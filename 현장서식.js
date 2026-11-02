@@ -6659,7 +6659,7 @@ function expandCompletedSitesMenu() {
 /**
  * 배포된 웹 앱 URL 가져오기
  */
-var CURRENT_ACTIVE_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwJTNqEODEBUJNirHC3MWNpp-uSJsrjOPuT6C5cSJvlNCD1FIPOYZE9rn8aFhIouUY_/exec";
+var CURRENT_ACTIVE_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec";
 
 function getWebAppUrl() {
   try {
@@ -6669,7 +6669,7 @@ function getWebAppUrl() {
         var savedUrl = String(docProps.getProperty("WEB_APP_URL") || "").trim();
         if (savedUrl) {
           // 폐기된 구 배포 ID가 저장되어 있으면 신규 배포 URL로 자동 치환
-          if (savedUrl.indexOf("AKfycbwJTNqEODEBUJNirHC3MWNpp-uSJsrjOPuT6C5cSJvlNCD1FIPOYZE9rn8aFhIouUY_") === -1 && savedUrl.indexOf("script.google.com/macros/s/") !== -1) {
+          if (savedUrl.indexOf("AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg") === -1 && savedUrl.indexOf("script.google.com/macros/s/") !== -1) {
             try { docProps.setProperty("WEB_APP_URL", CURRENT_ACTIVE_WEBAPP_URL); } catch (eUpdUrl) {}
             return CURRENT_ACTIVE_WEBAPP_URL;
           }
