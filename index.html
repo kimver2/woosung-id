@@ -211,7 +211,7 @@
   <iframe
     id="appFrame"
     credentialless
-    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=210"
+    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=211"
     allow="clipboard-write; camera; geolocation"
     onload="hideLoading()">
   </iframe>
@@ -682,7 +682,7 @@
       });
     }
 
-    // Background memo notification polling (8s interval + focus/visibility sync)
+    // Background memo notification polling helper (callable on-demand; automatic polling delegated to inner dashboard)
     var lastMemoPollMs = Date.now();
     function runTopMemoNotificationPoll() {
       try {
@@ -707,16 +707,6 @@
           .catch(function(ePoll) {});
       } catch (ePAll) {}
     }
-
-    if (typeof setInterval !== 'undefined') {
-      setInterval(runTopMemoNotificationPoll, 8000);
-    }
-    window.addEventListener('focus', function() { runTopMemoNotificationPoll(); });
-    document.addEventListener('visibilitychange', function() {
-      if (document.visibilityState === 'visible') {
-        runTopMemoNotificationPoll();
-      }
-    });
   </script>
 </body>
 </html>
