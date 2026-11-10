@@ -13951,7 +13951,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += 'input:-ms-input-placeholder, textarea:-ms-input-placeholder { font-size: 11.5px !important; font-weight: 500 !important; color: #94a3b8 !important; opacity: 1 !important; letter-spacing: -0.2px !important; }';
   html += 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Pretendard", sans-serif; background: #f8fafc; color: #1e293b; font-size: 13px; padding-bottom: ' + (isMobile ? 'calc(80px + env(safe-area-inset-bottom, 0px))' : '70px') + '; }';
   html += '.header { background: #ffffff; padding: 14px 16px; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 20; ' + (isMobile ? 'max-width: 600px; margin: 0 auto;' : '') + ' }';
-  html += '.title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }';
+  html += '.title-row { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 10px; }';
   html += '.title { font-size: ' + (isMobile ? '16px' : '15px') + '; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 6px; }';
   html += '.kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }';
   html += '.kpi-card { background: #f1f5f9; border-radius: 8px; padding: 8px 6px; text-align: center; cursor: pointer; transition: all 0.15s ease; border: 1px solid transparent; }';
@@ -14797,7 +14797,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '<div class="header">';
   html += '  <div class="title-row">';
   html += '    <div class="title" id="pageTitle" onclick="onLogoClick()" style="cursor:pointer;" title="우성아이디 대시보드 새로고침 및 메인 이동">' + (isMobile ? '📱 우성아이디 현장 대시보드' : '🏗️ 우성아이디 현장 대시보드') + '</div>';
-  html += '    <div style="display:flex;align-items:center;gap:5px;">';
+  html += '    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;width:100%;">';
   if (!isModal && !isMobile) {
     html += '      <button type="button" class="btn btn-secondary" style="flex:none;padding:4px 8px;font-size:11px;font-weight:800;display:inline-flex;align-items:center;gap:3px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;" onclick="openWideModalView()" title="대시보드를 넓은 대형 팝업 창(1020px)으로 엽니다">⛶ 크게 보기</button>';
   }
