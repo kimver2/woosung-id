@@ -211,7 +211,7 @@
   <iframe
     id="appFrame"
     credentialless
-    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=214"
+    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=215"
     allow="clipboard-write; camera; geolocation"
     onload="hideLoading()">
   </iframe>
@@ -432,6 +432,38 @@
     var orcaDashboardSource = null;
     var orcaModalOpenInChild = false;
     var ignoreNextTopPopstate = false;
+    var pendingTopDeepLink = null;
+    (function initTopUrlDeepLink() {
+      var p = getTopUrlParams();
+      if (p.openSite || p.openTask || p.openTaskId) {
+        pendingTopDeepLink = {
+          siteName: p.openSite || '',
+          taskName: p.openTask || '',
+          taskId: p.openTaskId || '',
+          row: p.openRow || '',
+          scope: p.openScope || ''
+        };
+      }
+    })();
+
+    function sendDeepLinkToChild(payload) {
+      if (!payload || typeof payload !== 'object') return;
+      pendingTopDeepLink = payload;
+      var sendFn = function() {
+        if (orcaDashboardSource && orcaDashboardSource !== window) {
+          try {
+            orcaDashboardSource.postMessage({
+              type: 'WS_OPEN_TASK_DEEP_LINK',
+              payload: payload
+            }, '*');
+            pendingTopDeepLink = null;
+          } catch (eDl) {}
+        }
+      };
+      sendFn();
+      setTimeout(sendFn, 180);
+      setTimeout(sendFn, 500);
+    }
 
     function sendPushPermissionStateToChild(source, toggled) {
       var perm = ('Notification' in window) ? Notification.permission : 'unsupported';
@@ -502,7 +534,18 @@
     window.addEventListener('message', function(ev) {
       var data = ev && ev.data;
       if (!data || typeof data !== 'object') return;
-      if (ev.source) {
+      var isFromInnerDashboard = (
+        data.type === 'DASHBOARD_READY' ||
+        data.type === 'ORCA_BRIDGE_PING' ||
+        data.type === 'WS_AUTH_INIT' ||
+        data.type === 'WS_SAVE_AUTH' ||
+        data.type === 'WS_REQUEST_PUSH_TOGGLE' ||
+        data.type === 'WS_REQUEST_PUSH_PERMISSION' ||
+        data.type === 'WS_TRIGGER_NOTIFICATION' ||
+        data.type === 'ORCA_SHEET_MODAL_OPEN' ||
+        data.type === 'ORCA_SHEET_MODAL_CLOSED_BY_UI'
+      );
+      if (isFromInnerDashboard && ev.source && ev.source !== window) {
         orcaDashboardSource = ev.source;
       }
       if (data.type === 'DASHBOARD_READY') {
@@ -513,31 +556,25 @@
             ev.source.postMessage({ type: 'WS_RESTORE_AUTH', token: authRdy.token, user: authRdy.user }, '*');
           }
           sendPushPermissionStateToChild(ev.source, false);
-          var rdyParams = getTopUrlParams();
-          if (ev.source && (rdyParams.openSite || rdyParams.openTask || rdyParams.openTaskId)) {
-            ev.source.postMessage({
-              type: 'WS_OPEN_TASK_DEEP_LINK',
-              payload: {
+          if (pendingTopDeepLink) {
+            sendDeepLinkToChild(pendingTopDeepLink);
+          } else {
+            var rdyParams = getTopUrlParams();
+            if (rdyParams.openSite || rdyParams.openTask || rdyParams.openTaskId) {
+              sendDeepLinkToChild({
                 siteName: rdyParams.openSite || '',
                 taskName: rdyParams.openTask || '',
                 taskId: rdyParams.openTaskId || '',
                 row: rdyParams.openRow || '',
                 scope: rdyParams.openScope || ''
-              }
-            }, '*');
+              });
+            }
           }
         } catch (eRdyAuth) {}
         return;
       }
       if (data.type === 'WS_NOTIFICATION_CLICK') {
-        if (orcaDashboardSource) {
-          try {
-            orcaDashboardSource.postMessage({
-              type: 'WS_OPEN_TASK_DEEP_LINK',
-              payload: data.payload || {}
-            }, '*');
-          } catch (eNClk) {}
-        }
+        sendDeepLinkToChild(data.payload || {});
         return;
       }
       if (data.type === 'WS_REQUEST_PUSH_TOGGLE' || data.type === 'WS_REQUEST_PUSH_PERMISSION') {
@@ -598,6 +635,9 @@
           if (ev.source) {
             ev.source.postMessage({ type: 'WS_RESTORE_AUTH', token: authInit.token, user: authInit.user }, '*');
             sendPushPermissionStateToChild(ev.source, false);
+            if (pendingTopDeepLink) {
+              sendDeepLinkToChild(pendingTopDeepLink);
+            }
           }
         } catch (eAuthInit) {}
         return;
@@ -619,6 +659,9 @@
               ev.source.postMessage({ type: 'WS_RESTORE_AUTH', token: authPing.token, user: authPing.user }, '*');
             }
             sendPushPermissionStateToChild(ev.source, false);
+            if (pendingTopDeepLink) {
+              sendDeepLinkToChild(pendingTopDeepLink);
+            }
           }
         } catch (ePong) {}
       } else if (data.type === 'ORCA_SHEET_MODAL_OPEN') {
@@ -709,14 +752,7 @@
       });
       navigator.serviceWorker.addEventListener('message', function(event) {
         if (event.data && event.data.type === 'WS_NOTIFICATION_CLICK') {
-          if (orcaDashboardSource) {
-            try {
-              orcaDashboardSource.postMessage({
-                type: 'WS_OPEN_TASK_DEEP_LINK',
-                payload: event.data.payload || {}
-              }, '*');
-            } catch (eSWClick) {}
-          }
+          sendDeepLinkToChild(event.data.payload || {});
         }
       });
     }
@@ -732,7 +768,7 @@
           .then(function(r) { return r.json(); })
           .then(function(res) {
             if (res && res.serverTime) lastMemoPollMs = res.serverTime;
-            if (orcaDashboardSource) {
+            if (orcaDashboardSource && orcaDashboardSource !== window) {
               try {
                 orcaDashboardSource.postMessage({
                   type: 'WS_POLL_SYNC_TICK',
@@ -746,6 +782,15 @@
           .catch(function(ePoll) {});
       } catch (ePAll) {}
     }
+
+    window.addEventListener('focus', function() {
+      runTopMemoNotificationPoll();
+    });
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'visible') {
+        runTopMemoNotificationPoll();
+      }
+    });
   </script>
 </body>
 </html>

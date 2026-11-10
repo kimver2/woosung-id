@@ -43,14 +43,23 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url && 'focus' in client) {
-          client.postMessage({
-            type: 'WS_NOTIFICATION_CLICK',
-            payload: notifData
-          });
-          return client.focus();
+      if (clientList && clientList.length > 0) {
+        let targetClient = null;
+        for (const client of clientList) {
+          try {
+            client.postMessage({
+              type: 'WS_NOTIFICATION_CLICK',
+              payload: notifData
+            });
+          } catch (ePost) {}
+          if (!targetClient || client.focused || client.visibilityState === 'visible') {
+            targetClient = client;
+          }
         }
+        if (targetClient && 'focus' in targetClient) {
+          return targetClient.focus();
+        }
+        return;
       }
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
