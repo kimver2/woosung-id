@@ -7105,6 +7105,7 @@ function updateScheduleStatusFromWeb(row, newStatus, newShared, newMemo, newDate
     }
 
     // F열 비고 업데이트 (파라미터가 명시적으로 전달된 경우)
+    var createdMemoNotification = null;
     if (newMemo !== undefined && newMemo !== null) {
       var cleanMemo = String(newMemo).trim();
       var prevMemoForNotif = origMemoForMatch || String(sheet.getRange(rowNum, 6).getValue() || "").trim();
@@ -7113,7 +7114,7 @@ function updateScheduleStatusFromWeb(row, newStatus, newShared, newMemo, newDate
       try {
         var updateCommentInfo = extractNewlyAddedMemoComment(prevMemoForNotif, cleanMemo);
         if (updateCommentInfo && updateCommentInfo.text) {
-          recordMemoPushNotification({
+          createdMemoNotification = recordMemoPushNotification({
             siteName: siteName,
             taskName: updatedTask || taskName || origTaskForMatch,
             taskId: taskIdForMatch,
@@ -7150,6 +7151,7 @@ function updateScheduleStatusFromWeb(row, newStatus, newShared, newMemo, newDate
           date: updatedDate,
           manager: updatedManager,
           partner: updatedPartner,
+          memoNotification: createdMemoNotification,
           message: catMoveRes.message
         };
       }
@@ -7168,7 +7170,8 @@ function updateScheduleStatusFromWeb(row, newStatus, newShared, newMemo, newDate
       memo: updatedMemo,
       date: updatedDate,
       manager: updatedManager,
-      partner: updatedPartner
+      partner: updatedPartner,
+      memoNotification: createdMemoNotification
     };
   } catch(err) {
     Logger.log("updateScheduleStatusFromWeb 오류: " + err.toString());
@@ -9611,11 +9614,12 @@ function addScheduleTaskFromWeb(siteName, taskName, dateStr, manager, status, is
     invalidateDashboardServerCache();
 
     // 비고 코멘트가 포함되어 있으면 담당자 및 관리자에게 푸시 알림 기록
+    var createdMemoNotification = null;
     try {
       if (cleanMemo) {
         var addCommentInfo = extractNewlyAddedMemoComment("", cleanMemo);
         if (addCommentInfo && addCommentInfo.text) {
-          recordMemoPushNotification({
+          createdMemoNotification = recordMemoPushNotification({
             siteName: cleanSite,
             taskName: cleanTask,
             taskId: taskId,
@@ -9644,7 +9648,8 @@ function addScheduleTaskFromWeb(siteName, taskName, dateStr, manager, status, is
       shared: isSharedBool,
       memo: cleanMemo,
       manager: cleanManager,
-      status: cleanStatus
+      status: cleanStatus,
+      memoNotification: createdMemoNotification
     };
   } catch (err) {
     Logger.log("addScheduleTaskFromWeb 오류: " + err.toString());
@@ -10115,6 +10120,30 @@ function getRecentMemoPushNotifications(userStr, sinceMs) {
   } catch (err) {
     Logger.log("getRecentMemoPushNotifications 오류: " + err.toString());
     return [];
+  }
+}
+
+/**
+ * 클라이언트 실시간 백그라운드 폴링용 초경량 동기화 상태 조회 (시트 I/O 0회, 캐시 전용)
+ * @param {string} userStr
+ * @param {number} sinceMs
+ * @return {Object}
+ */
+function pollDashboardSyncStateFromWeb(userStr, sinceMs) {
+  try {
+    return {
+      success: true,
+      notifications: getRecentMemoPushNotifications(userStr, sinceMs),
+      lastMutationMs: getLastDashboardMutationMs(),
+      serverTime: Date.now()
+    };
+  } catch (err) {
+    return {
+      success: false,
+      notifications: [],
+      lastMutationMs: 0,
+      serverTime: Date.now()
+    };
   }
 }
 
@@ -21600,7 +21629,11 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      wsClientKnownMutationMs = Math.max(wsClientKnownMutationMs || 0, data.lastMutationMs);';
   html += '    }';
   html += '    if (data && Array.isArray(data.memoNotifications) && typeof checkAndDispatchIncomingMemoNotifications === "function") {';
-  html += '      checkAndDispatchIncomingMemoNotifications(data.memoNotifications);';
+  html += '      const isFirstSeed = (wsLastSeenNotifMs === 0);';
+  html += '      checkAndDispatchIncomingMemoNotifications(data.memoNotifications, isFirstSeed);';
+  html += '      if (isFirstSeed && wsLastSeenNotifMs === 0) {';
+  html += '        wsLastSeenNotifMs = Date.now();';
+  html += '      }';
   html += '    }';
   html += '    if (typeof updatePushToggleBtnUI === "function") {';
   html += '      updatePushToggleBtnUI();';
@@ -25303,7 +25336,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  }';
   html += '}';
   html += '';
-  html += 'function checkAndDispatchIncomingMemoNotifications(notifs) {';
+  html += 'function checkAndDispatchIncomingMemoNotifications(notifs, isInitialSeed) {';
   html += '  if (!Array.isArray(notifs) || notifs.length === 0) return;';
   html += '  const myIdentity = (typeof getPushUserIdentity === "function") ? getPushUserIdentity() : "";';
   html += '  if (!myIdentity) return;';
@@ -25317,6 +25350,13 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    const n = notifs[i];';
   html += '    if (!n || !n.id) continue;';
   html += '    if (wsShownNotifIdSet[n.id]) continue;';
+  html += '    if (isInitialSeed) {';
+  html += '      wsShownNotifIdSet[n.id] = true;';
+  html += '      if (n.timestamp > wsLastSeenNotifMs) {';
+  html += '        wsLastSeenNotifMs = n.timestamp;';
+  html += '      }';
+  html += '      continue;';
+  html += '    }';
   html += '    if (n.timestamp && (nowMs - n.timestamp > 30000) && !wsLastSeenNotifMs) {';
   html += '      wsShownNotifIdSet[n.id] = true;';
   html += '      continue;';
@@ -25567,41 +25607,61 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  }';
   html += '} catch (eInitPing) {}';
   html += '';
-  html += 'if (typeof setInterval !== "undefined") {';
-  html += '  setInterval(function() {';
-  html += '    try {';
-  html += '      if (typeof window !== "undefined" && window.top === window) {';
-  html += '        const u = (typeof getPushUserIdentity === "function") ? getPushUserIdentity() : "";';
-  html += '        const apiUrl = (typeof SCRIPT_URL !== "undefined" ? SCRIPT_URL : (window.location.href.split("?")[0]));';
-  html += '        fetch(apiUrl + "?action=pollMemoNotifications&user=" + encodeURIComponent(u) + "&since=" + wsLastSeenNotifMs)';
-  html += '          .then(function(r) { return r.json(); })';
-  html += '          .then(function(res) {';
-  html += '            if (res && res.success && Array.isArray(res.notifications)) {';
-  html += '              if (res.serverTime) wsLastSeenNotifMs = res.serverTime;';
-  html += '              checkAndDispatchIncomingMemoNotifications(res.notifications);';
-  html += '            }';
-  html += '            if (res && typeof res.lastMutationMs === "number" && res.lastMutationMs > 0) {';
-  html += '              if (!wsClientKnownMutationMs || res.lastMutationMs > wsClientKnownMutationMs) {';
-  html += '                wsClientKnownMutationMs = res.lastMutationMs;';
-  html += '                if (typeof loadDataSilently === "function") loadDataSilently();';
-  html += '              }';
-  html += '            }';
-  html += '          })';
-  html += '          .catch(function() {});';
+  html += 'let wsIsPollingSync = false;';
+  html += 'function pollRealtimeDashboardSync() {';
+  html += '  if (wsIsPollingSync) return;';
+  html += '  if (typeof document !== "undefined" && document.visibilityState === "hidden") return;';
+  html += '  const u = (typeof getPushUserIdentity === "function") ? getPushUserIdentity() : "";';
+  html += '  const handleSyncRes = function(res) {';
+  html += '    wsIsPollingSync = false;';
+  html += '    if (!res || !res.success) return;';
+  html += '    if (Array.isArray(res.notifications) && res.notifications.length > 0 && typeof checkAndDispatchIncomingMemoNotifications === "function") {';
+  html += '      checkAndDispatchIncomingMemoNotifications(res.notifications, false);';
+  html += '    }';
+  html += '    if (res.serverTime && res.serverTime > wsLastSeenNotifMs) {';
+  html += '      wsLastSeenNotifMs = res.serverTime;';
+  html += '    }';
+  html += '    if (typeof res.lastMutationMs === "number" && res.lastMutationMs > 0) {';
+  html += '      if (!wsClientKnownMutationMs) {';
+  html += '        wsClientKnownMutationMs = res.lastMutationMs;';
+  html += '      } else if (res.lastMutationMs > wsClientKnownMutationMs) {';
+  html += '        wsClientKnownMutationMs = res.lastMutationMs;';
+  html += '        if (typeof loadDataSilently === "function") loadDataSilently();';
   html += '      }';
-  html += '    } catch (eStand) {}';
-  html += '  }, 15000);';
+  html += '    }';
+  html += '  };';
+  html += '  wsIsPollingSync = true;';
+  html += '  if (typeof google !== "undefined" && google.script && google.script.run) {';
+  html += '    google.script.run';
+  html += '      .withSuccessHandler(handleSyncRes)';
+  html += '      .withFailureHandler(function() { wsIsPollingSync = false; })';
+  html += '      .pollDashboardSyncStateFromWeb(u, wsLastSeenNotifMs || 0);';
+  html += '  } else if (typeof fetch === "function") {';
+  html += '    const apiUrl = (typeof SCRIPT_URL !== "undefined" ? SCRIPT_URL : (window.location.href.split("?")[0]));';
+  html += '    fetch(apiUrl + "?action=pollMemoNotifications&user=" + encodeURIComponent(u) + "&since=" + (wsLastSeenNotifMs || 0))';
+  html += '      .then(function(r) { return r.json(); })';
+  html += '      .then(handleSyncRes)';
+  html += '      .catch(function() { wsIsPollingSync = false; });';
+  html += '  } else {';
+  html += '    wsIsPollingSync = false;';
+  html += '  }';
+  html += '}';
+  html += '';
+  html += 'if (typeof setInterval !== "undefined") {';
+  html += '  setInterval(pollRealtimeDashboardSync, 5000);';
   html += '}';
   html += '';
   html += 'if (typeof window !== "undefined" && typeof window.addEventListener === "function") {';
   html += '  window.addEventListener("focus", function() {';
+  html += '    pollRealtimeDashboardSync();';
   html += '    if (typeof triggerAutoSilentSyncIfNeeded === "function") triggerAutoSilentSyncIfNeeded(4000);';
   html += '  });';
   html += '}';
   html += 'if (typeof document !== "undefined" && typeof document.addEventListener === "function") {';
   html += '  document.addEventListener("visibilitychange", function() {';
-  html += '    if (document.visibilityState === "visible" && typeof triggerAutoSilentSyncIfNeeded === "function") {';
-  html += '      triggerAutoSilentSyncIfNeeded(4000);';
+  html += '    if (document.visibilityState === "visible") {';
+  html += '      pollRealtimeDashboardSync();';
+  html += '      if (typeof triggerAutoSilentSyncIfNeeded === "function") triggerAutoSilentSyncIfNeeded(4000);';
   html += '    }';
   html += '  });';
   html += '}';
@@ -26871,6 +26931,9 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '          }';
   html += '          if (res.row) tempTask.row = res.row;';
   html += '          if (res.id || res.taskId) tempTask.taskId = res.taskId || res.id;';
+  html += '          if (res.memoNotification && typeof checkAndDispatchIncomingMemoNotifications === "function") {';
+  html += '            checkAndDispatchIncomingMemoNotifications([res.memoNotification], false);';
+  html += '          }';
   html += '          if (rawData) renderDashboardPayload(rawData);';
   html += '          setTimeout(loadDataSilently, 350);';
   html += '        } else {';
@@ -26969,6 +27032,9 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = "💾 저장하기"; }';
   html += '      if (res && res.success) {';
   html += '        if (res.row) targetTask.row = res.row;';
+  html += '        if (res.memoNotification && typeof checkAndDispatchIncomingMemoNotifications === "function") {';
+  html += '          checkAndDispatchIncomingMemoNotifications([res.memoNotification], false);';
+  html += '        }';
   html += '        if (cascadeShiftsPayload.length > 0) {';
   html += '          google.script.run';
   html += '            .withSuccessHandler(() => { loadDataSilently(); })';
@@ -26976,6 +27042,8 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '            .cascadeShiftSiteTasksFromWeb(siteNameForSave, targetSheetNameForSave, cascadeShiftsPayload);';
   html += '        } else if (res.movedToCompleted) {';
   html += '          loadDataSilently();';
+  html += '        } else {';
+  html += '          setTimeout(loadDataSilently, 400);';
   html += '        }';
   html += '      } else {';
   html += '        Object.assign(targetTask, prevSnapshot);';
