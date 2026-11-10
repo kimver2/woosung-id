@@ -14181,6 +14181,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '.site-summary-rate.done strong { color: #16a34a; }';
   html += '.site-summary-counts { color: #64748b; font-size: 11px; }';
   html += '.site-toggle { font-size: 10px; color: #94a3b8; transition: transform 0.2s; flex-shrink: 0; }';
+  html += '.site-card.expanded { content-visibility: visible; contain-intrinsic-size: auto; }';
   html += '.site-card.expanded .site-toggle { transform: rotate(180deg); }';
   html += '.task-list { display: none; padding: 6px 10px 8px 10px; background: #f8fafc; border-top: 1px solid #f1f5f9; }';
   html += '.site-card.expanded .task-list { display: block; }';
@@ -18499,6 +18500,9 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  if (typeof mobileExpandedEstimateSites !== "undefined" && mobileExpandedEstimateSites && typeof mobileExpandedEstimateSites.clear === "function") {';
   html += '    mobileExpandedEstimateSites.clear();';
   html += '  }';
+  html += '  if (typeof expandedSiteCards !== "undefined" && expandedSiteCards && typeof expandedSiteCards.clear === "function") {';
+  html += '    expandedSiteCards.clear();';
+  html += '  }';
   html += '  if (newScope !== "site" && newScope !== "single" && newScope !== "as" && newScope !== "newSite") newScope = "site";';
   html += '  currentScope = newScope;';
   html += '  currentFilter = "all";';
@@ -21886,6 +21890,9 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  if (typeof mobileExpandedEstimateSites !== "undefined" && mobileExpandedEstimateSites && typeof mobileExpandedEstimateSites.clear === "function") {';
   html += '    mobileExpandedEstimateSites.clear();';
   html += '  }';
+  html += '  if (typeof expandedSiteCards !== "undefined" && expandedSiteCards && typeof expandedSiteCards.clear === "function") {';
+  html += '    expandedSiteCards.clear();';
+  html += '  }';
   html += '  currentFilter = (status === "done") ? "done" : "all";';
   html += '  selectedPcSiteName = "";';
   html += '  pcSiteDetailFilter = "all";';
@@ -22762,6 +22769,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '}';
 
   html += 'const mobileExpandedEstimateSites = new Set();';
+  html += 'const expandedSiteCards = new Set();';
   html += '';
   html += 'function toggleMobileEstimateCard(siteEnc) {';
   html += '  const siteName = decodeURIComponent(siteEnc);';
@@ -23049,8 +23057,9 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    visibleSitesCount++;';
   html += '    const site = item.site;';
   html += '    const filteredTasks = item.filteredTasks;';
-  html += '    const isExpanded = (query !== "") || (currentFilter !== "all" && currentFilter !== "done");';
   html += '    const siteEnc = encodeURIComponent(site.siteName);';
+  html += '    const autoExpand = (query !== "") || (currentFilter !== "all" && currentFilter !== "done");';
+  html += '    const isExpanded = autoExpand || (typeof expandedSiteCards !== "undefined" && expandedSiteCards.has(site.siteName));';
   html += '    const isChecked = checkedSites.has(site.siteName);';
   html += '    const mobStatusInfo = getSiteStatusInfo(site, mobTodayStr);';
   html += '    let earliestDateStr = "";';
@@ -23078,8 +23087,8 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    }';
   html += '    const mobPeriodStr = (earliestDateStr && latestDateStr) ? (earliestDateStr.replace(/-/g, ".") + " ~ " + latestDateStr.replace(/-/g, ".")) : (latestDateStr ? latestDateStr.replace(/-/g, ".") : "");';
   html += '';
-  html += '    html += \'<div class="site-card \' + (isExpanded ? "expanded" : "") + \'">\';';
-  html += '    html += \'  <div class="site-header" style="border-left-color: \' + site.colorHex + \';" onclick="toggleSite(this)">\';';
+  html += '    html += \'<div class="site-card \' + (isExpanded ? "expanded" : "") + \'" data-sitename="\' + siteEnc + \'">\';';
+  html += '    html += \'  <div class="site-header" style="border-left-color: \' + site.colorHex + \';" onclick="toggleSite(this, \\\'\' + siteEnc + \'\\\')">\';';
   html += '    html += \'    <input type="checkbox" class="site-check" data-sitename="\' + siteEnc + \'" \' + (isChecked ? "checked" : "") + \' onclick="onSiteCheckboxClick(event, this)" title="현장 선택">\';';
   html += '    const pRate = (typeof site.progressRate === "number") ? site.progressRate : 0;';
   html += '    let rateClass = "low";';
@@ -23283,14 +23292,30 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    }';
   html += '    container.innerHTML = mHeadBarHtml + emptyHtml;';
   html += '  } else {';
+  html += '    const prevWinScrollY = (typeof window !== "undefined") ? (window.scrollY || window.pageYOffset || 0) : 0;';
+  html += '    const prevContainerScrollTop = container ? container.scrollTop : 0;';
   html += '    container.innerHTML = mHeadBarHtml + html;';
+  html += '    if (container && prevContainerScrollTop > 0) container.scrollTop = prevContainerScrollTop;';
+  html += '    if (typeof window !== "undefined" && prevWinScrollY > 0 && Math.abs((window.scrollY || window.pageYOffset || 0) - prevWinScrollY) > 10) {';
+  html += '      window.scrollTo(0, prevWinScrollY);';
+  html += '    }';
   html += '  }';
   html += '  if (typeof updateFilterVisualStates === "function") updateFilterVisualStates();';
   html += '  if (typeof updateAllMobileSelectAllStates === "function") updateAllMobileSelectAllStates();';
   html += '}';
-
-  html += 'function toggleSite(el) {';
-  html += '  el.parentElement.classList.toggle("expanded");';
+  html += '';
+  html += 'function toggleSite(el, siteEnc) {';
+  html += '  const card = el && el.parentElement;';
+  html += '  if (!card) return;';
+  html += '  const isNowExpanded = card.classList.toggle("expanded");';
+  html += '  const enc = siteEnc || card.getAttribute("data-sitename") || "";';
+  html += '  if (enc && typeof expandedSiteCards !== "undefined") {';
+  html += '    try {';
+  html += '      const sName = decodeURIComponent(enc);';
+  html += '      if (isNowExpanded) expandedSiteCards.add(sName);';
+  html += '      else expandedSiteCards.delete(sName);';
+  html += '    } catch (e) {}';
+  html += '  }';
   html += '}';
   html += '';
   html += 'function openEditModal(row, encSiteName) {';
