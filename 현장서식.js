@@ -9129,6 +9129,25 @@ function getValidDashboardAuthTokens(ss) {
 }
 
 /**
+ * [대시보드 보안 잠금] 유효한 모든 인증 토큰 -> 사용자 이름 역추적 매핑 반환
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss]
+ * @return {Object.<string, string>}
+ */
+function getValidDashboardAuthTokenMap(ss) {
+  var currentPin = getDashboardAccessPin();
+  var map = {};
+  var adminTok = computeDashboardUserToken(HIDDEN_ADMIN_AUTH_USER, HIDDEN_ADMIN_AUTH_PIN);
+  map[adminTok] = HIDDEN_ADMIN_AUTH_USER;
+  var memberList = getAllRegisteredMemberNamesForAuth(ss);
+  for (var i = 0; i < memberList.length; i++) {
+    var mName = memberList[i];
+    var tok = computeDashboardUserToken(mName, currentPin);
+    map[tok] = mName;
+  }
+  return map;
+}
+
+/**
  * [대시보드 보안 잠금] 클라이언트에서 입력한 구성원 이름 + 비밀번호 검증 (히든 계정 admin / 007077 지원)
  */
 function verifyDashboardAccessPinFromWeb(inputPin, inputUser) {
@@ -9966,16 +9985,14 @@ function computeMemoPushRecipients(managerStr, author) {
     mgrList.push("admin");
   }
   var cleanAuthor = String(author || "").replace(/\s+/g, "").trim();
-  var isAuthorAdmin = (cleanAuthor.toLowerCase() === "admin" || cleanAuthor === "관리자");
   var recipients = [];
   for (var i = 0; i < mgrList.length; i++) {
     var m = mgrList[i];
     var cleanM = String(m || "").replace(/\s+/g, "").trim();
     if (!cleanM) continue;
-    if (isAuthorAdmin && (cleanM.toLowerCase() === "admin" || cleanM === "관리자")) {
-      continue;
-    }
-    if (cleanM === cleanAuthor) {
+    // admin 계정은 총괄 모니터링 및 테스트 계정이므로 작성자가 admin/관리자이더라도 항상 수신자에 포함
+    var isCurrentMAdmin = (cleanM.toLowerCase() === "admin" || cleanM === "관리자");
+    if (!isCurrentMAdmin && cleanM === cleanAuthor) {
       continue;
     }
     recipients.push(cleanM);
@@ -10118,7 +10135,12 @@ function doGet(e) {
     var pollUser = p.user || "";
     var pollSince = p.since || 0;
     var notifs = getRecentMemoPushNotifications(pollUser, pollSince);
-    return ContentService.createTextOutput(JSON.stringify({ success: true, notifications: notifs, serverTime: Date.now() }))
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      notifications: notifs,
+      serverTime: Date.now(),
+      lastMutationMs: getLastDashboardMutationMs()
+    }))
       .setMimeType(ContentService.MimeType.JSON);
   }
   var newStatus = p.status;
@@ -12848,24 +12870,64 @@ function getDashboardServerCache() {
  */
 function invalidateDashboardServerCache() {
   try {
+    var nowMs = String(new Date().getTime());
     if (typeof CacheService !== "undefined" && CacheService && typeof CacheService.getScriptCache === "function") {
       var cache = CacheService.getScriptCache();
-      if (!cache) return;
-      var keysToRemove = [DASHBOARD_SERVER_CACHE_KEY, DASHBOARD_SERVER_CACHE_KEY + "_cnt"];
-      var cntStr = (typeof cache.get === "function") ? cache.get(DASHBOARD_SERVER_CACHE_KEY + "_cnt") : null;
-      var count = cntStr ? parseInt(cntStr, 10) : 5;
-      for (var k = 0; k < Math.max(count + 5, 8); k++) {
-        keysToRemove.push(DASHBOARD_SERVER_CACHE_KEY + "_c_" + k);
-      }
-      if (typeof cache.removeAll === "function") {
-        cache.removeAll(keysToRemove);
-      } else if (typeof cache.remove === "function") {
-        for (var r = 0; r < keysToRemove.length; r++) {
-          cache.remove(keysToRemove[r]);
+      if (cache) {
+        var keysToRemove = [DASHBOARD_SERVER_CACHE_KEY, DASHBOARD_SERVER_CACHE_KEY + "_cnt"];
+        var cntStr = (typeof cache.get === "function") ? cache.get(DASHBOARD_SERVER_CACHE_KEY + "_cnt") : null;
+        var count = cntStr ? parseInt(cntStr, 10) : 5;
+        for (var k = 0; k < Math.max(count + 5, 8); k++) {
+          keysToRemove.push(DASHBOARD_SERVER_CACHE_KEY + "_c_" + k);
+        }
+        if (typeof cache.removeAll === "function") {
+          cache.removeAll(keysToRemove);
+        } else if (typeof cache.remove === "function") {
+          for (var r = 0; r < keysToRemove.length; r++) {
+            cache.remove(keysToRemove[r]);
+          }
+        }
+        if (typeof cache.put === "function") {
+          cache.put("WS_LAST_MUTATION_MS_V1", nowMs, 21600);
         }
       }
     }
+    if (typeof PropertiesService !== "undefined" && PropertiesService && typeof PropertiesService.getScriptProperties === "function") {
+      var props = PropertiesService.getScriptProperties();
+      if (props && typeof props.setProperty === "function") {
+        props.setProperty("WS_LAST_MUTATION_MS_V1", nowMs);
+      }
+    }
   } catch (eCacheInv) {}
+}
+
+/**
+ * 대시보드 최신 변경 시점(ms) 조회 (CacheService 우선, PropertiesService 폴백)
+ */
+function getLastDashboardMutationMs() {
+  try {
+    if (typeof CacheService !== "undefined" && CacheService && typeof CacheService.getScriptCache === "function") {
+      var cache = CacheService.getScriptCache();
+      if (cache && typeof cache.get === "function") {
+        var val = cache.get("WS_LAST_MUTATION_MS_V1");
+        if (val) {
+          var parsed = parseInt(val, 10);
+          if (!isNaN(parsed) && parsed > 0) return parsed;
+        }
+      }
+    }
+    if (typeof PropertiesService !== "undefined" && PropertiesService && typeof PropertiesService.getScriptProperties === "function") {
+      var props = PropertiesService.getScriptProperties();
+      if (props && typeof props.getProperty === "function") {
+        var pVal = props.getProperty("WS_LAST_MUTATION_MS_V1");
+        if (pVal) {
+          var parsedP = parseInt(pVal, 10);
+          if (!isNaN(parsedP) && parsedP > 0) return parsedP;
+        }
+      }
+    }
+  } catch (eGetMut) {}
+  return 0;
 }
 
 /**
@@ -12926,6 +12988,7 @@ function getSidebarDashboardData(forceRefresh) {
             if (!parsedCache.memberPhoneMap) {
               parsedCache.memberPhoneMap = getMemberPhoneMap(null);
             }
+            parsedCache.lastMutationMs = getLastDashboardMutationMs();
             return parsedCache;
           }
         }
@@ -12949,7 +13012,8 @@ function getSidebarDashboardData(forceRefresh) {
         members: getMemberNames(ss),
         holidays: getKoreanHolidaysMap(ss),
         sites: [],
-        scopeCounts: { site: 0, single: 0, as: 0 }
+        scopeCounts: { site: 0, single: 0, as: 0 },
+        lastMutationMs: getLastDashboardMutationMs()
       };
     }
 
@@ -13757,7 +13821,8 @@ function getSidebarDashboardData(forceRefresh) {
       holidays: getKoreanHolidaysMap(ss),
       sites: sitesList,
       siteInfoMap: getSiteInfoMap(ss, true),
-      memoNotifications: getRecentMemoPushNotifications("", 0)
+      memoNotifications: getRecentMemoPushNotifications("", 0),
+      lastMutationMs: getLastDashboardMutationMs()
     };
 
     try {
@@ -13779,7 +13844,8 @@ function getSidebarDashboardData(forceRefresh) {
       memberPhoneMap: getMemberPhoneMap(null),
       siteSuperintendents: getSiteSuperintendents(null),
       sites: [],
-      siteInfoMap: {}
+      siteInfoMap: {},
+      lastMutationMs: getLastDashboardMutationMs()
     };
   }
 }
@@ -14654,8 +14720,12 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
 
   var currentPinToken = computeDashboardPinToken(getDashboardAccessPin());
   var validAuthTokensList = getValidDashboardAuthTokens();
+  var validAuthTokenMap = getValidDashboardAuthTokenMap(SpreadsheetApp.getActiveSpreadsheet() || getAppSpreadsheet());
   var cleanPreTok = (typeof preAuthToken === "string") ? preAuthToken.trim() : "";
   var authIdentityUsr = (typeof preAuthUser === "string") ? preAuthUser.trim() : "";
+  if (!authIdentityUsr && cleanPreTok && validAuthTokenMap && validAuthTokenMap[cleanPreTok]) {
+    authIdentityUsr = validAuthTokenMap[cleanPreTok];
+  }
   var cleanPreUsr = (authIdentityUsr.toLowerCase() !== "admin") ? authIdentityUsr : "";
   var isServerPreAuthed = !!(cleanPreTok && cleanPreTok.indexOf("WSAUTH_") === 0 && validAuthTokensList.indexOf(cleanPreTok) !== -1);
   html += '<div id="wsAccessLockOverlay" style="display:' + (isServerPreAuthed ? 'none' : 'flex') + ';position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0f172a;z-index:200000;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">';
@@ -15767,6 +15837,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '<script>';
   html += 'var WS_REQUIRED_PIN_TOKEN = ' + jsStringLiteral_(currentPinToken) + ';\n';
   html += 'var WS_VALID_AUTH_TOKENS = ' + JSON.stringify(validAuthTokensList) + ';\n';
+  html += 'var WS_AUTH_TOKEN_USER_MAP = ' + JSON.stringify(validAuthTokenMap) + ';\n';
   html += 'var WS_SERVER_PRE_TOKEN = ' + jsStringLiteral_(isServerPreAuthed ? cleanPreTok : "") + ';\n';
   html += 'var WS_SERVER_PRE_USER = ' + jsStringLiteral_(authIdentityUsr) + ';\n';
   html += 'var WS_CURRENT_AUTH_USER = WS_SERVER_PRE_USER || "";\n';
@@ -15826,7 +15897,17 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    if (!savedUsr && typeof sessionStorage !== "undefined" && sessionStorage && typeof sessionStorage.getItem === "function") {\n';
   html += '      savedUsr = sessionStorage.getItem(WS_USER_STORAGE_KEY) || "";\n';
   html += '    }\n';
-  html += '    if (savedUsr && savedUsr.toLowerCase() !== "admin") {\n';
+  html += '    if (!savedUsr && savedTok && typeof WS_AUTH_TOKEN_USER_MAP !== "undefined" && WS_AUTH_TOKEN_USER_MAP && WS_AUTH_TOKEN_USER_MAP[savedTok]) {\n';
+  html += '      savedUsr = WS_AUTH_TOKEN_USER_MAP[savedTok];\n';
+  html += '      try {\n';
+  html += '        if (typeof localStorage !== "undefined" && localStorage) localStorage.setItem(WS_USER_STORAGE_KEY, savedUsr);\n';
+  html += '        if (typeof sessionStorage !== "undefined" && sessionStorage) sessionStorage.setItem(WS_USER_STORAGE_KEY, savedUsr);\n';
+  html += '      } catch (eU) {}\n';
+  html += '      try {\n';
+  html += '        if (window.top && window.top !== window) window.top.postMessage({ type: "WS_RESTORE_AUTH", token: savedTok, user: savedUsr }, "*");\n';
+  html += '      } catch (eTopSync) {}\n';
+  html += '    }\n';
+  html += '    if (savedUsr) {\n';
   html += '      WS_CURRENT_AUTH_USER = savedUsr;\n';
   html += '    }\n';
   html += '    var lockEl = document.getElementById("wsAccessLockOverlay");\n';
@@ -15854,15 +15935,18 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '          if (lk) lk.style.display = "none";\n';
   html += '          try { if (typeof sessionStorage !== "undefined" && sessionStorage) sessionStorage.setItem(WS_PIN_STORAGE_KEY, d.token); } catch (eR) {}\n';
   html += '        }\n';
-  html += '        if (d.user) {\n';
-  html += '          var cleanUserStr = String(d.user).trim();\n';
-  html += '          WS_CURRENT_AUTH_USER = cleanUserStr;\n';
+  html += '        var restoredUsr = d.user ? String(d.user).trim() : "";\n';
+  html += '        if (!restoredUsr && d.token && typeof WS_AUTH_TOKEN_USER_MAP !== "undefined" && WS_AUTH_TOKEN_USER_MAP && WS_AUTH_TOKEN_USER_MAP[d.token]) {\n';
+  html += '          restoredUsr = WS_AUTH_TOKEN_USER_MAP[d.token];\n';
+  html += '        }\n';
+  html += '        if (restoredUsr) {\n';
+  html += '          WS_CURRENT_AUTH_USER = restoredUsr;\n';
   html += '          try {\n';
-  html += '            if (typeof localStorage !== "undefined" && localStorage) localStorage.setItem(WS_USER_STORAGE_KEY, cleanUserStr);\n';
-  html += '            if (typeof sessionStorage !== "undefined" && sessionStorage) sessionStorage.setItem(WS_USER_STORAGE_KEY, cleanUserStr);\n';
+  html += '            if (typeof localStorage !== "undefined" && localStorage) localStorage.setItem(WS_USER_STORAGE_KEY, restoredUsr);\n';
+  html += '            if (typeof sessionStorage !== "undefined" && sessionStorage) sessionStorage.setItem(WS_USER_STORAGE_KEY, restoredUsr);\n';
   html += '          } catch (eU) {}\n';
   html += '          var nInp = document.getElementById("wsAccessNameInput");\n';
-  html += '          if (nInp && !nInp.value && cleanUserStr.toLowerCase() !== "admin") nInp.value = cleanUserStr;\n';
+  html += '          if (nInp && !nInp.value && restoredUsr.toLowerCase() !== "admin") nInp.value = restoredUsr;\n';
   html += '        }\n';
   html += '      });\n';
   html += '      try { if (window.top && window.top !== window) window.top.postMessage({ type: "WS_AUTH_INIT" }, "*"); } catch (eTopI) {}\n';
@@ -15944,6 +16028,13 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      rawUser = WS_SERVER_PRE_USER.trim();\n';
   html += '    }\n';
   html += '    if (!rawUser) {\n';
+  html += '      var tok1 = (typeof localStorage !== "undefined" && localStorage) ? localStorage.getItem(WS_PIN_STORAGE_KEY) : "";\n';
+  html += '      if (!tok1 && typeof sessionStorage !== "undefined" && sessionStorage) tok1 = sessionStorage.getItem(WS_PIN_STORAGE_KEY);\n';
+  html += '      if (tok1 && typeof WS_AUTH_TOKEN_USER_MAP !== "undefined" && WS_AUTH_TOKEN_USER_MAP && WS_AUTH_TOKEN_USER_MAP[tok1]) {\n';
+  html += '        rawUser = WS_AUTH_TOKEN_USER_MAP[tok1];\n';
+  html += '      }\n';
+  html += '    }\n';
+  html += '    if (!rawUser) {\n';
   html += '      var nameInp = document.getElementById("wsAccessNameInput");\n';
   html += '      if (nameInp && nameInp.value && nameInp.value.trim()) rawUser = nameInp.value.trim();\n';
   html += '    }\n';
@@ -15969,6 +16060,11 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    }\n';
   html += '    if (typeof WS_SERVER_PRE_USER === "string" && WS_SERVER_PRE_USER.trim()) {\n';
   html += '      return WS_SERVER_PRE_USER.trim();\n';
+  html += '    }\n';
+  html += '    var tok2 = (typeof localStorage !== "undefined" && localStorage) ? localStorage.getItem(WS_PIN_STORAGE_KEY) : "";\n';
+  html += '    if (!tok2 && typeof sessionStorage !== "undefined" && sessionStorage) tok2 = sessionStorage.getItem(WS_PIN_STORAGE_KEY);\n';
+  html += '    if (tok2 && typeof WS_AUTH_TOKEN_USER_MAP !== "undefined" && WS_AUTH_TOKEN_USER_MAP && WS_AUTH_TOKEN_USER_MAP[tok2]) {\n';
+  html += '      return WS_AUTH_TOKEN_USER_MAP[tok2];\n';
   html += '    }\n';
   html += '    var nameInp = document.getElementById("wsAccessNameInput");\n';
   html += '    if (nameInp && nameInp.value && nameInp.value.trim() && nameInp.value.trim().toLowerCase() !== "admin") {\n';
@@ -18309,6 +18405,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '}';
   html += '';
   html += 'function setDashboardScope(newScope) {';
+  html += '  if (typeof triggerAutoSilentSyncIfNeeded === "function") { triggerAutoSilentSyncIfNeeded(2500); }';
   html += '  if (typeof mobileExpandedEstimateSites !== "undefined" && mobileExpandedEstimateSites && typeof mobileExpandedEstimateSites.clear === "function") {';
   html += '    mobileExpandedEstimateSites.clear();';
   html += '  }';
@@ -19453,6 +19550,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '}';
   html += '';
   html += 'function switchToPcView(view) {';
+  html += '  if (typeof triggerAutoSilentSyncIfNeeded === "function") { triggerAutoSilentSyncIfNeeded(2500); }';
   html += '  if (typeof clearCheckedSiteTasks === "function") clearCheckedSiteTasks();';
   html += '  if (view === "todo") {';
   html += '    isCalendarMode = false;';
@@ -21393,6 +21491,17 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  recalcAllSitesAndKpi(rawData);';
   html += '  renderDashboardPayload(rawData);';
   html += '}';
+  html += 'let wsClientKnownMutationMs = 0;';
+  html += 'let wsLastSilentSyncTriggerMs = 0;';
+  html += 'function triggerAutoSilentSyncIfNeeded(minIntervalMs) {';
+  html += '  try {';
+  html += '    const interval = (typeof minIntervalMs === "number") ? minIntervalMs : 3000;';
+  html += '    const now = Date.now();';
+  html += '    if (now - wsLastSilentSyncTriggerMs < interval) return;';
+  html += '    wsLastSilentSyncTriggerMs = now;';
+  html += '    loadDataSilently();';
+  html += '  } catch (eTrig) {}';
+  html += '}';
   html += 'function loadDataSilently() {';
   html += '  const reqSeq = clientMutationSeq;';
   html += '  google.script.run';
@@ -21487,6 +21596,34 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '        }, 350);';
   html += '      }';
   html += '    } catch(ePrefetch) {}';
+  html += '    if (data && typeof data.lastMutationMs === "number" && data.lastMutationMs > 0) {';
+  html += '      wsClientKnownMutationMs = Math.max(wsClientKnownMutationMs || 0, data.lastMutationMs);';
+  html += '    }';
+  html += '    if (data && Array.isArray(data.memoNotifications) && typeof checkAndDispatchIncomingMemoNotifications === "function") {';
+  html += '      checkAndDispatchIncomingMemoNotifications(data.memoNotifications);';
+  html += '    }';
+  html += '    if (typeof updatePushToggleBtnUI === "function") {';
+  html += '      updatePushToggleBtnUI();';
+  html += '    }';
+  html += '    if (window.__pendingPushDeepLink && typeof openTaskFromPushPayload === "function") {';
+  html += '      const pDeep = window.__pendingPushDeepLink;';
+  html += '      window.__pendingPushDeepLink = null;';
+  html += '      setTimeout(function() { openTaskFromPushPayload(pDeep); }, 200);';
+  html += '    }';
+  html += '    try {';
+  html += '      if (typeof isBottomSheetVisible === "function" && isBottomSheetVisible() && curSiteName && curTaskObj) {';
+  html += '        const liveTask = findLiveTaskInRawData(curSiteName, curTaskObj);';
+  html += '        if (liveTask) {';
+  html += '          curTaskObj = liveTask;';
+  html += '          const memoInp = document.getElementById("sheetMemoInput");';
+  html += '          const isUserTypingMemo = !!(memoInp && (document.activeElement === memoInp || (memoInp.value && memoInp.value.trim())));';
+  html += '          if (!isUserTypingMemo) {';
+  html += '            sheetMemoHistoryItems = parseMemoHistoryItems(liveTask.memo || "");';
+  html += '            renderSheetMemoHistoryUI();';
+  html += '          }';
+  html += '        }';
+  html += '      }';
+  html += '    } catch (eLiveModalMemo) {}';
   html += '  } catch (renderErr) {';
   html += '    document.getElementById("contentArea").innerHTML = \'<div class="empty-state">⚠️ 대시보드 렌더링 오류: \' + escapeHtml(renderErr.message || renderErr) + \'</div>\';';
   html += '  }';
@@ -21509,17 +21646,6 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  });';
   html += '  updateCheckedStatusUI();';
   html += '  if (isCalendarMode) toggleCalendarView(); else renderList();';
-  html += '  if (data && Array.isArray(data.memoNotifications) && typeof checkAndDispatchIncomingMemoNotifications === "function") {';
-  html += '    checkAndDispatchIncomingMemoNotifications(data.memoNotifications);';
-  html += '  }';
-  html += '  if (typeof updatePushToggleBtnUI === "function") {';
-  html += '    updatePushToggleBtnUI();';
-  html += '  }';
-  html += '  if (window.__pendingPushDeepLink && typeof openTaskFromPushPayload === "function") {';
-  html += '    const pDeep = window.__pendingPushDeepLink;';
-  html += '    window.__pendingPushDeepLink = null;';
-  html += '    setTimeout(function() { openTaskFromPushPayload(pDeep); }, 200);';
-  html += '  }';
   html += '}';
   html += '';
   html += 'let selectedPcSiteName = "";';
@@ -25134,13 +25260,13 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '}';
   html += '';
   html += 'function togglePushNotifications() {';
-  html += '  if (typeof Notification === "undefined") {';
+  html += '  if (typeof window !== "undefined" && window.top && window.top !== window) {';
   html += '    try {';
-  html += '      if (window.top && window.top !== window) {';
-  html += '        window.top.postMessage({ type: "WS_REQUEST_PUSH_PERMISSION" }, "*");';
-  html += '        return;';
-  html += '      }';
+  html += '      window.top.postMessage({ type: "WS_REQUEST_PUSH_TOGGLE" }, "*");';
+  html += '      return;';
   html += '    } catch (eTopReq) {}';
+  html += '  }';
+  html += '  if (typeof Notification === "undefined") {';
   html += '    alert("현재 브라우저는 웹 푸시 알림을 지원하지 않습니다.");';
   html += '    return;';
   html += '  }';
@@ -25162,11 +25288,6 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '        }';
   html += '      });';
   html += '    }';
-  html += '    try {';
-  html += '      if (window.top && window.top !== window) {';
-  html += '        window.top.postMessage({ type: "WS_REQUEST_PUSH_PERMISSION" }, "*");';
-  html += '      }';
-  html += '    } catch (eReqTop) {}';
   html += '    return;';
   html += '  }';
   html += '  let curEnabled = false;';
@@ -25185,28 +25306,32 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += 'function checkAndDispatchIncomingMemoNotifications(notifs) {';
   html += '  if (!Array.isArray(notifs) || notifs.length === 0) return;';
   html += '  const myIdentity = (typeof getPushUserIdentity === "function") ? getPushUserIdentity() : "";';
+  html += '  if (!myIdentity) return;';
   html += '  let isEnabled = true;';
   html += '  try {';
   html += '    const stored = localStorage.getItem("ws_push_notification_enabled_v1");';
   html += '    if (stored !== null) isEnabled = (stored === "true" || stored === "1");';
   html += '  } catch (eEn) {}';
+  html += '  const nowMs = Date.now();';
   html += '  for (let i = 0; i < notifs.length; i++) {';
   html += '    const n = notifs[i];';
   html += '    if (!n || !n.id) continue;';
   html += '    if (wsShownNotifIdSet[n.id]) continue;';
+  html += '    if (n.timestamp && (nowMs - n.timestamp > 30000) && !wsLastSeenNotifMs) {';
+  html += '      wsShownNotifIdSet[n.id] = true;';
+  html += '      continue;';
+  html += '    }';
   html += '    let isForMe = false;';
   html += '    const recips = n.recipients || [];';
-  html += '    if (myIdentity) {';
-  html += '      for (let r = 0; r < recips.length; r++) {';
-  html += '        const recip = String(recips[r] || "").replace(/\\s+/g, "").trim();';
-  html += '        if (myIdentity.toLowerCase() === "admin" && (recip.toLowerCase() === "admin" || recip === "관리자")) {';
-  html += '          isForMe = true;';
-  html += '          break;';
-  html += '        }';
-  html += '        if (recip.toLowerCase() === myIdentity.toLowerCase()) {';
-  html += '          isForMe = true;';
-  html += '          break;';
-  html += '        }';
+  html += '    for (let r = 0; r < recips.length; r++) {';
+  html += '      const recip = String(recips[r] || "").replace(/\\s+/g, "").trim();';
+  html += '      if (myIdentity.toLowerCase() === "admin" && (recip.toLowerCase() === "admin" || recip === "관리자")) {';
+  html += '        isForMe = true;';
+  html += '        break;';
+  html += '      }';
+  html += '      if (recip.toLowerCase() === myIdentity.toLowerCase()) {';
+  html += '        isForMe = true;';
+  html += '        break;';
   html += '      }';
   html += '    }';
   html += '    wsShownNotifIdSet[n.id] = true;';
@@ -25233,6 +25358,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    commentText: n.commentText || "",';
   html += '    timestamp: n.timestamp || Date.now()';
   html += '  };';
+  html += '  let forwardedToTop = false;';
   html += '  try {';
   html += '    if (window.top && window.top !== window) {';
   html += '      window.top.postMessage({';
@@ -25245,9 +25371,10 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '          data: notifData';
   html += '        }';
   html += '      }, "*");';
+  html += '      forwardedToTop = true;';
   html += '    }';
   html += '  } catch (eTopN) {}';
-  html += '  if (typeof Notification !== "undefined" && Notification.permission === "granted") {';
+  html += '  if (!forwardedToTop && typeof Notification !== "undefined" && Notification.permission === "granted") {';
   html += '    try {';
   html += '      const nObj = new Notification(n.title || "우성 일정 알림", {';
   html += '        body: n.body || "",';
@@ -25418,10 +25545,19 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      checkAndDispatchIncomingMemoNotifications(data.notifications);';
   html += '    }';
   html += '  } else if (data.type === "WS_PUSH_PERMISSION_RESULT") {';
-  html += '    if (data.permission === "granted") {';
-  html += '      try { localStorage.setItem("ws_push_notification_enabled_v1", "true"); } catch (ePerm) {}';
-  html += '      if (typeof updatePushToggleBtnUI === "function") updatePushToggleBtnUI();';
-  html += '      if (typeof showToast === "function") showToast("🔔 비고 알림이 활성화되었습니다!");';
+  html += '    var isPermGranted = (data.permission === "granted" && data.enabled !== false);';
+  html += '    try { localStorage.setItem("ws_push_notification_enabled_v1", isPermGranted ? "true" : "false"); } catch (ePerm) {}';
+  html += '    if (typeof updatePushToggleBtnUI === "function") updatePushToggleBtnUI();';
+  html += '    if (typeof showToast === "function") showToast(isPermGranted ? "🔔 비고 알림이 켜졌습니다." : "🔕 비고 알림이 꺼졌습니다.");';
+  html += '  } else if (data.type === "WS_POLL_SYNC_TICK") {';
+  html += '    if (Array.isArray(data.notifications) && typeof checkAndDispatchIncomingMemoNotifications === "function") {';
+  html += '      checkAndDispatchIncomingMemoNotifications(data.notifications);';
+  html += '    }';
+  html += '    if (typeof data.lastMutationMs === "number" && data.lastMutationMs > 0) {';
+  html += '      if (!wsClientKnownMutationMs || data.lastMutationMs > wsClientKnownMutationMs) {';
+  html += '        wsClientKnownMutationMs = data.lastMutationMs;';
+  html += '        if (typeof loadDataSilently === "function") loadDataSilently();';
+  html += '      }';
   html += '    }';
   html += '  }';
   html += '});';
@@ -25444,11 +25580,30 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '              if (res.serverTime) wsLastSeenNotifMs = res.serverTime;';
   html += '              checkAndDispatchIncomingMemoNotifications(res.notifications);';
   html += '            }';
+  html += '            if (res && typeof res.lastMutationMs === "number" && res.lastMutationMs > 0) {';
+  html += '              if (!wsClientKnownMutationMs || res.lastMutationMs > wsClientKnownMutationMs) {';
+  html += '                wsClientKnownMutationMs = res.lastMutationMs;';
+  html += '                if (typeof loadDataSilently === "function") loadDataSilently();';
+  html += '              }';
+  html += '            }';
   html += '          })';
   html += '          .catch(function() {});';
   html += '      }';
   html += '    } catch (eStand) {}';
   html += '  }, 15000);';
+  html += '}';
+  html += '';
+  html += 'if (typeof window !== "undefined" && typeof window.addEventListener === "function") {';
+  html += '  window.addEventListener("focus", function() {';
+  html += '    if (typeof triggerAutoSilentSyncIfNeeded === "function") triggerAutoSilentSyncIfNeeded(4000);';
+  html += '  });';
+  html += '}';
+  html += 'if (typeof document !== "undefined" && typeof document.addEventListener === "function") {';
+  html += '  document.addEventListener("visibilitychange", function() {';
+  html += '    if (document.visibilityState === "visible" && typeof triggerAutoSilentSyncIfNeeded === "function") {';
+  html += '      triggerAutoSilentSyncIfNeeded(4000);';
+  html += '    }';
+  html += '  });';
   html += '}';
   html += '';
   html += 'try {';
@@ -26050,6 +26205,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '}';
   html += '';
   html += 'function openBottomSheet(site, task, explicitList, explicitIndex) {';
+  html += '  if (typeof triggerAutoSilentSyncIfNeeded === "function") { triggerAutoSilentSyncIfNeeded(2500); }';
   html += '  closeCustomDatePicker();';
   html += '  flushQuickShareSync();';
   html += '  curEstimateEditSite = null;';
