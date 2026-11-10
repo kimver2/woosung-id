@@ -211,7 +211,7 @@
   <iframe
     id="appFrame"
     credentialless
-    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=211"
+    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=212"
     allow="clipboard-write; camera; geolocation"
     onload="hideLoading()">
   </iframe>
@@ -435,7 +435,7 @@
 
     function sendPushPermissionStateToChild(source, toggled) {
       var perm = ('Notification' in window) ? Notification.permission : 'default';
-      var storedEn = localStorage.getItem('ws_push_notification_enabled_v1');
+      var storedEn = localStorage.getItem('ws_push_notification_enabled_v2');
       var isEn = (storedEn === null) ? (perm === 'granted') : (storedEn === 'true' || storedEn === '1');
       if (source) {
         try {
@@ -526,7 +526,7 @@
         if (Notification.permission === 'default') {
           Notification.requestPermission().then(function(perm) {
             var isGranted = (perm === 'granted');
-            try { localStorage.setItem('ws_push_notification_enabled_v1', String(isGranted)); } catch (eSP) {}
+            try { localStorage.setItem('ws_push_notification_enabled_v2', String(isGranted)); } catch (eSP) {}
             if (isGranted) {
               triggerTopSystemNotification('🔔 [우성아이디] 비고 알림 활성화', '비고 코멘트 알림을 정상적으로 수신합니다.', 'test-notif-perm');
             }
@@ -539,9 +539,9 @@
           return;
         }
         // Notification.permission === 'granted'
-        var curEn = localStorage.getItem('ws_push_notification_enabled_v1');
+        var curEn = localStorage.getItem('ws_push_notification_enabled_v2');
         var nextEn = (curEn === null) ? false : (curEn !== 'true' && curEn !== '1');
-        try { localStorage.setItem('ws_push_notification_enabled_v1', String(nextEn)); } catch (eSE) {}
+        try { localStorage.setItem('ws_push_notification_enabled_v2', String(nextEn)); } catch (eSE) {}
         if (nextEn) {
           triggerTopSystemNotification('🔔 [우성아이디] 비고 알림 켜짐', '비고 코멘트 알림을 수신합니다.', 'test-notif-on');
         }
@@ -550,6 +550,14 @@
       }
       if (data.type === 'WS_TRIGGER_NOTIFICATION') {
         var nPayload = data.payload || {};
+        if ('Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission().then(function(perm) {
+            if (perm === 'granted') {
+              triggerTopSystemNotification(nPayload.title, nPayload.body, nPayload.data && nPayload.data.tag, nPayload.data);
+            }
+          });
+          return;
+        }
         triggerTopSystemNotification(nPayload.title, nPayload.body, nPayload.data && nPayload.data.tag, nPayload.data);
         return;
       }
