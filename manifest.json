@@ -1,0 +1,17 @@
+{
+  "name": "우성 테크보드 (Woosung Techboard)",
+  "short_name": "우성일정",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "description": "우성 일정 및 현장 공정 관리 테크보드",
+  "icons": [
+    {
+      "src": "partner_icon_640x640.png",
+      "sizes": "640x640",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -23,6 +23,7 @@
   <meta http-equiv="Expires" content="0">
   
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📱</text></svg>">
+  <link rel="manifest" href="manifest.json">
 
   <style>
     * {
@@ -210,7 +211,7 @@
   <iframe
     id="appFrame"
     credentialless
-    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=206"
+    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=207"
     allow="clipboard-write; camera; geolocation"
     onload="hideLoading()">
   </iframe>
@@ -228,12 +229,28 @@
         document.cookie = name + '=' + encodeURIComponent(val || '') + '; path=/; max-age=' + maxAgeSec + '; SameSite=Lax';
       } catch (eSC) {}
     }
+    function getTopUrlParams() {
+      var params = {};
+      try {
+        var qs = window.location.search || '';
+        if (qs.indexOf('?') === 0) qs = qs.substring(1);
+        var pairs = qs.split('&');
+        for (var i = 0; i < pairs.length; i++) {
+          if (!pairs[i]) continue;
+          var p = pairs[i].split('=');
+          var k = decodeURIComponent(p[0] || '');
+          var v = decodeURIComponent(p[1] || '');
+          if (k) params[k] = v;
+        }
+      } catch (eQ) {}
+      return params;
+    }
     function getTopSavedAuth() {
       var tok = '';
       var usr = '';
       try {
         tok = localStorage.getItem('ws_dashboard_auth_token_v2') || sessionStorage.getItem('ws_dashboard_auth_token_v2') || getTopSavedCookie('ws_dashboard_auth_token_v2') || '';
-        usr = localStorage.getItem('ws_dashboard_auth_user_v2') || getTopSavedCookie('ws_dashboard_auth_user_v2') || '';
+        usr = localStorage.getItem('ws_dashboard_auth_user_v2') || sessionStorage.getItem('ws_dashboard_auth_user_v2') || getTopSavedCookie('ws_dashboard_auth_user_v2') || '';
       } catch (eG) {
         tok = getTopSavedCookie('ws_dashboard_auth_token_v2') || '';
         usr = getTopSavedCookie('ws_dashboard_auth_user_v2') || '';
@@ -247,7 +264,7 @@
           try { localStorage.setItem('ws_dashboard_auth_token_v2', token); } catch (eL1) {}
           setTopSavedCookie('ws_dashboard_auth_token_v2', token, 31536000);
         }
-        if (cleanU && cleanU.toLowerCase() !== 'admin') {
+        if (cleanU) {
           try { localStorage.setItem('ws_dashboard_auth_user_v2', cleanU); } catch (eL2) {}
           setTopSavedCookie('ws_dashboard_auth_user_v2', cleanU, 31536000);
         }
@@ -257,6 +274,9 @@
       }
       if (token) {
         try { sessionStorage.setItem('ws_dashboard_auth_token_v2', token); } catch (eSS) {}
+      }
+      if (cleanU) {
+        try { sessionStorage.setItem('ws_dashboard_auth_user_v2', cleanU); } catch (eSSU) {}
       }
     }
     function checkTopPinLockout() {
@@ -362,12 +382,18 @@
           if (topLock) topLock.style.display = 'none';
         }
         var frame = document.getElementById('appFrame');
-        if (frame && (auth.token || auth.user)) {
+        if (frame) {
           var baseSrc = frame.getAttribute('src') || '';
           var extra = '';
           if (auth.token) extra += '&authTok=' + encodeURIComponent(auth.token);
           if (auth.user) extra += '&authUsr=' + encodeURIComponent(auth.user);
-          if (extra && baseSrc.indexOf('authTok=') === -1) {
+          var uParams = getTopUrlParams();
+          if (uParams.openSite) extra += '&openSite=' + encodeURIComponent(uParams.openSite);
+          if (uParams.openTask) extra += '&openTask=' + encodeURIComponent(uParams.openTask);
+          if (uParams.openTaskId) extra += '&openTaskId=' + encodeURIComponent(uParams.openTaskId);
+          if (uParams.openRow) extra += '&openRow=' + encodeURIComponent(uParams.openRow);
+          if (uParams.openScope) extra += '&openScope=' + encodeURIComponent(uParams.openScope);
+          if (extra && baseSrc.indexOf('authTok=') === -1 && baseSrc.indexOf('openSite=') === -1) {
             frame.src = baseSrc + extra;
           }
         }
@@ -405,7 +431,76 @@
           if (ev.source && (authRdy.token || authRdy.user)) {
             ev.source.postMessage({ type: 'WS_RESTORE_AUTH', token: authRdy.token, user: authRdy.user }, '*');
           }
+          var rdyParams = getTopUrlParams();
+          if (ev.source && (rdyParams.openSite || rdyParams.openTask || rdyParams.openTaskId)) {
+            ev.source.postMessage({
+              type: 'WS_OPEN_TASK_DEEP_LINK',
+              payload: {
+                siteName: rdyParams.openSite || '',
+                taskName: rdyParams.openTask || '',
+                taskId: rdyParams.openTaskId || '',
+                row: rdyParams.openRow || '',
+                scope: rdyParams.openScope || ''
+              }
+            }, '*');
+          }
         } catch (eRdyAuth) {}
+        return;
+      }
+      if (data.type === 'WS_NOTIFICATION_CLICK') {
+        if (orcaDashboardSource) {
+          try {
+            orcaDashboardSource.postMessage({
+              type: 'WS_OPEN_TASK_DEEP_LINK',
+              payload: data.payload || {}
+            }, '*');
+          } catch (eNClk) {}
+        }
+        return;
+      }
+      if (data.type === 'WS_REQUEST_PUSH_PERMISSION') {
+        if ('Notification' in window) {
+          Notification.requestPermission().then(function(perm) {
+            if (ev.source) {
+              ev.source.postMessage({
+                type: 'WS_PUSH_PERMISSION_RESULT',
+                permission: perm
+              }, '*');
+            }
+          });
+        }
+        return;
+      }
+      if (data.type === 'WS_TRIGGER_NOTIFICATION') {
+        var nPayload = data.payload || {};
+        if ('Notification' in window && Notification.permission === 'granted') {
+          if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+              type: 'SHOW_NOTIFICATION',
+              title: nPayload.title || '우성 일정 알림',
+              body: nPayload.body || '',
+              icon: nPayload.icon || 'partner_icon_640x640.png',
+              badge: nPayload.badge || 'partner_icon_640x640.png',
+              data: nPayload.data || {}
+            });
+          } else if (wsSwRegistration && wsSwRegistration.showNotification) {
+            wsSwRegistration.showNotification(nPayload.title || '우성 일정 알림', {
+              body: nPayload.body || '',
+              icon: nPayload.icon || 'partner_icon_640x640.png',
+              badge: nPayload.badge || 'partner_icon_640x640.png',
+              data: nPayload.data || {},
+              tag: (nPayload.data && nPayload.data.tag) || ('memo-' + Date.now()),
+              renotify: true
+            });
+          } else {
+            try {
+              new Notification(nPayload.title || '우성 일정 알림', {
+                body: nPayload.body || '',
+                icon: nPayload.icon || 'partner_icon_640x640.png'
+              });
+            } catch (eNewN) {}
+          }
+        }
         return;
       }
       if (data.type === 'WS_AUTH_INIT') {
@@ -510,6 +605,58 @@
         }
       }
     });
+
+    // PWA Service Worker Registration
+    var wsSwRegistration = null;
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./sw.js').then(function(reg) {
+          wsSwRegistration = reg;
+        }).catch(function(err) {});
+      });
+      navigator.serviceWorker.addEventListener('message', function(event) {
+        if (event.data && event.data.type === 'WS_NOTIFICATION_CLICK') {
+          if (orcaDashboardSource) {
+            try {
+              orcaDashboardSource.postMessage({
+                type: 'WS_OPEN_TASK_DEEP_LINK',
+                payload: event.data.payload || {}
+              }, '*');
+            } catch (eSWClick) {}
+          }
+        }
+      });
+    }
+
+    // Background memo notification polling (15s interval)
+    var lastMemoPollMs = Date.now();
+    if (typeof setInterval !== 'undefined') {
+      setInterval(function() {
+        try {
+          var auth = getTopSavedAuth();
+          var user = auth.user || '';
+          var pollUrl = GAS_AUTH_API_URL + '?action=pollMemoNotifications&user=' + encodeURIComponent(user) + '&since=' + lastMemoPollMs;
+          fetch(pollUrl, { method: 'GET', credentials: 'omit' })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+              if (res && res.success && Array.isArray(res.notifications) && res.notifications.length > 0) {
+                lastMemoPollMs = res.serverTime || Date.now();
+                if (orcaDashboardSource) {
+                  try {
+                    orcaDashboardSource.postMessage({
+                      type: 'WS_INCOMING_NOTIFICATIONS',
+                      notifications: res.notifications
+                    }, '*');
+                  } catch (eFwd) {}
+                }
+              } else if (res && res.serverTime) {
+                lastMemoPollMs = res.serverTime;
+              }
+            })
+            .catch(function(ePoll) {});
+        } catch (ePAll) {}
+      }, 15000);
+    }
   </script>
 </body>
 </html>

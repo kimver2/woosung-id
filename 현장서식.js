@@ -7107,8 +7107,25 @@ function updateScheduleStatusFromWeb(row, newStatus, newShared, newMemo, newDate
     // F열 비고 업데이트 (파라미터가 명시적으로 전달된 경우)
     if (newMemo !== undefined && newMemo !== null) {
       var cleanMemo = String(newMemo).trim();
+      var prevMemoForNotif = origMemoForMatch || String(sheet.getRange(rowNum, 6).getValue() || "").trim();
       sheet.getRange(rowNum, 6).setValue(cleanMemo); // F열(6열) 비고 업데이트
       updatedMemo = cleanMemo;
+      try {
+        var updateCommentInfo = extractNewlyAddedMemoComment(prevMemoForNotif, cleanMemo);
+        if (updateCommentInfo && updateCommentInfo.text) {
+          recordMemoPushNotification({
+            siteName: siteName,
+            taskName: updatedTask || taskName || origTaskForMatch,
+            taskId: taskIdForMatch,
+            row: rowNum,
+            scope: targetSheetName || "site",
+            manager: updatedManager || origMgrForMatch,
+            author: updateCommentInfo.author,
+            commentText: updateCommentInfo.text,
+            rawLine: updateCommentInfo.rawLine
+          });
+        }
+      } catch (eNotifUpd) {}
     }
 
     var now = new Date();
@@ -9574,6 +9591,26 @@ function addScheduleTaskFromWeb(siteName, taskName, dateStr, manager, status, is
     SpreadsheetApp.flush();
     invalidateDashboardServerCache();
 
+    // 비고 코멘트가 포함되어 있으면 담당자 및 관리자에게 푸시 알림 기록
+    try {
+      if (cleanMemo) {
+        var addCommentInfo = extractNewlyAddedMemoComment("", cleanMemo);
+        if (addCommentInfo && addCommentInfo.text) {
+          recordMemoPushNotification({
+            siteName: cleanSite,
+            taskName: cleanTask,
+            taskId: taskId,
+            row: newRow,
+            scope: category || "site",
+            manager: cleanManager,
+            author: addCommentInfo.author,
+            commentText: addCommentInfo.text,
+            rawLine: addCommentInfo.rawLine
+          });
+        }
+      }
+    } catch (eNotifAdd) {}
+
     // 캘린더 연동 제거 완료: 락 대기 및 캘린더 API 호출 생략 (~50ms 저장)
 
     return {
@@ -9841,6 +9878,230 @@ function updateEstimateRowFromWeb(data) {
 }
 
 /**
+ * 비고 코멘트 신규 추가분 추출 (타임스탬프 및 작성자 포함 파싱)
+ * @param {string} origMemo
+ * @param {string} newMemo
+ * @return {{rawLine: string, author: string, time: string, text: string}|null}
+ */
+function extractNewlyAddedMemoComment(origMemo, newMemo) {
+  if (!newMemo || !String(newMemo).trim()) return null;
+  var origLines = String(origMemo || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").map(function(l) { return l.trim(); }).filter(Boolean);
+  var newLines = String(newMemo || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").map(function(l) { return l.trim(); }).filter(Boolean);
+  if (newLines.length === 0) return null;
+  if (newLines.length <= origLines.length && newLines.join("\n") === origLines.join("\n")) {
+    return null;
+  }
+  var addedLines = [];
+  if (origLines.length === 0) {
+    addedLines = newLines;
+  } else {
+    var isPrefixMatch = true;
+    for (var i = 0; i < origLines.length; i++) {
+      if (origLines[i] !== newLines[i]) {
+        isPrefixMatch = false;
+        break;
+      }
+    }
+    if (isPrefixMatch && newLines.length > origLines.length) {
+      addedLines = newLines.slice(origLines.length);
+    } else {
+      for (var j = 0; j < newLines.length; j++) {
+        if (origLines.indexOf(newLines[j]) === -1) {
+          addedLines.push(newLines[j]);
+        }
+      }
+      if (addedLines.length === 0 && newLines.length > 0) {
+        addedLines = [newLines[newLines.length - 1]];
+      }
+    }
+  }
+  if (addedLines.length === 0) return null;
+
+  var lastLine = addedLines[addedLines.length - 1];
+  var tsRegex = /^\[(?:\d+차\s*\|?\s*)?(\d{2}\/\d{2}\s+\d{2}:\d{2})(?:\s*[\|·]\s*([^\]]+))?\]\s*(.*)$/;
+  var legacyAuthorRegex = /^작성자\s+([^\s:：]+)\s*[:：]\s*(.*)$/;
+  var author = "";
+  var timeStr = "";
+  var commentText = "";
+  var m = lastLine.match(tsRegex);
+  if (m) {
+    timeStr = m[1].trim();
+    author = (m[2] || "").trim();
+    commentText = m[3] || "";
+    var subM = commentText.trim().match(legacyAuthorRegex);
+    if (subM && !author) {
+      author = subM[1].trim();
+      commentText = subM[2];
+    }
+  } else {
+    var legM = lastLine.match(legacyAuthorRegex);
+    if (legM) {
+      author = legM[1].trim();
+      commentText = legM[2];
+    } else {
+      commentText = lastLine;
+    }
+  }
+  commentText = String(commentText || "").trim();
+  if (!commentText && addedLines.length > 0) {
+    commentText = addedLines.join(" ");
+  }
+  return {
+    rawLine: lastLine,
+    author: author,
+    time: timeStr,
+    text: commentText
+  };
+}
+
+/**
+ * 비고 코멘트 푸시 알림 수신자 계산 (해당 공종 담당자 목록 + admin 계정, 작성자 본인 제외)
+ * @param {string} managerStr
+ * @param {string} author
+ * @return {string[]}
+ */
+function computeMemoPushRecipients(managerStr, author) {
+  var mgrList = parseManagerNamesList(managerStr);
+  if (mgrList.indexOf("admin") === -1) {
+    mgrList.push("admin");
+  }
+  var cleanAuthor = String(author || "").replace(/\s+/g, "").trim();
+  var isAuthorAdmin = (cleanAuthor.toLowerCase() === "admin" || cleanAuthor === "관리자");
+  var recipients = [];
+  for (var i = 0; i < mgrList.length; i++) {
+    var m = mgrList[i];
+    var cleanM = String(m || "").replace(/\s+/g, "").trim();
+    if (!cleanM) continue;
+    if (isAuthorAdmin && (cleanM.toLowerCase() === "admin" || cleanM === "관리자")) {
+      continue;
+    }
+    if (cleanM === cleanAuthor) {
+      continue;
+    }
+    recipients.push(cleanM);
+  }
+  return recipients;
+}
+
+/**
+ * 푸시 알림 큐 조회 (CacheService 우선, PropertiesService 영구 보존)
+ * @return {Array<Object>}
+ */
+function getMemoPushNotificationQueue() {
+  try {
+    var cache = CacheService.getScriptCache();
+    var cached = cache ? cache.get("WS_MEMO_PUSH_QUEUE_CACHE_V1") : null;
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (eC) {}
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var raw = props.getProperty("WS_MEMO_PUSH_QUEUE_V1");
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      try {
+        var c = CacheService.getScriptCache();
+        if (c) c.put("WS_MEMO_PUSH_QUEUE_CACHE_V1", raw, 21600);
+      } catch (eCP) {}
+      return parsed;
+    }
+  } catch (eP) {}
+  return [];
+}
+
+/**
+ * 푸시 알림 큐 저장 (최대 50건 보존)
+ * @param {Array<Object>} queue
+ */
+function saveMemoPushNotificationQueue(queue) {
+  var trimmed = (queue || []).slice(-50);
+  var json = JSON.stringify(trimmed);
+  try {
+    var cache = CacheService.getScriptCache();
+    if (cache) cache.put("WS_MEMO_PUSH_QUEUE_CACHE_V1", json, 21600);
+  } catch (eC) {}
+  try {
+    var props = PropertiesService.getScriptProperties();
+    props.setProperty("WS_MEMO_PUSH_QUEUE_V1", json);
+  } catch (eP) {}
+}
+
+/**
+ * 신규 비고 코멘트 푸시 알림 레코드 생성 및 큐 적재
+ * @param {Object} notifInput
+ * @return {Object|null}
+ */
+function recordMemoPushNotification(notifInput) {
+  if (!notifInput) return null;
+  try {
+    var recipients = computeMemoPushRecipients(notifInput.manager, notifInput.author);
+    if (!recipients || recipients.length === 0) return null;
+    var notif = {
+      id: "notif_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+      timestamp: Date.now(),
+      siteName: notifInput.siteName || "",
+      taskName: notifInput.taskName || "",
+      taskId: notifInput.taskId || "",
+      row: notifInput.row || "",
+      scope: notifInput.scope || "",
+      author: notifInput.author || "",
+      commentText: notifInput.commentText || "",
+      recipients: recipients,
+      title: "💬 [" + (notifInput.siteName || "현장") + "] " + (notifInput.taskName || "공종") + " 새 비고",
+      body: (notifInput.author ? ("[" + notifInput.author + "] ") : "") + (notifInput.commentText || "")
+    };
+    var queue = getMemoPushNotificationQueue();
+    queue.push(notif);
+    saveMemoPushNotificationQueue(queue);
+    return notif;
+  } catch (err) {
+    Logger.log("recordMemoPushNotification 오류: " + err.toString());
+    return null;
+  }
+}
+
+/**
+ * 최근 비고 푸시 알림 목록 필터링 조회
+ * @param {string} userStr
+ * @param {number} sinceMs
+ * @return {Array<Object>}
+ */
+function getRecentMemoPushNotifications(userStr, sinceMs) {
+  try {
+    var queue = getMemoPushNotificationQueue();
+    var cleanU = String(userStr || "").replace(/\s+/g, "").trim();
+    var since = parseInt(sinceMs, 10) || 0;
+    var result = [];
+    for (var i = 0; i < queue.length; i++) {
+      var item = queue[i];
+      if (since > 0 && item.timestamp <= since) continue;
+      if (cleanU) {
+        var isRecipient = false;
+        var rList = item.recipients || [];
+        for (var j = 0; j < rList.length; j++) {
+          var r = String(rList[j] || "").replace(/\s+/g, "").trim();
+          if (cleanU.toLowerCase() === "admin" && (r.toLowerCase() === "admin" || r === "관리자")) {
+            isRecipient = true;
+            break;
+          }
+          if (r.toLowerCase() === cleanU.toLowerCase()) {
+            isRecipient = true;
+            break;
+          }
+        }
+        if (!isRecipient) continue;
+      }
+      result.push(item);
+    }
+    return result;
+  } catch (err) {
+    Logger.log("getRecentMemoPushNotifications 오류: " + err.toString());
+    return [];
+  }
+}
+
+/**
  * 모바일 웹 드롭다운 상태 변경 화면 (doGet)
  */
 function doGet(e) {
@@ -9851,6 +10112,15 @@ function doGet(e) {
   var targetTask = (p.task || p.taskName) ? String(p.task || p.taskName).trim() : "";
   var targetId = p.id ? String(p.id).trim() : "";
   var action = p.action;
+
+  // 0-0-Push) 비고 푸시 알림 초고속 폴링 (시트 I/O 배제, 캐시 기반 0ms 응답)
+  if (action === "pollMemoNotifications") {
+    var pollUser = p.user || "";
+    var pollSince = p.since || 0;
+    var notifs = getRecentMemoPushNotifications(pollUser, pollSince);
+    return ContentService.createTextOutput(JSON.stringify({ success: true, notifications: notifs, serverTime: Date.now() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
   var newStatus = p.status;
   var newShared = (p.shared !== undefined) ? p.shared : p.isShared;
   var newMemo = p.memo;
@@ -13486,7 +13756,8 @@ function getSidebarDashboardData(forceRefresh) {
       siteSuperintendents: getSiteSuperintendents(ss),
       holidays: getKoreanHolidaysMap(ss),
       sites: sitesList,
-      siteInfoMap: getSiteInfoMap(ss, true)
+      siteInfoMap: getSiteInfoMap(ss, true),
+      memoNotifications: getRecentMemoPushNotifications("", 0)
     };
 
     try {
@@ -14384,7 +14655,8 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   var currentPinToken = computeDashboardPinToken(getDashboardAccessPin());
   var validAuthTokensList = getValidDashboardAuthTokens();
   var cleanPreTok = (typeof preAuthToken === "string") ? preAuthToken.trim() : "";
-  var cleanPreUsr = (typeof preAuthUser === "string" && preAuthUser.trim().toLowerCase() !== "admin") ? preAuthUser.trim() : "";
+  var authIdentityUsr = (typeof preAuthUser === "string") ? preAuthUser.trim() : "";
+  var cleanPreUsr = (authIdentityUsr.toLowerCase() !== "admin") ? authIdentityUsr : "";
   var isServerPreAuthed = !!(cleanPreTok && cleanPreTok.indexOf("WSAUTH_") === 0 && validAuthTokensList.indexOf(cleanPreTok) !== -1);
   html += '<div id="wsAccessLockOverlay" style="display:' + (isServerPreAuthed ? 'none' : 'flex') + ';position:fixed;top:0;left:0;width:100vw;height:100vh;background:#0f172a;z-index:200000;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">';
   html += '  <div id="wsAccessLockCard" style="background:#ffffff;border-radius:20px;width:100%;max-width:360px;padding:30px 24px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.45);text-align:center;">';
@@ -14445,6 +14717,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      <button type="button" class="pc-view-tab" data-view="list" onclick="switchToPcView(\'list\')">현장별</button>';
   html += '    </div>';
   html += '    <button type="button" class="pc-btn-action-top" id="pcMonthlyReportBtn" onclick="openMonthlyReportModal()" style="background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;font-weight:800;" title="월간 협력업체 투입 일수 및 현장 가동 리포트">📊 월간집계</button>';
+  html += '    <button type="button" class="pc-btn-action-top" id="pcPushToggleBtn" onclick="togglePushNotifications()" style="background:#eff6ff;color:#2563eb;border:1.5px solid #93c5fd;font-weight:800;" title="비고 알림 켜기/끄기">🔔 알림</button>';
   html += '    <button type="button" class="pc-btn-action-top" onclick="captureCalendarScreen()">📸 캡쳐</button>';
   html += '    <button type="button" class="pc-btn-action-top refresh-btn" onclick="loadData(true)">🔄 새로고침</button>';
   html += '  </div>';
@@ -14459,6 +14732,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
     html += '      <button type="button" class="btn btn-secondary" style="flex:none;padding:4px 8px;font-size:11px;font-weight:800;display:inline-flex;align-items:center;gap:3px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;" onclick="openWideModalView()" title="대시보드를 넓은 대형 팝업 창(1020px)으로 엽니다">⛶ 크게 보기</button>';
   }
   html += '      <button type="button" id="mobileFilterResetBtn" class="btn btn-secondary" style="display:none;flex:none;padding:4px 8px;font-size:11px;font-weight:800;background:#fef2f2;color:#dc2626;border:1.5px solid #fca5a5;" onclick="resetAllCalendarFilters()" title="활성화된 검색어·담당자·상태 필터를 한 번에 모두 해제합니다">✕ 필터해제</button>';
+  html += '      <button type="button" id="mobilePushToggleBtn" class="btn btn-secondary" style="flex:none;padding:4px 8px;font-size:11px;font-weight:800;background:#eff6ff;color:#2563eb;border:1.5px solid #93c5fd;" onclick="togglePushNotifications()" title="비고 알림 켜기/끄기">🔔 알림</button>';
   html += '      <button type="button" id="mobileMonthlyReportBtn" class="btn btn-secondary" style="flex:none;padding:4px 8px;font-size:11px;font-weight:800;background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;" onclick="openMonthlyReportModal()" title="월간 협력업체 투입 일수 및 현장 가동 리포트">📊 월간집계</button>';
   html += '      <button type="button" class="btn btn-secondary btn-refresh-action" style="flex:none;padding:4px 9px;font-size:11.5px;" onclick="loadData(true)">🔄 새로고침</button>';
   html += '    </div>';
@@ -15494,7 +15768,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += 'var WS_REQUIRED_PIN_TOKEN = ' + jsStringLiteral_(currentPinToken) + ';\n';
   html += 'var WS_VALID_AUTH_TOKENS = ' + JSON.stringify(validAuthTokensList) + ';\n';
   html += 'var WS_SERVER_PRE_TOKEN = ' + jsStringLiteral_(isServerPreAuthed ? cleanPreTok : "") + ';\n';
-  html += 'var WS_SERVER_PRE_USER = ' + jsStringLiteral_(cleanPreUsr) + ';\n';
+  html += 'var WS_SERVER_PRE_USER = ' + jsStringLiteral_(authIdentityUsr) + ';\n';
   html += 'var WS_CURRENT_AUTH_USER = WS_SERVER_PRE_USER || "";\n';
   html += 'var WS_PIN_STORAGE_KEY = "ws_dashboard_auth_token_v2";\n';
   html += 'var WS_USER_STORAGE_KEY = "ws_dashboard_auth_user_v2";\n';
@@ -15580,7 +15854,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '          if (lk) lk.style.display = "none";\n';
   html += '          try { if (typeof sessionStorage !== "undefined" && sessionStorage) sessionStorage.setItem(WS_PIN_STORAGE_KEY, d.token); } catch (eR) {}\n';
   html += '        }\n';
-  html += '        if (d.user && String(d.user).toLowerCase() !== "admin") {\n';
+  html += '        if (d.user) {\n';
   html += '          var cleanUserStr = String(d.user).trim();\n';
   html += '          WS_CURRENT_AUTH_USER = cleanUserStr;\n';
   html += '          try {\n';
@@ -15588,7 +15862,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '            if (typeof sessionStorage !== "undefined" && sessionStorage) sessionStorage.setItem(WS_USER_STORAGE_KEY, cleanUserStr);\n';
   html += '          } catch (eU) {}\n';
   html += '          var nInp = document.getElementById("wsAccessNameInput");\n';
-  html += '          if (nInp && !nInp.value) nInp.value = cleanUserStr;\n';
+  html += '          if (nInp && !nInp.value && cleanUserStr.toLowerCase() !== "admin") nInp.value = cleanUserStr;\n';
   html += '        }\n';
   html += '      });\n';
   html += '      try { if (window.top && window.top !== window) window.top.postMessage({ type: "WS_AUTH_INIT" }, "*"); } catch (eTopI) {}\n';
@@ -15621,7 +15895,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  var keepChk = document.getElementById("wsAccessKeepLoginChk");\n';
   html += '  var keepPersistent = keepChk ? !!keepChk.checked : true;\n';
   html += '  var cleanU = String(userName || "").replace(/\\s+/g, "").trim();\n';
-  html += '  if (cleanU && cleanU.toLowerCase() !== "admin") {\n';
+  html += '  if (cleanU) {\n';
   html += '    WS_CURRENT_AUTH_USER = cleanU;\n';
   html += '  }\n';
   html += '  try {\n';
@@ -15630,14 +15904,14 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      localStorage.removeItem(WS_PIN_LOCK_UNTIL_KEY);\n';
   html += '      if (keepPersistent) {\n';
   html += '        localStorage.setItem(WS_PIN_STORAGE_KEY, token);\n';
-  html += '        if (cleanU && cleanU.toLowerCase() !== "admin") localStorage.setItem(WS_USER_STORAGE_KEY, cleanU);\n';
+  html += '        if (cleanU) localStorage.setItem(WS_USER_STORAGE_KEY, cleanU);\n';
   html += '      } else {\n';
   html += '        localStorage.removeItem(WS_PIN_STORAGE_KEY);\n';
   html += '      }\n';
   html += '    }\n';
   html += '    if (typeof sessionStorage !== "undefined" && sessionStorage) {\n';
   html += '      sessionStorage.setItem(WS_PIN_STORAGE_KEY, token);\n';
-  html += '      if (cleanU && cleanU.toLowerCase() !== "admin") sessionStorage.setItem(WS_USER_STORAGE_KEY, cleanU);\n';
+  html += '      if (cleanU) sessionStorage.setItem(WS_USER_STORAGE_KEY, cleanU);\n';
   html += '    }\n';
   html += '    if (typeof window !== "undefined") {\n';
   html += '      var authMsg = { type: "WS_SAVE_AUTH", token: token, user: cleanU, keep: keepPersistent };\n';
@@ -15655,25 +15929,52 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '}\n';
   html += 'function getCurrentLoggedInUserName() {\n';
   html += '  try {\n';
-  html += '    if (typeof WS_CURRENT_AUTH_USER === "string" && WS_CURRENT_AUTH_USER.trim() && WS_CURRENT_AUTH_USER.toLowerCase() !== "admin") {\n';
+  html += '    var rawUser = "";\n';
+  html += '    if (typeof WS_CURRENT_AUTH_USER === "string" && WS_CURRENT_AUTH_USER.trim()) {\n';
+  html += '      rawUser = WS_CURRENT_AUTH_USER.trim();\n';
+  html += '    } else if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.getItem === "function") {\n';
+  html += '      var u1 = localStorage.getItem(WS_USER_STORAGE_KEY);\n';
+  html += '      if (u1 && u1.trim()) rawUser = u1.trim();\n';
+  html += '    }\n';
+  html += '    if (!rawUser && typeof sessionStorage !== "undefined" && sessionStorage && typeof sessionStorage.getItem === "function") {\n';
+  html += '      var u2 = sessionStorage.getItem(WS_USER_STORAGE_KEY);\n';
+  html += '      if (u2 && u2.trim()) rawUser = u2.trim();\n';
+  html += '    }\n';
+  html += '    if (!rawUser && typeof WS_SERVER_PRE_USER === "string" && WS_SERVER_PRE_USER.trim()) {\n';
+  html += '      rawUser = WS_SERVER_PRE_USER.trim();\n';
+  html += '    }\n';
+  html += '    if (!rawUser) {\n';
+  html += '      var nameInp = document.getElementById("wsAccessNameInput");\n';
+  html += '      if (nameInp && nameInp.value && nameInp.value.trim()) rawUser = nameInp.value.trim();\n';
+  html += '    }\n';
+  html += '    if (rawUser) {\n';
+  html += '      if (rawUser.toLowerCase() === "admin") return "관리자";\n';
+  html += '      return rawUser;\n';
+  html += '    }\n';
+  html += '  } catch (eAuthU) {}\n';
+  html += '  return "";\n';
+  html += '}\n';
+  html += 'function getPushUserIdentity() {\n';
+  html += '  try {\n';
+  html += '    if (typeof WS_CURRENT_AUTH_USER === "string" && WS_CURRENT_AUTH_USER.trim()) {\n';
   html += '      return WS_CURRENT_AUTH_USER.trim();\n';
   html += '    }\n';
   html += '    if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.getItem === "function") {\n';
   html += '      var u1 = localStorage.getItem(WS_USER_STORAGE_KEY);\n';
-  html += '      if (u1 && u1.trim() && u1.toLowerCase() !== "admin") return u1.trim();\n';
+  html += '      if (u1 && u1.trim()) return u1.trim();\n';
   html += '    }\n';
   html += '    if (typeof sessionStorage !== "undefined" && sessionStorage && typeof sessionStorage.getItem === "function") {\n';
   html += '      var u2 = sessionStorage.getItem(WS_USER_STORAGE_KEY);\n';
-  html += '      if (u2 && u2.trim() && u2.toLowerCase() !== "admin") return u2.trim();\n';
+  html += '      if (u2 && u2.trim()) return u2.trim();\n';
   html += '    }\n';
-  html += '    if (typeof WS_SERVER_PRE_USER === "string" && WS_SERVER_PRE_USER.trim() && WS_SERVER_PRE_USER.toLowerCase() !== "admin") {\n';
+  html += '    if (typeof WS_SERVER_PRE_USER === "string" && WS_SERVER_PRE_USER.trim()) {\n';
   html += '      return WS_SERVER_PRE_USER.trim();\n';
   html += '    }\n';
   html += '    var nameInp = document.getElementById("wsAccessNameInput");\n';
   html += '    if (nameInp && nameInp.value && nameInp.value.trim() && nameInp.value.trim().toLowerCase() !== "admin") {\n';
   html += '      return nameInp.value.trim();\n';
   html += '    }\n';
-  html += '  } catch (eAuthU) {}\n';
+  html += '  } catch (eId) {}\n';
   html += '  return "";\n';
   html += '}\n';
   html += 'function showWsAccessPinError(customMsg) {\n';
@@ -21208,6 +21509,17 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  });';
   html += '  updateCheckedStatusUI();';
   html += '  if (isCalendarMode) toggleCalendarView(); else renderList();';
+  html += '  if (data && Array.isArray(data.memoNotifications) && typeof checkAndDispatchIncomingMemoNotifications === "function") {';
+  html += '    checkAndDispatchIncomingMemoNotifications(data.memoNotifications);';
+  html += '  }';
+  html += '  if (typeof updatePushToggleBtnUI === "function") {';
+  html += '    updatePushToggleBtnUI();';
+  html += '  }';
+  html += '  if (window.__pendingPushDeepLink && typeof openTaskFromPushPayload === "function") {';
+  html += '    const pDeep = window.__pendingPushDeepLink;';
+  html += '    window.__pendingPushDeepLink = null;';
+  html += '    setTimeout(function() { openTaskFromPushPayload(pDeep); }, 200);';
+  html += '  }';
   html += '}';
   html += '';
   html += 'let selectedPcSiteName = "";';
@@ -24787,6 +25099,303 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  }';
   html += '});';
   html += '';
+  html += 'let wsLastSeenNotifMs = 0;';
+  html += 'const wsShownNotifIdSet = {};';
+  html += '';
+  html += 'function updatePushToggleBtnUI() {';
+  html += '  let isEnabled = false;';
+  html += '  try {';
+  html += '    const stored = localStorage.getItem("ws_push_notification_enabled_v1");';
+  html += '    if (stored === null) {';
+  html += '      isEnabled = (typeof Notification !== "undefined" && Notification.permission === "granted");';
+  html += '    } else {';
+  html += '      isEnabled = (stored === "true" || stored === "1");';
+  html += '    }';
+  html += '  } catch (eUI) {}';
+  html += '  const pcBtn = document.getElementById("pcPushToggleBtn");';
+  html += '  const mBtn = document.getElementById("mobilePushToggleBtn");';
+  html += '  const btnStyleBg = isEnabled ? "#eff6ff" : "#f8fafc";';
+  html += '  const btnStyleColor = isEnabled ? "#2563eb" : "#64748b";';
+  html += '  const btnStyleBorder = isEnabled ? "#93c5fd" : "#cbd5e1";';
+  html += '  if (pcBtn) {';
+  html += '    pcBtn.innerHTML = (isEnabled ? "🔔" : "🔕") + \' <span class="push-btn-txt">알림</span>\';';
+  html += '    pcBtn.style.background = btnStyleBg;';
+  html += '    pcBtn.style.color = btnStyleColor;';
+  html += '    pcBtn.style.borderColor = btnStyleBorder;';
+  html += '    pcBtn.title = isEnabled ? "비고 알림 켜짐 (클릭 시 끄기)" : "비고 알림 꺼짐 (클릭 시 켜기)";';
+  html += '  }';
+  html += '  if (mBtn) {';
+  html += '    mBtn.innerHTML = (isEnabled ? "🔔" : "🔕") + \' <span class="push-btn-txt">알림</span>\';';
+  html += '    mBtn.style.background = btnStyleBg;';
+  html += '    mBtn.style.color = btnStyleColor;';
+  html += '    mBtn.style.borderColor = btnStyleBorder;';
+  html += '    mBtn.title = isEnabled ? "비고 알림 켜짐 (클릭 시 끄기)" : "비고 알림 꺼짐 (클릭 시 켜기)";';
+  html += '  }';
+  html += '}';
+  html += '';
+  html += 'function togglePushNotifications() {';
+  html += '  if (typeof Notification === "undefined") {';
+  html += '    try {';
+  html += '      if (window.top && window.top !== window) {';
+  html += '        window.top.postMessage({ type: "WS_REQUEST_PUSH_PERMISSION" }, "*");';
+  html += '        return;';
+  html += '      }';
+  html += '    } catch (eTopReq) {}';
+  html += '    alert("현재 브라우저는 웹 푸시 알림을 지원하지 않습니다.");';
+  html += '    return;';
+  html += '  }';
+  html += '  if (Notification.permission === "denied") {';
+  html += '    alert("⚠️ 브라우저에서 알림 권한이 차단되어 있습니다.\\n브라우저 주소창 좌측의 설정/자물쇠 아이콘을 눌러 알림 권한을 \'허용\'으로 변경해주세요.");';
+  html += '    return;';
+  html += '  }';
+  html += '  if (Notification.permission === "default") {';
+  html += '    const reqPromise = Notification.requestPermission();';
+  html += '    if (reqPromise && typeof reqPromise.then === "function") {';
+  html += '      reqPromise.then(function(perm) {';
+  html += '        if (perm === "granted") {';
+  html += '          try { localStorage.setItem("ws_push_notification_enabled_v1", "true"); } catch (eS) {}';
+  html += '          updatePushToggleBtnUI();';
+  html += '          if (typeof showToast === "function") showToast("🔔 비고 알림이 활성화되었습니다!");';
+  html += '        } else {';
+  html += '          try { localStorage.setItem("ws_push_notification_enabled_v1", "false"); } catch (eS) {}';
+  html += '          updatePushToggleBtnUI();';
+  html += '        }';
+  html += '      });';
+  html += '    }';
+  html += '    try {';
+  html += '      if (window.top && window.top !== window) {';
+  html += '        window.top.postMessage({ type: "WS_REQUEST_PUSH_PERMISSION" }, "*");';
+  html += '      }';
+  html += '    } catch (eReqTop) {}';
+  html += '    return;';
+  html += '  }';
+  html += '  let curEnabled = false;';
+  html += '  try {';
+  html += '    const stored = localStorage.getItem("ws_push_notification_enabled_v1");';
+  html += '    curEnabled = (stored === null) ? true : (stored === "true" || stored === "1");';
+  html += '  } catch (eC) {}';
+  html += '  const nextState = !curEnabled;';
+  html += '  try { localStorage.setItem("ws_push_notification_enabled_v1", String(nextState)); } catch (eN) {}';
+  html += '  updatePushToggleBtnUI();';
+  html += '  if (typeof showToast === "function") {';
+  html += '    showToast(nextState ? "🔔 비고 알림이 켜졌습니다." : "🔕 비고 알림이 꺼졌습니다.");';
+  html += '  }';
+  html += '}';
+  html += '';
+  html += 'function checkAndDispatchIncomingMemoNotifications(notifs) {';
+  html += '  if (!Array.isArray(notifs) || notifs.length === 0) return;';
+  html += '  const myIdentity = (typeof getPushUserIdentity === "function") ? getPushUserIdentity() : "";';
+  html += '  let isEnabled = true;';
+  html += '  try {';
+  html += '    const stored = localStorage.getItem("ws_push_notification_enabled_v1");';
+  html += '    if (stored !== null) isEnabled = (stored === "true" || stored === "1");';
+  html += '  } catch (eEn) {}';
+  html += '  for (let i = 0; i < notifs.length; i++) {';
+  html += '    const n = notifs[i];';
+  html += '    if (!n || !n.id) continue;';
+  html += '    if (wsShownNotifIdSet[n.id]) continue;';
+  html += '    let isForMe = false;';
+  html += '    const recips = n.recipients || [];';
+  html += '    if (myIdentity) {';
+  html += '      for (let r = 0; r < recips.length; r++) {';
+  html += '        const recip = String(recips[r] || "").replace(/\\s+/g, "").trim();';
+  html += '        if (myIdentity.toLowerCase() === "admin" && (recip.toLowerCase() === "admin" || recip === "관리자")) {';
+  html += '          isForMe = true;';
+  html += '          break;';
+  html += '        }';
+  html += '        if (recip.toLowerCase() === myIdentity.toLowerCase()) {';
+  html += '          isForMe = true;';
+  html += '          break;';
+  html += '        }';
+  html += '      }';
+  html += '    }';
+  html += '    wsShownNotifIdSet[n.id] = true;';
+  html += '    if (n.timestamp > wsLastSeenNotifMs) {';
+  html += '      wsLastSeenNotifMs = n.timestamp;';
+  html += '    }';
+  html += '    if (!isForMe) continue;';
+  html += '    showMemoPushInAppBanner(n);';
+  html += '    if (isEnabled) {';
+  html += '      dispatchSystemPushNotification(n);';
+  html += '    }';
+  html += '  }';
+  html += '}';
+  html += '';
+  html += 'function dispatchSystemPushNotification(n) {';
+  html += '  const notifData = {';
+  html += '    tag: n.id,';
+  html += '    siteName: n.siteName || "",';
+  html += '    taskName: n.taskName || "",';
+  html += '    taskId: n.taskId || "",';
+  html += '    row: n.row || "",';
+  html += '    scope: n.scope || "",';
+  html += '    author: n.author || "",';
+  html += '    commentText: n.commentText || "",';
+  html += '    timestamp: n.timestamp || Date.now()';
+  html += '  };';
+  html += '  try {';
+  html += '    if (window.top && window.top !== window) {';
+  html += '      window.top.postMessage({';
+  html += '        type: "WS_TRIGGER_NOTIFICATION",';
+  html += '        payload: {';
+  html += '          title: n.title || "우성 일정 알림",';
+  html += '          body: n.body || "",';
+  html += '          icon: "partner_icon_640x640.png",';
+  html += '          badge: "partner_icon_640x640.png",';
+  html += '          data: notifData';
+  html += '        }';
+  html += '      }, "*");';
+  html += '    }';
+  html += '  } catch (eTopN) {}';
+  html += '  if (typeof Notification !== "undefined" && Notification.permission === "granted") {';
+  html += '    try {';
+  html += '      const nObj = new Notification(n.title || "우성 일정 알림", {';
+  html += '        body: n.body || "",';
+  html += '        icon: "partner_icon_640x640.png",';
+  html += '        data: notifData,';
+  html += '        tag: n.id';
+  html += '      });';
+  html += '      nObj.onclick = function() {';
+  html += '        try { window.focus(); } catch (eF) {}';
+  html += '        openTaskFromPushPayload(notifData);';
+  html += '      };';
+  html += '    } catch (eNew) {}';
+  html += '  }';
+  html += '}';
+  html += '';
+  html += 'function showMemoPushInAppBanner(n) {';
+  html += '  let container = document.getElementById("memoPushBannerContainer");';
+  html += '  if (!container) {';
+  html += '    container = document.createElement("div");';
+  html += '    container.id = "memoPushBannerContainer";';
+  html += '    container.style.cssText = "position:fixed;top:14px;right:16px;z-index:999999;display:flex;flex-direction:column;gap:8px;max-width:340px;width:calc(100vw - 32px);pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,\'Pretendard\',sans-serif;";';
+  html += '    document.body.appendChild(container);';
+  html += '  }';
+  html += '  const banner = document.createElement("div");';
+  html += '  banner.className = "memo-push-in-app-banner";';
+  html += '  banner.style.cssText = "background:#ffffff;border:1.5px solid #2563eb;border-radius:12px;padding:12px 14px;box-shadow:0 10px 25px -5px rgba(37,99,235,0.3);pointer-events:auto;cursor:pointer;display:flex;flex-direction:column;gap:4px;transition:all 0.3s ease;";';
+  html += '  const head = document.createElement("div");';
+  html += '  head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;";';
+  html += '  const title = document.createElement("div");';
+  html += '  title.style.cssText = "font-size:13px;font-weight:900;color:#1e3a8a;display:flex;align-items:center;gap:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";';
+  html += '  title.innerHTML = \'<span>💬</span> <span>\' + escapeHtml(n.siteName || "현장") + \' · \' + escapeHtml(n.taskName || "공종") + \'</span>\';';
+  html += '  const closeBtn = document.createElement("button");';
+  html += '  closeBtn.type = "button";';
+  html += '  closeBtn.style.cssText = "border:none;background:none;color:#94a3b8;font-size:14px;font-weight:900;cursor:pointer;padding:0 4px;";';
+  html += '  closeBtn.innerText = "✕";';
+  html += '  closeBtn.onclick = function(e) {';
+  html += '    e.stopPropagation();';
+  html += '    if (banner.parentNode) banner.parentNode.removeChild(banner);';
+  html += '  };';
+  html += '  head.appendChild(title);';
+  html += '  head.appendChild(closeBtn);';
+  html += '  const body = document.createElement("div");';
+  html += '  body.style.cssText = "font-size:12px;color:#334155;line-height:1.4;word-break:break-all;";';
+  html += '  const authorPrefix = n.author ? (\'<span style="display:inline-block;font-size:10.5px;font-weight:800;color:#1d4ed8;background:#dbeafe;padding:1px 5px;border-radius:4px;margin-right:4px;">\' + escapeHtml(n.author) + \'</span>\') : "";';
+  html += '  body.innerHTML = authorPrefix + escapeHtml(n.commentText || "");';
+  html += '  const cta = document.createElement("div");';
+  html += '  cta.style.cssText = "margin-top:2px;font-size:11px;font-weight:700;color:#2563eb;text-align:right;";';
+  html += '  cta.innerText = "클릭하여 해당 일정 및 비고 확인 👉";';
+  html += '  banner.appendChild(head);';
+  html += '  banner.appendChild(body);';
+  html += '  banner.appendChild(cta);';
+  html += '  banner.onclick = function() {';
+  html += '    if (banner.parentNode) banner.parentNode.removeChild(banner);';
+  html += '    openTaskFromPushPayload(n);';
+  html += '  };';
+  html += '  container.appendChild(banner);';
+  html += '  setTimeout(function() {';
+  html += '    if (banner.parentNode) {';
+  html += '      banner.style.opacity = "0";';
+  html += '      banner.style.transform = "translateY(-10px)";';
+  html += '      setTimeout(function() {';
+  html += '        if (banner.parentNode) banner.parentNode.removeChild(banner);';
+  html += '      }, 300);';
+  html += '    }';
+  html += '  }, 6000);';
+  html += '}';
+  html += '';
+  html += 'function openTaskFromPushPayload(payload) {';
+  html += '  if (!payload || typeof payload !== "object") return false;';
+  html += '  const targetSite = payload.siteName || "";';
+  html += '  const targetTask = payload.taskName || "";';
+  html += '  const targetTaskId = payload.taskId || "";';
+  html += '  const targetRow = parseInt(payload.row, 10) || 0;';
+  html += '  const targetScope = payload.scope || "";';
+  html += '  if (!rawData || !Array.isArray(rawData.sites)) {';
+  html += '    window.__pendingPushDeepLink = payload;';
+  html += '    return false;';
+  html += '  }';
+  html += '  if (targetScope && typeof currentScope !== "undefined" && currentScope !== targetScope) {';
+  html += '    if (typeof setScopeFilter === "function") {';
+  html += '      setScopeFilter(targetScope);';
+  html += '    }';
+  html += '  }';
+  html += '  let foundSite = "";';
+  html += '  let foundTask = null;';
+  html += '  const sites = rawData.sites || [];';
+  html += '  for (let i = 0; i < sites.length; i++) {';
+  html += '    const s = sites[i];';
+  html += '    const sName = s.siteName || s.name || "";';
+  html += '    const tasks = s.tasks || [];';
+  html += '    for (let j = 0; j < tasks.length; j++) {';
+  html += '      const t = tasks[j];';
+  html += '      if (targetTaskId && (t.taskId === targetTaskId || t.id === targetTaskId)) {';
+  html += '        foundSite = sName;';
+  html += '        foundTask = t;';
+  html += '        break;';
+  html += '      }';
+  html += '      if (targetSite && targetTask && targetRow && sName === targetSite && t.taskName === targetTask && t.row === targetRow) {';
+  html += '        foundSite = sName;';
+  html += '        foundTask = t;';
+  html += '        break;';
+  html += '      }';
+  html += '      if (targetSite && targetTask && sName === targetSite && t.taskName === targetTask) {';
+  html += '        if (!foundTask) {';
+  html += '          foundSite = sName;';
+  html += '          foundTask = t;';
+  html += '        }';
+  html += '      }';
+  html += '    }';
+  html += '    if (foundTask && targetTaskId) break;';
+  html += '  }';
+  html += '  if (!foundTask && targetSite) {';
+  html += '    for (let i = 0; i < sites.length; i++) {';
+  html += '      const s = sites[i];';
+  html += '      if (s.siteName === targetSite && Array.isArray(s.tasks) && s.tasks.length > 0) {';
+  html += '        foundSite = s.siteName;';
+  html += '        foundTask = s.tasks[0];';
+  html += '        break;';
+  html += '      }';
+  html += '    }';
+  html += '  }';
+  html += '  if (foundTask) {';
+  html += '    openBottomSheet(foundSite || targetSite, foundTask);';
+  html += '    setTimeout(function() {';
+  html += '      const histList = document.getElementById("sheetMemoHistoryList");';
+  html += '      if (histList) {';
+  html += '        histList.scrollTop = histList.scrollHeight;';
+  html += '        const items = histList.querySelectorAll(".memo-hist-item");';
+  html += '        if (items && items.length > 0) {';
+  html += '          const lastItem = items[items.length - 1];';
+  html += '          lastItem.scrollIntoView({ behavior: "smooth", block: "nearest" });';
+  html += '          lastItem.style.transition = "background-color 0.4s ease, border-color 0.4s ease";';
+  html += '          const origBg = lastItem.style.backgroundColor;';
+  html += '          const origBorder = lastItem.style.borderColor;';
+  html += '          lastItem.style.backgroundColor = "#fef08a";';
+  html += '          lastItem.style.borderColor = "#eab308";';
+  html += '          setTimeout(function() {';
+  html += '            lastItem.style.backgroundColor = origBg || "";';
+  html += '            lastItem.style.borderColor = origBorder || "";';
+  html += '          }, 2400);';
+  html += '        }';
+  html += '      }';
+  html += '    }, 250);';
+  html += '    return true;';
+  html += '  }';
+  html += '  return false;';
+  html += '}';
+  html += '';
   html += 'window.addEventListener("message", function(ev) {';
   html += '  const data = ev && ev.data;';
   html += '  if (!data || typeof data !== "object") return;';
@@ -24800,6 +25409,20 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    if (typeof handleGlobalEscape === "function") {';
   html += '      handleGlobalEscape();';
   html += '    }';
+  html += '  } else if (data.type === "WS_OPEN_TASK_DEEP_LINK") {';
+  html += '    if (typeof openTaskFromPushPayload === "function") {';
+  html += '      openTaskFromPushPayload(data.payload);';
+  html += '    }';
+  html += '  } else if (data.type === "WS_INCOMING_NOTIFICATIONS") {';
+  html += '    if (typeof checkAndDispatchIncomingMemoNotifications === "function") {';
+  html += '      checkAndDispatchIncomingMemoNotifications(data.notifications);';
+  html += '    }';
+  html += '  } else if (data.type === "WS_PUSH_PERMISSION_RESULT") {';
+  html += '    if (data.permission === "granted") {';
+  html += '      try { localStorage.setItem("ws_push_notification_enabled_v1", "true"); } catch (ePerm) {}';
+  html += '      if (typeof updatePushToggleBtnUI === "function") updatePushToggleBtnUI();';
+  html += '      if (typeof showToast === "function") showToast("🔔 비고 알림이 활성화되었습니다!");';
+  html += '    }';
   html += '  }';
   html += '});';
   html += 'try {';
@@ -24807,6 +25430,47 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    window.top.postMessage({ type: "ORCA_BRIDGE_PING" }, "*");';
   html += '  }';
   html += '} catch (eInitPing) {}';
+  html += '';
+  html += 'if (typeof setInterval !== "undefined") {';
+  html += '  setInterval(function() {';
+  html += '    try {';
+  html += '      if (typeof window !== "undefined" && window.top === window) {';
+  html += '        const u = (typeof getPushUserIdentity === "function") ? getPushUserIdentity() : "";';
+  html += '        const apiUrl = (typeof SCRIPT_URL !== "undefined" ? SCRIPT_URL : (window.location.href.split("?")[0]));';
+  html += '        fetch(apiUrl + "?action=pollMemoNotifications&user=" + encodeURIComponent(u) + "&since=" + wsLastSeenNotifMs)';
+  html += '          .then(function(r) { return r.json(); })';
+  html += '          .then(function(res) {';
+  html += '            if (res && res.success && Array.isArray(res.notifications)) {';
+  html += '              if (res.serverTime) wsLastSeenNotifMs = res.serverTime;';
+  html += '              checkAndDispatchIncomingMemoNotifications(res.notifications);';
+  html += '            }';
+  html += '          })';
+  html += '          .catch(function() {});';
+  html += '      }';
+  html += '    } catch (eStand) {}';
+  html += '  }, 15000);';
+  html += '}';
+  html += '';
+  html += 'try {';
+  html += '  if (typeof window !== "undefined" && window.location && window.location.search) {';
+  html += '    const qs = window.location.search.substring(1);';
+  html += '    const pairs = qs.split("&");';
+  html += '    const pObj = {};';
+  html += '    for (let pi = 0; pi < pairs.length; pi++) {';
+  html += '      const kv = pairs[pi].split("=");';
+  html += '      if (kv[0]) pObj[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || "");';
+  html += '    }';
+  html += '    if (pObj.openSite || pObj.openTask || pObj.openTaskId) {';
+  html += '      window.__pendingPushDeepLink = {';
+  html += '        siteName: pObj.openSite || "",';
+  html += '        taskName: pObj.openTask || "",';
+  html += '        taskId: pObj.openTaskId || "",';
+  html += '        row: pObj.openRow || "",';
+  html += '        scope: pObj.openScope || ""';
+  html += '      };';
+  html += '    }';
+  html += '  }';
+  html += '} catch (eUrlParam) {}';
   html += '';
   html += 'function findSiteDefaultManager(siteName) {';
   html += '  if (!siteName || !rawData || !Array.isArray(rawData.sites)) return "";';
@@ -26453,6 +27117,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      window.parent.postMessage({ type: "DASHBOARD_READY" }, "*");';
   html += '    }';
   html += '  } catch(eReadyPost) {}';
+  html += '  if (typeof updatePushToggleBtnUI === "function") updatePushToggleBtnUI();';
   html += '  if (!renderedFromSsr) {';
   html += '    loadData();';
   html += '  } else if (!isTodoLoaded) {';
