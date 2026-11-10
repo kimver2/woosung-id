@@ -19,8 +19,9 @@ self.addEventListener('message', (event) => {
         icon: icon || 'partner_icon_640x640.png',
         badge: badge || 'partner_icon_640x640.png',
         data: data || {},
-        tag: (data && data.tag) || ('memo-' + Date.now()),
-        renotify: true
+        tag: event.data.tag || (data && data.tag) || ('memo-' + Date.now()),
+        renotify: true,
+        vibrate: [150, 70, 150]
       })
     );
   }

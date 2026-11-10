@@ -211,7 +211,7 @@
   <iframe
     id="appFrame"
     credentialless
-    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=213"
+    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=214"
     allow="clipboard-write; camera; geolocation"
     onload="hideLoading()">
   </iframe>
@@ -434,9 +434,10 @@
     var ignoreNextTopPopstate = false;
 
     function sendPushPermissionStateToChild(source, toggled) {
-      var perm = ('Notification' in window) ? Notification.permission : 'default';
-      var storedEn = localStorage.getItem('ws_push_notification_enabled_v2');
-      var isEn = (storedEn === null) ? (perm === 'granted') : (storedEn === 'true' || storedEn === '1');
+      var perm = ('Notification' in window) ? Notification.permission : 'unsupported';
+      var storedEn = null;
+      try { storedEn = localStorage.getItem('ws_push_notification_enabled_v2'); } catch (eG) {}
+      var isEn = (storedEn === null) ? (perm !== 'denied') : (storedEn === 'true' || storedEn === '1');
       if (source) {
         try {
           source.postMessage({
@@ -450,31 +451,52 @@
     }
 
     function triggerTopSystemNotification(title, body, tag, data) {
+      try {
+        if (navigator.vibrate) navigator.vibrate([150, 70, 150]);
+      } catch (eV) {}
       if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      var nTitle = title || '우성 일정 알림';
       var nOptions = {
         body: body || '',
         icon: 'partner_icon_640x640.png',
         badge: 'partner_icon_640x640.png',
         data: data || {},
-        tag: tag || ('memo-' + Date.now()),
-        renotify: true
+        tag: tag || (data && data.tag) || ('memo-' + Date.now()),
+        renotify: true,
+        vibrate: [150, 70, 150]
       };
-      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'SHOW_NOTIFICATION',
-          title: title || '우성 일정 알림',
-          body: nOptions.body,
-          icon: nOptions.icon,
-          badge: nOptions.badge,
-          data: nOptions.data
+      if ('serviceWorker' in navigator) {
+        if (wsSwRegistration && typeof wsSwRegistration.showNotification === 'function') {
+          try {
+            wsSwRegistration.showNotification(nTitle, nOptions);
+            return;
+          } catch (eSw1) {}
+        }
+        navigator.serviceWorker.ready.then(function(reg) {
+          wsSwRegistration = reg;
+          if (reg && typeof reg.showNotification === 'function') {
+            reg.showNotification(nTitle, nOptions);
+          } else if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+              type: 'SHOW_NOTIFICATION',
+              title: nTitle,
+              body: nOptions.body,
+              icon: nOptions.icon,
+              badge: nOptions.badge,
+              tag: nOptions.tag,
+              data: nOptions.data
+            });
+          } else {
+            try { new Notification(nTitle, nOptions); } catch (eN1) {}
+          }
+        }).catch(function() {
+          try { new Notification(nTitle, nOptions); } catch (eN2) {}
         });
-      } else if (wsSwRegistration && wsSwRegistration.showNotification) {
-        wsSwRegistration.showNotification(title || '우성 일정 알림', nOptions);
-      } else {
-        try {
-          new Notification(title || '우성 일정 알림', nOptions);
-        } catch (eN) {}
+        return;
       }
+      try {
+        new Notification(nTitle, nOptions);
+      } catch (eN) {}
     }
 
     window.addEventListener('message', function(ev) {
@@ -520,7 +542,11 @@
       }
       if (data.type === 'WS_REQUEST_PUSH_TOGGLE' || data.type === 'WS_REQUEST_PUSH_PERMISSION') {
         if (!('Notification' in window)) {
-          if (ev.source) ev.source.postMessage({ type: 'WS_PUSH_PERMISSION_RESULT', permission: 'unsupported', enabled: false, toggled: true }, '*');
+          var curEnU = null;
+          try { curEnU = localStorage.getItem('ws_push_notification_enabled_v2'); } catch (eGU) {}
+          var nextEnU = (curEnU === null) ? false : (curEnU !== 'true' && curEnU !== '1');
+          try { localStorage.setItem('ws_push_notification_enabled_v2', String(nextEnU)); } catch (eSU) {}
+          if (ev.source) ev.source.postMessage({ type: 'WS_PUSH_PERMISSION_RESULT', permission: 'unsupported', enabled: nextEnU, toggled: true }, '*');
           return;
         }
         if (Notification.permission === 'default') {
@@ -535,11 +561,16 @@
           return;
         }
         if (Notification.permission === 'denied') {
-          if (ev.source) ev.source.postMessage({ type: 'WS_PUSH_PERMISSION_RESULT', permission: 'denied', enabled: false, toggled: true }, '*');
+          var curEnD = null;
+          try { curEnD = localStorage.getItem('ws_push_notification_enabled_v2'); } catch (eGD) {}
+          var nextEnD = (curEnD === null) ? false : (curEnD !== 'true' && curEnD !== '1');
+          try { localStorage.setItem('ws_push_notification_enabled_v2', String(nextEnD)); } catch (eSD) {}
+          if (ev.source) ev.source.postMessage({ type: 'WS_PUSH_PERMISSION_RESULT', permission: 'denied', enabled: nextEnD, toggled: true }, '*');
           return;
         }
         // Notification.permission === 'granted'
-        var curEn = localStorage.getItem('ws_push_notification_enabled_v2');
+        var curEn = null;
+        try { curEn = localStorage.getItem('ws_push_notification_enabled_v2'); } catch (eGG) {}
         var nextEn = (curEn === null) ? false : (curEn !== 'true' && curEn !== '1');
         try { localStorage.setItem('ws_push_notification_enabled_v2', String(nextEn)); } catch (eSE) {}
         if (nextEn) {
