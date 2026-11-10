@@ -23,7 +23,6 @@
   <meta http-equiv="Expires" content="0">
   
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📱</text></svg>">
-  <link rel="manifest" href="manifest.json">
 
   <style>
     * {
@@ -211,7 +210,7 @@
   <iframe
     id="appFrame"
     credentialless
-    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=215"
+    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=216"
     allow="clipboard-write; camera; geolocation"
     onload="hideLoading()">
   </iframe>
@@ -229,46 +228,15 @@
         document.cookie = name + '=' + encodeURIComponent(val || '') + '; path=/; max-age=' + maxAgeSec + '; SameSite=Lax';
       } catch (eSC) {}
     }
-    function getTopUrlParams() {
-      var params = {};
-      try {
-        var qs = window.location.search || '';
-        if (qs.indexOf('?') === 0) qs = qs.substring(1);
-        var pairs = qs.split('&');
-        for (var i = 0; i < pairs.length; i++) {
-          if (!pairs[i]) continue;
-          var p = pairs[i].split('=');
-          var k = decodeURIComponent(p[0] || '');
-          var v = decodeURIComponent(p[1] || '');
-          if (k) params[k] = v;
-        }
-      } catch (eQ) {}
-      return params;
-    }
-    function computeTopAdminToken() {
-      var s = 'ws_auth_v2::admin::007077';
-      var h1 = 5381;
-      for (var i = 0; i < s.length; i++) {
-        h1 = (((h1 << 5) + h1) ^ s.charCodeAt(i)) >>> 0;
-      }
-      return 'WSAUTH_' + h1.toString(16).toUpperCase() + '_' + s.length;
-    }
     function getTopSavedAuth() {
       var tok = '';
       var usr = '';
       try {
         tok = localStorage.getItem('ws_dashboard_auth_token_v2') || sessionStorage.getItem('ws_dashboard_auth_token_v2') || getTopSavedCookie('ws_dashboard_auth_token_v2') || '';
-        usr = localStorage.getItem('ws_dashboard_auth_user_v2') || sessionStorage.getItem('ws_dashboard_auth_user_v2') || getTopSavedCookie('ws_dashboard_auth_user_v2') || '';
+        usr = localStorage.getItem('ws_dashboard_auth_user_v2') || getTopSavedCookie('ws_dashboard_auth_user_v2') || '';
       } catch (eG) {
         tok = getTopSavedCookie('ws_dashboard_auth_token_v2') || '';
         usr = getTopSavedCookie('ws_dashboard_auth_user_v2') || '';
-      }
-      if (tok && (!usr || usr.trim() === '')) {
-        if (tok === computeTopAdminToken()) {
-          usr = 'admin';
-          try { localStorage.setItem('ws_dashboard_auth_user_v2', 'admin'); } catch (eAU) {}
-          setTopSavedCookie('ws_dashboard_auth_user_v2', 'admin', 31536000);
-        }
       }
       return { token: tok, user: usr };
     }
@@ -279,7 +247,7 @@
           try { localStorage.setItem('ws_dashboard_auth_token_v2', token); } catch (eL1) {}
           setTopSavedCookie('ws_dashboard_auth_token_v2', token, 31536000);
         }
-        if (cleanU) {
+        if (cleanU && cleanU.toLowerCase() !== 'admin') {
           try { localStorage.setItem('ws_dashboard_auth_user_v2', cleanU); } catch (eL2) {}
           setTopSavedCookie('ws_dashboard_auth_user_v2', cleanU, 31536000);
         }
@@ -289,9 +257,6 @@
       }
       if (token) {
         try { sessionStorage.setItem('ws_dashboard_auth_token_v2', token); } catch (eSS) {}
-      }
-      if (cleanU) {
-        try { sessionStorage.setItem('ws_dashboard_auth_user_v2', cleanU); } catch (eSSU) {}
       }
     }
     function checkTopPinLockout() {
@@ -397,18 +362,12 @@
           if (topLock) topLock.style.display = 'none';
         }
         var frame = document.getElementById('appFrame');
-        if (frame) {
+        if (frame && (auth.token || auth.user)) {
           var baseSrc = frame.getAttribute('src') || '';
           var extra = '';
           if (auth.token) extra += '&authTok=' + encodeURIComponent(auth.token);
           if (auth.user) extra += '&authUsr=' + encodeURIComponent(auth.user);
-          var uParams = getTopUrlParams();
-          if (uParams.openSite) extra += '&openSite=' + encodeURIComponent(uParams.openSite);
-          if (uParams.openTask) extra += '&openTask=' + encodeURIComponent(uParams.openTask);
-          if (uParams.openTaskId) extra += '&openTaskId=' + encodeURIComponent(uParams.openTaskId);
-          if (uParams.openRow) extra += '&openRow=' + encodeURIComponent(uParams.openRow);
-          if (uParams.openScope) extra += '&openScope=' + encodeURIComponent(uParams.openScope);
-          if (extra && baseSrc.indexOf('authTok=') === -1 && baseSrc.indexOf('openSite=') === -1) {
+          if (extra && baseSrc.indexOf('authTok=') === -1) {
             frame.src = baseSrc + extra;
           }
         }
@@ -432,120 +391,11 @@
     var orcaDashboardSource = null;
     var orcaModalOpenInChild = false;
     var ignoreNextTopPopstate = false;
-    var pendingTopDeepLink = null;
-    (function initTopUrlDeepLink() {
-      var p = getTopUrlParams();
-      if (p.openSite || p.openTask || p.openTaskId) {
-        pendingTopDeepLink = {
-          siteName: p.openSite || '',
-          taskName: p.openTask || '',
-          taskId: p.openTaskId || '',
-          row: p.openRow || '',
-          scope: p.openScope || ''
-        };
-      }
-    })();
-
-    function sendDeepLinkToChild(payload) {
-      if (!payload || typeof payload !== 'object') return;
-      pendingTopDeepLink = payload;
-      var sendFn = function() {
-        if (orcaDashboardSource && orcaDashboardSource !== window) {
-          try {
-            orcaDashboardSource.postMessage({
-              type: 'WS_OPEN_TASK_DEEP_LINK',
-              payload: payload
-            }, '*');
-            pendingTopDeepLink = null;
-          } catch (eDl) {}
-        }
-      };
-      sendFn();
-      setTimeout(sendFn, 180);
-      setTimeout(sendFn, 500);
-    }
-
-    function sendPushPermissionStateToChild(source, toggled) {
-      var perm = ('Notification' in window) ? Notification.permission : 'unsupported';
-      var storedEn = null;
-      try { storedEn = localStorage.getItem('ws_push_notification_enabled_v2'); } catch (eG) {}
-      var isEn = (storedEn === null) ? (perm !== 'denied') : (storedEn === 'true' || storedEn === '1');
-      if (source) {
-        try {
-          source.postMessage({
-            type: 'WS_PUSH_PERMISSION_RESULT',
-            permission: perm,
-            enabled: isEn,
-            toggled: !!toggled
-          }, '*');
-        } catch (eSendP) {}
-      }
-    }
-
-    function triggerTopSystemNotification(title, body, tag, data) {
-      try {
-        if (navigator.vibrate) navigator.vibrate([150, 70, 150]);
-      } catch (eV) {}
-      if (!('Notification' in window) || Notification.permission !== 'granted') return;
-      var nTitle = title || '우성 일정 알림';
-      var nOptions = {
-        body: body || '',
-        icon: 'partner_icon_640x640.png',
-        badge: 'partner_icon_640x640.png',
-        data: data || {},
-        tag: tag || (data && data.tag) || ('memo-' + Date.now()),
-        renotify: true,
-        vibrate: [150, 70, 150]
-      };
-      if ('serviceWorker' in navigator) {
-        if (wsSwRegistration && typeof wsSwRegistration.showNotification === 'function') {
-          try {
-            wsSwRegistration.showNotification(nTitle, nOptions);
-            return;
-          } catch (eSw1) {}
-        }
-        navigator.serviceWorker.ready.then(function(reg) {
-          wsSwRegistration = reg;
-          if (reg && typeof reg.showNotification === 'function') {
-            reg.showNotification(nTitle, nOptions);
-          } else if (navigator.serviceWorker.controller) {
-            navigator.serviceWorker.controller.postMessage({
-              type: 'SHOW_NOTIFICATION',
-              title: nTitle,
-              body: nOptions.body,
-              icon: nOptions.icon,
-              badge: nOptions.badge,
-              tag: nOptions.tag,
-              data: nOptions.data
-            });
-          } else {
-            try { new Notification(nTitle, nOptions); } catch (eN1) {}
-          }
-        }).catch(function() {
-          try { new Notification(nTitle, nOptions); } catch (eN2) {}
-        });
-        return;
-      }
-      try {
-        new Notification(nTitle, nOptions);
-      } catch (eN) {}
-    }
 
     window.addEventListener('message', function(ev) {
       var data = ev && ev.data;
       if (!data || typeof data !== 'object') return;
-      var isFromInnerDashboard = (
-        data.type === 'DASHBOARD_READY' ||
-        data.type === 'ORCA_BRIDGE_PING' ||
-        data.type === 'WS_AUTH_INIT' ||
-        data.type === 'WS_SAVE_AUTH' ||
-        data.type === 'WS_REQUEST_PUSH_TOGGLE' ||
-        data.type === 'WS_REQUEST_PUSH_PERMISSION' ||
-        data.type === 'WS_TRIGGER_NOTIFICATION' ||
-        data.type === 'ORCA_SHEET_MODAL_OPEN' ||
-        data.type === 'ORCA_SHEET_MODAL_CLOSED_BY_UI'
-      );
-      if (isFromInnerDashboard && ev.source && ev.source !== window) {
+      if (ev.source) {
         orcaDashboardSource = ev.source;
       }
       if (data.type === 'DASHBOARD_READY') {
@@ -555,90 +405,13 @@
           if (ev.source && (authRdy.token || authRdy.user)) {
             ev.source.postMessage({ type: 'WS_RESTORE_AUTH', token: authRdy.token, user: authRdy.user }, '*');
           }
-          sendPushPermissionStateToChild(ev.source, false);
-          if (pendingTopDeepLink) {
-            sendDeepLinkToChild(pendingTopDeepLink);
-          } else {
-            var rdyParams = getTopUrlParams();
-            if (rdyParams.openSite || rdyParams.openTask || rdyParams.openTaskId) {
-              sendDeepLinkToChild({
-                siteName: rdyParams.openSite || '',
-                taskName: rdyParams.openTask || '',
-                taskId: rdyParams.openTaskId || '',
-                row: rdyParams.openRow || '',
-                scope: rdyParams.openScope || ''
-              });
-            }
-          }
         } catch (eRdyAuth) {}
-        return;
-      }
-      if (data.type === 'WS_NOTIFICATION_CLICK') {
-        sendDeepLinkToChild(data.payload || {});
-        return;
-      }
-      if (data.type === 'WS_REQUEST_PUSH_TOGGLE' || data.type === 'WS_REQUEST_PUSH_PERMISSION') {
-        if (!('Notification' in window)) {
-          var curEnU = null;
-          try { curEnU = localStorage.getItem('ws_push_notification_enabled_v2'); } catch (eGU) {}
-          var nextEnU = (curEnU === null) ? false : (curEnU !== 'true' && curEnU !== '1');
-          try { localStorage.setItem('ws_push_notification_enabled_v2', String(nextEnU)); } catch (eSU) {}
-          if (ev.source) ev.source.postMessage({ type: 'WS_PUSH_PERMISSION_RESULT', permission: 'unsupported', enabled: nextEnU, toggled: true }, '*');
-          return;
-        }
-        if (Notification.permission === 'default') {
-          Notification.requestPermission().then(function(perm) {
-            var isGranted = (perm === 'granted');
-            try { localStorage.setItem('ws_push_notification_enabled_v2', String(isGranted)); } catch (eSP) {}
-            if (isGranted) {
-              triggerTopSystemNotification('🔔 [우성아이디] 비고 알림 활성화', '비고 코멘트 알림을 정상적으로 수신합니다.', 'test-notif-perm');
-            }
-            sendPushPermissionStateToChild(ev.source, true);
-          });
-          return;
-        }
-        if (Notification.permission === 'denied') {
-          var curEnD = null;
-          try { curEnD = localStorage.getItem('ws_push_notification_enabled_v2'); } catch (eGD) {}
-          var nextEnD = (curEnD === null) ? false : (curEnD !== 'true' && curEnD !== '1');
-          try { localStorage.setItem('ws_push_notification_enabled_v2', String(nextEnD)); } catch (eSD) {}
-          if (ev.source) ev.source.postMessage({ type: 'WS_PUSH_PERMISSION_RESULT', permission: 'denied', enabled: nextEnD, toggled: true }, '*');
-          return;
-        }
-        // Notification.permission === 'granted'
-        var curEn = null;
-        try { curEn = localStorage.getItem('ws_push_notification_enabled_v2'); } catch (eGG) {}
-        var nextEn = (curEn === null) ? false : (curEn !== 'true' && curEn !== '1');
-        try { localStorage.setItem('ws_push_notification_enabled_v2', String(nextEn)); } catch (eSE) {}
-        if (nextEn) {
-          triggerTopSystemNotification('🔔 [우성아이디] 비고 알림 켜짐', '비고 코멘트 알림을 수신합니다.', 'test-notif-on');
-        }
-        sendPushPermissionStateToChild(ev.source, true);
-        return;
-      }
-      if (data.type === 'WS_TRIGGER_NOTIFICATION') {
-        var nPayload = data.payload || {};
-        if ('Notification' in window && Notification.permission === 'default') {
-          Notification.requestPermission().then(function(perm) {
-            if (perm === 'granted') {
-              triggerTopSystemNotification(nPayload.title, nPayload.body, nPayload.data && nPayload.data.tag, nPayload.data);
-            }
-          });
-          return;
-        }
-        triggerTopSystemNotification(nPayload.title, nPayload.body, nPayload.data && nPayload.data.tag, nPayload.data);
         return;
       }
       if (data.type === 'WS_AUTH_INIT') {
         try {
           var authInit = getTopSavedAuth();
-          if (ev.source) {
-            ev.source.postMessage({ type: 'WS_RESTORE_AUTH', token: authInit.token, user: authInit.user }, '*');
-            sendPushPermissionStateToChild(ev.source, false);
-            if (pendingTopDeepLink) {
-              sendDeepLinkToChild(pendingTopDeepLink);
-            }
-          }
+          if (ev.source) ev.source.postMessage({ type: 'WS_RESTORE_AUTH', token: authInit.token, user: authInit.user }, '*');
         } catch (eAuthInit) {}
         return;
       }
@@ -657,10 +430,6 @@
             var authPing = getTopSavedAuth();
             if (authPing.token || authPing.user) {
               ev.source.postMessage({ type: 'WS_RESTORE_AUTH', token: authPing.token, user: authPing.user }, '*');
-            }
-            sendPushPermissionStateToChild(ev.source, false);
-            if (pendingTopDeepLink) {
-              sendDeepLinkToChild(pendingTopDeepLink);
             }
           }
         } catch (ePong) {}
@@ -742,55 +511,14 @@
       }
     });
 
-    // PWA Service Worker Registration
-    var wsSwRegistration = null;
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function() {
-        navigator.serviceWorker.register('./sw.js').then(function(reg) {
-          wsSwRegistration = reg;
-        }).catch(function(err) {});
-      });
-      navigator.serviceWorker.addEventListener('message', function(event) {
-        if (event.data && event.data.type === 'WS_NOTIFICATION_CLICK') {
-          sendDeepLinkToChild(event.data.payload || {});
+    // 잔존 서비스워커 자동 해제 (웹 푸시 알림 기능 원복 대응)
+    if ('serviceWorker' in navigator && typeof navigator.serviceWorker.getRegistrations === 'function') {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        for (var i = 0; i < regs.length; i++) {
+          regs[i].unregister();
         }
-      });
+      }).catch(function() {});
     }
-
-    // Background memo notification polling helper (callable on-demand; automatic polling delegated to inner dashboard)
-    var lastMemoPollMs = Date.now();
-    function runTopMemoNotificationPoll() {
-      try {
-        var auth = getTopSavedAuth();
-        var user = auth.user || '';
-        var pollUrl = GAS_AUTH_API_URL + '?action=pollMemoNotifications&user=' + encodeURIComponent(user) + '&since=' + lastMemoPollMs;
-        fetch(pollUrl, { method: 'GET', credentials: 'omit' })
-          .then(function(r) { return r.json(); })
-          .then(function(res) {
-            if (res && res.serverTime) lastMemoPollMs = res.serverTime;
-            if (orcaDashboardSource && orcaDashboardSource !== window) {
-              try {
-                orcaDashboardSource.postMessage({
-                  type: 'WS_POLL_SYNC_TICK',
-                  notifications: (res && res.notifications) || [],
-                  lastMutationMs: (res && res.lastMutationMs) || 0,
-                  serverTime: (res && res.serverTime) || Date.now()
-                }, '*');
-              } catch (eFwd) {}
-            }
-          })
-          .catch(function(ePoll) {});
-      } catch (ePAll) {}
-    }
-
-    window.addEventListener('focus', function() {
-      runTopMemoNotificationPoll();
-    });
-    document.addEventListener('visibilitychange', function() {
-      if (document.visibilityState === 'visible') {
-        runTopMemoNotificationPoll();
-      }
-    });
   </script>
 </body>
 </html>
