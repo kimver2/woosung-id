@@ -410,7 +410,7 @@ function getMemberNames(ss) {
   }
 
   if (members.length === 0) {
-    members = ["조항만", "송지은", "전예린", "한송이", "인경호"];
+    members = ["조항만", "송지은", "전예린", "한송이"];
   }
 
   return members.filter(function(m) { return EXCLUDED_MEMBERS.indexOf(m) === -1; });
@@ -590,9 +590,9 @@ function getAvailableManagers(ss, sheet) {
     }
   }
 
-  // 예외 폴백 (구성원 시트가 없거나 비어있는 경우 표준 5인)
+  // 예외 폴백 (구성원 시트가 없거나 비어있는 경우 표준 4인)
   if (managers.length === 0) {
-    managers = ["조항만", "송지은", "전예린", "한송이", "인경호"];
+    managers = ["조항만", "송지은", "전예린", "한송이"];
   }
 
   return managers;
@@ -9065,7 +9065,7 @@ function getAllRegisteredMemberNamesForAuth(ss) {
     }
   } catch (eAuthM) {}
   if (members.length === 0) {
-    members = ["조항만", "송지은", "전예린", "한송이", "김종혁", "인경호"];
+    members = ["조항만", "송지은", "전예린", "한송이", "김종혁"];
   }
   return members;
 }
@@ -13501,7 +13501,7 @@ function getSidebarDashboardData(forceRefresh) {
       kpi: { totalSites: 0, activeSites: 0, totalTasks: 0, todayCount: 0, delayedCount: 0 },
       scopeCounts: { site: 0, single: 0, as: 0 },
       todayStr: formatDateYYMMDD(new Date()),
-      members: ["조항만", "송지은", "전예린", "한송이", "인경호"],
+      members: ["조항만", "송지은", "전예린", "한송이"],
       tasks: getAvailableTasks(null),
       holidays: getKoreanHolidaysMap(null),
       partnerPhoneMap: getPartnerPhoneMap(null),
@@ -14830,7 +14830,6 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '              <option value="송지은">송지은</option>';
   html += '              <option value="전예린">전예린</option>';
   html += '              <option value="한송이">한송이</option>';
-  html += '              <option value="인경호">인경호</option>';
   html += '            </select>';
   html += '          </div>';
   html += '          <div class="sheet-field-col" style="flex:1.2;">';
@@ -15966,7 +15965,13 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      else if (res.partners) rawData.partners = res.partners.map(function(p) { return p.dropdownVal || p.name; });\n';
   html += '      if (res.availableTasks) rawData.tasks = res.availableTasks;\n';
   html += '      else if (res.tasks) rawData.tasks = res.tasks.map(function(t) { return t.taskName; });\n';
-  html += '      if (res.availableManagers) rawData.availableManagers = res.availableManagers;\n';
+  html += '      if (Array.isArray(res.members) && res.members.length > 0) {\n';
+  html += '        rawData.members = res.members.map(function(m) { return String(m.name || "").trim(); }).filter(function(n) { return n && n !== "김종혁" && n !== "영하"; });\n';
+  html += '        rawData.availableManagers = rawData.members.slice();\n';
+  html += '      } else if (Array.isArray(res.availableManagers) && res.availableManagers.length > 0) {\n';
+  html += '        rawData.availableManagers = res.availableManagers;\n';
+  html += '        rawData.members = res.availableManagers.filter(function(n) { return n && n !== "김종혁" && n !== "영하"; });\n';
+  html += '      }\n';
   html += '      if (res.partnerPhoneMap) rawData.partnerPhoneMap = res.partnerPhoneMap;\n';
   html += '      if (res.memberPhoneMap) rawData.memberPhoneMap = res.memberPhoneMap;\n';
   html += '      if (res.siteSuperintendents) rawData.siteSuperintendents = res.siteSuperintendents;\n';
@@ -15982,6 +15987,12 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      }\n';
   html += '      if (typeof populatePartnerSelectOptions === "function") {\n';
   html += '        populatePartnerSelectOptions(rawData.partners);\n';
+  html += '      }\n';
+  html += '      if (typeof populateManagerSelectOptions === "function") {\n';
+  html += '        populateManagerSelectOptions(rawData.members);\n';
+  html += '      }\n';
+  html += '      if (typeof renderMemberFilterTabs === "function") {\n';
+  html += '        renderMemberFilterTabs(rawData.members);\n';
   html += '      }\n';
   html += '    }\n';
   html += '    renderSettingsView();\n';
@@ -23122,10 +23133,19 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += 'function populateManagerSelectOptions(members) {';
   html += '  const sel1 = document.getElementById("sheetManagerSelect");';
   html += '  const sel2 = document.getElementById("sheetManagerSelect2");';
-  html += '  const defaultList = ["조항만", "송지은", "전예린", "한송이", "인경호"];';
+  html += '  let sourceList = Array.isArray(members) && members.length > 0 ? members : [];';
+  html += '  if (sourceList.length === 0 && typeof currentSettingsData !== "undefined" && currentSettingsData && Array.isArray(currentSettingsData.members) && currentSettingsData.members.length > 0) {';
+  html += '    sourceList = currentSettingsData.members.map(m => m && m.name ? String(m.name).trim() : "").filter(Boolean);';
+  html += '  }';
+  html += '  if (sourceList.length === 0 && typeof rawData !== "undefined" && rawData && Array.isArray(rawData.members) && rawData.members.length > 0) {';
+  html += '    sourceList = rawData.members;';
+  html += '  }';
+  html += '  if (sourceList.length === 0) {';
+  html += '    sourceList = ["조항만", "송지은", "전예린", "한송이"];';
+  html += '  }';
   html += '  const allList = [];';
   html += '  const seen = {};';
-  html += '  (members || []).concat(defaultList).forEach(m => {';
+  html += '  sourceList.forEach(m => {';
   html += '    const name = String(m || "").trim();';
   html += '    if (name && name !== "김종혁" && name !== "영하" && !seen[name]) {';
   html += '      seen[name] = true;';
