@@ -9076,37 +9076,53 @@ function getDashboardAccessPin() {
  * - 구성원 시트에서 퇴사자를 삭제하면 해당 인원의 인증 토큰이 즉시 무효화되어 자동 차단됨
  */
 function getAllRegisteredMemberNamesForAuth(ss) {
+  var cache = null;
+  try {
+    if (typeof CacheService !== "undefined" && CacheService && typeof CacheService.getScriptCache === "function") {
+      cache = CacheService.getScriptCache();
+    }
+  } catch (eC) {}
+  if (cache) {
+    try {
+      var cachedStr = cache.get("WS_AUTH_MEMBERS_LIST_V2");
+      if (cachedStr) {
+        var parsed = JSON.parse(cachedStr);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (eParse) {}
+  }
+
   var members = [];
   try {
     if (!ss && typeof SpreadsheetApp !== "undefined" && SpreadsheetApp && typeof SpreadsheetApp.getActiveSpreadsheet === "function") {
       ss = SpreadsheetApp.getActiveSpreadsheet();
     }
-    if (!ss && typeof getAppSpreadsheet === "function") {
-      ss = getAppSpreadsheet();
-    }
-    var mSheet = ss ? findMembersSheet(ss) : null;
-    if (mSheet && mSheet.getLastRow() >= 2) {
-      var lastR = mSheet.getLastRow();
-      var lastC = Math.max(mSheet.getLastColumn(), 1);
-      var hVals = mSheet.getRange(1, 1, 1, lastC).getValues()[0];
-      var nameCol = -1;
-      for (var c = 0; c < lastC; c++) {
-        var hStr = String(hVals[c] || "").trim();
-        if (hStr.indexOf("이름") !== -1 || hStr.indexOf("성명") !== -1 || hStr.indexOf("담당자") !== -1 || hStr.indexOf("직원") !== -1 || hStr.indexOf("팀원") !== -1) {
-          nameCol = c + 1;
-          break;
+    // [초고속 최적화]: ss가 없고 doGet 초기 로드 중인 경우 무거운 SpreadsheetApp.openById(1.5~2.5초)를 원천 생략
+    if (ss) {
+      var mSheet = findMembersSheet(ss);
+      if (mSheet && mSheet.getLastRow() >= 2) {
+        var lastR = mSheet.getLastRow();
+        var lastC = Math.max(mSheet.getLastColumn(), 1);
+        var hVals = mSheet.getRange(1, 1, 1, lastC).getValues()[0];
+        var nameCol = -1;
+        for (var c = 0; c < lastC; c++) {
+          var hStr = String(hVals[c] || "").trim();
+          if (hStr.indexOf("이름") !== -1 || hStr.indexOf("성명") !== -1 || hStr.indexOf("담당자") !== -1 || hStr.indexOf("직원") !== -1 || hStr.indexOf("팀원") !== -1) {
+            nameCol = c + 1;
+            break;
+          }
         }
-      }
-      if (nameCol === -1) nameCol = 1;
-      var names = mSheet.getRange(2, nameCol, lastR - 1, 1).getValues();
-      for (var i = 0; i < names.length; i++) {
-        var nm = String(names[i][0] || "").trim();
-        if (nm && nm !== "이름" && nm !== "성명" && nm !== "담당자") {
-          var parts = nm.split(/[,/]/);
-          for (var p = 0; p < parts.length; p++) {
-            var subNm = parts[p].replace(/\s+/g, "").trim();
-            if (subNm && members.indexOf(subNm) === -1) {
-              members.push(subNm);
+        if (nameCol === -1) nameCol = 1;
+        var names = mSheet.getRange(2, nameCol, lastR - 1, 1).getValues();
+        for (var i = 0; i < names.length; i++) {
+          var nm = String(names[i][0] || "").trim();
+          if (nm && nm !== "이름" && nm !== "성명" && nm !== "담당자") {
+            var parts = nm.split(/[,/]/);
+            for (var p = 0; p < parts.length; p++) {
+              var subNm = parts[p].replace(/\s+/g, "").trim();
+              if (subNm && members.indexOf(subNm) === -1) {
+                members.push(subNm);
+              }
             }
           }
         }
@@ -9115,6 +9131,11 @@ function getAllRegisteredMemberNamesForAuth(ss) {
   } catch (eAuthM) {}
   if (members.length === 0) {
     members = ["조항만", "송지은", "전예린", "한송이", "김종혁"];
+  }
+  if (cache && members.length > 0) {
+    try {
+      cache.put("WS_AUTH_MEMBERS_LIST_V2", JSON.stringify(members), 21600);
+    } catch (ePut) {}
   }
   return members;
 }
@@ -9150,12 +9171,33 @@ function computeDashboardUserToken(userStr, pinStr) {
  * [대시보드 보안 잠금] 현재 유효한 모든 구성원 토큰 + 히든 관리자(admin/007077) 토큰 목록 반환
  */
 function getValidDashboardAuthTokens(ss) {
+  var cache = null;
+  try {
+    if (typeof CacheService !== "undefined" && CacheService && typeof CacheService.getScriptCache === "function") {
+      cache = CacheService.getScriptCache();
+    }
+  } catch (eC) {}
+  if (cache) {
+    try {
+      var cachedTokens = cache.get("WS_VALID_AUTH_TOKENS_V2");
+      if (cachedTokens) {
+        var parsedToks = JSON.parse(cachedTokens);
+        if (Array.isArray(parsedToks) && parsedToks.length > 0) return parsedToks;
+      }
+    } catch (eTokParse) {}
+  }
+
   var currentPin = getDashboardAccessPin();
   var tokens = [computeDashboardUserToken(HIDDEN_ADMIN_AUTH_USER, HIDDEN_ADMIN_AUTH_PIN)];
   var memberList = getAllRegisteredMemberNamesForAuth(ss);
   for (var i = 0; i < memberList.length; i++) {
     var tok = computeDashboardUserToken(memberList[i], currentPin);
     if (tokens.indexOf(tok) === -1) tokens.push(tok);
+  }
+  if (cache && tokens.length > 0) {
+    try {
+      cache.put("WS_VALID_AUTH_TOKENS_V2", JSON.stringify(tokens), 21600);
+    } catch (ePutTok) {}
   }
   return tokens;
 }
@@ -12633,7 +12675,12 @@ function invalidateDashboardServerCache() {
     if (typeof CacheService !== "undefined" && CacheService && typeof CacheService.getScriptCache === "function") {
       var cache = CacheService.getScriptCache();
       if (!cache) return;
-      var keysToRemove = [DASHBOARD_SERVER_CACHE_KEY, DASHBOARD_SERVER_CACHE_KEY + "_cnt"];
+      var keysToRemove = [
+        DASHBOARD_SERVER_CACHE_KEY,
+        DASHBOARD_SERVER_CACHE_KEY + "_cnt",
+        "WS_AUTH_MEMBERS_LIST_V2",
+        "WS_VALID_AUTH_TOKENS_V2"
+      ];
       var cntStr = (typeof cache.get === "function") ? cache.get(DASHBOARD_SERVER_CACHE_KEY + "_cnt") : null;
       var count = cntStr ? parseInt(cntStr, 10) : 5;
       for (var k = 0; k < Math.max(count + 5, 8); k++) {
@@ -21037,9 +21084,27 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  }';
   html += '  try {';
   html += '    if (typeof window !== "undefined" && window.parent && window.parent !== window) {';
+  html += '      var pSites = (data && data.sites) || [];';
   html += '      var previewPayload = {';
   html += '        kpi: data.kpi || {},';
-  html += '        recentSites: (data.sites || []).slice(0, 5).map(function(s) {';
+  html += '        scopeCounts: data.scopeCounts || {},';
+  html += '        members: data.members || [],';
+  html += '        sites: pSites.slice(0, 30).map(function(s) {';
+  html += '          return {';
+  html += '            siteName: s.siteName,';
+  html += '            progressRate: s.progressRate || 0,';
+  html += '            tasksCount: (s.tasks || []).length,';
+  html += '            delayedTasksCount: s.delayedTasksCount || 0,';
+  html += '            isDelayed: (s.delayedTasksCount || 0) > 0,';
+  html += '            scope: s.scope || "진행중",';
+  html += '            status: s.status || "",';
+  html += '            address: s.address || "",';
+  html += '            startDateStr: s.startDateStr || "",';
+  html += '            endDateStr: s.endDateStr || "",';
+  html += '            tasks: (s.tasks || []).slice(0, 2).map(function(t) { return { taskName: t.taskName, dateStr: t.dateStr, status: t.status, manager: t.manager, partner: t.partner }; })';
+  html += '          };';
+  html += '        }),';
+  html += '        recentSites: pSites.slice(0, 5).map(function(s) {';
   html += '          return {';
   html += '            siteName: s.siteName,';
   html += '            progressRate: s.progressRate || 0,';
@@ -25003,6 +25068,19 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    if (typeof handleGlobalEscape === "function") {';
   html += '      handleGlobalEscape();';
   html += '    }';
+  html += '  } else if (data.type === "WS_APPLY_SEARCH") {';
+  html += '    if (typeof data.query === "string") {';
+  html += '      var sInp = document.getElementById("searchInput") || document.getElementById("pcSearchInput");';
+  html += '      if (sInp) {';
+  html += '        sInp.value = data.query;';
+  html += '        if (typeof onSearchInput === "function") onSearchInput();';
+  html += '        if (typeof onPcSearchInput === "function") onPcSearchInput();';
+  html += '      }';
+  html += '    }';
+  html += '  } else if (data.type === "WS_FOCUS_SITE") {';
+  html += '    if (typeof data.siteName === "string" && data.siteName) {';
+  html += '      if (typeof toggleSite === "function") toggleSite(data.siteName);';
+  html += '    }';
   html += '  }';
   html += '});';
   html += 'try {';
@@ -26649,9 +26727,28 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  } catch(eInstant) {}';
   html += '  try {';
   html += '    if (renderedInstantly && typeof window !== "undefined" && window.parent && window.parent !== window) {';
+  html += '      var dObj = rawData || (typeof storedCache !== "undefined" && storedCache) || {};';
+  html += '      var pSites = dObj.sites || [];';
   html += '      var previewPayload = {';
-  html += '        kpi: (rawData && rawData.kpi) || {},';
-  html += '        recentSites: ((rawData && rawData.sites) || []).slice(0, 5).map(function(s) {';
+  html += '        kpi: dObj.kpi || {},';
+  html += '        scopeCounts: dObj.scopeCounts || {},';
+  html += '        members: dObj.members || [],';
+  html += '        sites: pSites.slice(0, 30).map(function(s) {';
+  html += '          return {';
+  html += '            siteName: s.siteName,';
+  html += '            progressRate: s.progressRate || 0,';
+  html += '            tasksCount: (s.tasks || []).length,';
+  html += '            delayedTasksCount: s.delayedTasksCount || 0,';
+  html += '            isDelayed: (s.delayedTasksCount || 0) > 0,';
+  html += '            scope: s.scope || "진행중",';
+  html += '            status: s.status || "",';
+  html += '            address: s.address || "",';
+  html += '            startDateStr: s.startDateStr || "",';
+  html += '            endDateStr: s.endDateStr || "",';
+  html += '            tasks: (s.tasks || []).slice(0, 2).map(function(t) { return { taskName: t.taskName, dateStr: t.dateStr, status: t.status, manager: t.manager, partner: t.partner }; })';
+  html += '          };';
+  html += '        }),';
+  html += '        recentSites: pSites.slice(0, 5).map(function(s) {';
   html += '          return {';
   html += '            siteName: s.siteName,';
   html += '            progressRate: s.progressRate || 0,';

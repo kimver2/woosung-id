@@ -47,7 +47,7 @@
       display: block;
       background-color: #f8fafc;
     }
-    /* 로딩 인디케이터 및 네이티브 앱 스켈레톤 UI (체감 0초 즉시 반응) */
+    /* 네이티브 앱 스켈레톤 및 초고속 캐시 프리뷰 UI (체감 0초 즉시 반응) */
     #loadingOverlay {
       position: absolute;
       top: 0;
@@ -58,7 +58,7 @@
       display: flex;
       flex-direction: column;
       z-index: 10;
-      transition: opacity 0.16s ease-out, visibility 0.16s ease-out;
+      transition: opacity 0.22s ease-out, visibility 0.22s ease-out;
       overflow: hidden;
     }
     #loadingOverlay.hidden {
@@ -73,6 +73,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-shrink: 0;
     }
     .skel-brand {
       font-size: 14.5px;
@@ -92,16 +93,20 @@
       display: inline-flex;
       align-items: center;
       gap: 5px;
+      transition: background 0.2s, color 0.2s;
     }
     .skel-body {
-      padding: 12px;
+      padding: 10px 12px;
       display: flex;
       flex-direction: column;
-      gap: 9px;
+      gap: 8px;
       max-width: 600px;
       margin: 0 auto;
       width: 100%;
       box-sizing: border-box;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      flex: 1;
     }
     .skel-kpi {
       background: #ffffff;
@@ -111,6 +116,97 @@
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 8px;
+      flex-shrink: 0;
+    }
+    .skel-search-box {
+      position: relative;
+      width: 100%;
+      flex-shrink: 0;
+    }
+    .skel-search-input {
+      width: 100%;
+      padding: 8px 30px 8px 32px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 12.5px;
+      outline: none;
+      background: #ffffff;
+      box-sizing: border-box;
+      font-family: inherit;
+      color: #0f172a;
+    }
+    .skel-search-input:focus {
+      border-color: #2563eb;
+    }
+    .skel-scope-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .skel-scope-tab {
+      padding: 6px 2px;
+      border-radius: 8px;
+      border: 1.5px solid #cbd5e1;
+      background: #ffffff;
+      color: #475569;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .skel-scope-tab.active {
+      background: #2563eb;
+      color: #ffffff;
+      border-color: #2563eb;
+    }
+    .skel-member-bar {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      flex-shrink: 0;
+    }
+    .skel-member-bar::-webkit-scrollbar {
+      display: none;
+    }
+    .skel-member-chip {
+      padding: 4px 9px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #ffffff;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .skel-member-chip.active {
+      background: #0f172a;
+      color: #ffffff;
+      border-color: #0f172a;
+      font-weight: 700;
+    }
+    .skel-site-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    .skel-site-card:active {
+      transform: scale(0.99);
     }
     .skel-card {
       background: #ffffff;
@@ -145,43 +241,56 @@
   </style>
 </head>
 <body>
-  <!-- 네이티브 앱 스켈레톤 로딩 화면 -->
+  <!-- 네이티브 앱 스켈레톤 및 초고속 프리뷰 화면 -->
   <div id="loadingOverlay">
     <div class="skel-header">
       <div class="skel-brand"><span>📱</span> 우성아이디 현장관리</div>
-      <div class="skel-sync-badge">
-        <span class="spinner"></span>
-        <span>연결 중</span>
+      <div class="skel-sync-badge" id="skelSyncBadge">
+        <span class="spinner" id="skelSpinner"></span>
+        <span id="skelSyncText">실시간 연결 중</span>
       </div>
     </div>
     <div class="skel-body" id="skelBody">
+      <!-- 1) KPI Bar -->
       <div class="skel-kpi" id="skelKpi">
-        <div class="skel-shimmer" style="height: 36px;"></div>
-        <div class="skel-shimmer" style="height: 36px;"></div>
-        <div class="skel-shimmer" style="height: 36px;"></div>
+        <div class="skel-shimmer" style="height: 38px;"></div>
+        <div class="skel-shimmer" style="height: 38px;"></div>
+        <div class="skel-shimmer" style="height: 38px;"></div>
       </div>
-      <div class="skel-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div class="skel-shimmer" style="width: 55%; height: 16px;"></div>
-          <div class="skel-shimmer" style="width: 18%; height: 14px; border-radius: 10px;"></div>
-        </div>
-        <div class="skel-shimmer" style="width: 100%; height: 4px; margin-top: 2px;"></div>
-        <div class="skel-shimmer" style="width: 75%; height: 12px; margin-top: 4px;"></div>
+      <!-- 2) Search Bar -->
+      <div class="skel-search-box" id="skelSearchBox" style="display:none;">
+        <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;color:#94a3b8;pointer-events:none;">🔍</span>
+        <input type="text" id="skelSearchInput" class="skel-search-input" placeholder="현장명, 공종, 담당자 검색..." oninput="onSkelSearch(this.value)">
       </div>
-      <div class="skel-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div class="skel-shimmer" style="width: 65%; height: 16px;"></div>
-          <div class="skel-shimmer" style="width: 18%; height: 14px; border-radius: 10px;"></div>
+      <!-- 3) Scope Tabs -->
+      <div class="skel-scope-tabs" id="skelScopeTabs" style="display:none;"></div>
+      <!-- 4) Member Filter Bar -->
+      <div class="skel-member-bar" id="skelMemberBar" style="display:none;"></div>
+      <!-- 5) Cards List -->
+      <div id="skelCardsList" style="display:flex;flex-direction:column;gap:8px;">
+        <div class="skel-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="skel-shimmer" style="width: 55%; height: 16px;"></div>
+            <div class="skel-shimmer" style="width: 18%; height: 14px; border-radius: 10px;"></div>
+          </div>
+          <div class="skel-shimmer" style="width: 100%; height: 4px; margin-top: 2px;"></div>
+          <div class="skel-shimmer" style="width: 75%; height: 12px; margin-top: 4px;"></div>
         </div>
-        <div class="skel-shimmer" style="width: 100%; height: 4px; margin-top: 2px;"></div>
-        <div class="skel-shimmer" style="width: 70%; height: 12px; margin-top: 4px;"></div>
-      </div>
-      <div class="skel-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div class="skel-shimmer" style="width: 50%; height: 16px;"></div>
-          <div class="skel-shimmer" style="width: 18%; height: 14px; border-radius: 10px;"></div>
+        <div class="skel-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="skel-shimmer" style="width: 65%; height: 16px;"></div>
+            <div class="skel-shimmer" style="width: 18%; height: 14px; border-radius: 10px;"></div>
+          </div>
+          <div class="skel-shimmer" style="width: 100%; height: 4px; margin-top: 2px;"></div>
+          <div class="skel-shimmer" style="width: 70%; height: 12px; margin-top: 4px;"></div>
         </div>
-        <div class="skel-shimmer" style="width: 100%; height: 4px; margin-top: 2px;"></div>
+        <div class="skel-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="skel-shimmer" style="width: 50%; height: 16px;"></div>
+            <div class="skel-shimmer" style="width: 18%; height: 14px; border-radius: 10px;"></div>
+          </div>
+          <div class="skel-shimmer" style="width: 100%; height: 4px; margin-top: 2px;"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -210,56 +319,196 @@
   <iframe
     id="appFrame"
     credentialless
-    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=219"
+    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=220"
     allow="clipboard-write; camera; geolocation"
     onload="hideLoading()">
   </iframe>
 
   <script>
+    var skelState = {
+      previewData: null,
+      searchQuery: '',
+      selectedScope: '진행중',
+      selectedMember: '',
+      clickedSite: ''
+    };
+
     function renderSkelFromCache() {
       try {
         var rawPrev = localStorage.getItem('ws_dashboard_swr_preview');
         if (!rawPrev) return;
         var p = JSON.parse(rawPrev);
         if (!p) return;
+        skelState.previewData = p;
+
+        // 1) KPI Bar
         if (p.kpi) {
           var kpiEl = document.getElementById('skelKpi');
           if (kpiEl) {
-            kpiEl.innerHTML = '<div style="background:#fff;border-radius:10px;padding:8px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);"><span style="font-size:10px;color:#64748b;display:block;">전체 현장</span><strong style="font-size:15px;color:#0f172a;">' + (p.kpi.totalSites || 0) + '</strong></div>' +
-              '<div style="background:#fff;border-radius:10px;padding:8px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);"><span style="font-size:10px;color:#2563eb;display:block;">오늘 공정</span><strong style="font-size:15px;color:#2563eb;">' + (p.kpi.todayCount || 0) + '</strong></div>' +
-              '<div style="background:#fff;border-radius:10px;padding:8px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);"><span style="font-size:10px;color:#dc2626;display:block;">공정 지연</span><strong style="font-size:15px;color:#dc2626;">' + (p.kpi.delayedCount || 0) + '</strong></div>';
+            kpiEl.innerHTML = '<div style="background:#fff;border-radius:10px;padding:8px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);"><span style="font-size:10px;color:#64748b;display:block;">전체 현장</span><strong style="font-size:16px;color:#0f172a;">' + (p.kpi.totalSites || 0) + '</strong></div>' +
+              '<div style="background:#fff;border-radius:10px;padding:8px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);"><span style="font-size:10px;color:#2563eb;display:block;">오늘 공정</span><strong style="font-size:16px;color:#2563eb;">' + (p.kpi.todayCount || 0) + '</strong></div>' +
+              '<div style="background:#fff;border-radius:10px;padding:8px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);"><span style="font-size:10px;color:#dc2626;display:block;">공정 지연</span><strong style="font-size:16px;color:#dc2626;">' + (p.kpi.delayedCount || 0) + '</strong></div>';
           }
         }
-        if (Array.isArray(p.recentSites) && p.recentSites.length > 0) {
-          var bodyEl = document.getElementById('skelBody');
-          if (bodyEl) {
-            var cardsHtml = '';
-            p.recentSites.slice(0, 3).forEach(function(s) {
-              var rate = Math.round(s.progressRate || 0);
-              var badgeColor = s.isDelayed ? '#dc2626' : (rate >= 100 ? '#10b981' : '#2563eb');
-              var badgeText = s.isDelayed ? '지연' : (rate >= 100 ? '완료' : rate + '%');
-              cardsHtml += '<div class="skel-card" style="padding:12px;background:#ffffff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);">' +
-                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
-                  '<strong style="font-size:13.5px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%;">' + (s.siteName || '') + '</strong>' +
-                  '<span style="font-size:11px;font-weight:700;color:' + badgeColor + ';background:' + (s.isDelayed ? '#fee2e2' : '#eff6ff') + ';padding:2px 7px;border-radius:8px;">' + badgeText + '</span>' +
-                '</div>' +
-                '<div style="width:100%;height:5px;background:#f1f5f9;border-radius:3px;overflow:hidden;">' +
-                  '<div style="width:' + Math.min(100, rate) + '%;height:100%;background:' + badgeColor + ';border-radius:3px;"></div>' +
-                '</div>' +
-              '</div>';
-            });
-            var existingKpi = document.getElementById('skelKpi');
-            bodyEl.innerHTML = '';
-            if (existingKpi) bodyEl.appendChild(existingKpi);
-            var divWrap = document.createElement('div');
-            divWrap.innerHTML = cardsHtml;
-            while (divWrap.firstChild) {
-              bodyEl.appendChild(divWrap.firstChild);
-            }
-          }
+
+        // 2) Search Box 노출
+        var sBox = document.getElementById('skelSearchBox');
+        if (sBox) sBox.style.display = 'block';
+
+        // 3) Scope Tabs 렌더링
+        var scBox = document.getElementById('skelScopeTabs');
+        if (scBox && p.scopeCounts) {
+          scBox.style.display = 'grid';
+          var scopes = [
+            { key: '진행중', label: '진행중', cnt: p.scopeCounts.ongoing || (p.kpi && p.kpi.totalSites) || 0 },
+            { key: '견적/상담', label: '견적/상담', cnt: p.scopeCounts.estimate || 0 },
+            { key: '완료', label: '완료', cnt: p.scopeCounts.completed || 0 },
+            { key: '전체', label: '전체', cnt: (p.scopeCounts.ongoing || 0) + (p.scopeCounts.estimate || 0) + (p.scopeCounts.completed || 0) }
+          ];
+          var scHtml = '';
+          scopes.forEach(function(sc) {
+            var activeCls = (sc.key === skelState.selectedScope) ? ' active' : '';
+            scHtml += '<div class="skel-scope-tab' + activeCls + '" onclick="onSkelScopeClick(\'' + sc.key + '\')">' +
+              sc.label + ' <span style="font-size:9.5px;opacity:0.85;">' + sc.cnt + '</span></div>';
+          });
+          scBox.innerHTML = scHtml;
         }
+
+        // 4) Member Chips 렌더링
+        var mBox = document.getElementById('skelMemberBar');
+        var memberList = (Array.isArray(p.members) && p.members.length > 0) ? p.members : ['조항만', '송지은', '전예린', '한송이', '김종혁'];
+        if (mBox && memberList.length > 0) {
+          mBox.style.display = 'flex';
+          var mHtml = '<div class="skel-member-chip' + (!skelState.selectedMember ? ' active' : '') + '" onclick="onSkelMemberClick(\'\')">전체</div>';
+          memberList.forEach(function(m) {
+            var activeCls = (m === skelState.selectedMember) ? ' active' : '';
+            mHtml += '<div class="skel-member-chip' + activeCls + '" onclick="onSkelMemberClick(\'' + m + '\')">' + m + '</div>';
+          });
+          mBox.innerHTML = mHtml;
+        }
+
+        // 5) Site Cards 렌더링
+        renderSkelCardsList();
       } catch (ePrev) {}
     }
+
+    function renderSkelCardsList() {
+      var p = skelState.previewData;
+      if (!p) return;
+      var rawSites = p.sites || p.recentSites || [];
+      if (!Array.isArray(rawSites) || rawSites.length === 0) return;
+
+      var q = (skelState.searchQuery || '').toLowerCase().trim();
+      var sc = skelState.selectedScope;
+      var mb = skelState.selectedMember;
+
+      var filtered = rawSites.filter(function(s) {
+        if (!s) return false;
+        if (sc && sc !== '전체' && s.scope && s.scope !== sc) return false;
+        if (mb) {
+          var hasMb = false;
+          if (Array.isArray(s.tasks)) {
+            for (var i = 0; i < s.tasks.length; i++) {
+              if (s.tasks[i] && s.tasks[i].manager === mb) { hasMb = true; break; }
+            }
+          }
+          if (!hasMb) return false;
+        }
+        if (q) {
+          var matchName = (s.siteName || '').toLowerCase().indexOf(q) !== -1;
+          var matchAddr = (s.address || '').toLowerCase().indexOf(q) !== -1;
+          var matchTask = false;
+          if (Array.isArray(s.tasks)) {
+            for (var t = 0; t < s.tasks.length; t++) {
+              if ((s.tasks[t].taskName || '').toLowerCase().indexOf(q) !== -1 || (s.tasks[t].manager || '').toLowerCase().indexOf(q) !== -1) {
+                matchTask = true; break;
+              }
+            }
+          }
+          if (!matchName && !matchAddr && !matchTask) return false;
+        }
+        return true;
+      });
+
+      var cardsEl = document.getElementById('skelCardsList');
+      if (!cardsEl) return;
+      if (filtered.length === 0) {
+        cardsEl.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;font-size:13px;background:#fff;border-radius:12px;">일치하는 현장이 없습니다.</div>';
+        return;
+      }
+
+      var html = '';
+      filtered.forEach(function(s) {
+        var rate = Math.round(s.progressRate || 0);
+        var badgeColor = s.isDelayed ? '#dc2626' : (rate >= 100 ? '#10b981' : '#2563eb');
+        var badgeBg = s.isDelayed ? '#fee2e2' : (rate >= 100 ? '#dcfce7' : '#eff6ff');
+        var badgeText = s.isDelayed ? '지연' : (rate >= 100 ? '완료' : rate + '%');
+        var dateInfo = (s.startDateStr || s.endDateStr) ? ((s.startDateStr || '') + (s.endDateStr ? ' ~ ' + s.endDateStr : '')) : '';
+
+        html += '<div class="skel-site-card" onclick="onSkelCardClick(\'' + (s.siteName || '').replace(/'/g, "\\'") + '\')">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+            '<strong style="font-size:14px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:72%;">' + (s.siteName || '') + '</strong>' +
+            '<span style="font-size:11px;font-weight:800;color:' + badgeColor + ';background:' + badgeBg + ';padding:2.5px 8px;border-radius:8px;">' + badgeText + '</span>' +
+          '</div>' +
+          '<div style="width:100%;height:5px;background:#f1f5f9;border-radius:3px;overflow:hidden;">' +
+            '<div style="width:' + Math.min(100, rate) + '%;height:100%;background:' + badgeColor + ';border-radius:3px;transition:width 0.3s ease;"></div>' +
+          '</div>';
+
+        if (dateInfo || s.address) {
+          html += '<div style="font-size:11px;color:#64748b;display:flex;justify-content:space-between;align-items:center;">' +
+            '<span>' + (dateInfo || s.address || '') + '</span>' +
+            (s.tasksCount ? '<span style="font-size:10.5px;color:#94a3b8;">공정 ' + s.tasksCount + '개</span>' : '') +
+          '</div>';
+        }
+
+        if (Array.isArray(s.tasks) && s.tasks.length > 0) {
+          html += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px;">';
+          s.tasks.slice(0, 2).forEach(function(t) {
+            html += '<span style="font-size:10px;font-weight:600;background:#f8fafc;border:1px solid #e2e8f0;color:#334155;padding:2px 6px;border-radius:6px;">' +
+              (t.taskName || '') + (t.manager ? ' (' + t.manager + ')' : '') + '</span>';
+          });
+          html += '</div>';
+        }
+
+        html += '</div>';
+      });
+      cardsEl.innerHTML = html;
+    }
+
+    function onSkelSearch(q) {
+      skelState.searchQuery = q || '';
+      renderSkelCardsList();
+    }
+
+    function onSkelScopeClick(scopeKey) {
+      skelState.selectedScope = scopeKey;
+      var scTabs = document.querySelectorAll('.skel-scope-tab');
+      scTabs.forEach(function(el) {
+        if (el.innerText.indexOf(scopeKey) !== -1) el.classList.add('active');
+        else el.classList.remove('active');
+      });
+      renderSkelCardsList();
+    }
+
+    function onSkelMemberClick(memberName) {
+      skelState.selectedMember = memberName;
+      var chips = document.querySelectorAll('.skel-member-chip');
+      chips.forEach(function(el) {
+        if ((!memberName && el.innerText === '전체') || el.innerText === memberName) el.classList.add('active');
+        else el.classList.remove('active');
+      });
+      renderSkelCardsList();
+    }
+
+    function onSkelCardClick(siteName) {
+      skelState.clickedSite = siteName;
+      if (orcaDashboardSource) {
+        try {
+          orcaDashboardSource.postMessage({ type: 'WS_FOCUS_SITE', siteName: siteName }, '*');
+        } catch (ePost) {}
+      }
+    }
+
     renderSkelFromCache();
     var GAS_AUTH_API_URL = 'https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec';
     function getTopSavedCookie(name) {
@@ -419,17 +668,30 @@
       } catch (eInitFrame) {}
     })();
 
+    var isLoadingHidden = false;
     function hideLoading() {
+      if (isLoadingHidden) return;
+      isLoadingHidden = true;
       var overlay = document.getElementById('loadingOverlay');
       if (overlay) {
+        var syncBadge = document.getElementById('skelSyncBadge');
+        var syncText = document.getElementById('skelSyncText');
+        var spinner = document.getElementById('skelSpinner');
+        if (syncBadge) {
+          syncBadge.style.background = '#dcfce7';
+          syncBadge.style.color = '#15803d';
+        }
+        if (syncText) syncText.innerText = '연결 완료';
+        if (spinner) spinner.style.display = 'none';
+
         overlay.classList.add('hidden');
         setTimeout(function() {
           if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-        }, 300);
+        }, 250);
       }
     }
-    // 최대 1.8초 후에는 로딩 화면 자동 해제 (기존 2.2초 -> 1.8초 단축)
-    setTimeout(hideLoading, 1800);
+    // 네트워크 단절 등 예외 상황 방어용 안전 타임아웃만 설정 (최대 12초)
+    setTimeout(hideLoading, 12000);
 
     // 모바일 기기 뒤로가기 버튼(popstate) 연동 브릿지:
     // 하단 상세 팝업이 열려 있을 때 기기 뒤로가기를 누르면 페이지 이탈 대신 팝업을 닫음
@@ -448,6 +710,16 @@
           try {
             localStorage.setItem('ws_dashboard_swr_preview', JSON.stringify(data.preview));
           } catch (ePrvSave) {}
+        }
+        if (ev.source && skelState.searchQuery) {
+          try {
+            ev.source.postMessage({ type: 'WS_APPLY_SEARCH', query: skelState.searchQuery }, '*');
+          } catch (eQ) {}
+        }
+        if (ev.source && skelState.clickedSite) {
+          try {
+            ev.source.postMessage({ type: 'WS_FOCUS_SITE', siteName: skelState.clickedSite }, '*');
+          } catch (eF) {}
         }
         hideLoading();
         try {
