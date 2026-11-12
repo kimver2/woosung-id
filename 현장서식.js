@@ -13728,8 +13728,9 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Pretendard", sans-serif; background: #f8fafc; color: #1e293b; font-size: 13px; padding-bottom: ' + (isMobile ? 'calc(80px + env(safe-area-inset-bottom, 0px))' : '70px') + '; }';
   html += '.header { background: #ffffff; padding: 14px 16px; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 20; ' + (isMobile ? 'max-width: 600px; margin: 0 auto;' : '') + ' }';
   html += '.title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }';
-  html += '.title { font-size: ' + (isMobile ? '16px' : '15px') + '; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 6px; }';
-  html += '.swr-sync-badge { display: none; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 2.5px 8px; border-radius: 12px; margin-left: 6px; vertical-align: middle; transition: opacity 0.25s ease, background-color 0.25s ease, color 0.25s ease; box-shadow: 0 1px 2px rgba(37,99,235,0.08); }';
+  html += '.title { font-size: ' + (isMobile ? '16px' : '15px') + '; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 6px; white-space: nowrap; }';
+  html += '.swr-sync-badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 11px; font-weight: 700; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 2.5px 7px; border-radius: 12px; margin-left: 6px; vertical-align: middle; min-width: 76px; box-sizing: border-box; text-align: center; white-space: nowrap; box-shadow: 0 1px 2px rgba(37,99,235,0.08); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.2s ease, visibility 0.2s ease, background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; flex-shrink: 0; }';
+  html += '.swr-sync-badge.is-visible { opacity: 1; visibility: visible; pointer-events: auto; }';
   html += '.swr-spinner { width: 9px; height: 9px; border: 1.5px solid #bfdbfe; border-top-color: #2563eb; border-radius: 50%; animation: swrSpin 0.7s linear infinite; display: inline-block; flex-shrink: 0; }';
   html += '@keyframes swrSpin { to { transform: rotate(360deg); } }';
   html += '.kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }';
@@ -14564,14 +14565,14 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    <button type="button" class="pc-btn-action-top" id="pcMonthlyReportBtn" onclick="openMonthlyReportModal()" style="background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;font-weight:800;" title="월간 협력업체 투입 일수 및 현장 가동 리포트">📊 월간집계</button>';
   html += '    <button type="button" class="pc-btn-action-top" onclick="captureCalendarScreen()">📸 캡쳐</button>';
   html += '    <button type="button" class="pc-btn-action-top refresh-btn" onclick="loadData(true)">🔄 새로고침</button>';
-  html += '    <span id="pcSwrSyncBadge" class="swr-sync-badge"><span class="swr-spinner"></span><span id="pcSwrSyncText">최신 동기화 중...</span></span>';
+  html += '    <span id="pcSwrSyncBadge" class="swr-sync-badge"><span class="swr-spinner"></span><span id="pcSwrSyncText">동기화 중</span></span>';
   html += '  </div>';
   html += '</header>';
 
   // Body HTML
   html += '<div class="header">';
   html += '  <div class="title-row">';
-  html += '    <div class="title" id="pageTitle" onclick="onLogoClick()" style="cursor:pointer;" title="우성아이디 대시보드 새로고침 및 메인 이동">' + (isMobile ? '📱 우성아이디 현장 대시보드' : '🏗️ 우성아이디 현장 대시보드') + '<span id="swrSyncBadge" class="swr-sync-badge"><span class="swr-spinner"></span><span id="swrSyncText">최신 동기화 중...</span></span></div>';
+  html += '    <div class="title" id="pageTitle" onclick="onLogoClick()" style="cursor:pointer;" title="우성아이디 대시보드 새로고침 및 메인 이동">' + (isMobile ? '📱 우성아이디 현장 대시보드' : '🏗️ 우성아이디 현장 대시보드') + '<span id="swrSyncBadge" class="swr-sync-badge"><span class="swr-spinner"></span><span id="swrSyncText">동기화 중</span></span></div>';
   html += '    <div style="display:flex;align-items:center;gap:5px;">';
   if (!isModal && !isMobile) {
     html += '      <button type="button" class="btn btn-secondary" style="flex:none;padding:4px 8px;font-size:11px;font-weight:800;display:inline-flex;align-items:center;gap:3px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;" onclick="openWideModalView()" title="대시보드를 넓은 대형 팝업 창(1020px)으로 엽니다">⛶ 크게 보기</button>';
@@ -21187,8 +21188,10 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  badges.forEach((b, idx) => {';
   html += '    if (!b) return;';
   html += '    if (visible) {';
-  html += '      b.style.display = "inline-flex";';
+  html += '      b.classList.add("is-visible");';
+  html += '      b.style.visibility = "visible";';
   html += '      b.style.opacity = "1";';
+  html += '      b.style.pointerEvents = "auto";';
   html += '      const sp = b.querySelector(".swr-spinner");';
   html += '      if (isSuccess) {';
   html += '        b.style.background = "#f0fdf4";';
@@ -21201,10 +21204,16 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '        b.style.borderColor = "#bfdbfe";';
   html += '        if (sp) sp.style.display = "inline-block";';
   html += '      }';
-  html += '      if (texts[idx]) texts[idx].innerText = text || (isSuccess ? "동기화 완료" : "최신 동기화 중...");';
+  html += '      if (texts[idx]) texts[idx].innerText = text || (isSuccess ? "동기화 완료" : "동기화 중");';
   html += '    } else {';
+  html += '      b.classList.remove("is-visible");';
   html += '      b.style.opacity = "0";';
-  html += '      setTimeout(() => { if (b) b.style.display = "none"; }, 300);';
+  html += '      b.style.pointerEvents = "none";';
+  html += '      setTimeout(() => {';
+  html += '        if (b && !b.classList.contains("is-visible")) {';
+  html += '          b.style.visibility = "hidden";';
+  html += '        }';
+  html += '      }, 250);';
   html += '    }';
   html += '  });';
   html += '}';
@@ -21232,12 +21241,12 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  if (isManual === true) {';
   html += '    isManualRefreshPending = true;';
   html += '    setRefreshLoadingState(true);';
-  html += '    showSwrSyncIndicator(true, "새로고침 중...", false);';
+  html += '    showSwrSyncIndicator(true, "동기화 중", false);';
   html += '  } else if (!rawData) {';
   html += '    const stored = getStoredDashboardCache();';
   html += '    if (stored && Array.isArray(stored.sites)) {';
   html += '      renderDashboardPayload(stored);';
-  html += '      showSwrSyncIndicator(true, "최신 동기화 중...", false);';
+  html += '      showSwrSyncIndicator(true, "동기화 중", false);';
   html += '    } else {';
   html += '      setRefreshLoadingState(true);';
   html += '      if (!isCalendarMode) {';
@@ -21357,7 +21366,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '}';
   html += 'function loadDataSilently() {';
   html += '  const reqSeq = clientMutationSeq;';
-  html += '  showSwrSyncIndicator(true, "최신 동기화 중...", false);';
+  html += '  showSwrSyncIndicator(true, "동기화 중", false);';
   html += '  google.script.run';
   html += '    .withSuccessHandler(function(data) {';
   html += '      if (reqSeq !== clientMutationSeq) return;';
@@ -26792,7 +26801,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    }';
   html += '  } catch(eReadyPost) {}';
   html += '  if (renderedInstantly) {';
-  html += '    showSwrSyncIndicator(true, "최신 동기화 중...", false);';
+  html += '    showSwrSyncIndicator(true, "동기화 중", false);';
   html += '    loadDataSilently();';
   html += '    if (!isTodoLoaded) {';
   html += '      setTimeout(function() { if (!isTodoLoaded) loadTodoList(false); }, 350);';
