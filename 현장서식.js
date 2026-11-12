@@ -247,7 +247,13 @@ function createTasksSheetMenu() {
 /**
  * 공종 목록 반환 (04_공종 시트 최우선 연동 + 시트 직접 편집 영구 보존)
  */
+var _availableTasksCache = null;
+
 function getAvailableTasks(sheet) {
+  if (_availableTasksCache && Array.isArray(_availableTasksCache) && _availableTasksCache.length > 0) {
+    return _availableTasksCache;
+  }
+
   var ss = null;
   try {
     ss = sheet ? (sheet.getParent() || SpreadsheetApp.getActiveSpreadsheet()) : SpreadsheetApp.getActiveSpreadsheet();
@@ -314,6 +320,10 @@ function getAvailableTasks(sheet) {
     ];
   }
 
+  if (tasks.length > 0) {
+    _availableTasksCache = tasks;
+  }
+
   return tasks;
 }
 
@@ -369,31 +379,40 @@ function ensureTasksInValidation(sheet, newTasks) {
 /**
  * 03_구성원 시트 연동 개별 구성원 이름 목록 반환 (대시보드 담당자 필터 버튼용)
  */
-function getMemberNames(ss) {
+var _membersSheetDataCache = null;
+
+function getMemberNames(ss, preloadedRows) {
   var members = [];
   var EXCLUDED_MEMBERS = ["김종혁", "영하"];
   try {
-    if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!ss) ss = getAppSpreadsheet();
-    var mSheet = findMembersSheet(ss);
-    if (mSheet && mSheet.getLastRow() >= 2) {
-      var lastR = mSheet.getLastRow();
-      var lastC = Math.max(mSheet.getLastColumn(), 1);
-      var hVals = mSheet.getRange(1, 1, 1, lastC).getValues()[0];
+    var rawRows = preloadedRows || _membersSheetDataCache;
+    if (!rawRows || !Array.isArray(rawRows) || rawRows.length < 2) {
+      if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+      if (!ss) ss = getAppSpreadsheet();
+      var mSheet = findMembersSheet(ss);
+      if (mSheet && mSheet.getLastRow() >= 2) {
+        var lastR = mSheet.getLastRow();
+        var lastC = Math.max((typeof mSheet.getLastColumn === "function" ? mSheet.getLastColumn() : 1), 1);
+        var headerVals = mSheet.getRange(1, 1, 1, lastC).getValues()[0];
+        var mData = mSheet.getRange(2, 1, lastR - 1, lastC).getValues();
+        rawRows = [headerVals].concat(mData);
+      }
+    }
+    if (rawRows && Array.isArray(rawRows) && rawRows.length >= 2) {
+      var hVals = rawRows[0];
       var nameCol = -1;
-      for (var c = 0; c < lastC; c++) {
+      for (var c = 0; c < hVals.length; c++) {
         var hStr = String(hVals[c] || "").trim();
         if (hStr.indexOf("이름") !== -1 || hStr.indexOf("성명") !== -1 || hStr.indexOf("담당자") !== -1 || hStr.indexOf("직원") !== -1 || hStr.indexOf("팀원") !== -1) {
-          nameCol = c + 1;
+          nameCol = c;
           break;
         }
       }
       if (nameCol === -1) {
-        nameCol = 1;
+        nameCol = 0;
       }
-      var names = mSheet.getRange(2, nameCol, lastR - 1, 1).getValues();
-      for (var i = 0; i < names.length; i++) {
-        var nm = String(names[i][0] || "").trim();
+      for (var i = 1; i < rawRows.length; i++) {
+        var nm = String(rawRows[i][nameCol] || "").trim();
         if (nm && nm !== "이름" && nm !== "성명" && nm !== "담당자") {
           var parts = nm.split(/[,/]/);
           for (var p = 0; p < parts.length; p++) {
@@ -422,7 +441,7 @@ function getMemberNames(ss) {
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss]
  * @return {Object<string, string>}
  */
-function getMemberPhoneMap(ss) {
+function getMemberPhoneMap(ss, preloadedRows) {
   var phoneMap = {
     "인경호": "010-9870-9696",
     "조항만": "010-4491-0112",
@@ -431,17 +450,25 @@ function getMemberPhoneMap(ss) {
     "한송이": "010-2775-2667"
   };
   try {
-    if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!ss) ss = getAppSpreadsheet();
-    var mSheet = findMembersSheet(ss);
-    if (mSheet && mSheet.getLastRow() >= 2) {
-      var lastR = mSheet.getLastRow();
-      var lastC = Math.max((typeof mSheet.getLastColumn === "function" ? mSheet.getLastColumn() : 5), 5);
-      var headerVals = mSheet.getRange(1, 1, 1, lastC).getValues()[0];
+    var rawRows = preloadedRows || _membersSheetDataCache;
+    if (!rawRows || !Array.isArray(rawRows) || rawRows.length < 2) {
+      if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+      if (!ss) ss = getAppSpreadsheet();
+      var mSheet = findMembersSheet(ss);
+      if (mSheet && mSheet.getLastRow() >= 2) {
+        var lastR = mSheet.getLastRow();
+        var lastC = Math.max((typeof mSheet.getLastColumn === "function" ? mSheet.getLastColumn() : 5), 5);
+        var headerVals = mSheet.getRange(1, 1, 1, lastC).getValues()[0];
+        var mData = mSheet.getRange(2, 1, lastR - 1, lastC).getValues();
+        rawRows = [headerVals].concat(mData);
+      }
+    }
+    if (rawRows && Array.isArray(rawRows) && rawRows.length >= 2) {
+      var headerVals = rawRows[0];
       var nameColIdx = -1;
       var phoneColIdx = -1;
 
-      for (var c = 0; c < lastC; c++) {
+      for (var c = 0; c < headerVals.length; c++) {
         var hStr = String(headerVals[c] || "").trim().toLowerCase();
         if (nameColIdx === -1 && (hStr.indexOf("이름") !== -1 || hStr.indexOf("성명") !== -1 || hStr.indexOf("담당자") !== -1 || hStr.indexOf("직원") !== -1)) {
           nameColIdx = c;
@@ -454,16 +481,15 @@ function getMemberPhoneMap(ss) {
       if (nameColIdx === -1) nameColIdx = 0;
       if (phoneColIdx === -1) phoneColIdx = 3; // 기본 D열(4열)
 
-      var mData = mSheet.getRange(2, 1, lastR - 1, lastC).getValues();
-      for (var i = 0; i < mData.length; i++) {
-        var mName = String(mData[i][nameColIdx] || "").trim();
-        var rawPhone = String(mData[i][phoneColIdx] || "").trim();
+      for (var i = 1; i < rawRows.length; i++) {
+        var mName = String(rawRows[i][nameColIdx] || "").trim();
+        var rawPhone = String(rawRows[i][phoneColIdx] || "").trim();
         if (!mName) continue;
 
         if (!rawPhone) {
-          for (var oc = 0; oc < mData[i].length; oc++) {
+          for (var oc = 0; oc < rawRows[i].length; oc++) {
             if (oc === nameColIdx) continue;
-            var cVal = String(mData[i][oc] || "").trim();
+            var cVal = String(rawRows[i][oc] || "").trim();
             if (/01[0-9]-?[0-9]{3,4}-?[0-9]{4}/.test(cVal)) {
               rawPhone = cVal;
               break;
@@ -495,32 +521,55 @@ function getMemberPhoneMap(ss) {
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss]
  * @return {Array<{name: string, role: string, phone: string}>}
  */
-function getSiteSuperintendents(ss) {
+function getSiteSuperintendents(ss, preloadedRows) {
   var list = [];
   var EXCLUDED_MEMBERS = ["김종혁", "영하"];
   try {
-    if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!ss && typeof getAppSpreadsheet === "function") ss = getAppSpreadsheet();
-    var mSheet = findMembersSheet(ss);
-    if (mSheet && mSheet.getLastRow() >= 2) {
-      var colIdxs = getMemberSheetColumnIndices(mSheet);
-      var lastR = mSheet.getLastRow();
-      var lastC = Math.max((typeof mSheet.getLastColumn === "function" ? mSheet.getLastColumn() : 6), colIdxs.maxCol || 6);
-      var mData = mSheet.getRange(2, 1, lastR - 1, lastC).getValues();
-      var phoneMap = getMemberPhoneMap(ss);
+    var rawRows = preloadedRows || _membersSheetDataCache;
+    var mSheet = null;
+    if (!rawRows || !Array.isArray(rawRows) || rawRows.length < 2) {
+      if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+      if (!ss && typeof getAppSpreadsheet === "function") ss = getAppSpreadsheet();
+      mSheet = findMembersSheet(ss);
+      if (mSheet && mSheet.getLastRow() >= 2) {
+        var lastR = mSheet.getLastRow();
+        var lastC = Math.max((typeof mSheet.getLastColumn === "function" ? mSheet.getLastColumn() : 6), 6);
+        var headerVals = mSheet.getRange(1, 1, 1, lastC).getValues()[0];
+        var mData = mSheet.getRange(2, 1, lastR - 1, lastC).getValues();
+        rawRows = [headerVals].concat(mData);
+      }
+    }
+    if (rawRows && Array.isArray(rawRows) && rawRows.length >= 2) {
+      var headerVals = rawRows[0];
+      var nameColIdx = -1;
+      var roleColIdx = -1;
+      var phoneColIdx = -1;
+      var emailColIdx = -1;
+      for (var c = 0; c < headerVals.length; c++) {
+        var hc = String(headerVals[c] || "").trim().toLowerCase();
+        if (nameColIdx === -1 && (hc.indexOf("이름") !== -1 || hc.indexOf("성명") !== -1 || hc.indexOf("담당자") !== -1)) nameColIdx = c;
+        if (roleColIdx === -1 && (hc.indexOf("직급") !== -1 || hc.indexOf("역할") !== -1 || hc.indexOf("직책") !== -1 || hc.indexOf("구분") !== -1)) roleColIdx = c;
+        if (phoneColIdx === -1 && (hc.indexOf("연락처") !== -1 || hc.indexOf("전화") !== -1 || hc.indexOf("phone") !== -1 || hc.indexOf("휴대폰") !== -1 || hc.indexOf("핸드폰") !== -1)) phoneColIdx = c;
+        if (emailColIdx === -1 && (hc.indexOf("이메일") !== -1 || hc.indexOf("email") !== -1 || hc.indexOf("메일") !== -1)) emailColIdx = c;
+      }
+      if (nameColIdx === -1) nameColIdx = 0;
+      if (roleColIdx === -1) roleColIdx = 1;
+      if (phoneColIdx === -1) phoneColIdx = 3;
 
-      for (var i = 0; i < mData.length; i++) {
-        var rowVals = mData[i];
-        var mName = String(rowVals[colIdxs.nameCol] || "").trim();
+      var phoneMap = getMemberPhoneMap(ss, rawRows);
+
+      for (var i = 1; i < rawRows.length; i++) {
+        var rowVals = rawRows[i];
+        var mName = String(rowVals[nameColIdx] || "").trim();
         if (!mName || EXCLUDED_MEMBERS.indexOf(mName) !== -1) continue;
 
-        var mRole = (colIdxs.roleCol >= 0 && colIdxs.roleCol < rowVals.length) ? String(rowVals[colIdxs.roleCol] || "").trim() : "";
+        var mRole = (roleColIdx >= 0 && roleColIdx < rowVals.length) ? String(rowVals[roleColIdx] || "").trim() : "";
         var cleanRole = mRole.replace(/\s+/g, "");
         var isSupt = (cleanRole.indexOf("소장") !== -1);
 
         if (!isSupt) {
           for (var oc = 0; oc < rowVals.length; oc++) {
-            if (oc === colIdxs.nameCol || oc === colIdxs.phoneCol || oc === colIdxs.emailCol) continue;
+            if (oc === nameColIdx || oc === phoneColIdx || oc === emailColIdx) continue;
             var cellStr = String(rowVals[oc] || "").trim().replace(/\s+/g, "");
             if (cellStr === "소장" || cellStr === "현장소장" || cellStr === "총괄소장" || cellStr === "시공소장" || cellStr === "공사소장" || cellStr === "부소장") {
               isSupt = true;
@@ -532,7 +581,7 @@ function getSiteSuperintendents(ss) {
 
         if (!isSupt) continue;
 
-        var rawPhone = (colIdxs.phoneCol >= 0 && colIdxs.phoneCol < rowVals.length) ? String(rowVals[colIdxs.phoneCol] || "").trim() : "";
+        var rawPhone = (phoneColIdx >= 0 && phoneColIdx < rowVals.length) ? String(rowVals[phoneColIdx] || "").trim() : "";
         if (!rawPhone || rawPhone.indexOf("@") !== -1) {
           rawPhone = "";
           for (var pc = 0; pc < rowVals.length; pc++) {
@@ -10325,7 +10374,8 @@ function doGet(e) {
 
   // 0-8) 대시보드 원시 데이터 JSON 조회 (action=getDashboardData || action=getSidebarData)
   if (action === "getDashboardData" || action === "getSidebarData") {
-    var dashData = getSidebarDashboardData(true);
+    var isForce = (p.force === "true" || p.force === true);
+    var dashData = getSidebarDashboardData(isForce);
     return ContentService.createTextOutput(JSON.stringify(dashData))
       .setMimeType(ContentService.MimeType.JSON);
   }
@@ -12577,6 +12627,8 @@ function getDashboardServerCache() {
  * 서버단 대시보드 데이터 캐시 무효화 (시트/웹 수정 시 즉시 호출)
  */
 function invalidateDashboardServerCache() {
+  _availableTasksCache = null;
+  _membersSheetDataCache = null;
   try {
     if (typeof CacheService !== "undefined" && CacheService && typeof CacheService.getScriptCache === "function") {
       var cache = CacheService.getScriptCache();
@@ -13448,6 +13500,19 @@ function getSidebarDashboardData(forceRefresh) {
       }
     }
 
+    // 01_구성원 시트 데이터 1회 단일 조회 후 캐시 공유 (중복 시트 I/O 제거)
+    _membersSheetDataCache = null;
+    try {
+      var mSheetOnce = findMembersSheet(ss);
+      if (mSheetOnce && mSheetOnce.getLastRow() >= 2) {
+        var mLastR = mSheetOnce.getLastRow();
+        var mMaxCols = Math.max((typeof mSheetOnce.getLastColumn === "function" ? mSheetOnce.getLastColumn() : 6), 6);
+        var mHeaderVals = mSheetOnce.getRange(1, 1, 1, mMaxCols).getValues()[0];
+        var mDataVals = mSheetOnce.getRange(2, 1, mLastR - 1, mMaxCols).getValues();
+        _membersSheetDataCache = [mHeaderVals].concat(mDataVals);
+      }
+    } catch(eMOnce) {}
+
     // 02_거래처 시트 데이터 1회 단일 조회 후 공유 (중복 시트 I/O 제거)
     var sharedPartnerRows = null;
     try {
@@ -13488,6 +13553,7 @@ function getSidebarDashboardData(forceRefresh) {
       sites: sitesList,
       siteInfoMap: getSiteInfoMap(ss, true)
     };
+    _membersSheetDataCache = null;
 
     try {
       var jsonStr = JSON.stringify(resultPayload);
@@ -13616,6 +13682,9 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '.header { background: #ffffff; padding: 14px 16px; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 20; ' + (isMobile ? 'max-width: 600px; margin: 0 auto;' : '') + ' }';
   html += '.title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }';
   html += '.title { font-size: ' + (isMobile ? '16px' : '15px') + '; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 6px; }';
+  html += '.swr-sync-badge { display: none; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 2.5px 8px; border-radius: 12px; margin-left: 6px; vertical-align: middle; transition: opacity 0.25s ease, background-color 0.25s ease, color 0.25s ease; box-shadow: 0 1px 2px rgba(37,99,235,0.08); }';
+  html += '.swr-spinner { width: 9px; height: 9px; border: 1.5px solid #bfdbfe; border-top-color: #2563eb; border-radius: 50%; animation: swrSpin 0.7s linear infinite; display: inline-block; flex-shrink: 0; }';
+  html += '@keyframes swrSpin { to { transform: rotate(360deg); } }';
   html += '.kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }';
   html += '.kpi-card { background: #f1f5f9; border-radius: 8px; padding: 8px 6px; text-align: center; cursor: pointer; transition: all 0.15s ease; border: 1px solid transparent; }';
   html += '.kpi-card:hover { background: #e2e8f0; }';
@@ -14448,13 +14517,14 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    <button type="button" class="pc-btn-action-top" id="pcMonthlyReportBtn" onclick="openMonthlyReportModal()" style="background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;font-weight:800;" title="월간 협력업체 투입 일수 및 현장 가동 리포트">📊 월간집계</button>';
   html += '    <button type="button" class="pc-btn-action-top" onclick="captureCalendarScreen()">📸 캡쳐</button>';
   html += '    <button type="button" class="pc-btn-action-top refresh-btn" onclick="loadData(true)">🔄 새로고침</button>';
+  html += '    <span id="pcSwrSyncBadge" class="swr-sync-badge"><span class="swr-spinner"></span><span id="pcSwrSyncText">최신 동기화 중...</span></span>';
   html += '  </div>';
   html += '</header>';
 
   // Body HTML
   html += '<div class="header">';
   html += '  <div class="title-row">';
-  html += '    <div class="title" id="pageTitle" onclick="onLogoClick()" style="cursor:pointer;" title="우성아이디 대시보드 새로고침 및 메인 이동">' + (isMobile ? '📱 우성아이디 현장 대시보드' : '🏗️ 우성아이디 현장 대시보드') + '</div>';
+  html += '    <div class="title" id="pageTitle" onclick="onLogoClick()" style="cursor:pointer;" title="우성아이디 대시보드 새로고침 및 메인 이동">' + (isMobile ? '📱 우성아이디 현장 대시보드' : '🏗️ 우성아이디 현장 대시보드') + '<span id="swrSyncBadge" class="swr-sync-badge"><span class="swr-spinner"></span><span id="swrSyncText">최신 동기화 중...</span></span></div>';
   html += '    <div style="display:flex;align-items:center;gap:5px;">';
   if (!isModal && !isMobile) {
     html += '      <button type="button" class="btn btn-secondary" style="flex:none;padding:4px 8px;font-size:11px;font-weight:800;display:inline-flex;align-items:center;gap:3px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;" onclick="openWideModalView()" title="대시보드를 넓은 대형 팝업 창(1020px)으로 엽니다">⛶ 크게 보기</button>';
@@ -20967,37 +21037,119 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  }';
   html += '  try {';
   html += '    if (typeof window !== "undefined" && window.parent && window.parent !== window) {';
-  html += '      window.parent.postMessage({ type: "DASHBOARD_READY" }, "*");';
+  html += '      var previewPayload = {';
+  html += '        kpi: data.kpi || {},';
+  html += '        recentSites: (data.sites || []).slice(0, 5).map(function(s) {';
+  html += '          return {';
+  html += '            siteName: s.siteName,';
+  html += '            progressRate: s.progressRate || 0,';
+  html += '            tasksCount: (s.tasks || []).length,';
+  html += '            isDelayed: (s.delayedTasksCount || 0) > 0';
+  html += '          };';
+  html += '        })';
+  html += '      };';
+  html += '      window.parent.postMessage({ type: "DASHBOARD_READY", preview: previewPayload }, "*");';
   html += '    }';
   html += '  } catch(eReadyPost) {}';
   html += '  loadWeatherData();';
   html += '}';
   html += '';
+  html += 'const DASHBOARD_CACHE_KEY = "ws_dashboard_cache_v2";';
+  html += 'const DASHBOARD_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;';
+  html += 'function getStoredDashboardCache() {';
+  html += '  try {';
+  html += '    if (typeof localStorage === "undefined" || !localStorage || typeof localStorage.getItem !== "function") return null;';
+  html += '    const raw = localStorage.getItem(DASHBOARD_CACHE_KEY);';
+  html += '    if (!raw) return null;';
+  html += '    const parsed = JSON.parse(raw);';
+  html += '    if (!parsed) return null;';
+  html += '    if (parsed.data && Array.isArray(parsed.data.sites) && parsed.data.sites.length > 0) {';
+  html += '      const age = Date.now() - (parsed.cachedAt || 0);';
+  html += '      if (age < DASHBOARD_CACHE_MAX_AGE_MS) return parsed.data;';
+  html += '    }';
+  html += '    if (Array.isArray(parsed.sites) && parsed.sites.length > 0) return parsed;';
+  html += '    return null;';
+  html += '  } catch(e) { return null; }';
+  html += '}';
+  html += 'function saveDashboardCache(data) {';
+  html += '  try {';
+  html += '    if (!data || !Array.isArray(data.sites)) return;';
+  html += '    if (typeof localStorage === "undefined" || !localStorage || typeof localStorage.setItem !== "function") return;';
+  html += '    const envelope = { cachedAt: Date.now(), data: data };';
+  html += '    localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(envelope));';
+  html += '  } catch(e) {}';
+  html += '}';
+  html += 'function invalidateDashboardClientCache() {';
+  html += '  try {';
+  html += '    if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.removeItem === "function") {';
+  html += '      localStorage.removeItem(DASHBOARD_CACHE_KEY);';
+  html += '    }';
+  html += '  } catch(e) {}';
+  html += '}';
+  html += 'function showSwrSyncIndicator(visible, text, isSuccess) {';
+  html += '  const badges = [document.getElementById("swrSyncBadge"), document.getElementById("pcSwrSyncBadge")];';
+  html += '  const texts = [document.getElementById("swrSyncText"), document.getElementById("pcSwrSyncText")];';
+  html += '  badges.forEach((b, idx) => {';
+  html += '    if (!b) return;';
+  html += '    if (visible) {';
+  html += '      b.style.display = "inline-flex";';
+  html += '      b.style.opacity = "1";';
+  html += '      const sp = b.querySelector(".swr-spinner");';
+  html += '      if (isSuccess) {';
+  html += '        b.style.background = "#f0fdf4";';
+  html += '        b.style.color = "#16a34a";';
+  html += '        b.style.borderColor = "#bbf7d0";';
+  html += '        if (sp) sp.style.display = "none";';
+  html += '      } else {';
+  html += '        b.style.background = "#eff6ff";';
+  html += '        b.style.color = "#2563eb";';
+  html += '        b.style.borderColor = "#bfdbfe";';
+  html += '        if (sp) sp.style.display = "inline-block";';
+  html += '      }';
+  html += '      if (texts[idx]) texts[idx].innerText = text || (isSuccess ? "동기화 완료" : "최신 동기화 중...");';
+  html += '    } else {';
+  html += '      b.style.opacity = "0";';
+  html += '      setTimeout(() => { if (b) b.style.display = "none"; }, 300);';
+  html += '    }';
+  html += '  });';
+  html += '}';
+  html += 'function isDashboardDataDifferent(oldData, newData) {';
+  html += '  if (!oldData || !newData) return true;';
+  html += '  if (!oldData.kpi || !newData.kpi) return true;';
+  html += '  if (oldData.kpi.totalSites !== newData.kpi.totalSites || oldData.kpi.todayCount !== newData.kpi.todayCount || oldData.kpi.delayedCount !== newData.kpi.delayedCount || oldData.kpi.activeSites !== newData.kpi.activeSites) return true;';
+  html += '  const oldSites = oldData.sites || [];';
+  html += '  const newSites = newData.sites || [];';
+  html += '  if (oldSites.length !== newSites.length) return true;';
+  html += '  for (let i = 0; i < oldSites.length; i++) {';
+  html += '    const os = oldSites[i];';
+  html += '    const ns = newSites[i];';
+  html += '    if (!ns || os.siteName !== ns.siteName || (os.tasks || []).length !== (ns.tasks || []).length) return true;';
+  html += '    if (os.progressRate !== ns.progressRate || os.delayedTasksCount !== ns.delayedTasksCount) return true;';
+  html += '  }';
+  html += '  if (JSON.stringify(oldData.scopeCounts || {}) !== JSON.stringify(newData.scopeCounts || {})) return true;';
+  html += '  return false;';
+  html += '}';
   html += 'function loadData(isManual) {';
   html += '  if (typeof isMobileTodoMode !== "undefined" && isMobileTodoMode) {';
   html += '    loadTodoList(true);';
   html += '    return;';
   html += '  }';
-  html += '  if (isManual === true) isManualRefreshPending = true;';
-  html += '  if (isManual !== true && !rawData) {';
-  html += '    try {';
-  html += '      if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.getItem === "function") {';
-  html += '        const cachedStr = localStorage.getItem("ws_dashboard_cache_v2");';
-  html += '        if (cachedStr) {';
-  html += '          const cachedObj = JSON.parse(cachedStr);';
-  html += '          if (cachedObj && Array.isArray(cachedObj.sites)) {';
-  html += '            renderDashboardPayload(cachedObj);';
-  html += '          }';
-  html += '        }';
-  html += '      }';
-  html += '    } catch(eCache) {}';
-  html += '  }';
-  html += '  if (isManual === true || !rawData) {';
+  html += '  if (isManual === true) {';
+  html += '    isManualRefreshPending = true;';
   html += '    setRefreshLoadingState(true);';
-  html += '  }';
-  html += '  if (!isCalendarMode && !rawData) {';
-  html += '    const ca = document.getElementById("contentArea");';
-  html += '    if (ca) ca.innerHTML = \'<div class="loading-state"><div class="spinner"></div><p class="loading-text">현장 데이터 불러오는 중...</p></div>\';';
+  html += '    showSwrSyncIndicator(true, "새로고침 중...", false);';
+  html += '  } else if (!rawData) {';
+  html += '    const stored = getStoredDashboardCache();';
+  html += '    if (stored && Array.isArray(stored.sites)) {';
+  html += '      renderDashboardPayload(stored);';
+  html += '      showSwrSyncIndicator(true, "최신 동기화 중...", false);';
+  html += '    } else {';
+  html += '      setRefreshLoadingState(true);';
+  html += '      if (!isCalendarMode) {';
+  html += '        const ca = document.getElementById("contentArea");';
+  html += '        if (ca) ca.innerHTML = \'<div class="loading-state"><div class="spinner"></div><p class="loading-text">현장 데이터 불러오는 중...</p></div>\';';
+  html += '      }';
+  html += '    }';
   html += '  }';
   html += '  const runner = google.script.run';
   html += '    .withSuccessHandler(onDataLoaded)';
@@ -21106,19 +21258,24 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  }';
   html += '  recalcAllSitesAndKpi(rawData);';
   html += '  renderDashboardPayload(rawData);';
+  html += '  try { saveDashboardCache(rawData); } catch(eSaveMut) {}';
   html += '}';
   html += 'function loadDataSilently() {';
   html += '  const reqSeq = clientMutationSeq;';
+  html += '  showSwrSyncIndicator(true, "최신 동기화 중...", false);';
   html += '  google.script.run';
   html += '    .withSuccessHandler(function(data) {';
   html += '      if (reqSeq !== clientMutationSeq) return;';
   html += '      onDataLoaded(data);';
   html += '    })';
-  html += '    .withFailureHandler(function() {})';
+  html += '    .withFailureHandler(function() {';
+  html += '      showSwrSyncIndicator(false);';
+  html += '    })';
   html += '    .getSidebarDashboardData(true);';
   html += '}';
 
   html += 'function onError(err) {';
+  html += '  showSwrSyncIndicator(false);';
   html += '  setRefreshLoadingState(false);';
   html += '  isManualRefreshPending = false;';
   html += '  if (!rawData) {';
@@ -21185,12 +21342,13 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    });';
   html += '  }';
   html += '  try {';
-  html += '    renderDashboardPayload(data);';
-  html += '    try {';
-  html += '      if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.setItem === "function") {';
-  html += '        localStorage.setItem("ws_dashboard_cache_v2", JSON.stringify(data));';
-  html += '      }';
-  html += '    } catch(eSaveCache) {}';
+  html += '    const hasDiff = isDashboardDataDifferent(rawData, data);';
+  html += '    if (hasDiff || !rawData) {';
+  html += '      renderDashboardPayload(data);';
+  html += '    }';
+  html += '    saveDashboardCache(data);';
+  html += '    showSwrSyncIndicator(true, "동기화 완료", true);';
+  html += '    setTimeout(function() { showSwrSyncIndicator(false); }, 1500);';
   html += '    if (wasManual) showToast("✅ 최신 현장 데이터로 새로고침되었습니다.");';
   html += '    try {';
   html += '      if (!isTodoLoaded) {';
@@ -26475,33 +26633,44 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      isTodoLoaded = true;';
   html += '    }';
   html += '  } catch(eSsrTodo) {}';
-  html += '  let renderedFromSsr = false;';
+  html += '  let renderedInstantly = false;';
   html += '  try {';
   html += '    if (hasServerInjectedData && rawData && Array.isArray(rawData.sites) && rawData.sites.length > 0) {';
   html += '      renderDashboardPayload(rawData);';
-  html += '      renderedFromSsr = true;';
-  html += '      if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.setItem === "function") {';
-  html += '        localStorage.setItem("ws_dashboard_cache_v2", JSON.stringify(rawData));';
-  html += '      }';
-  html += '    } else if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.getItem === "function") {';
-  html += '      const cachedStr = localStorage.getItem("ws_dashboard_cache_v2");';
-  html += '      if (cachedStr) {';
-  html += '        const cachedObj = JSON.parse(cachedStr);';
-  html += '        if (cachedObj && Array.isArray(cachedObj.sites) && cachedObj.sites.length > 0) {';
-  html += '          renderDashboardPayload(cachedObj);';
-  html += '        }';
+  html += '      saveDashboardCache(rawData);';
+  html += '      renderedInstantly = true;';
+  html += '    } else {';
+  html += '      const storedCache = getStoredDashboardCache();';
+  html += '      if (storedCache && Array.isArray(storedCache.sites) && storedCache.sites.length > 0) {';
+  html += '        renderDashboardPayload(storedCache);';
+  html += '        renderedInstantly = true;';
   html += '      }';
   html += '    }';
   html += '  } catch(eInstant) {}';
   html += '  try {';
-  html += '    if (typeof window !== "undefined" && window.parent && window.parent !== window) {';
-  html += '      window.parent.postMessage({ type: "DASHBOARD_READY" }, "*");';
+  html += '    if (renderedInstantly && typeof window !== "undefined" && window.parent && window.parent !== window) {';
+  html += '      var previewPayload = {';
+  html += '        kpi: (rawData && rawData.kpi) || {},';
+  html += '        recentSites: ((rawData && rawData.sites) || []).slice(0, 5).map(function(s) {';
+  html += '          return {';
+  html += '            siteName: s.siteName,';
+  html += '            progressRate: s.progressRate || 0,';
+  html += '            tasksCount: (s.tasks || []).length,';
+  html += '            isDelayed: (s.delayedTasksCount || 0) > 0';
+  html += '          };';
+  html += '        })';
+  html += '      };';
+  html += '      window.parent.postMessage({ type: "DASHBOARD_READY", preview: previewPayload }, "*");';
   html += '    }';
   html += '  } catch(eReadyPost) {}';
-  html += '  if (!renderedFromSsr) {';
-  html += '    loadData();';
-  html += '  } else if (!isTodoLoaded) {';
-  html += '    setTimeout(function() { if (!isTodoLoaded) loadTodoList(false); }, 350);';
+  html += '  if (renderedInstantly) {';
+  html += '    showSwrSyncIndicator(true, "최신 동기화 중...", false);';
+  html += '    loadDataSilently();';
+  html += '    if (!isTodoLoaded) {';
+  html += '      setTimeout(function() { if (!isTodoLoaded) loadTodoList(false); }, 350);';
+  html += '    }';
+  html += '  } else {';
+  html += '    loadData(false);';
   html += '  }';
   html += '  if (typeof window !== "undefined") {';
   html += '    window.addEventListener("keydown", function(e) {';
