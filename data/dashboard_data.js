@@ -134,13 +134,20 @@
         });
       }
       var url = GAS_API_URL + "?" + query.join("&");
-      return fetch(url, { method: "GET", mode: "cors" })
+      return fetch(url, { method: "GET", mode: "cors", redirect: "follow" })
         .then(function (r) { return r.text(); })
         .then(function (txt) {
-          try { return JSON.parse(txt); } catch (e) { return { ok: true, raw: txt }; }
+          try {
+            var parsed = JSON.parse(txt);
+            if (parsed && parsed.ok === undefined && parsed.success !== undefined) parsed.ok = !!parsed.success;
+            return parsed;
+          } catch (e) {
+            var isHtml = /<html|<body|<!doctype/i.test(String(txt || ""));
+            return { ok: !isHtml, htmlFallback: isHtml, raw: String(txt || "").slice(0, 200) };
+          }
         })
         .catch(function (err) {
-          return { ok: false, error: err && err.message ? err.message : String(err) };
+          return { ok: false, offlineFallback: true, error: err && err.message ? err.message : String(err) };
         });
     },
 
@@ -180,7 +187,22 @@
     saveTask: function (isEdit, payload, dashData) {
       if (dashData) this.saveDashboardCache(dashData);
       if (isEdit) {
-        return this.callGasApi("updateScheduleStatus", Object.assign({ format: "json" }, payload));
+        var rowNum = parseInt(payload && payload.row, 10);
+        if (!rowNum || rowNum < 2) {
+          // 로컬에서 방금 등록되어 아직 row가 동기화되지 않은 항목은 addScheduleTask로 안전 폴백
+          return this.callGasApi("addScheduleTask", {
+            site: payload.site,
+            task: payload.task,
+            date: payload.date,
+            manager: payload.manager,
+            status: payload.status,
+            shared: payload.shared,
+            memo: payload.memo,
+            partner: payload.partner,
+            category: payload.sheetName || "현장데이터"
+          });
+        }
+        return this.callGasApi("updateScheduleStatus", Object.assign({ format: "json", id: (payload && (payload.id || payload.taskId)) || "" }, payload));
       }
       return this.callGasApi("addScheduleTask", payload);
     },

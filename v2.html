@@ -540,8 +540,21 @@
 
     /* ================= 6. [현장 목록] ================= */
     .site-list-workspace-view { flex: 1; overflow-y: auto; padding: 18px 22px; background: var(--bg); }
-    .site-carousel-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    .site-carousel-track { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 14px; }
+    .site-carousel-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap; }
+    .carousel-wrap-box { position: relative; display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+    .carousel-arrow-btn {
+      width: 28px; height: 64px; border-radius: 8px; border: 1px solid var(--border); background: #ffffff;
+      color: var(--text-sub); font-size: 18px; font-weight: 800; cursor: pointer; flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center; box-shadow: var(--shadow-sm);
+      transition: all 0.12s;
+    }
+    .carousel-arrow-btn:hover { background: #eff6ff; color: #1e40af; border-color: #93c5fd; }
+    .site-carousel-track { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; flex: 1; scroll-behavior: smooth; }
+    .home-detail-chip-btn {
+      padding: 3px 8px; border-radius: 5px; border: 1px solid #cbd5e1; background: #ffffff;
+      color: #334155; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    }
+    .home-detail-chip-btn:hover { background: #eff6ff; color: #1d4ed8; border-color: #93c5fd; }
     .site-carousel-card {
       min-width: 230px; max-width: 255px; background: #ffffff; border: 1px solid var(--border); border-radius: 8px;
       padding: 11px 13px; cursor: pointer; flex-shrink: 0; transition: all 0.15s; box-shadow: var(--shadow-sm);
@@ -966,7 +979,6 @@
               <option value="송지은">송지은 소장</option>
               <option value="전예린">전예린 소장</option>
               <option value="한송이">한송이 소장</option>
-              <option value="인경호">인경호 소장</option>
               <option value="차정률">차정률 소장</option>
             </select>
           </div>
@@ -1020,7 +1032,6 @@
               <option value="송지은">송지은</option>
               <option value="전예린">전예린</option>
               <option value="한송이">한송이</option>
-              <option value="인경호">인경호</option>
               <option value="차정률">차정률</option>
             </select>
             <button type="button" onclick="triggerLiveSync(true)" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="새로고침">🔄</button>
@@ -1331,10 +1342,69 @@
       }
       function getMembersList() {
         if (state.settingsData && Array.isArray(state.settingsData.members) && state.settingsData.members.length) {
-          return state.settingsData.members.map((m) => m.name);
+          return state.settingsData.members.map((m) => String((m && m.name) || m || "").trim()).filter(Boolean);
         }
         const raw = (state.dashData && state.dashData.members) || ["조항만", "송지은", "전예린", "한송이", "차정률"];
-        return raw.includes("인경호") ? raw : [...raw, "인경호"];
+        return raw.map((m) => String(m || "").trim()).filter(Boolean);
+      }
+      function getMemberRoleTitle(name) {
+        if (state.settingsData && Array.isArray(state.settingsData.members)) {
+          const found = state.settingsData.members.find((m) => m && m.name === name);
+          if (found && found.role) return found.role;
+        }
+        return name === "조항만" ? "대표" : "소장";
+      }
+      function syncUserSelectorOptions() {
+        const members = getMembersList();
+        const pcSel = document.getElementById("userSelector");
+        const mobSel = document.getElementById("mUserSelector");
+        if (!members.includes(state.user) && members.length) {
+          state.user = members.includes("조항만") ? "조항만" : members[0];
+        }
+        if (pcSel) {
+          pcSel.innerHTML = members.map((m) => `<option value="${escHtml(m)}" ${m === state.user ? "selected" : ""}>${escHtml(m)} ${escHtml(getMemberRoleTitle(m))}</option>`).join("");
+        }
+        if (mobSel) {
+          mobSel.innerHTML = members.map((m) => `<option value="${escHtml(m)}" ${m === state.user ? "selected" : ""}>${escHtml(m)}</option>`).join("");
+        }
+        populateAuthMembersDatalist();
+      }
+      function filterRegisteredManagers(rawStr) {
+        const members = getMembersList();
+        if (!members.length) return [];
+        const parts = String(rawStr || "").split(",").map((x) => x.trim()).filter(Boolean);
+        const valid = [];
+        parts.forEach((p) => {
+          if (members.includes(p) && !valid.includes(p)) valid.push(p);
+        });
+        return valid;
+      }
+      function sanitizeUnregisteredMembers() {
+        const members = getMembersList();
+        if (!members.length) return;
+        const filterStr = (raw) => filterRegisteredManagers(raw).join(", ");
+        if (state.dashData && Array.isArray(state.dashData.sites)) {
+          state.dashData.sites.forEach((s) => {
+            if (s.primaryManager) s.primaryManager = filterStr(s.primaryManager);
+            if (s.estimateData && s.estimateData.manager) s.estimateData.manager = filterStr(s.estimateData.manager);
+            (s.tasks || []).forEach((t) => {
+              if (t.manager) t.manager = filterStr(t.manager);
+              if (t.manager1 && !members.includes(t.manager1)) t.manager1 = "";
+              if (t.manager2 && !members.includes(t.manager2)) t.manager2 = "";
+              if (!t.manager1 && t.manager) t.manager1 = t.manager.split(",")[0].trim();
+              if (!t.manager2 && t.manager && t.manager.includes(",")) t.manager2 = (t.manager.split(",")[1] || "").trim();
+            });
+          });
+        }
+        if (state.todoData && Array.isArray(state.todoData.list)) {
+          state.todoData.list.forEach((t) => {
+            if (t.manager) t.manager = filterStr(t.manager);
+          });
+        }
+        if (state.memberFilter && !members.includes(state.memberFilter)) state.memberFilter = "";
+        if (state.todoMemberFilter && state.todoMemberFilter !== "all" && state.todoMemberFilter !== "unassigned" && !members.includes(state.todoMemberFilter)) {
+          state.todoMemberFilter = "all";
+        }
       }
       function getTasksMasterList() {
         if (state.settingsData && Array.isArray(state.settingsData.tasks) && state.settingsData.tasks.length) {
@@ -1419,13 +1489,16 @@
         if (state.dashData && state.dashData.kpi) {
           let tCnt = 0, dCnt = 0;
           const todayY = getTodayYmd();
-          getAllSites().forEach((s) => (s.tasks || []).forEach((t) => {
-            if (t.status !== "완료") {
-              const y = parseYmdFromTask(t);
-              if (y === todayY || t.isToday) tCnt++;
-              if (t.isDelayed) dCnt++;
-            }
-          }));
+          getAllSites().forEach((s) => {
+            if (s.scope === "newSite" || s.isArchived || s.isAllCompleted) return;
+            (s.tasks || []).forEach((t) => {
+              if (t.status !== "완료") {
+                const y = parseYmdFromTask(t);
+                if (y === todayY || t.isToday) tCnt++;
+                if (t.isDelayed) dCnt++;
+              }
+            });
+          });
           state.dashData.kpi.todayCount = tCnt;
           state.dashData.kpi.delayedCount = dCnt;
         }
@@ -1553,7 +1626,7 @@
               <div class="kpi-tile-lbl">오늘 진행</div>
               <div class="kpi-tile-val" style="color:#2563eb;">${kpiToday}건</div>
             </div>
-            <div class="kpi-tile delay" onclick="switchMainTab('sites')">
+            <div class="kpi-tile delay" onclick="openDelayedSitesFromHome(false)">
               <div class="kpi-tile-lbl">공정 지연 ⚠️</div>
               <div class="kpi-tile-val">${kpiDelayed}건</div>
             </div>
@@ -1612,13 +1685,31 @@
         `;
       }
 
+      window.openDelayedSitesFromHome = function (isMobile) {
+        const delayedSite = getAllSites().find((s) => {
+          if (s.scope === "newSite" || s.isArchived || s.isAllCompleted) return false;
+          return (s.tasks || []).some((t) => t.isDelayed && t.status !== "완료");
+        });
+        if (delayedSite) {
+          state.scope = delayedSite.scope || "site";
+          state.selectedSiteKey = delayedSite.siteKey;
+        } else if (state.scope === "newSite") {
+          state.scope = "site";
+        }
+        state.siteTaskStatusFilter = "delay";
+        state.showArchivedSites = false;
+        markAllDirty();
+        if (isMobile) window.switchMobileTab("sites");
+        else window.switchMainTab("sites");
+      };
+
       // ================= [PC 탭 1: 홈 — To-Do 최상단 배치!] =================
       function renderPcHomeTab() {
         const user = state.user;
-        const roleLabel = user === "조항만" ? "대표님" : "소장님";
+        const roleLabel = getMemberRoleTitle(user) + "님";
         const todayYmd = getTodayYmd();
         const q = state.searchQuery.trim();
-        const allActiveSites = getAllSites().filter((s) => !s.isArchived && !s.isAllCompleted);
+        const allActiveSites = getAllSites().filter((s) => s.scope !== "newSite" && !s.isArchived && !s.isAllCompleted);
         const userSites = allActiveSites.filter((s) => (s.tasks || []).some((t) => taskMatchesMember(t, user)));
         const mySites = userSites.length ? userSites : allActiveSites;
 
@@ -1671,13 +1762,16 @@
           const cls = isDel ? "danger" : task.isToday ? "" : "warning";
           return `
             <div class="task-timeline-item ${cls}" onclick="openTaskEditModal('${escJs(task.id || task.taskId)}')">
-              <div style="min-width:0;">
+              <div style="min-width:0;flex:1;">
                 <strong>${escHtml(site.siteName)}</strong>
                 <span style="font-size:11px;background:${isDel ? "#fee2e2" : "#dbeafe"};color:${isDel ? "#991b1b" : "#1e40af"};padding:2px 6px;border-radius:4px;margin-left:6px;font-weight:700;">${escHtml(task.taskName)}</span>
                 <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">${escHtml(task.partner || task.manager || "-")}</span>
               </div>
-              <div style="white-space:nowrap;font-size:11.5px;font-weight:700;color:${isDel ? "#dc2626" : "#1d4ed8"};">
-                ${isDel ? "⚠️ 지연 (" + escHtml(ymd) + ")" : escHtml(ymd || task.status)}
+              <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                <div style="white-space:nowrap;font-size:11.5px;font-weight:700;color:${isDel ? "#dc2626" : "#1d4ed8"};">
+                  ${isDel ? "⚠️ 지연 (" + escHtml(ymd) + ")" : escHtml(ymd || task.status)}
+                </div>
+                <button type="button" class="home-detail-chip-btn" onclick="event.stopPropagation(); openSiteDetail('${escJs(site.siteKey)}')" title="해당 현장 상세 보기">현장 상세 ➔</button>
               </div>
             </div>`;
         }).join("") || `<div style="color:var(--text-muted);font-size:13px;padding:12px;">확인할 예정/진행 공정이 없습니다.</div>`;
@@ -1717,7 +1811,7 @@
                 <div class="hk-val" style="color:#10b981;">${todayTasks.length}건</div>
                 <div class="hk-sub">${escHtml(todayTasks.slice(0, 2).map((x) => x.task.taskName).join(", ") || "금일 예정 없음")}</div>
               </div>
-              <div class="home-kpi-card" onclick="switchMainTab('sites')">
+              <div class="home-kpi-card" onclick="openDelayedSitesFromHome(false)">
                 <div class="hk-lbl">나의 지연 / 확인 공정</div>
                 <div class="hk-val" style="color:#ef4444;">${delayedTasks.length}건 ⚠️</div>
                 <div class="hk-sub">${escHtml(delayedTasks[0] ? delayedTasks[0].site.siteName + " · " + delayedTasks[0].task.taskName : "지연 공정 없음")}</div>
@@ -1976,13 +2070,14 @@
         function getUniqueSiteManagers(tasks) {
           const seen = [];
           (tasks || []).forEach((t) => {
-            String(t.manager || "").split(",").forEach((part) => {
-              const name = part.trim();
+            filterRegisteredManagers(t.manager).forEach((name) => {
               if (name && !seen.includes(name)) seen.push(name);
             });
           });
           return seen;
         }
+        const activeCountAll = sitesPool.filter((s) => !(s.isArchived || s.isAllCompleted)).length;
+        const doneCountAll = sitesPool.filter((s) => (s.isArchived || s.isAllCompleted)).length;
 
         const carouselHtml = visibleSites.map((s) => {
           const uniqueMgrs = getUniqueSiteManagers(s.tasks);
@@ -2167,9 +2262,12 @@
 
         document.getElementById("pcSiteMain").innerHTML = `
           <div class="site-carousel-controls">
-            <div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--text-sub);">
-              <span>표시 현장 ${visibleSites.length}개</span>
-              <button type="button" class="btn-tool-tag" onclick="toggleArchivedSites()">${state.showArchivedSites ? "진행 현장만 보기" : "완료·보관 포함"}</button>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="pc-est-status-tabs">
+                <button type="button" class="pc-c-status-tab ${!state.showArchivedSites ? "active" : ""}" onclick="if(state.showArchivedSites) toggleArchivedSites()">🏗️ 진행 현장 <span class="pc-badge-count">${activeCountAll}</span></button>
+                <button type="button" class="pc-c-status-tab done-tab ${state.showArchivedSites ? "active" : ""}" onclick="if(!state.showArchivedSites) toggleArchivedSites()">✅ 완료·보관 포함 <span class="pc-badge-count-done">${doneCountAll}</span></button>
+              </div>
+              <span style="font-size:12px;font-weight:700;color:var(--text-muted);">표시 ${visibleSites.length}개</span>
             </div>
             <div style="display:flex;gap:5px;">
               <button type="button" class="st-pill ${state.siteSortBy === "progress" ? "active" : ""}" onclick="setSiteSort('progress')">진행률순</button>
@@ -2177,7 +2275,12 @@
               <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
             </div>
           </div>
-          <div class="site-carousel-track">${carouselHtml}</div>
+          ${visibleSites.length ? `
+            <div class="carousel-wrap-box">
+              <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcSiteCarouselTrack', -360)" title="이전 현장 보기">‹</button>
+              <div class="site-carousel-track" id="pcSiteCarouselTrack">${carouselHtml}</div>
+              <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcSiteCarouselTrack', 360)" title="다음 현장 보기">›</button>
+            </div>` : ""}
           ${detailHtml}
         `;
       }
@@ -2190,9 +2293,7 @@
         const filteredList = list.filter((t) => !q || matchesQuery([t.title, t.siteName, t.manager, t.detail, t.tag].join(" "), q));
 
         const members = getMembersList();
-        const memberSet = new Set(members);
-        filteredList.forEach((t) => { if (t.manager && !memberSet.has(t.manager)) memberSet.add(t.manager); });
-        const displayMembers = Array.from(memberSet);
+        const displayMembers = Array.from(new Set(members));
 
         const activeMemberFilter = state.todoMemberFilter;
         const rowsToShow = activeMemberFilter === "all" ? [...displayMembers, "unassigned"] : [activeMemberFilter];
@@ -2638,7 +2739,12 @@
               <button type="button" class="btn-act-blue" style="height:29px;padding:0 11px;font-size:12px;" onclick="openEstimateModal(null)">+ 신규 견적 등록</button>
             </div>
           </div>
-          ${filtered.length ? `<div class="site-carousel-track">${carouselHtml}</div>` : ""}
+          ${filtered.length ? `
+            <div class="carousel-wrap-box">
+              <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcQuoteCarouselTrack', -360)" title="이전 신규현장 보기">‹</button>
+              <div class="site-carousel-track" id="pcQuoteCarouselTrack">${carouselHtml}</div>
+              <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcQuoteCarouselTrack', 360)" title="다음 신규현장 보기">›</button>
+            </div>` : ""}
           ${detailHtml}
         `;
         if (state.quoteTableSearch) window.onFilterQuoteTable(state.quoteTableSearch);
@@ -2721,8 +2827,8 @@
       // [모바일 탭 1: 홈 (기본) — To-Do 최상단!]
       function renderMobileHomeTab() {
         const user = state.user;
-        const roleLabel = user === "조항만" ? "대표님" : "소장님";
-        const allActive = getAllSites().filter((s) => !s.isArchived && !s.isAllCompleted);
+        const roleLabel = getMemberRoleTitle(user) + "님";
+        const allActive = getAllSites().filter((s) => s.scope !== "newSite" && !s.isArchived && !s.isAllCompleted);
         const mySites = allActive.filter((s) => (s.tasks || []).some((t) => taskMatchesMember(t, user)));
         const pool = mySites.length ? mySites : allActive;
 
@@ -2746,7 +2852,7 @@
               <div style="font-size:11px;color:var(--text-muted);font-weight:700;">남은 To-Do</div>
               <div style="font-size:18px;font-weight:800;color:#1e40af;margin-top:2px;">${pendingTodos.length}건</div>
             </div>
-            <div class="m-card-box" style="padding:10px;margin-bottom:0;" onclick="switchMobileTab('sites')">
+            <div class="m-card-box" style="padding:10px;margin-bottom:0;" onclick="openDelayedSitesFromHome(true)">
               <div style="font-size:11px;color:var(--text-muted);font-weight:700;">지연 / 확인</div>
               <div style="font-size:18px;font-weight:800;color:#ef4444;margin-top:2px;">${delayed.length}건 ⚠️</div>
             </div>
@@ -2929,7 +3035,9 @@
           const info = getSiteInfo(s.siteName) || {};
           const tasks = s.tasks || [];
           const nextTask = tasks.find((t) => t.status !== "완료") || tasks[0];
-          const mgrs = Array.from(new Set(tasks.map((t) => t.manager).filter(Boolean))).join(", ") || "-";
+          const mgrSet = [];
+          tasks.forEach((t) => filterRegisteredManagers(t.manager).forEach((n) => { if (!mgrSet.includes(n)) mgrSet.push(n); }));
+          const mgrs = mgrSet.join(", ") || "-";
           const phone = nextTask ? lookupPartnerPhone(nextTask.partner, nextTask.manager) : "";
 
           return `
@@ -3590,11 +3698,20 @@
           }
           recalcSiteStats(site);
           if (window.WSDataService) {
-            window.WSDataService.saveTask(true, {
+            const req = window.WSDataService.saveTask(true, {
               row: task.row || "", site: site.siteName, task: task.taskName, status: task.status,
               shared: task.isShared, memo: task.memo, date: dateParam, manager: task.manager,
-              partner: task.partner, sheetName: task.sheetName || "현장데이터", taskId: task.taskId || task.id
+              partner: task.partner, sheetName: task.sheetName || "현장데이터",
+              id: task.taskId || task.id, taskId: task.taskId || task.id
             }, state.dashData);
+            if (req && typeof req.then === "function") {
+              req.then((res) => {
+                if (res && res.row) {
+                  task.row = res.row;
+                  window.WSDataService.saveDashboardCache(state.dashData);
+                }
+              });
+            }
           }
           showToast("✅ 공정이 수정되었습니다.");
         } else {
@@ -3621,11 +3738,22 @@
           site.tasks.push(newTask);
           recalcSiteStats(site);
           if (window.WSDataService) {
-            window.WSDataService.saveTask(false, {
+            const req = window.WSDataService.saveTask(false, {
               site: finalSiteName, task: newTask.taskName, date: dateParam, manager: managerCombined,
               status: ctx.status, shared: ctx.isShared, memo: finalMemo, partner: ctx.partner,
               category: ctx.scope, partnerPhone: ctx.partnerPhone
             }, state.dashData);
+            if (req && typeof req.then === "function") {
+              req.then((res) => {
+                if (res && (res.row || res.eventId)) {
+                  if (res.row) newTask.row = res.row;
+                  if (res.eventId) { newTask.id = res.eventId; newTask.taskId = res.eventId; }
+                  window.WSDataService.saveDashboardCache(state.dashData);
+                  markAllDirty();
+                  renderActiveViews();
+                }
+              });
+            }
           }
           showToast("✅ 새 일정이 등록되었습니다.");
         }
@@ -3918,7 +4046,7 @@
             window.WSDataService.saveTask(true, {
               row: t.row || "", site: site.siteName, task: t.taskName, status: t.status,
               shared: t.isShared, memo: t.memo || "", date: parseYmdFromTask(t), manager: t.manager || "",
-              partner: t.partner || "", sheetName: t.sheetName || "현장데이터", taskId: tid
+              partner: t.partner || "", sheetName: t.sheetName || "현장데이터", id: tid, taskId: tid
             }, state.dashData);
           }
         });
@@ -4134,7 +4262,17 @@
           });
           state.selectedQuoteKey = newKey;
         }
-        if (window.WSDataService) window.WSDataService.saveEstimate(ctx.isEdit, ed, state.dashData);
+        if (window.WSDataService) {
+          const estReq = window.WSDataService.saveEstimate(ctx.isEdit, ed, state.dashData);
+          if (!ctx.isEdit && estReq && typeof estReq.then === "function") {
+            estReq.then((res) => {
+              if (res && res.row) {
+                ed.row = res.row;
+                window.WSDataService.saveDashboardCache(state.dashData);
+              }
+            });
+          }
+        }
         window.closeModal("estimateEditModal");
         markAllDirty();
         renderActiveViews();
@@ -4358,6 +4496,8 @@
       };
       window.saveSettingsModalAll = function () {
         if (window.WSDataService) window.WSDataService.saveSettings(state.settingsData);
+        sanitizeUnregisteredMembers();
+        syncUserSelectorOptions();
         window.closeModal("settingsModal");
         markAllDirty();
         renderActiveViews();
@@ -4392,7 +4532,8 @@
           window.WSDataService.moveTaskDate({
             row: task.row || "", site: site.siteName, task: task.taskName,
             date: newEnd > targetYmd ? `${targetYmd} ~ ${newEnd}` : targetYmd,
-            sheetName: task.sheetName || "현장데이터", taskId: task.taskId || task.id
+            sheetName: task.sheetName || "현장데이터",
+            id: task.taskId || task.id, taskId: task.taskId || task.id
           }, state.dashData);
         }
         markAllDirty();
@@ -4581,6 +4722,10 @@
       window.copyText = copyText;
       window.showToast = showToast;
 
+      window.scrollCarouselTrack = function (trackId, delta) {
+        const el = document.getElementById(trackId);
+        if (el) el.scrollBy({ left: delta || 320, behavior: "smooth" });
+      };
       window.triggerLiveSync = function (manual) {
         const badge = document.getElementById("perfBadge");
         if (badge) { badge.classList.add("syncing"); badge.textContent = "🔄 Google Sheets 동기화 중..."; }
@@ -4594,7 +4739,13 @@
           if (dashData) { state.dashData = dashData; updated = true; }
           if (todoData) { state.todoData = todoData; updated = true; }
           state.syncSource = meta.source; state.syncTime = meta.updatedAt;
-          if (updated) { state.checkedSiteKeys = null; markAllDirty(); renderActiveViews(); }
+          if (updated) {
+            sanitizeUnregisteredMembers();
+            syncUserSelectorOptions();
+            state.checkedSiteKeys = null;
+            markAllDirty();
+            renderActiveViews();
+          }
           if (badge) { badge.classList.remove("syncing"); badge.textContent = `⚡ 실시간 동기화 (${meta.updatedAt}) · ${(window.__initialRenderMs || 0).toFixed(1)}ms`; }
           if (manual) showToast("✅ Google Sheets 최신 데이터로 동기화되었습니다.");
         });
@@ -4791,6 +4942,8 @@
         state.todoData = ds ? ds.getInitialTodoData() : { list: [] };
         state.financeData = ds ? ds.getInitialFinanceData() : { summary: {}, ledger: [] };
         state.settingsData = ds ? ds.getInitialSettingsData() : { partners: [], tasks: [], members: [] };
+        sanitizeUnregisteredMembers();
+        syncUserSelectorOptions();
         const meta = ds ? ds.getLastSyncMeta() : { source: "snapshot", updatedAt: "" };
         state.syncSource = meta.source; state.syncTime = meta.updatedAt;
 
