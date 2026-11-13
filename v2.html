@@ -1616,9 +1616,14 @@
       function getAllSites() { return (state.dashData && state.dashData.sites) || []; }
       function isTaskCompleted(task) {
         if (!task) return true;
-        if (task.isArchived === true || task.isCompleted === true) return true;
         const st = String(task.status || "").replace(/\s+/g, "");
-        return st.indexOf("완료") !== -1 || st.indexOf("취소") !== -1 || st.indexOf("제외") !== -1;
+        if (st && (st === "예정" || st === "진행" || st === "진행중" || st === "AS")) {
+          return false;
+        }
+        if (st.indexOf("완료") !== -1 || st.indexOf("취소") !== -1 || st.indexOf("제외") !== -1) {
+          return true;
+        }
+        return task.isArchived === true || task.isCompleted === true;
       }
       function isSiteCompleted(site) {
         if (!site) return true;
@@ -1628,13 +1633,12 @@
           const st = String(ed.status || "").trim();
           return Boolean(site.isArchived || site.isAllCompleted || st === "계약 완료" || st === "수주 실패" || st === "실패");
         }
-        if (site.isArchived === true || site.isAllCompleted === true) return true;
-        if ((Number(site.progressRate) || 0) >= 100) return true;
         const tasks = Array.isArray(site.tasks) ? site.tasks : [];
         if (tasks.length > 0) {
-          const hasActiveTask = tasks.some((t) => !isTaskCompleted(t));
-          if (!hasActiveTask) return true;
+          return !tasks.some((t) => !isTaskCompleted(t));
         }
+        if (site.isArchived === true || site.isAllCompleted === true) return true;
+        if ((Number(site.progressRate) || 0) >= 100) return true;
         return false;
       }
       function getUniqueSiteManagers(tasks) {
@@ -1730,6 +1734,16 @@
       function recalcSiteStats(site, skipDashMeta) {
         if (!site) return;
         const tasks = Array.isArray(site.tasks) ? site.tasks : [];
+        if (site.scope !== "newSite" && tasks.length > 1) {
+          tasks.sort((a, b) => {
+            const am = (a && a.dateMs) || 0;
+            const bm = (b && b.dateMs) || 0;
+            if (am && bm && am !== bm) return am - bm;
+            if (am && !bm) return -1;
+            if (!am && bm) return 1;
+            return 0;
+          });
+        }
         const todayYmd = getTodayYmd();
         const done = tasks.filter((t) => isTaskCompleted(t)).length;
         const validTasks = tasks.filter((t) => {
@@ -1749,7 +1763,18 @@
         site.delayedTasksCount = delayed;
         site.progressRate = validTasks.length ? Math.round((doneValid / validTasks.length) * 1000) / 10 : (tasks.length ? 100 : (Number(site.progressRate) || 0));
         if (site.scope !== "newSite" && tasks.length > 0) {
-          site.isAllCompleted = (done === tasks.length);
+          const allDone = (done === tasks.length);
+          site.isAllCompleted = allDone;
+          if (!allDone && site.isArchived) {
+            site.isArchived = false;
+            const restoreSheet = site.scope === "single" ? "단건" : site.scope === "as" ? "AS" : "현장데이터";
+            tasks.forEach((t) => {
+              if (t) {
+                t.isArchived = false;
+                if (t.sheetName === "완료현장") t.sheetName = restoreSheet;
+              }
+            });
+          }
         }
         site.assignees = getUniqueSiteManagers(tasks);
         if (!skipDashMeta) recalcDashMeta();
@@ -4050,9 +4075,13 @@
 
       window.openNewTaskModal = function (presetSiteName, presetDateYmd) {
         const d = presetDateYmd || state.selectedDayStr || getTodayYmd();
+        const matchedSiteForPreset = presetSiteName
+          ? (getAllSites().find((s) => s.siteName === presetSiteName && s.scope === state.scope)
+             || getAllSites().find((s) => s.siteName === presetSiteName && (s.scope || "site") !== "newSite"))
+          : null;
         state.sheetCtx = {
           mode: "create",
-          scope: presetSiteName ? (getAllSites().find((s) => s.siteName === presetSiteName)?.scope || state.scope) : (state.scope === "newSite" ? "site" : state.scope),
+          scope: matchedSiteForPreset ? matchedSiteForPreset.scope : (state.scope === "newSite" ? "site" : state.scope),
           siteName: presetSiteName || "",
           newSiteName: "",
           taskName: "",
@@ -4429,6 +4458,11 @@
           const found = findTaskById(ctx.taskId);
           if (!found) return;
           const { site, task } = found;
+          const origTaskName = task.taskName || "";
+          const origDateStr = task.dateDisplay || task.startDateStr || "";
+          const origMgrStr = task.manager || "";
+          const origMemoStr = task.memo || "";
+          const wasArchived = Boolean(task.isArchived || site.isArchived || task.sheetName === "완료현장");
           const dateDiff = diffDaysYmd(ctx.origStartYmd, ctx.startYmd);
           task.taskName = ctx.taskName.trim();
           task.startDateStr = ctx.startYmd;
@@ -4444,6 +4478,10 @@
           task.memo = finalMemo;
           task.isToday = ctx.startYmd === todayYmd;
           task.isDelayed = ctx.startYmd < todayYmd && ctx.status !== "완료";
+          if (String(ctx.status || "").indexOf("완료") === -1 && String(ctx.status || "").indexOf("취소") === -1) {
+            task.isArchived = false;
+            task.isCompleted = false;
+          }
 
           if (ctx.cascadeShift && dateDiff !== 0) {
             const shifts = [];
@@ -4471,28 +4509,61 @@
               row: task.row || "", site: site.siteName, task: task.taskName, status: task.status,
               shared: task.isShared, memo: task.memo, date: dateParam, manager: task.manager,
               partner: task.partner, sheetName: task.sheetName || "현장데이터",
-              id: task.taskId || task.id, taskId: task.taskId || task.id
+              id: task.taskId || task.id, taskId: task.taskId || task.id,
+              isArchived: wasArchived, origDate: origDateStr, origTask: origTaskName,
+              origMgr: origMgrStr, origMemo: origMemoStr, partnerPhone: ctx.partnerPhone || ""
             }, state.dashData);
             if (req && typeof req.then === "function") {
               req.then((res) => {
+                let changed = false;
                 if (res && res.row) {
                   task.row = res.row;
+                  changed = true;
+                }
+                if (res && res.movedToCompleted) {
+                  site.isArchived = true;
+                  site.isAllCompleted = true;
+                  (site.tasks || []).forEach((t) => {
+                    if (t) {
+                      t.isArchived = true;
+                      t.sheetName = "완료현장";
+                    }
+                  });
+                  changed = true;
+                }
+                if (changed) {
                   window.WSDataService.saveDashboardCache(state.dashData);
+                  markAllDirty();
+                  renderActiveViews();
                 }
               });
             }
           }
           showToast("✅ 공정이 수정되었습니다.");
         } else {
-          let site = getAllSites().find((s) => s.siteName === finalSiteName && s.scope === ctx.scope);
+          let site = getAllSites().find((s) => s.siteName === finalSiteName && s.scope === ctx.scope && !isSiteCompleted(s));
+          if (!site) {
+            site = getAllSites().find((s) => s.siteName === finalSiteName && s.scope === ctx.scope);
+          }
+          const targetSheetName = ctx.scope === "single" ? "단건" : ctx.scope === "as" ? "AS" : "현장데이터";
+          const isNewStatusDone = String(ctx.status || "").indexOf("완료") !== -1 || String(ctx.status || "").indexOf("취소") !== -1;
           if (!site) {
             const prefix = ctx.scope === "single" ? "SINGLE::" : ctx.scope === "as" ? "AS::" : "";
             site = {
               siteKey: prefix + finalSiteName, siteName: finalSiteName, colorCode: "1", colorHex: "#2563eb",
-              tasks: [], scope: ctx.scope, isArchived: false, totalTasksCount: 0, completedTasksCount: 0, delayedTasksCount: 0, progressRate: 0
+              tasks: [], scope: ctx.scope, isArchived: false, isAllCompleted: false, totalTasksCount: 0, completedTasksCount: 0, delayedTasksCount: 0, progressRate: 0
             };
             state.dashData.sites.unshift(site);
             if (state.checkedSiteKeys) state.checkedSiteKeys.add(site.siteKey);
+          } else if (!isNewStatusDone && (site.isArchived || site.isAllCompleted || isSiteCompleted(site))) {
+            site.isArchived = false;
+            site.isAllCompleted = false;
+            (site.tasks || []).forEach((t) => {
+              if (t) {
+                t.isArchived = false;
+                if (t.sheetName === "완료현장") t.sheetName = targetSheetName;
+              }
+            });
           }
           const newId = "task_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
           const newTask = {
@@ -4502,7 +4573,7 @@
             partner: ctx.partner, manager: managerCombined, manager1: ctx.manager1, manager2: ctx.manager2,
             status: ctx.status, isShared: ctx.isShared, memo: finalMemo,
             isToday: ctx.startYmd === todayYmd, isDelayed: ctx.startYmd < todayYmd && ctx.status !== "완료",
-            hasCal: true, scope: ctx.scope, sheetName: ctx.scope === "single" ? "단건" : ctx.scope === "as" ? "AS" : "현장데이터", isArchived: false
+            hasCal: true, scope: ctx.scope, sheetName: targetSheetName, isArchived: false
           };
           site.tasks.push(newTask);
           recalcSiteStats(site);
@@ -4565,10 +4636,24 @@
           const found = findTaskById(targetId);
           if (found) {
             const { site, task } = found;
+            const wasArchived = Boolean(task.isArchived || site.isArchived || task.sheetName === "완료현장");
+            const origDate = task.dateDisplay || task.startDateStr || "";
+            const origMgr = task.manager || "";
+            const delTaskId = task.taskId || task.id;
             site.tasks = (site.tasks || []).filter((t) => (t.id || t.taskId) !== (task.id || task.taskId));
-            recalcSiteStats(site);
+            if (site.tasks.length === 0 && (site.scope || "site") !== "newSite") {
+              const sIdx = state.dashData.sites.findIndex((s) => s.siteKey === site.siteKey);
+              if (sIdx > -1) state.dashData.sites.splice(sIdx, 1);
+              if (state.selectedSiteKey === site.siteKey) state.selectedSiteKey = null;
+              recalcDashMeta();
+            } else {
+              recalcSiteStats(site);
+            }
             if (window.WSDataService) {
-              window.WSDataService.deleteTask({ row: task.row || "", site: site.siteName, task: task.taskName, id: task.taskId || task.id, sheetName: task.sheetName || "현장데이터" }, state.dashData);
+              window.WSDataService.deleteTask({
+                row: task.row || "", site: site.siteName, task: task.taskName, id: delTaskId, taskId: delTaskId,
+                sheetName: task.sheetName || "현장데이터", isArchived: wasArchived, origDate, origMgr
+              }, state.dashData);
             }
           }
           showToast("🗑️ 공정이 삭제되었습니다.");
@@ -4578,7 +4663,8 @@
             const s = state.dashData.sites[idx];
             state.dashData.sites.splice(idx, 1);
             if (state.selectedSiteKey === targetId) state.selectedSiteKey = null;
-            if (window.WSDataService) window.WSDataService.deleteSite({ site: s.siteName, scope: s.scope }, state.dashData);
+            recalcDashMeta();
+            if (window.WSDataService) window.WSDataService.deleteSite({ site: s.siteName, scope: (s.isArchived ? "완료현장" : s.scope) }, state.dashData);
           }
           showToast("🗑️ 현장이 삭제되었습니다.");
         } else if (type === "todo") {
@@ -4804,9 +4890,15 @@
         (site.tasks || []).forEach((t) => {
           const tid = t.id || t.taskId;
           if (!state.checkedTableTaskIds.has(tid)) return;
+          const origDate = t.dateDisplay || t.startDateStr || "";
+          const origTask = t.taskName || "";
+          const origMgr = t.manager || "";
+          const origMemo = t.memo || "";
+          const wasArchived = Boolean(t.isArchived || site.isArchived || t.sheetName === "완료현장");
           if (field === "status") {
             t.status = val;
             if (val === "완료") t.isDelayed = false;
+            else { t.isArchived = false; t.isCompleted = false; }
           } else if (field === "shared") {
             t.isShared = val;
           }
@@ -4815,7 +4907,8 @@
             window.WSDataService.saveTask(true, {
               row: t.row || "", site: site.siteName, task: t.taskName, status: t.status,
               shared: t.isShared, memo: t.memo || "", date: parseYmdFromTask(t), manager: t.manager || "",
-              partner: t.partner || "", sheetName: t.sheetName || "현장데이터", id: tid, taskId: tid
+              partner: t.partner || "", sheetName: t.sheetName || "현장데이터", id: tid, taskId: tid,
+              isArchived: wasArchived, origDate, origTask, origMgr, origMemo
             }, state.dashData);
           }
         });
@@ -5285,6 +5378,8 @@
         const { site, task } = found;
         const origStart = parseYmdFromTask(task);
         if (!origStart || origStart === targetYmd) return;
+        const origDateStr = task.dateDisplay || origStart;
+        const wasArchived = Boolean(task.isArchived || site.isArchived || task.sheetName === "완료현장");
         const dur = diffDaysYmd(origStart, parseEndYmdFromTask(task, origStart));
         const newEnd = addDaysYmd(targetYmd, Math.max(0, dur));
         const todayYmd = getTodayYmd();
@@ -5302,6 +5397,7 @@
             row: task.row || "", site: site.siteName, task: task.taskName,
             date: newEnd > targetYmd ? `${targetYmd} ~ ${newEnd}` : targetYmd,
             sheetName: task.sheetName || "현장데이터",
+            isArchived: wasArchived, origDate: origDateStr, origMgr: task.manager || "",
             id: task.taskId || task.id, taskId: task.taskId || task.id
           }, state.dashData);
         }
