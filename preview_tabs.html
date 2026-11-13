@@ -195,7 +195,8 @@
     }
     .m-cal-full-grid {
       display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
-      grid-auto-rows: minmax(var(--m-cal-row-min, 72px), auto);
+      grid-auto-rows: auto;
+      touch-action: pan-y;
       background: #e2e8f0; gap: 1px;
       border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 10px;
     }
@@ -207,7 +208,7 @@
     .m-cal-head.sat { color: #2563eb; }
     .m-cal-cell {
       background: #ffffff;
-      min-height: var(--m-cal-row-min, 72px);
+      min-height: 72px;
       height: auto;
       padding: 3px 2px 4px 2px;
       display: flex; flex-direction: column; cursor: pointer; position: relative; min-width: 0; overflow: hidden;
@@ -231,6 +232,54 @@
     }
     .m-cal-pill.light-bg { color: #1e293b !important; }
     .m-cal-pill.done { opacity: 0.55; text-decoration: line-through; }
+    @keyframes calSlideFromRight {
+      0% { opacity: 0.35; transform: translateX(36px); }
+      100% { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes calSlideFromLeft {
+      0% { opacity: 0.35; transform: translateX(-36px); }
+      100% { opacity: 1; transform: translateX(0); }
+    }
+    .cal-slide-next { animation: calSlideFromRight 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+    .cal-slide-prev { animation: calSlideFromLeft 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+    .cal-weather-badge {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 9.5px; font-weight: 700; color: #334155;
+      background: #f1f5f9; padding: 1px 5px; border-radius: 999px; white-space: nowrap;
+    }
+    .cal-weather-badge-mini {
+      display: inline-flex; align-items: center; gap: 2px;
+      font-size: 9px; font-weight: 700; color: #475569; line-height: 1;
+    }
+    .m-cal-week-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; touch-action: pan-y; }
+    .m-cal-week-card {
+      background: #ffffff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04); cursor: pointer;
+    }
+    .m-cal-week-card.is-today { border: 2px solid var(--accent); background: #f0fdfa; }
+    .m-cal-week-card.is-selected { box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.22); }
+    .m-cal-week-card-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 6px;
+      padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid #f1f5f9;
+    }
+    .m-cal-week-pill {
+      display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box;
+      padding: 6px 9px; border-radius: 7px; font-size: 12px; font-weight: 700; color: #fff;
+      cursor: pointer;
+    }
+    .m-cal-week-pill.light-bg { color: #1e293b !important; }
+    .m-cal-week-pill.done { opacity: 0.58; text-decoration: line-through; }
+    .m-site-acc-card {
+      background: #ffffff; border: 1px solid var(--border); border-radius: 12px;
+      margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    .m-site-acc-head {
+      padding: 11px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      cursor: pointer; background: #ffffff;
+    }
+    .m-site-acc-body {
+      padding: 10px 12px 12px; border-top: 1px solid var(--border); background: #f8fafc;
+    }
 
     .m-app-body { flex: 1; overflow-y: auto; padding: 12px 12px 84px 12px; }
     .m-page-pane { display: none; }
@@ -600,11 +649,11 @@
 
     .cal-body-matrix {
       flex: 1; display: grid; grid-template-columns: repeat(7, 1fr);
-      grid-auto-rows: minmax(118px, 1fr); overflow-y: auto;
+      grid-auto-rows: minmax(max-content, 1fr); overflow-y: auto; touch-action: pan-y;
     }
     .cal-day-cell {
       border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
-      padding: 4px 5px; display: flex; flex-direction: column; gap: 2px; background: #ffffff; min-width: 0;
+      padding: 4px 5px; display: flex; flex-direction: column; gap: 2px; background: #ffffff; min-width: 0; min-height: 110px;
       position: relative; transition: background 0.12s;
     }
     .cal-day-cell:nth-child(7n) { border-right: none; }
@@ -1357,6 +1406,10 @@
         selectedQuoteKey: null,
         quoteTableSearch: "",
         mobileExpandedQuoteKeys: new Set(),
+        mobileExpandedSiteKeys: new Set(),
+        checkedMobileTaskIds: new Set(),
+        weatherData: {},
+        _lastCalSlideDir: "",
         financePartnerFilter: "all",
         dirtyPcTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true },
         dirtyMobileTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true },
@@ -2229,6 +2282,7 @@
 
         const eventsByDay = expandEventsByDay(events);
         const year = state.calYear, month = state.calMonth;
+        const slideCls = state._lastCalSlideDir === "next" ? "cal-slide-next" : state._lastCalSlideDir === "prev" ? "cal-slide-prev" : "";
         let bodyHtml = "";
 
         if (state.calViewMode === "week") {
@@ -2241,6 +2295,7 @@
             d.setDate(anchor.getDate() + i);
             const ymd = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
             const dayEvents = eventsByDay[ymd] || [];
+            const w = state.weatherData && state.weatherData[ymd];
             const pills = dayEvents.map(({ site, task }) => {
               const isDone = task.status === "완료";
               const isDel = task.isDelayed && !isDone;
@@ -2268,14 +2323,17 @@
                    ondragover="event.preventDefault(); this.classList.add('drag-over')"
                    ondragleave="this.classList.remove('drag-over')"
                    ondrop="onCalDayDrop(event, '${ymd}'); this.classList.remove('drag-over')">
-                <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:6px;border-bottom:1px solid var(--border);">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:6px;border-bottom:1px solid var(--border);gap:4px;">
                   <span style="font-weight:800;font-size:13px;color:${i === 0 ? "#ef4444" : i === 6 ? "#2563eb" : "var(--text)"};">${d.getMonth() + 1}/${d.getDate()}</span>
-                  <button type="button" class="btn-tool-tag" onclick="openNewTaskModal('', '${ymd}')">+</button>
+                  <div style="display:flex;align-items:center;gap:4px;">
+                    ${w ? `<span class="cal-weather-badge" title="${escHtml(w.fullText)}">${escHtml(w.badgeText)}</span>` : ""}
+                    <button type="button" class="btn-tool-tag" onclick="openNewTaskModal('', '${ymd}')">+</button>
+                  </div>
                 </div>
                 ${pills || `<div style="font-size:11px;color:#cbd5e1;text-align:center;padding:12px 0;">일정 없음</div>`}
               </div>`;
           }
-          bodyHtml = `<div class="cal-week-grid">${weekCols}</div>`;
+          bodyHtml = `<div class="cal-week-grid ${slideCls}">${weekCols}</div>`;
         } else {
           const firstDow = new Date(year, month - 1, 1).getDay();
           const daysInMonth = new Date(year, month, 0).getDate();
@@ -2344,6 +2402,7 @@
                 <div class="cdc-top">
                   <span class="cdc-num">${cellD}${ymd === todayYmd ? " 오늘" : ""}</span>
                   <div class="cdc-right">
+                    ${state.weatherData && state.weatherData[ymd] ? `<span class="cal-weather-badge" title="${escHtml(state.weatherData[ymd].fullText)}">${escHtml(state.weatherData[ymd].badgeText)}</span>` : ""}
                     ${holName ? `<span class="cdc-hol">${escHtml(holName)}</span>` : ""}
                     <button type="button" class="cal-day-add-btn" onclick="event.stopPropagation(); openNewTaskModal('', '${ymd}')" title="이 날짜에 일정 등록">+</button>
                   </div>
@@ -2351,10 +2410,11 @@
                 <div class="cal-events-list">${pillsHtml}</div>
               </div>`;
           }
-          bodyHtml = `<div class="cal-body-matrix">${cellsHtml}</div>`;
+          bodyHtml = `<div class="cal-body-matrix ${slideCls}">${cellsHtml}</div>`;
         }
 
-        document.getElementById("pcCalMain").innerHTML = `
+        const pcCalEl = document.getElementById("pcCalMain");
+        pcCalEl.innerHTML = `
           <div class="pc-cal-toolbar">
             <div class="pc-cal-filter-banner">
               ${chips.join("")}
@@ -2376,6 +2436,8 @@
             ${bodyHtml}
           </div>
         `;
+        state._lastCalSlideDir = "";
+        setupCalendarSwipe(pcCalEl);
       }
 
       // ================= [PC 탭 4: 현장 목록 (체크박스/모달 완비)] =================
@@ -3325,73 +3387,112 @@
         }
 
         const year = state.calYear, month = state.calMonth;
-        const firstDow = new Date(year, month - 1, 1).getDay();
-        const daysInMonth = new Date(year, month, 0).getDate();
-        const prevMonthDays = new Date(year, month - 1, 0).getDate();
-        const totalCells = Math.ceil((firstDow + daysInMonth) / 7) * 7;
+        const slideCls = state._lastCalSlideDir === "next" ? "cal-slide-next" : state._lastCalSlideDir === "prev" ? "cal-slide-prev" : "";
+        let calContentHtml = "";
 
-        const targetCellList = [];
-        let maxDayEvents = 0;
-        for (let i = 0; i < totalCells; i++) {
-          let cellY = year, cellM = month, cellD = 0, isOther = false;
-          if (i < firstDow) {
-            cellD = prevMonthDays - firstDow + i + 1;
-            cellM = month - 1;
-            if (cellM === 0) { cellM = 12; cellY--; }
-            isOther = true;
-          } else if (i >= firstDow + daysInMonth) {
-            cellD = i - (firstDow + daysInMonth) + 1;
-            cellM = month + 1;
-            if (cellM === 13) { cellM = 1; cellY++; }
-            isOther = true;
-          } else {
-            cellD = i - firstDow + 1;
+        if (state.mobileCalMode === "week") {
+          const anchor = new Date(state.selectedDayStr + "T00:00:00");
+          const startWeek = new Date(anchor);
+          startWeek.setDate(anchor.getDate() - anchor.getDay());
+          const weekDaysKo = ["일", "월", "화", "수", "목", "금", "토"];
+          let weekCardsHtml = "";
+          for (let i = 0; i < 7; i++) {
+            const d = new Date(startWeek);
+            d.setDate(startWeek.getDate() + i);
+            const ymd = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+            const dayEvents = eventsByDay[ymd] || [];
+            const holName = holidays[ymd] || "";
+            const w = state.weatherData && state.weatherData[ymd];
+            const pills = dayEvents.map(({ site, task }) => {
+              const isDone = isTaskCompleted(task);
+              const isDel = !isDone && (task.isDelayed || ymd < todayYmd);
+              const bgCol = isDel ? "#dc2626" : (site.colorHex || "#2563eb");
+              const lightCls = !isDel && isLightHexColor(bgCol) ? "light-bg" : "";
+              const sIcon = getTaskStatusIcon(task);
+              const tid = task.id || task.taskId;
+              return `<div class="m-cal-week-pill ${isDone ? "done" : ""} ${lightCls}" style="background:${escHtml(bgCol)};" onclick="event.stopPropagation(); state.selectedDayStr='${ymd}'; openTaskEditModal('${escJs(tid)}');">${isDel ? "⚠️" : sIcon}<span class="cal-sh-box ${task.isShared ? "blue" : "red"}" style="width:6px;height:6px;flex-shrink:0;"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">[${escHtml(site.siteName)} ${site.progressRate || 0}%] ${escHtml(task.taskName)}${task.manager ? " (" + escHtml(task.manager) + ")" : ""} - ${escHtml(task.status)}</span></div>`;
+            }).join("") || `<div style="font-size:11.5px;color:#94a3b8;padding:4px 2px;">등록된 일정이 없습니다.</div>`;
+            const dayColor = i === 0 ? "#ef4444" : i === 6 ? "#2563eb" : "var(--text)";
+            weekCardsHtml += `
+              <div class="m-cal-week-card ${ymd === todayYmd ? "is-today" : ""} ${ymd === state.selectedDayStr ? "is-selected" : ""}" onclick="selectCalDay('${ymd}')">
+                <div class="m-cal-week-card-head">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <span style="font-size:13.5px;font-weight:900;color:${dayColor};">${d.getMonth() + 1}/${d.getDate()} (${weekDaysKo[i]})</span>
+                    ${ymd === todayYmd ? `<span style="font-size:10px;background:#0f766e;color:#fff;padding:1px 6px;border-radius:999px;font-weight:800;">오늘</span>` : ""}
+                    ${holName ? `<span style="font-size:10.5px;color:#ef4444;font-weight:800;">${escHtml(holName)}</span>` : ""}
+                    ${w ? `<span class="cal-weather-badge" title="${escHtml(w.fullText)}">${escHtml(w.badgeText)}</span>` : ""}
+                  </div>
+                  <button type="button" class="btn-tool-tag" onclick="event.stopPropagation(); openNewTaskModal('', '${ymd}')">+ 추가</button>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:5px;">${pills}</div>
+              </div>`;
           }
-          if (state.mobileCalMode === "week") {
-            const selD = Number(state.selectedDayStr.slice(8, 10)) || 1;
-            if (Math.floor(i / 7) !== Math.floor((firstDow + selD - 1) / 7)) continue;
+          calContentHtml = `<div class="m-cal-week-list ${slideCls}">${weekCardsHtml}</div>`;
+        } else {
+          const firstDow = new Date(year, month - 1, 1).getDay();
+          const daysInMonth = new Date(year, month, 0).getDate();
+          const prevMonthDays = new Date(year, month - 1, 0).getDate();
+          const totalCells = Math.ceil((firstDow + daysInMonth) / 7) * 7;
+
+          let gridCells = "";
+          for (let i = 0; i < totalCells; i++) {
+            let cellY = year, cellM = month, cellD = 0, isOther = false;
+            if (i < firstDow) {
+              cellD = prevMonthDays - firstDow + i + 1;
+              cellM = month - 1;
+              if (cellM === 0) { cellM = 12; cellY--; }
+              isOther = true;
+            } else if (i >= firstDow + daysInMonth) {
+              cellD = i - (firstDow + daysInMonth) + 1;
+              cellM = month + 1;
+              if (cellM === 13) { cellM = 1; cellY++; }
+              isOther = true;
+            } else {
+              cellD = i - firstDow + 1;
+            }
+            const ymd = cellY + "-" + String(cellM).padStart(2, "0") + "-" + String(cellD).padStart(2, "0");
+            const dow = i % 7;
+            const dayEvents = eventsByDay[ymd] || [];
+            const cls = ["m-cal-cell"];
+            if (isOther) cls.push("other-month");
+            if (dow === 0) cls.push("sun");
+            if (dow === 6) cls.push("sat");
+            if (ymd === todayYmd) cls.push("today");
+            if (ymd === state.selectedDayStr) cls.push("selected");
+            const holName = holidays[ymd] || "";
+            const w = state.weatherData && state.weatherData[ymd];
+
+            const pillsHtml = dayEvents.map(({ site, task }) => {
+              const isDone = isTaskCompleted(task);
+              const isDel = !isDone && (task.isDelayed || ymd < todayYmd);
+              const bgCol = isDel ? "#dc2626" : (site.colorHex || "#2563eb");
+              const lightCls = !isDel && isLightHexColor(bgCol) ? "light-bg" : "";
+              const sIcon = getTaskStatusIcon(task);
+              const tid = task.id || task.taskId;
+              const len = (task.taskName || "").length;
+              const fSize = len > 10 ? "7.5px" : len > 7 ? "8px" : "8.5px";
+              return `<div class="m-cal-pill ${isDone ? "done" : ""} ${lightCls}" style="background:${escHtml(bgCol)};font-size:${fSize};gap:1.5px;padding:1.5px 2px;" onclick="event.stopPropagation(); state.selectedDayStr='${ymd}'; openTaskEditModal('${escJs(tid)}');">${isDel ? "⚠️" : sIcon}<span class="cal-sh-box ${task.isShared ? "blue" : "red"}" style="width:5px;height:5px;"></span><span style="overflow:hidden;text-overflow:ellipsis;">${escHtml(task.taskName)}</span></div>`;
+            }).join("");
+
+            gridCells += `
+              <div class="${cls.join(" ")}" onclick="selectCalDay('${ymd}')">
+                <div class="m-cal-cell-header">
+                  <span class="m-day-num">${cellD}</span>
+                  <div style="display:flex;align-items:center;gap:1.5px;min-width:0;">
+                    ${w ? `<span class="cal-weather-badge-mini" title="${escHtml(w.fullText)}">${escHtml(w.icon)}</span>` : ""}
+                    ${holName ? `<span class="m-cal-hol">${escHtml(holName)}</span>` : ""}
+                    <button type="button" onclick="event.stopPropagation(); openNewTaskModal('', '${ymd}')" title="일정 추가" style="border:none;background:transparent;color:#94a3b8;font-size:10px;font-weight:800;padding:0 1px;cursor:pointer;line-height:1;">+</button>
+                  </div>
+                </div>
+                <div class="m-cal-events-list">${pillsHtml}</div>
+              </div>`;
           }
-          const ymd = cellY + "-" + String(cellM).padStart(2, "0") + "-" + String(cellD).padStart(2, "0");
-          const dayEvents = eventsByDay[ymd] || [];
-          if (dayEvents.length > maxDayEvents) maxDayEvents = dayEvents.length;
-          targetCellList.push({ i, cellD, isOther, ymd, dow: i % 7, dayEvents });
-        }
-
-        const rowMinPx = state.mobileCalMode === "week"
-          ? Math.max(115, 28 + maxDayEvents * 18)
-          : Math.max(72, 24 + maxDayEvents * 17);
-
-        let gridCells = "";
-        targetCellList.forEach(({ cellD, isOther, ymd, dow, dayEvents }) => {
-          const cls = ["m-cal-cell"];
-          if (isOther) cls.push("other-month");
-          if (dow === 0) cls.push("sun");
-          if (dow === 6) cls.push("sat");
-          if (ymd === todayYmd) cls.push("today");
-          if (ymd === state.selectedDayStr) cls.push("selected");
-          const holName = holidays[ymd] || "";
-
-          const pillsHtml = dayEvents.map(({ site, task }) => {
-            const isDone = isTaskCompleted(task);
-            const isDel = !isDone && (task.isDelayed || ymd < todayYmd);
-            const bgCol = isDel ? "#dc2626" : (site.colorHex || "#2563eb");
-            const lightCls = !isDel && isLightHexColor(bgCol) ? "light-bg" : "";
-            const sIcon = getTaskStatusIcon(task);
-            const tid = task.id || task.taskId;
-            const len = (task.taskName || "").length;
-            const fSize = len > 10 ? "7.5px" : len > 7 ? "8px" : "8.5px";
-            return `<div class="m-cal-pill ${isDone ? "done" : ""} ${lightCls}" style="background:${escHtml(bgCol)};font-size:${fSize};gap:1.5px;padding:1.5px 2px;" onclick="if(state.selectedDayStr==='${ymd}'){event.stopPropagation();openTaskEditModal('${escJs(tid)}');}">${isDel ? "⚠️" : sIcon}<span class="cal-sh-box ${task.isShared ? "blue" : "red"}" style="width:5px;height:5px;"></span><span style="overflow:hidden;text-overflow:ellipsis;">${escHtml(task.taskName)}</span></div>`;
-          }).join("");
-
-          gridCells += `
-            <div class="${cls.join(" ")}" onclick="selectCalDay('${ymd}')">
-              <div class="m-cal-cell-header">
-                <span class="m-day-num">${cellD}</span>
-                ${holName ? `<span class="m-cal-hol">${escHtml(holName)}</span>` : ""}
-              </div>
-              <div class="m-cal-events-list">${pillsHtml}</div>
+          calContentHtml = `
+            <div class="m-cal-full-grid ${slideCls}">
+              <div class="m-cal-head sun">일</div><div class="m-cal-head">월</div><div class="m-cal-head">화</div><div class="m-cal-head">수</div><div class="m-cal-head">목</div><div class="m-cal-head">금</div><div class="m-cal-head sat">토</div>
+              ${gridCells}
             </div>`;
-        });
+        }
 
         const selEvents = eventsByDay[state.selectedDayStr] || [];
         const selCardsHtml = selEvents.map(({ site, task }) => {
@@ -3418,7 +3519,8 @@
             </div>`;
         }).join("") || `<div class="m-card-box" style="text-align:center;color:var(--text-muted);font-size:12px;">선택한 날짜(${escHtml(state.selectedDayStr)})에 표시할 공정이 없습니다.</div>`;
 
-        document.getElementById("m-page-calendar").innerHTML = `
+        const mCalEl = document.getElementById("m-page-calendar");
+        mCalEl.innerHTML = `
           <div class="m-cal-filter-banner">
             ${filterChips.join("")}
             <span class="m-filter-count">일치 ${events.length}건</span>
@@ -3426,7 +3528,7 @@
           <div class="m-cal-month-nav">
             <div style="display:flex;align-items:center;gap:5px;">
               <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(-1)">◀</button>
-              <span style="font-size:14px;font-weight:800;color:var(--text);">${year}년 ${month}월</span>
+              <span id="mCalMonthTitle" style="font-size:14px;font-weight:800;color:var(--text);">${year}년 ${month}월</span>
               <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(1)">▶</button>
               <button type="button" class="m-cal-nav-btn" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;" onclick="resetCalendarToday()">오늘</button>
             </div>
@@ -3435,19 +3537,18 @@
               <button type="button" onclick="setMobileCalMode('week')" style="border:none;background:${state.mobileCalMode === "week" ? "#fff" : "transparent"};font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:4px;color:${state.mobileCalMode === "week" ? "#1d4ed8" : "var(--text-muted)"};cursor:pointer;">주간</button>
             </div>
           </div>
-          <div class="m-cal-full-grid" style="--m-cal-row-min:${rowMinPx}px;">
-            <div class="m-cal-head sun">일</div><div class="m-cal-head">월</div><div class="m-cal-head">화</div><div class="m-cal-head">수</div><div class="m-cal-head">목</div><div class="m-cal-head">금</div><div class="m-cal-head sat">토</div>
-            ${gridCells}
-          </div>
+          ${calContentHtml}
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
             <span style="font-size:12.5px;font-weight:800;color:var(--text);">📅 ${escHtml(state.selectedDayStr)} 공정 (${selEvents.length}건)</span>
             <button type="button" class="btn-tool-tag" onclick="openNewTaskModal('', '${escJs(state.selectedDayStr)}')">+ 이 날 일정 추가</button>
           </div>
           ${selCardsHtml}
         `;
+        state._lastCalSlideDir = "";
+        setupCalendarSwipe(mCalEl);
       }
 
-      // [모바일 탭 4: 현장 목록 — 진행/완료 토글 & 멤버 미완료 기준 필터]
+      // [모바일 탭 4: 현장 목록 — 진행/완료 토글 & 아코디언 전체 공정/길안내/업로드/안내문]
       function renderMobileSitesTab() {
         const q = state.searchQuery.trim();
         const m = state.memberFilter;
@@ -3469,10 +3570,15 @@
           return true;
         });
 
+        if (!state._mobileSitesAutoInit && visible.length > 0) {
+          state.mobileExpandedSiteKeys.add(visible[0].siteKey);
+          state._mobileSitesAutoInit = true;
+        }
+
         const toggleBarHtml = `
           <div style="display:flex;gap:6px;margin-bottom:10px;">
-            <button type="button" onclick="if(state.showArchivedSites){state.showArchivedSites=false;markAllDirty();renderActiveViews();}" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid ${!state.showArchivedSites ? "#1e40af" : "var(--border)"};background:${!state.showArchivedSites ? "#1e40af" : "#fff"};color:${!state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">🏗️ 진행 현장 ${activeCountAll}</button>
-            <button type="button" onclick="if(!state.showArchivedSites){state.showArchivedSites=true;markAllDirty();renderActiveViews();}" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid ${state.showArchivedSites ? "#1e40af" : "var(--border)"};background:${state.showArchivedSites ? "#1e40af" : "#fff"};color:${state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">✅ 완료 현장 ${doneCountAll}</button>
+            <button type="button" onclick="if(state.showArchivedSites){state.showArchivedSites=false;state._mobileSitesAutoInit=false;state.mobileExpandedSiteKeys.clear();markAllDirty();renderActiveViews();}" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid ${!state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${!state.showArchivedSites ? "#0f766e" : "#fff"};color:${!state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">🏗️ 진행 현장 ${activeCountAll}</button>
+            <button type="button" onclick="if(!state.showArchivedSites){state.showArchivedSites=true;state._mobileSitesAutoInit=false;state.mobileExpandedSiteKeys.clear();markAllDirty();renderActiveViews();}" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid ${state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${state.showArchivedSites ? "#0f766e" : "#fff"};color:${state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">✅ 완료 현장 ${doneCountAll}</button>
           </div>`;
 
         document.getElementById("m-page-sites").innerHTML = toggleBarHtml + (visible.map((s) => {
@@ -3481,41 +3587,111 @@
           const nextTask = tasks.find((t) => !isTaskCompleted(t)) || tasks[0];
           const mgrSet = getUniqueSiteManagers(tasks);
           const mgrs = mgrSet.join(", ") || "-";
-          const phone = nextTask ? lookupPartnerPhone(nextTask.partner) : "";
           const remainingCnt = tasks.filter((t) => !isTaskCompleted(t)).length;
+          const isExpanded = q ? true : state.mobileExpandedSiteKeys.has(s.siteKey);
+          const allChecked = tasks.length > 0 && tasks.every((t) => state.checkedMobileTaskIds.has(t.id || t.taskId));
+          const mapSearchQuery = (info.address || s.siteName || "").trim();
+          const mapUrl = mapSearchQuery ? `https://map.kakao.com/link/search/${encodeURIComponent(mapSearchQuery)}` : "";
 
-          return `
-            <div class="m-card-box">
-              <div class="m-card-title-row">
-                <span style="font-size:14.5px;font-weight:800;color:#1e3a8a;">🏢 ${escHtml(s.siteName)}</span>
-                <span style="font-size:11px;font-weight:800;color:${(s.progressRate || 0) >= 80 ? "#10b981" : "#2563eb"};">${s.progressRate || 0}% 완료</span>
-              </div>
-              <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">
-                담당: ${escHtml(mgrs)} &nbsp;•&nbsp; 남은 공정 ${remainingCnt}건 (${s.completedTasksCount || 0}/${s.totalTasksCount || 0})
-                ${s.delayedTasksCount ? ` &nbsp;•&nbsp; <span style="color:#dc2626;font-weight:700;">지연 ${s.delayedTasksCount}</span>` : ""}
-              </div>
-              <div style="background:#f8fafc;padding:8px 10px;border-radius:6px;border:1px solid var(--border);margin-bottom:8px;font-size:11.5px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;">
-                  <span>🔑 <strong>비번:</strong> <span style="color:#2563eb;font-weight:800;">${escHtml(info.doorPassword || "-")}</span></span>
-                  <div style="display:flex;gap:4px;">
+          let bodyHtml = "";
+          if (isExpanded) {
+            const tasksListHtml = tasks.map((t) => {
+              const tid = t.id || t.taskId;
+              const isDone = isTaskCompleted(t);
+              const isDel = !isDone && t.isDelayed;
+              const pPhone = lookupPartnerPhone(t.partner);
+              const checked = state.checkedMobileTaskIds.has(tid);
+              const ymd = parseYmdFromTask(t);
+              return `
+                <div onclick="openTaskEditModal('${escJs(tid)}')" style="background:#fff;border:1px solid ${isDel ? "#fecaca" : "var(--border)"};border-left:3px solid ${isDel ? "#ef4444" : (isDone ? "#10b981" : "#2563eb")};border-radius:8px;padding:8px 9px;cursor:pointer;">
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <input type="checkbox" ${checked ? "checked" : ""} onclick="event.stopPropagation();" onchange="toggleMobileTaskCheck('${escJs(tid)}', this.checked)" style="width:15px;height:15px;accent-color:#0f766e;cursor:pointer;flex-shrink:0;" />
+                    <span title="${t.isShared ? "공유됨" : "미공유"}" style="font-size:11px;flex-shrink:0;">${t.isShared ? "🟦" : "🟥"}</span>
+                    <span style="font-size:10px;padding:1.5px 5px;border-radius:4px;font-weight:800;background:${isDel ? "#fee2e2" : (isDone ? "#dcfce7" : "#eff6ff")};color:${isDel ? "#dc2626" : (isDone ? "#059669" : "#1d4ed8")};flex-shrink:0;">${isDel ? "지연 ⚠️" : escHtml(t.status || "예정")}</span>
+                    <span style="font-size:12.5px;font-weight:800;color:${isDone ? "#64748b" : "#0f172a"};${isDone ? "text-decoration:line-through;" : ""}overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(t.taskName)}</span>
+                    <span style="font-size:10.5px;color:var(--text-muted);font-weight:700;flex-shrink:0;">${escHtml(ymd || "-")}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:4px;padding-left:21px;font-size:11px;color:var(--text-sub);">
+                    <span>👤 ${escHtml(filterRegisteredManagers(t.manager) || "-")} · 🤝 ${escHtml(t.partner || "미등록")}</span>
+                    ${pPhone ? `<a href="tel:${escHtml(pPhone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;padding:2px 7px;border-radius:6px;font-weight:800;text-decoration:none;font-size:10.5px;flex-shrink:0;">📞 ${escHtml(pPhone)}</a>` : ""}
+                  </div>
+                  ${t.memo ? `<div style="margin-top:3px;padding-left:21px;font-size:10.5px;color:#475569;">📝 ${escHtml(t.memo)}</div>` : ""}
+                </div>`;
+            }).join("") || `<div style="font-size:11.5px;color:var(--text-muted);text-align:center;padding:8px;">등록된 공정이 없습니다.</div>`;
+
+            bodyHtml = `
+              <div class="m-site-acc-body">
+                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">
+                  <button type="button" class="btn-tool-tag" onclick="openPartnerGuideForSite('${escJs(s.siteKey)}')">📋 안내문 확인</button>
+                  <button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(s.siteName)}')">✏️ 정보 수정</button>
+                  <button type="button" class="btn-tool-tag" onclick="openSiteFileUploadModal('${escJs(s.siteName)}')">📤 파일 업로드</button>
+                  <button type="button" class="btn-tool-tag" onclick="openNewTaskModal('${escJs(s.siteName)}', '')">+ 새 공정</button>
+                </div>
+
+                <div style="background:#ffffff;padding:9px 10px;border-radius:8px;border:1px solid var(--border);margin-bottom:8px;font-size:11.5px;display:flex;flex-direction:column;gap:5px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                    <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;">📍 <strong>주소:</strong> ${escHtml(info.address || "주소 미등록")}</span>
+                    <div style="display:flex;gap:4px;flex-shrink:0;">
+                      ${info.address ? `<button type="button" class="btn-tool-tag" onclick="copyText('${escJs(info.address)}')">복사</button>` : ""}
+                      ${mapUrl ? `<a href="${escHtml(mapUrl)}" target="_blank" rel="noopener" class="btn-tool-tag" style="text-decoration:none;background:#fef08a;color:#713f12;border-color:#fde047;">🚗 길안내</a>` : ""}
+                    </div>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                    <span>🔑 <strong>비번:</strong> <span style="color:#0f766e;font-weight:800;">${escHtml(info.doorPassword || "-")}</span></span>
                     ${info.doorPassword ? `<button type="button" class="btn-tool-tag" onclick="copyText('${escJs(info.doorPassword)}')">복사</button>` : ""}
-                    <button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(s.siteName)}')">수정</button>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                    <span>📞 <strong>관리실:</strong> ${escHtml(info.officePhone || "-")}</span>
+                    ${info.officePhone ? `<a href="tel:${escHtml(String(info.officePhone).replace(/[^0-9]/g, ""))}" class="btn-tool-tag" style="text-decoration:none;">전화</a>` : ""}
+                  </div>
+                  <div style="color:var(--text-sub);font-size:11px;">⚠️ <strong>특이사항/주차:</strong> ${escHtml(info.memo || "-")}</div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                    <span>📁 <strong>드라이브:</strong> ${info.driveUrl ? "연결됨" : "미연결"}</span>
+                    ${info.driveUrl ? `<a href="${escHtml(info.driveUrl)}" target="_blank" rel="noopener" class="btn-tool-tag" style="text-decoration:none;">드라이브 열기 ↗</a>` : `<button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(s.siteName)}')">+ 연결하기</button>`}
                   </div>
                 </div>
-                <div style="color:var(--text-muted);font-size:11px;margin-top:3px;">📍 ${escHtml(info.address || "주소 미등록")}</div>
-              </div>
-              <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;">
-                <span class="chip-item ${info.consentDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;" onclick="togglePreChecklist('${escJs(s.siteName)}', 'consentDone')">${info.consentDone ? "✓" : "○"} 동의서</span>
-                <span class="chip-item ${info.elevatorCoverDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;" onclick="togglePreChecklist('${escJs(s.siteName)}', 'elevatorCoverDone')">${info.elevatorCoverDone ? "✓" : "○"} 보양</span>
-                <span class="chip-item ${info.officeNoticeDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;" onclick="togglePreChecklist('${escJs(s.siteName)}', 'officeNoticeDone')">${info.officeNoticeDone ? "✓" : "○"} 신고</span>
-              </div>
-              ${nextTask ? `
-                <div style="border-top:1px solid var(--border);padding-top:8px;" onclick="openTaskEditModal('${escJs(nextTask.id || nextTask.taskId)}')">
-                  <div style="font-size:12px;font-weight:700;color:${nextTask.isDelayed ? "#dc2626" : "#1e40af"};">${escHtml(parseYmdFromTask(nextTask))} · ${escHtml(nextTask.taskName)} (${escHtml(nextTask.status)})</div>
-                  <div style="font-size:11px;color:var(--text-sub);margin-top:2px;">${escHtml(nextTask.partner || nextTask.memo || "-")}</div>
-                  ${phone ? `<a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" class="m-call-btn-large">📞 ${escHtml(phone)} 전화 걸기</a>` : ""}
+
+                <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
+                  <span style="font-size:10.5px;font-weight:800;color:var(--text-muted);">착공필수:</span>
+                  <span class="chip-item ${info.consentDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;" onclick="togglePreChecklist('${escJs(s.siteName)}', 'consentDone')">${info.consentDone ? "✓" : "○"} 동의서</span>
+                  <span class="chip-item ${info.elevatorCoverDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;" onclick="togglePreChecklist('${escJs(s.siteName)}', 'elevatorCoverDone')">${info.elevatorCoverDone ? "✓" : "○"} 승강기보양</span>
+                  <span class="chip-item ${info.officeNoticeDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;" onclick="togglePreChecklist('${escJs(s.siteName)}', 'officeNoticeDone')">${info.officeNoticeDone ? "✓" : "○"} 관리실신고</span>
                 </div>
-              ` : ""}
+
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding:4px 2px;">
+                  <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;color:var(--text);cursor:pointer;">
+                    <input type="checkbox" ${allChecked ? "checked" : ""} onchange="toggleMobileSiteAllTasks('${escJs(s.siteKey)}', this.checked)" style="width:15px;height:15px;accent-color:#0f766e;" />
+                    전체선택 (${tasks.length}건)
+                  </label>
+                  <span style="font-size:10.5px;color:var(--text-muted);font-weight:700;">🟦 공유 / 🟥 미공유</span>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  ${tasksListHtml}
+                </div>
+              </div>`;
+          }
+
+          return `
+            <div class="m-site-acc-card">
+              <div class="m-site-acc-head" onclick="toggleMobileSiteCard('${escJs(s.siteKey)}')">
+                <div style="min-width:0;flex:1;">
+                  <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;">
+                    <span style="font-size:14px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:5px;min-width:0;">
+                      <span style="width:9px;height:9px;border-radius:50%;background:${escHtml(s.colorHex || "#0f766e")};flex-shrink:0;"></span>
+                      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.siteName)}</span>
+                    </span>
+                    <span style="font-size:11px;font-weight:800;color:${(s.progressRate || 0) >= 80 ? "#059669" : "#0f766e"};flex-shrink:0;">${s.progressRate || 0}%</span>
+                  </div>
+                  <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">
+                    담당: ${escHtml(mgrs)} · 남은 ${remainingCnt}건 (${s.completedTasksCount || 0}/${s.totalTasksCount || 0})
+                    ${s.delayedTasksCount ? ` · <span style="color:#dc2626;font-weight:800;">지연 ${s.delayedTasksCount}</span>` : ""}
+                  </div>
+                  ${!isExpanded && nextTask ? `<div style="font-size:11px;color:#0f766e;font-weight:700;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">다음: ${escHtml(parseYmdFromTask(nextTask))} · ${escHtml(nextTask.taskName)}</div>` : ""}
+                </div>
+                <span style="font-size:13px;color:var(--text-muted);font-weight:800;flex-shrink:0;">${isExpanded ? "▾" : "▸"}</span>
+              </div>
+              ${bodyHtml}
             </div>`;
         }).join("") || `<div class="m-card-box" style="text-align:center;color:var(--text-muted);font-size:12px;">조건에 맞는 현장이 없습니다.</div>`);
       }
@@ -3704,15 +3880,126 @@
         }
       }
 
+      function loadWeatherData() {
+        if (!location.protocol.startsWith("http")) return;
+        if (Object.keys(state.weatherData || {}).length > 0) return;
+        const url = "https://api.open-meteo.com/v1/forecast?latitude=37.5665&longitude=126.9780&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTokyo&forecast_days=8";
+        fetch(url).then((r) => r.json()).then((data) => {
+          if (data && data.daily && Array.isArray(data.daily.time)) {
+            data.daily.time.forEach((dateStr, idx) => {
+              const code = data.daily.weathercode ? data.daily.weathercode[idx] : 0;
+              const maxT = data.daily.temperature_2m_max ? Math.round(data.daily.temperature_2m_max[idx]) : null;
+              const minT = data.daily.temperature_2m_min ? Math.round(data.daily.temperature_2m_min[idx]) : null;
+              const pop = data.daily.precipitation_probability_max ? data.daily.precipitation_probability_max[idx] : 0;
+              let icon = "☀️", desc = "맑음";
+              if (code >= 1 && code <= 2) { icon = "⛅"; desc = "구름조금"; }
+              else if (code === 3) { icon = "☁️"; desc = "흐림"; }
+              else if (code === 45 || code === 48) { icon = "🌫️"; desc = "안개"; }
+              else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) { icon = "🌧️"; desc = "비"; }
+              else if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) { icon = "❄️"; desc = "눈"; }
+              else if (code >= 95) { icon = "⛈️"; desc = "뇌우"; }
+              let badgeText = icon;
+              if (pop >= 30) badgeText += " " + pop + "%";
+              else if (maxT !== null) badgeText += " " + maxT + "°";
+              state.weatherData[dateStr] = {
+                icon, desc, maxT, minT, pop, badgeText,
+                fullText: icon + " " + desc + (maxT !== null ? " " + maxT + "°/" + minT + "°" : "") + (pop > 0 ? " (강수 " + pop + "%)" : "")
+              };
+            });
+            state.dirtyPcTabs.calendar = true;
+            state.dirtyMobileTabs.calendar = true;
+            renderActiveViews();
+          }
+        }).catch(() => {});
+      }
+
+      function setupCalendarSwipe(containerEl) {
+        if (!containerEl || containerEl.dataset.swipeBound === "1") return;
+        containerEl.dataset.swipeBound = "1";
+        let tStartX = 0, tStartY = 0, tStartTime = 0, tTracking = false;
+        containerEl.addEventListener("touchstart", (e) => {
+          if (!e.touches || e.touches.length !== 1) { tTracking = false; return; }
+          if (e.target && e.target.closest("input, textarea, select")) { tTracking = false; return; }
+          tStartX = e.touches[0].clientX;
+          tStartY = e.touches[0].clientY;
+          tStartTime = Date.now();
+          tTracking = true;
+        }, { passive: true });
+        containerEl.addEventListener("touchend", (e) => {
+          if (!tTracking || !e.changedTouches || !e.changedTouches.length) return;
+          tTracking = false;
+          const dt = Date.now() - tStartTime;
+          const dx = e.changedTouches[0].clientX - tStartX;
+          const dy = e.changedTouches[0].clientY - tStartY;
+          if (dt < 750 && Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+            window.moveCalendarMonth(dx < 0 ? 1 : -1);
+          }
+        }, { passive: true });
+
+        let mDownX = 0, mDownY = 0, mDownTime = 0, mTracking = false;
+        containerEl.addEventListener("mousedown", (e) => {
+          if (e.button !== 0) return;
+          if (e.target && e.target.closest("button, a, input, select, textarea, .cal-event-pill, .m-cal-pill, .m-cal-week-pill")) {
+            mTracking = false; return;
+          }
+          mDownX = e.clientX; mDownY = e.clientY; mDownTime = Date.now(); mTracking = true;
+        });
+        containerEl.addEventListener("mouseup", (e) => {
+          if (!mTracking) return;
+          mTracking = false;
+          const dt = Date.now() - mDownTime;
+          const dx = e.clientX - mDownX;
+          const dy = e.clientY - mDownY;
+          if (dt < 750 && Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy) * 1.3) {
+            window.moveCalendarMonth(dx < 0 ? 1 : -1);
+          }
+        });
+      }
+
       // ================= 모달 1: 공정 상세 / 수정 / 신규 등록 통합 모달 =================
+      let _modalHistoryDepth = 0;
+      let _ignoreNextModalPopstate = false;
       function openModal(id) {
         const el = document.getElementById(id);
-        if (el) el.classList.add("open");
+        if (!el) return;
+        const wasOpen = el.classList.contains("open");
+        el.classList.add("open");
+        if (!wasOpen) {
+          try {
+            if (window.history && typeof window.history.pushState === "function") {
+              _modalHistoryDepth++;
+              window.history.pushState({ wsModal: id }, "");
+            }
+          } catch (ePush) {}
+        }
       }
-      window.closeModal = function (id) {
+      window.closeModal = function (id, fromPopstate) {
         const el = document.getElementById(id);
-        if (el) el.classList.remove("open");
+        if (!el) return;
+        const wasOpen = el.classList.contains("open");
+        el.classList.remove("open");
+        if (wasOpen && !fromPopstate && _modalHistoryDepth > 0) {
+          _modalHistoryDepth--;
+          try {
+            if (window.history && typeof window.history.back === "function") {
+              _ignoreNextModalPopstate = true;
+              window.history.back();
+            }
+          } catch (eBack) {}
+        }
       };
+      window.addEventListener("popstate", () => {
+        if (_ignoreNextModalPopstate) {
+          _ignoreNextModalPopstate = false;
+          return;
+        }
+        const openModals = Array.from(document.querySelectorAll(".ws-modal-backdrop.open"));
+        if (openModals.length > 0) {
+          const last = openModals[openModals.length - 1];
+          if (_modalHistoryDepth > 0) _modalHistoryDepth--;
+          window.closeModal(last.id, true);
+        }
+      });
 
       function buildDatalistHtml(id, items) {
         return `<datalist id="${id}">${items.map((x) => `<option value="${escHtml(x)}">`).join("")}</datalist>`;
@@ -4454,7 +4741,7 @@
         const site = getAllSites().find((s) => s.siteKey === siteKey);
         if (!site) return;
         const tasks = site.tasks || [];
-        const checked = tasks.filter((t) => state.checkedTableTaskIds.has(t.id || t.taskId));
+        const checked = tasks.filter((t) => state.checkedTableTaskIds.has(t.id || t.taskId) || state.checkedMobileTaskIds.has(t.id || t.taskId));
         const target = checked.length ? checked : tasks.filter((t) => t.status !== "완료").slice(0, 5);
         const items = (target.length ? target : tasks.slice(0, 3)).map((t) => buildGuideTextForTask(site, t));
         if (!items.length) return showToast("생성할 공정이 없습니다.");
@@ -5132,10 +5419,42 @@
         window.onGlobalSearch("");
       };
       window.moveCalendarMonth = function (delta) {
-        state.calMonth += delta;
-        if (state.calMonth < 1) { state.calMonth = 12; state.calYear--; }
-        if (state.calMonth > 12) { state.calMonth = 1; state.calYear++; }
+        const isWeek = (state.device === "pc" && state.calViewMode === "week") || (state.device === "mobile" && state.mobileCalMode === "week");
+        state._lastCalSlideDir = delta > 0 ? "next" : "prev";
+        if (isWeek) {
+          state.selectedDayStr = addDaysYmd(state.selectedDayStr || getTodayYmd(), delta * 7);
+          state.calYear = Number(state.selectedDayStr.slice(0, 4));
+          state.calMonth = Number(state.selectedDayStr.slice(5, 7));
+        } else {
+          state.calMonth += delta;
+          if (state.calMonth < 1) { state.calMonth = 12; state.calYear--; }
+          if (state.calMonth > 12) { state.calMonth = 1; state.calYear++; }
+          const ym = state.calYear + "-" + String(state.calMonth).padStart(2, "0");
+          const todayYmd = getTodayYmd();
+          state.selectedDayStr = todayYmd.startsWith(ym) ? todayYmd : ym + "-01";
+        }
         markAllDirty(); renderActiveViews();
+      };
+      window.toggleMobileSiteCard = function (siteKey) {
+        if (state.mobileExpandedSiteKeys.has(siteKey)) state.mobileExpandedSiteKeys.delete(siteKey);
+        else state.mobileExpandedSiteKeys.add(siteKey);
+        state.dirtyMobileTabs.sites = true;
+        renderActiveViews();
+      };
+      window.toggleMobileTaskCheck = function (tid, checked) {
+        if (checked) state.checkedMobileTaskIds.add(tid);
+        else state.checkedMobileTaskIds.delete(tid);
+      };
+      window.toggleMobileSiteAllTasks = function (siteKey, checked) {
+        const site = getAllSites().find((s) => s.siteKey === siteKey);
+        if (!site) return;
+        (site.tasks || []).forEach((t) => {
+          const tid = t.id || t.taskId;
+          if (checked) state.checkedMobileTaskIds.add(tid);
+          else state.checkedMobileTaskIds.delete(tid);
+        });
+        state.dirtyMobileTabs.sites = true;
+        renderActiveViews();
       };
       window.resetCalendarToday = function () {
         const ymd = getTodayYmd();
@@ -5464,6 +5783,7 @@
 
         if (location.protocol.startsWith("http")) {
           setTimeout(() => window.triggerLiveSync(false), 120);
+          loadWeatherData();
         }
       }
 
