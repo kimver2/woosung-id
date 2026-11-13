@@ -543,16 +543,31 @@
     .site-carousel-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     .site-carousel-track { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 14px; }
     .site-carousel-card {
-      min-width: 220px; max-width: 245px; background: #ffffff; border: 1px solid var(--border); border-radius: 8px;
+      min-width: 230px; max-width: 255px; background: #ffffff; border: 1px solid var(--border); border-radius: 8px;
       padding: 11px 13px; cursor: pointer; flex-shrink: 0; transition: all 0.15s; box-shadow: var(--shadow-sm);
+      display: flex; flex-direction: column; gap: 6px;
     }
     .site-carousel-card:hover { border-color: #93c5fd; transform: translateY(-1px); }
     .site-carousel-card.active { background: #eff6ff; border: 2px solid #2563eb; }
-    .scc-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-    .scc-title { font-size: 13px; font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 155px; }
-    .scc-pct { font-size: 12px; font-weight: 800; color: #2563eb; }
-    .scc-sub { font-size: 11px; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-    .scc-delay-tag { background: #fee2e2; color: #dc2626; padding: 1px 5px; border-radius: 4px; font-weight: 700; font-size: 10px; }
+    .scc-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .scc-title { font-size: 13px; font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+    .scc-pct { font-size: 12px; font-weight: 800; color: #2563eb; white-space: nowrap; flex-shrink: 0; }
+    .scc-sub { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); }
+    .scc-sub-line1 {
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-sub); font-weight: 600;
+    }
+    .scc-sub-line2 {
+      display: flex; align-items: center; justify-content: space-between; gap: 6px; white-space: nowrap;
+    }
+    .scc-count-txt { white-space: nowrap; font-weight: 600; color: var(--text-muted); }
+    .scc-delay-tag {
+      background: #fee2e2; color: #dc2626; padding: 2px 6px; border-radius: 4px;
+      font-weight: 700; font-size: 10.5px; white-space: nowrap; flex-shrink: 0; line-height: 1.2;
+    }
+    .scc-ok-tag {
+      background: #ecfdf5; color: #059669; padding: 2px 6px; border-radius: 4px;
+      font-weight: 700; font-size: 10.5px; white-space: nowrap; flex-shrink: 0; line-height: 1.2;
+    }
 
     .detail-card-panel {
       background: #ffffff; border: 1px solid var(--border); border-radius: var(--radius);
@@ -756,9 +771,83 @@
       .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
       .meta-5grid { grid-template-columns: 1fr 1fr; }
     }
+
+    /* ================= 7. 멤버 인증 잠금 오버레이 ================= */
+    .ws-auth-overlay {
+      position: fixed; inset: 0; z-index: 999999;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      display: none; align-items: center; justify-content: center;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+      padding: 18px;
+    }
+    .ws-auth-overlay.open { display: flex; }
+    .ws-auth-card {
+      width: 100%; max-width: 390px; background: #ffffff;
+      border-radius: 18px; padding: 30px 26px 26px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.45);
+      text-align: center;
+    }
+    .ws-auth-icon {
+      width: 52px; height: 52px; margin: 0 auto 14px;
+      border-radius: 14px; background: #eff6ff; color: #2563eb;
+      display: flex; align-items: center; justify-content: center; font-size: 24px;
+    }
+    .ws-auth-title { margin: 0 0 6px; font-size: 19px; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
+    .ws-auth-desc { margin: 0 0 18px; font-size: 13px; color: #64748b; line-height: 1.5; }
+    .ws-auth-input {
+      width: 100%; box-sizing: border-box; padding: 11px 14px; margin-bottom: 10px;
+      border: 1.5px solid #cbd5e1; border-radius: 10px;
+      font-size: 15px; font-weight: 700; text-align: center; outline: none; transition: border-color 0.15s;
+      color: #0f172a; background: #fff;
+    }
+    .ws-auth-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+    .ws-auth-input.pin-input { letter-spacing: 3px; font-size: 17px; }
+    .ws-auth-keep {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      margin: 4px 0 14px; font-size: 12.5px; color: #475569; cursor: pointer; font-weight: 600;
+    }
+    .ws-auth-error {
+      min-height: 18px; font-size: 12px; color: #dc2626; font-weight: 700; margin-bottom: 10px;
+    }
+    .ws-auth-btn {
+      width: 100%; padding: 12px; border: none; border-radius: 10px;
+      background: #2563eb; color: #ffffff; font-size: 14.5px; font-weight: 800;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .ws-auth-btn:hover { background: #1d4ed8; }
+    .ws-auth-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .ws-auth-hint {
+      margin-top: 12px; font-size: 11.5px; color: #94a3b8; line-height: 1.45;
+    }
   </style>
 </head>
 <body>
+
+  <!-- ================= 멤버 인증 로그인 오버레이 ================= -->
+  <div id="topAccessLockOverlay" class="ws-auth-overlay" role="dialog" aria-modal="true" aria-labelledby="topAccessTitle">
+    <div class="ws-auth-card">
+      <div class="ws-auth-icon">🔒</div>
+      <h2 id="topAccessTitle" class="ws-auth-title">우성아이디 멤버 인증</h2>
+      <p class="ws-auth-desc">
+        등록된 <strong>멤버 성함</strong>과 <strong>공용 비밀번호</strong>를 입력해 주세요.<br>
+        로그인 후 내 맞춤 홈 화면과 캘린더로 바로 연결됩니다.
+      </p>
+      <input type="text" id="topAccessNameInput" list="wsMembersAuthDl" class="ws-auth-input"
+             placeholder="성함 (예: 조항만, 송지은)" autocomplete="username"
+             onkeydown="if(event.key==='Enter'){ const p=document.getElementById('topAccessPinInput'); if(p) p.focus(); }">
+      <datalist id="wsMembersAuthDl"></datalist>
+      <input type="password" id="topAccessPinInput" class="ws-auth-input pin-input"
+             placeholder="비밀번호 (PIN)" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter') submitTopAccessPin()">
+      <label class="ws-auth-keep">
+        <input type="checkbox" id="topAccessKeepChk" checked style="width:15px;height:15px;cursor:pointer;">
+        <span>이 기기에서 자동 로그인 유지</span>
+      </label>
+      <div id="topAccessPinError" class="ws-auth-error"></div>
+      <button type="button" id="topAccessPinBtn" class="ws-auth-btn" onclick="submitTopAccessPin()">인증하고 시작하기</button>
+      <div class="ws-auth-hint">5회 연속 실패 시 3분간 입력이 제한됩니다.</div>
+    </div>
+  </div>
 
   <!-- ================= 0. 프리뷰 글로벌 컨트롤 바 (preview_tabs.html / ?preview=1 전용) ================= -->
   <div class="preview-global-bar">
@@ -836,6 +925,7 @@
           <button type="button" class="btn-header-tool" onclick="openMonthlyReportModal()">📊 월간집계</button>
           <button type="button" class="btn-header-tool" onclick="openSettingsModal()">⚙️ 설정</button>
           <button type="button" class="sync-btn" onclick="triggerLiveSync(true)">🔄 동기화</button>
+          <button type="button" class="btn-header-tool" onclick="logoutDashboardAuth()" title="잠금 / 로그아웃">🔒 로그아웃</button>
         </div>
       </header>
 
@@ -882,6 +972,7 @@
               <option value="차정률">차정률</option>
             </select>
             <button type="button" onclick="triggerLiveSync(true)" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="새로고침">🔄</button>
+            <button type="button" onclick="logoutDashboardAuth()" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="잠금 / 로그아웃">🔒</button>
           </div>
         </header>
 
@@ -1823,8 +1914,20 @@
         let selectedSite = visibleSites.find((s) => s.siteKey === state.selectedSiteKey) || visibleSites[0] || sitesPool[0];
         if (selectedSite) state.selectedSiteKey = selectedSite.siteKey;
 
+        function getUniqueSiteManagers(tasks) {
+          const seen = [];
+          (tasks || []).forEach((t) => {
+            String(t.manager || "").split(",").forEach((part) => {
+              const name = part.trim();
+              if (name && !seen.includes(name)) seen.push(name);
+            });
+          });
+          return seen;
+        }
+
         const carouselHtml = visibleSites.map((s) => {
-          const mgrs = Array.from(new Set((s.tasks || []).map((t) => t.manager).filter(Boolean))).slice(0, 2).join(", ") || "미정";
+          const uniqueMgrs = getUniqueSiteManagers(s.tasks);
+          const mgrs = uniqueMgrs.slice(0, 3).join(", ") || "미정";
           const pct = s.progressRate || 0;
           const pctColor = pct >= 80 ? "#10b981" : pct >= 40 ? "#2563eb" : "#f59e0b";
           return `
@@ -1834,9 +1937,11 @@
                 <span class="scc-pct" style="color:${pctColor};">${pct}%</span>
               </div>
               <div class="scc-sub">
-                <span>👤 ${escHtml(mgrs)}</span>
-                <span>${s.completedTasksCount || 0}/${s.totalTasksCount || 0} 완료</span>
-                ${s.delayedTasksCount > 0 ? `<span class="scc-delay-tag">⚠️ 지연 ${s.delayedTasksCount}</span>` : ""}
+                <div class="scc-sub-line1" title="${escHtml(mgrs)}">👤 ${escHtml(mgrs)}</div>
+                <div class="scc-sub-line2">
+                  <span class="scc-count-txt">${s.completedTasksCount || 0}/${s.totalTasksCount || 0} 완료</span>
+                  ${s.delayedTasksCount > 0 ? `<span class="scc-delay-tag">⚠️ 지연 ${s.delayedTasksCount}</span>` : `<span class="scc-ok-tag">정상</span>`}
+                </div>
               </div>
             </div>`;
         }).join("");
@@ -1844,7 +1949,7 @@
         let detailHtml = `<div class="detail-card-panel"><p style="color:var(--text-muted);">표시할 현장이 없습니다.</p></div>`;
         if (selectedSite) {
           const tasks = selectedSite.tasks || [];
-          const mgrs = Array.from(new Set(tasks.map((t) => t.manager).filter(Boolean))).join(", ") || "미지정";
+          const mgrs = getUniqueSiteManagers(tasks).join(", ") || "미지정";
           const ymds = tasks.map(parseYmdFromTask).filter(Boolean).sort();
           const periodStr = ymds.length ? `${ymds[0]} ~ ${ymds[ymds.length - 1]}` : (selectedSite.earliestDateDisplay || "-");
           const info = getSiteInfo(selectedSite.siteName) || {};
@@ -4016,6 +4121,191 @@
         });
       };
 
+      const GAS_AUTH_API_URL = "https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec";
+      const AUTH_COOKIE_NAME = "ws_dashboard_auth_token_v2";
+      const AUTH_USER_COOKIE = "ws_dashboard_auth_user_v2";
+      const AUTH_LOCKOUT_UNTIL_KEY = "ws_pin_lock_until_v1";
+      const AUTH_LOCKOUT_FAIL_KEY = "ws_pin_fail_count_v1";
+      const DEFAULT_PIN_FALLBACK = "0112";
+      const ADMIN_USER_FALLBACK = "admin";
+      const ADMIN_PIN_FALLBACK = "007077";
+
+      function getTopSavedCookie(name) {
+        try {
+          const match = document.cookie.match(new RegExp("(?:^|; )" + name.replace(/([.$?*|{}()[\]\\/+^])/g, "\\$1") + "=([^;]*)"));
+          return match ? decodeURIComponent(match[1]) : "";
+        } catch (e) { return ""; }
+      }
+      function setTopSavedCookie(name, val, days) {
+        try {
+          const expires = days ? "; expires=" + new Date(Date.now() + days * 86400000).toUTCString() : "";
+          document.cookie = name + "=" + encodeURIComponent(val) + expires + "; path=/; SameSite=Lax";
+        } catch (e) {}
+      }
+      function getTopSavedAuth() {
+        let token = "", user = "";
+        try { token = localStorage.getItem(AUTH_COOKIE_NAME) || ""; user = localStorage.getItem(AUTH_USER_COOKIE) || ""; } catch (e) {}
+        if (!token) { try { token = sessionStorage.getItem(AUTH_COOKIE_NAME) || ""; user = sessionStorage.getItem(AUTH_USER_COOKIE) || ""; } catch (e) {} }
+        if (!token) { token = getTopSavedCookie(AUTH_COOKIE_NAME); user = getTopSavedCookie(AUTH_USER_COOKIE); }
+        return { token, user };
+      }
+      function saveTopAuthData(token, user, keepPersistent) {
+        if (keepPersistent) {
+          try { localStorage.setItem(AUTH_COOKIE_NAME, token); localStorage.setItem(AUTH_USER_COOKIE, user); } catch (e) {}
+          try { sessionStorage.removeItem(AUTH_COOKIE_NAME); sessionStorage.removeItem(AUTH_USER_COOKIE); } catch (e) {}
+          setTopSavedCookie(AUTH_COOKIE_NAME, token, 365);
+          setTopSavedCookie(AUTH_USER_COOKIE, user, 365);
+        } else {
+          try { sessionStorage.setItem(AUTH_COOKIE_NAME, token); sessionStorage.setItem(AUTH_USER_COOKIE, user); } catch (e) {}
+          try { localStorage.removeItem(AUTH_COOKIE_NAME); localStorage.removeItem(AUTH_USER_COOKIE); } catch (e) {}
+          setTopSavedCookie(AUTH_COOKIE_NAME, "", -1);
+          setTopSavedCookie(AUTH_USER_COOKIE, "", -1);
+        }
+      }
+      function clearTopAuthData() {
+        try { localStorage.removeItem(AUTH_COOKIE_NAME); localStorage.removeItem(AUTH_USER_COOKIE); } catch (e) {}
+        try { sessionStorage.removeItem(AUTH_COOKIE_NAME); sessionStorage.removeItem(AUTH_USER_COOKIE); } catch (e) {}
+        setTopSavedCookie(AUTH_COOKIE_NAME, "", -1);
+        setTopSavedCookie(AUTH_USER_COOKIE, "", -1);
+      }
+      function computeDashboardUserToken(userStr, pinStr) {
+        const cleanUser = String(userStr || "").trim().toLowerCase();
+        const cleanPin = String(pinStr || "").trim();
+        const s = "ws_auth_v2::" + cleanUser + "::" + cleanPin;
+        let h1 = 5381;
+        for (let i = 0; i < s.length; i++) {
+          h1 = (((h1 << 5) + h1) ^ s.charCodeAt(i)) >>> 0;
+        }
+        return "WSAUTH_" + h1.toString(16).toUpperCase() + "_" + s.length;
+      }
+      function checkTopPinLockout() {
+        try {
+          const until = Number(localStorage.getItem(AUTH_LOCKOUT_UNTIL_KEY) || "0");
+          const now = Date.now();
+          if (until > now) {
+            const leftSec = Math.ceil((until - now) / 1000);
+            const min = Math.floor(leftSec / 60), sec = leftSec % 60;
+            return { locked: true, msg: `비밀번호 5회 오입력으로 제한되었습니다. (${min}분 ${sec}초 후 재시도)` };
+          }
+          if (until > 0 && until <= now) {
+            localStorage.removeItem(AUTH_LOCKOUT_UNTIL_KEY);
+            localStorage.removeItem(AUTH_LOCKOUT_FAIL_KEY);
+          }
+        } catch (e) {}
+        return { locked: false };
+      }
+      function populateAuthMembersDatalist() {
+        const dl = document.getElementById("wsMembersAuthDl");
+        if (!dl) return;
+        dl.innerHTML = getMembersList().map((m) => `<option value="${escHtml(m)}"></option>`).join("");
+      }
+      function applyAuthenticatedUser(user) {
+        const clean = String(user || "").trim();
+        if (!clean) return;
+        if (clean.toLowerCase() === ADMIN_USER_FALLBACK) {
+          window.onUserChanged("조항만");
+          return;
+        }
+        const members = getMembersList();
+        const exact = members.find((m) => m.toLowerCase() === clean.toLowerCase());
+        if (exact) window.onUserChanged(exact);
+      }
+      window.submitTopAccessPin = async function () {
+        const lockState = checkTopPinLockout();
+        const nameEl = document.getElementById("topAccessNameInput");
+        const pinEl = document.getElementById("topAccessPinInput");
+        const errEl = document.getElementById("topAccessPinError");
+        const btnEl = document.getElementById("topAccessPinBtn");
+        const keepEl = document.getElementById("topAccessKeepChk");
+        if (lockState.locked) {
+          if (errEl) errEl.textContent = lockState.msg;
+          return;
+        }
+        const valName = String((nameEl && nameEl.value) || "").trim();
+        const valPin = String((pinEl && pinEl.value) || "").trim();
+        if (!valName) { if (errEl) errEl.textContent = "등록된 성함을 입력해 주세요."; if (nameEl) nameEl.focus(); return; }
+        if (!valPin) { if (errEl) errEl.textContent = "비밀번호(PIN)를 입력해 주세요."; if (pinEl) pinEl.focus(); return; }
+
+        if (btnEl) { btnEl.disabled = true; btnEl.textContent = "인증 확인 중..."; }
+        if (errEl) errEl.textContent = "";
+
+        let data = null;
+        if (location.protocol.startsWith("http")) {
+          try {
+            const url = `${GAS_AUTH_API_URL}?action=verifyDashboardPin&user=${encodeURIComponent(valName)}&pin=${encodeURIComponent(valPin)}&_t=${Date.now()}`;
+            const resp = await fetch(url, { method: "GET", redirect: "follow" });
+            if (resp.ok) data = await resp.json();
+          } catch (e) {
+            data = null;
+          }
+        }
+        // 로컬 file:// 환경 또는 오프라인 fallback 검증 (동일 토큰 공식 적용)
+        if (!data) {
+          const isAdmin = valName.toLowerCase() === ADMIN_USER_FALLBACK && valPin === ADMIN_PIN_FALLBACK;
+          const members = getMembersList();
+          const matchedMember = members.find((m) => m.toLowerCase() === valName.toLowerCase());
+          if (isAdmin) {
+            data = { success: true, user: ADMIN_USER_FALLBACK, isAdmin: true, token: computeDashboardUserToken(ADMIN_USER_FALLBACK, ADMIN_PIN_FALLBACK) };
+          } else if (matchedMember && valPin === DEFAULT_PIN_FALLBACK) {
+            data = { success: true, user: matchedMember, isAdmin: false, token: computeDashboardUserToken(matchedMember, valPin) };
+          } else if (!matchedMember) {
+            data = { success: false, error: "등록되지 않은 사용자입니다. (시트 환경설정 멤버 확인)" };
+          } else {
+            data = { success: false, error: "비밀번호(PIN)가 일치하지 않습니다." };
+          }
+        }
+
+        if (data && data.success && data.token) {
+          try { localStorage.removeItem(AUTH_LOCKOUT_UNTIL_KEY); localStorage.removeItem(AUTH_LOCKOUT_FAIL_KEY); } catch (e) {}
+          const keep = keepEl ? !!keepEl.checked : true;
+          const verifiedUser = data.user || valName;
+          saveTopAuthData(data.token, verifiedUser, keep);
+          const ov = document.getElementById("topAccessLockOverlay");
+          if (ov) ov.classList.remove("open");
+          applyAuthenticatedUser(verifiedUser);
+          showToast(`🔓 ${verifiedUser}님 인증되었습니다.`);
+        } else {
+          let failCnt = 0;
+          try { failCnt = Number(localStorage.getItem(AUTH_LOCKOUT_FAIL_KEY) || "0") + 1; localStorage.setItem(AUTH_LOCKOUT_FAIL_KEY, String(failCnt)); } catch (e) {}
+          if (failCnt >= 5) {
+            try { localStorage.setItem(AUTH_LOCKOUT_UNTIL_KEY, String(Date.now() + 180000)); } catch (e) {}
+            if (errEl) errEl.textContent = "비밀번호 5회 연속 실패로 3분간 입력이 제한됩니다.";
+          } else {
+            const msg = (data && data.error) ? data.error : "사용자명 또는 비밀번호가 올바르지 않습니다.";
+            if (errEl) errEl.textContent = `${msg} (남은 기회 ${5 - failCnt}회)`;
+          }
+          if (pinEl) { pinEl.value = ""; pinEl.focus(); }
+        }
+        if (btnEl) { btnEl.disabled = false; btnEl.textContent = "인증하고 시작하기"; }
+      };
+      window.logoutDashboardAuth = function () {
+        clearTopAuthData();
+        const ov = document.getElementById("topAccessLockOverlay");
+        const pinEl = document.getElementById("topAccessPinInput");
+        const errEl = document.getElementById("topAccessPinError");
+        if (pinEl) pinEl.value = "";
+        if (errEl) errEl.textContent = "";
+        populateAuthMembersDatalist();
+        if (ov) ov.classList.add("open");
+        const nameEl = document.getElementById("topAccessNameInput");
+        if (nameEl) setTimeout(() => nameEl.focus(), 60);
+      };
+      function initDashboardAuthLock() {
+        populateAuthMembersDatalist();
+        const searchParams = new URLSearchParams(location.search || "");
+        if (searchParams.get("noauth") === "1") return;
+        const auth = getTopSavedAuth();
+        if (auth && auth.token && auth.user) {
+          applyAuthenticatedUser(auth.user);
+          return;
+        }
+        const ov = document.getElementById("topAccessLockOverlay");
+        if (ov) ov.classList.add("open");
+        const lockState = checkTopPinLockout();
+        const errEl = document.getElementById("topAccessPinError");
+        if (lockState.locked && errEl) errEl.textContent = lockState.msg;
+      }
+
       function bootstrap() {
         const ds = window.WSDataService;
         state.dashData = ds ? ds.getInitialDashboardData() : { kpi: {}, scopeCounts: {}, sites: [], siteInfoMap: {}, holidays: {} };
@@ -4030,6 +4320,8 @@
         else if (hash.includes("user=han")) window.onUserChanged("한송이");
         else if (hash.includes("user=jeon")) window.onUserChanged("전예린");
         else window.onUserChanged("조항만");
+
+        initDashboardAuthLock();
 
         // 기본 첫 진입 화면은 웹/모바일 모두 "홈"
         const isSmallViewport = !IS_PREVIEW_MODE && window.innerWidth <= 860;
