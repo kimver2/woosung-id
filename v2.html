@@ -819,6 +819,55 @@
     .ws-auth-hint {
       margin-top: 12px; font-size: 11.5px; color: #94a3b8; line-height: 1.45;
     }
+
+    /* ================= 8. 신규견적 전용 상세 대시보드 스타일 ================= */
+    .pc-estimate-detail-container { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
+    .pc-est-hero-card { background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 18px 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+    .pc-est-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .pc-est-title-wrap { display: flex; flex-direction: column; gap: 6px; }
+    .pc-est-badge-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .pc-est-site-name { margin: 0; font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px; }
+    .pc-est-meta-line { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #475569; flex-wrap: wrap; }
+    .pc-est-dot { color: #cbd5e1; }
+    .pc-est-call-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; background: #dcfce7; color: #15803d; font-weight: 700; text-decoration: none; font-size: 12px; border: 1px solid #86efac; }
+    .pc-est-call-btn:hover { background: #bbf7d0; }
+    .pc-est-hero-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pc-est-grid-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    @media (max-width: 1200px) { .pc-est-grid-cards { grid-template-columns: repeat(2, 1fr); } }
+    .pc-est-card { background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+    .pc-est-card.highlight-card { background: #f8fafc; border-color: #cbd5e1; }
+    .pc-est-card-head { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; }
+    .pc-est-card-icon { font-size: 16px; }
+    .pc-est-card-title { font-size: 13px; font-weight: 800; color: #1e293b; }
+    .pc-est-card-body { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+    .pc-est-info-row { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; gap: 8px; }
+    .pc-est-info-row .lbl { color: #64748b; font-weight: 600; flex-shrink: 0; }
+    .pc-est-info-row .val { color: #0f172a; text-align: right; word-break: break-all; }
+    .pc-est-info-row .val.big-amt { font-size: 15px; font-weight: 800; }
+    .pc-est-next-action-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 7px; padding: 8px 10px; }
+    .pc-est-next-action-box .action-tag { font-size: 11px; font-weight: 800; color: #b45309; margin-bottom: 3px; }
+    .pc-est-next-action-box .action-text { font-size: 12.5px; font-weight: 700; color: #78350f; line-height: 1.4; }
+    .pc-est-memo-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 7px 9px; font-size: 12px; color: #334155; line-height: 1.4; }
+    .pc-est-fail-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 7px 9px; font-size: 12px; color: #991b1b; line-height: 1.4; }
+    .pc-est-table-card { background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    .pc-est-table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+    .pc-est-table-count { background: #eff6ff; color: #1d4ed8; font-weight: 800; font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid #bfdbfe; }
+    .pc-est-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+    .pc-est-table thead tr { background: #f8fafc; }
+    .pc-est-table th { padding: 9px 8px; color: #475569; font-weight: 700; font-size: 11.5px; text-align: left; border-bottom: 1.5px solid #e2e8f0; white-space: nowrap; }
+    .pc-est-table td { padding: 10px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .pc-est-table-row { cursor: pointer; transition: background-color 0.15s; }
+    .pc-est-table-row:hover { background-color: #f8fafc; }
+    .pc-est-table-row.selected-row { background-color: #eff6ff !important; border-left: 3px solid #2563eb; }
+    .pc-est-status-tabs { display: flex; background: #f1f5f9; padding: 3px; border-radius: 9px; gap: 3px; }
+    .pc-c-status-tab {
+      display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border: none;
+      border-radius: 7px; font-size: 12px; font-weight: 800; color: #64748b; background: transparent; cursor: pointer;
+    }
+    .pc-c-status-tab.active { background: #ffffff; color: #1d4ed8; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .pc-c-status-tab.done-tab.active { color: #059669; }
+    .pc-badge-count { font-size: 10.5px; padding: 1px 6px; border-radius: 8px; background: #eff6ff; color: #2563eb; }
+    .pc-badge-count-done { font-size: 10.5px; padding: 1px 6px; border-radius: 8px; background: #ecfdf5; color: #059669; }
   </style>
 </head>
 <body>
@@ -940,7 +989,10 @@
           <aside class="sidebar-panel" id="pcSiteSidebar"></aside>
           <main class="site-list-workspace-view" id="pcSiteMain"></main>
         </div>
-        <div class="page-container" id="page-quote"><div class="standard-page-view" id="pcQuoteMain"></div></div>
+        <div class="page-container" id="page-quote">
+          <aside class="sidebar-panel" id="pcQuoteSidebar"></aside>
+          <main class="site-list-workspace-view" id="pcQuoteMain"></main>
+        </div>
         <div class="page-container" id="page-finance"><div class="standard-page-view" id="pcFinanceMain"></div></div>
       </div>
     </div>
@@ -1165,6 +1217,11 @@
         checkedTableTaskIds: new Set(),
         todoMemberFilter: "all",
         quoteShowArchived: false,
+        quoteStatusFilter: "active",
+        quoteSortBy: "priority",
+        selectedQuoteKey: null,
+        quoteTableSearch: "",
+        mobileExpandedQuoteKeys: new Set(),
         financePartnerFilter: "all",
         dirtyPcTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true },
         dirtyMobileTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true },
@@ -1471,7 +1528,7 @@
         const scopeLabels = { site: "진행 현장", single: "단건 공정", as: "A/S 목록", newSite: "신규 견적" };
         let siteRows = activeSites.map((site) => {
           const isChecked = state.checkedSiteKeys && state.checkedSiteKeys.has(site.siteKey);
-          const isSelected = mode === "sites" && state.selectedSiteKey === site.siteKey;
+          const isSelected = (mode === "sites" && state.selectedSiteKey === site.siteKey) || (mode === "quote" && state.selectedQuoteKey === site.siteKey);
           const cnt = site.totalTasksCount || (site.tasks && site.tasks.length) || 0;
           return `
             <div class="site-check-row ${isSelected ? "selected-site" : ""}" onclick="onSidebarSiteClick('${escJs(site.siteKey)}', event)">
@@ -1487,7 +1544,9 @@
           .join("");
 
         return `
-          <button type="button" class="btn-new-task-big" onclick="openNewTaskModal('', state.selectedDayStr)">➕ 새 일정 등록</button>
+          ${mode === "quote"
+            ? `<button type="button" class="btn-new-task-big" onclick="openEstimateModal(null)">➕ 새 신규견적 등록</button>`
+            : `<button type="button" class="btn-new-task-big" onclick="openNewTaskModal('', state.selectedDayStr)">➕ 새 일정 등록</button>`}
 
           <div class="sidebar-kpi-row">
             <div class="kpi-tile" onclick="selectCalDay('${todayYmd}'); switchMainTab('calendar');">
@@ -2225,55 +2284,364 @@
         `;
       }
 
-      // ================= [PC 탭 5: 신규 현장 견적] =================
-      function renderPcQuoteTab() {
+      // ================= [PC 탭 5: 신규 현장 견적 (기존 현장서식.js 동일 화면 구성)] =================
+      function getEstimateBadgeStyle(type, text) {
+        const clean = String(text || "").trim();
+        if (!clean) return { bg: "#f1f5f9", fg: "#64748b", border: "#e2e8f0", bold: false };
+        const colorTable = {
+          "계약 완료": { bg: "#dcfce7", fg: "#15803d", border: "#86efac", bold: true },
+          "견적서 전달": { bg: "#ccfbf1", fg: "#0f766e", border: "#99f6e4", bold: false },
+          "피드백 대기": { bg: "#fef3c7", fg: "#92400e", border: "#fde68a", bold: false },
+          "견적 작성 중": { bg: "#fce7f3", fg: "#9d174d", border: "#fbcfe8", bold: false },
+          "현장 방문 예정": { bg: "#fef9c3", fg: "#854d0e", border: "#fef08a", bold: false },
+          "현장 방문 완료": { bg: "#ffedd5", fg: "#9a3412", border: "#fed7aa", bold: false },
+          "1차상담 예정": { bg: "#e0e7ff", fg: "#3730a3", border: "#c7d2fe", bold: false },
+          "2차상담 예정": { bg: "#c7d2fe", fg: "#312e81", border: "#a5b4fc", bold: false },
+          "상담 중": { bg: "#ede9fe", fg: "#5b21b6", border: "#ddd6fe", bold: false },
+          "신규 문의": { bg: "#dbeafe", fg: "#1e40af", border: "#bfdbfe", bold: false },
+          "문의 접수": { bg: "#dbeafe", fg: "#1e40af", border: "#bfdbfe", bold: false },
+          "보류": { bg: "#f1f5f9", fg: "#475569", border: "#cbd5e1", bold: false },
+          "수주 실패": { bg: "#fee2e2", fg: "#b91c1c", border: "#fecaca", bold: false },
+          "실패": { bg: "#fee2e2", fg: "#b91c1c", border: "#fecaca", bold: false },
+          "긴급": { bg: "#fee2e2", fg: "#b91c1c", border: "#fca5a5", bold: true },
+          "높음": { bg: "#ffedd5", fg: "#c2410c", border: "#fdba74", bold: true },
+          "보통": { bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe", bold: false },
+          "낮음": { bg: "#f1f5f9", fg: "#64748b", border: "#cbd5e1", bold: false },
+          "전체공사": { bg: "#dbeafe", fg: "#1e40af", border: "#93c5fd", bold: true },
+          "주방": { bg: "#ffedd5", fg: "#c2410c", border: "#fed7aa", bold: false },
+          "욕실": { bg: "#f3e8ff", fg: "#7e22ce", border: "#e9d5ff", bold: false },
+          "도배·마루": { bg: "#dcfce7", fg: "#15803d", border: "#bbf7d0", bold: false },
+          "붙박이·가구": { bg: "#fef9c3", fg: "#854d0e", border: "#fef08a", bold: false },
+          "샷시·단열": { bg: "#fce7f3", fg: "#9d174d", border: "#fbcfe8", bold: false },
+          "기타": { bg: "#f1f5f9", fg: "#64748b", border: "#cbd5e1", bold: false },
+          "소개": { bg: "#dcfce7", fg: "#15803d", border: "#86efac", bold: false },
+          "온라인": { bg: "#dbeafe", fg: "#1e40af", border: "#bfdbfe", bold: false },
+          "기존 고객": { bg: "#f3e8ff", fg: "#7e22ce", border: "#e9d5ff", bold: false },
+          "현장 문의": { bg: "#ffedd5", fg: "#c2410c", border: "#fed7aa", bold: false },
+          "워크인": { bg: "#fee2e2", fg: "#b91c1c", border: "#fecaca", bold: false },
+          "블로그": { bg: "#fef9c3", fg: "#854d0e", border: "#fef08a", bold: false }
+        };
+        return colorTable[clean] || { bg: "#f1f5f9", fg: "#475569", border: "#e2e8f0", bold: false };
+      }
+
+      function buildEstimateBadgeHtml(type, text, labelPrefix) {
+        if (!text) return `<span style="color:#94a3b8;font-size:11px;">-</span>`;
+        const st = getEstimateBadgeStyle(type, text);
+        const prefix = labelPrefix ? `<span style="font-size:10px;opacity:0.75;margin-right:3px;">${escHtml(labelPrefix)}</span>` : "";
+        return `<span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:12px;font-size:11.5px;font-weight:${st.bold ? "800" : "700"};background:${st.bg};color:${st.fg};border:1px solid ${st.border};line-height:1.2;white-space:nowrap;">${prefix}${escHtml(text)}</span>`;
+      }
+
+      function formatEstimateAmtStr(amt) {
+        if (amt === "" || amt === null || amt === undefined) return "-";
+        if (typeof amt === "number") return amt > 0 ? amt.toLocaleString() + "원" : "-";
+        const num = parseInt(String(amt).replace(/[^0-9]/g, ""), 10);
+        if (!isNaN(num) && num > 0) return num.toLocaleString() + "원";
+        return String(amt).trim() || "-";
+      }
+
+      function formatEstimateDateYMD(val) {
+        if (!val || val === "-") return "-";
+        const s = String(val).trim();
+        if (!s || s === "-") return "-";
+        const m = s.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})/);
+        if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+        return s;
+      }
+
+      window.openSpreadsheetEstimateSheet = function () {
+        window.open("https://docs.google.com/spreadsheets/d/1V6Nb5ZB8gOfwDFsN8svMDZQYWXIJjGa9tuUYrVu0JhY/edit?gid=760414857#gid=760414857", "_blank", "noopener");
+      };
+
+      function getSortedQuotesForTab(statusMode) {
         const q = state.searchQuery.trim();
-        const quotes = getAllSites().filter((s) => s.scope === "newSite" && (state.quoteShowArchived || !s.isArchived));
-        const filtered = quotes.filter((s) => {
-          if (!q) return true;
+        const m = state.memberFilter;
+        const allNewSites = getAllSites().filter((s) => s.scope === "newSite");
+        const activeQuotes = allNewSites.filter((s) => !s.isArchived && !s.isAllCompleted);
+        const doneQuotes = allNewSites.filter((s) => s.isArchived || s.isAllCompleted);
+        const pool = statusMode === "done" ? doneQuotes : activeQuotes;
+
+        const filtered = pool.filter((s) => {
           const ed = s.estimateData || {};
-          return matchesQuery([s.siteName, ed.status, ed.scope, ed.clientPhone, ed.manager, ed.memo, ed.nextAction].join(" "), q);
+          const mgr = ed.manager || s.primaryManager || (s.tasks && s.tasks[0] && s.tasks[0].manager) || "";
+          if (m && !mgr.includes(m)) return false;
+          if (q) {
+            const hay = [s.siteName, ed.status, ed.priority, ed.scope, ed.source, ed.clientName, ed.clientPhone, mgr, ed.memo, ed.nextAction, ed.address].join(" ");
+            if (!matchesQuery(hay, q)) return false;
+          }
+          return true;
         });
 
-        const rowsHtml = filtered.map((s) => {
-          const ed = s.estimateData || {};
-          const amt = ed.expectedAmount ? formatKrw(ed.expectedAmount) : "-";
-          const stColor = String(ed.status || "").includes("완료") || String(ed.status || "").includes("계약")
-            ? "background:#dcfce7;color:#15803d;"
-            : String(ed.status || "").includes("실패")
-            ? "background:#f1f5f9;color:#64748b;"
-            : "background:#dbeafe;color:#1e40af;";
+        const prioOrder = { "긴급": 1, "높음": 2, "보통": 3, "낮음": 4 };
+        filtered.sort((a, b) => {
+          const ea = a.estimateData || {}, eb = b.estimateData || {};
+          if (state.quoteSortBy === "inquiry") {
+            const ad = ea.inquiryDate || "", bd = eb.inquiryDate || "";
+            if (ad && bd && ad !== bd) return bd.localeCompare(ad);
+            if (ad && !bd) return -1;
+            if (!ad && bd) return 1;
+            return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
+          }
+          const as = prioOrder[ea.priority || "보통"] || 99;
+          const bs = prioOrder[eb.priority || "보통"] || 99;
+          if (as !== bs) return as - bs;
+          const ad = ea.inquiryDate || "", bd = eb.inquiryDate || "";
+          if (ad && bd && ad !== bd) return bd.localeCompare(ad);
+          return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
+        });
+
+        return { allNewSites, activeQuotes, doneQuotes, filtered };
+      }
+
+      window.selectQuoteCard = function (siteKey) {
+        state.selectedQuoteKey = siteKey;
+        state.dirtyPcTabs.quote = true;
+        renderActiveViews();
+      };
+      window.setQuoteStatusFilter = function (st) {
+        state.quoteStatusFilter = st === "done" ? "done" : "active";
+        state.quoteShowArchived = state.quoteStatusFilter === "done";
+        state.selectedQuoteKey = null;
+        markAllDirty();
+        renderActiveViews();
+      };
+      window.setQuoteSort = function (sortBy) {
+        state.quoteSortBy = sortBy === "inquiry" ? "inquiry" : "priority";
+        state.dirtyPcTabs.quote = true;
+        renderActiveViews();
+      };
+      window.toggleMobileQuoteCard = function (siteKey) {
+        if (state.mobileExpandedQuoteKeys.has(siteKey)) state.mobileExpandedQuoteKeys.delete(siteKey);
+        else state.mobileExpandedQuoteKeys.add(siteKey);
+        state.dirtyMobileTabs.quote = true;
+        renderActiveViews();
+      };
+      window.onFilterQuoteTable = function (query) {
+        state.quoteTableSearch = String(query || "");
+        const q = state.quoteTableSearch.toLowerCase().trim();
+        document.querySelectorAll("#pcEstimateDataTable tbody tr").forEach((r) => {
+          const s = r.getAttribute("data-search") || "";
+          r.style.display = (!q || s.indexOf(q) !== -1) ? "" : "none";
+        });
+      };
+
+      function renderPcQuoteTab() {
+        const sb = document.getElementById("pcQuoteSidebar");
+        if (sb) sb.innerHTML = renderSharedSidebarHtml("quote");
+
+        const isDoneView = state.quoteStatusFilter === "done";
+        const { activeQuotes, doneQuotes, filtered } = getSortedQuotesForTab(state.quoteStatusFilter);
+
+        let curSite = filtered.find((s) => s.siteKey === state.selectedQuoteKey) || filtered[0] || null;
+        if (curSite) state.selectedQuoteKey = curSite.siteKey;
+
+        const carouselHtml = filtered.map((s) => {
+          const isSel = curSite && s.siteKey === curSite.siteKey;
+          const eData = s.estimateData || {};
+          const eSt = eData.status || "신규 문의";
+          const stStyle = getEstimateBadgeStyle("status", eSt);
+          const eAmtStr = formatEstimateAmtStr(eData.expectedAmount);
+          const sMgr = eData.manager || s.primaryManager || (s.tasks && s.tasks[0] ? s.tasks[0].manager : "") || "미지정";
           return `
-            <tr style="cursor:pointer;" onclick="openEstimateModal('${escJs(s.siteKey)}')">
-              <td>${escHtml(ed.inquiryDate || s.earliestDateDisplay || "-")}</td>
-              <td><strong>${escHtml(s.siteName)}</strong></td>
-              <td>${escHtml(ed.scope || "-")}</td>
-              <td><span style="${stColor}padding:2px 7px;border-radius:4px;font-weight:700;font-size:11px;">${escHtml(ed.status || "진행중")}</span></td>
-              <td style="font-weight:700;">${escHtml(amt)}</td>
-              <td>👤 ${escHtml(ed.manager || "-")}</td>
-              <td style="color:var(--text-sub);max-width:220px;">${escHtml(ed.nextAction || ed.memo || "-")}</td>
-              <td onclick="event.stopPropagation();">${ed.clientPhone ? `<a href="tel:${escHtml(ed.clientPhone.replace(/[^0-9]/g, ""))}" class="btn-tool-tag">📞 ${escHtml(ed.clientPhone)}</a>` : `<button type="button" class="btn-tool-tag" onclick="openEstimateModal('${escJs(s.siteKey)}')">수정</button>`}</td>
-            </tr>`;
-        }).join("") || `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px;">신규 견적 데이터가 없습니다.</td></tr>`;
+            <div class="site-carousel-card ${isSel ? "active" : ""}" style="gap:6px;" onclick="selectQuoteCard('${escJs(s.siteKey)}')">
+              <div class="scc-top">
+                <span class="scc-title"><span style="color:${escHtml(stStyle.fg)};">●</span> ${escHtml(s.siteName)}</span>
+                <span style="font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:10px;background:${stStyle.bg};color:${stStyle.fg};border:1px solid ${stStyle.border};white-space:nowrap;flex-shrink:0;">${escHtml(eSt)}</span>
+              </div>
+              <div class="scc-sub" style="gap:5px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                  <span style="font-size:11.5px;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">👤 ${escHtml(sMgr)}</span>
+                  ${buildEstimateBadgeHtml("priority", eData.priority || "보통")}
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                  ${buildEstimateBadgeHtml("scope", eData.scope || "전체공사")}
+                  <span style="color:#2563eb;font-weight:800;font-size:12px;white-space:nowrap;">${eAmtStr}</span>
+                </div>
+              </div>
+            </div>`;
+        }).join("");
+
+        let detailHtml = "";
+        if (!curSite) {
+          detailHtml = `
+            <div class="detail-card-panel" style="padding:50px 20px;text-align:center;">
+              <div style="font-size:34px;margin-bottom:10px;">📋</div>
+              <p style="color:var(--text-muted);font-weight:700;margin-bottom:14px;">${isDoneView ? "계약 완료된 신규현장이 없습니다." : "조건에 맞는 진행 신규현장이 없습니다."}</p>
+              <button type="button" class="btn-act-blue" onclick="openEstimateModal(null)">+ 신규 견적 등록</button>
+            </div>`;
+        } else {
+          const est = curSite.estimateData || {};
+          const siteName = curSite.siteName || "";
+          const clientName = est.clientName || "";
+          const rawPhone = String(est.clientPhone || "").trim();
+          const cleanPhone = rawPhone.replace(/[^0-9+]/g, "");
+          const hasPhone = Boolean(cleanPhone && cleanPhone.length >= 7 && rawPhone !== "-" && rawPhone !== "미등록");
+          const manager = est.manager || curSite.primaryManager || "조항만";
+          const address = est.address || "";
+          const expectedAmtStr = formatEstimateAmtStr(est.expectedAmount);
+          const contractAmtStr = formatEstimateAmtStr(est.contractAmount);
+
+          const statusBadge = buildEstimateBadgeHtml("status", est.status || "신규 문의");
+          const priorityBadge = buildEstimateBadgeHtml("priority", est.priority || "보통", "우선순위: ");
+          const scopeBadge = buildEstimateBadgeHtml("scope", est.scope || "전체공사", "공사범위: ");
+          const sourceBadge = buildEstimateBadgeHtml("source", est.source || "온라인", "유입: ");
+          const phoneLink = hasPhone
+            ? `<a href="tel:${escHtml(cleanPhone)}" class="pc-est-call-btn" title="고객 전화 걸기 (${escHtml(rawPhone)})">📞 ${escHtml(rawPhone)}</a>`
+            : `<span style="color:#94a3b8;font-size:12px;">연락처 미등록</span>`;
+
+          const tableRowsHtml = filtered.map((s, idx) => {
+            const e = s.estimateData || {};
+            const isRowSel = s.siteKey === curSite.siteKey;
+            const rowAmtStr = formatEstimateAmtStr(e.expectedAmount);
+            const rRawPhone = String(e.clientPhone || "").trim();
+            const rCleanPhone = rRawPhone.replace(/[^0-9+]/g, "");
+            const rHasPhone = Boolean(rCleanPhone && rCleanPhone.length >= 7 && rRawPhone !== "-" && rRawPhone !== "미등록");
+            const searchStr = [s.siteName, e.clientName, e.clientPhone, e.memo, e.nextAction, e.manager, e.scope, e.status].join(" ").toLowerCase();
+            return `
+              <tr class="pc-est-table-row ${isRowSel ? "selected-row" : ""}" data-search="${escHtml(searchStr)}" onclick="selectQuoteCard('${escJs(s.siteKey)}')" ondblclick="openEstimateModal('${escJs(s.siteKey)}')" title="클릭: 상세 보기 · 더블클릭: 정보 수정">
+                <td style="text-align:center;color:#94a3b8;font-weight:700;">${idx + 1}</td>
+                <td><strong style="color:${isRowSel ? "#1d4ed8" : "#0f172a"};font-size:13px;">${escHtml(s.siteName)}</strong></td>
+                <td style="text-align:center;">${buildEstimateBadgeHtml("status", e.status || "신규 문의")}</td>
+                <td style="text-align:center;">${buildEstimateBadgeHtml("priority", e.priority || "보통")}</td>
+                <td style="text-align:center;">${buildEstimateBadgeHtml("scope", e.scope || "전체공사")}</td>
+                <td style="text-align:center;">${buildEstimateBadgeHtml("source", e.source || "온라인")}</td>
+                <td style="text-align:center;font-weight:600;color:#1e293b;">${e.clientName ? escHtml(e.clientName) : `<span style="color:#94a3b8;">-</span>`}</td>
+                <td style="text-align:center;font-size:12px;white-space:nowrap;">${rHasPhone ? `<a href="tel:${escHtml(rCleanPhone)}" style="color:#2563eb;text-decoration:none;font-weight:600;" onclick="event.stopPropagation();">📞 ${escHtml(rRawPhone)}</a>` : `<span style="color:#94a3b8;">-</span>`}</td>
+                <td style="text-align:center;white-space:nowrap;"><span style="background:#f1f5f9;padding:2px 8px;border-radius:10px;font-size:11.5px;font-weight:700;color:#334155;">${escHtml(e.manager || "조항만")}</span></td>
+                <td style="text-align:right;font-weight:700;color:#2563eb;white-space:nowrap;">${rowAmtStr}</td>
+                <td style="text-align:center;font-size:12px;color:#475569;white-space:nowrap;">${escHtml(formatEstimateDateYMD(e.expectedDate))}</td>
+                <td style="text-align:center;white-space:nowrap;" onclick="event.stopPropagation();">
+                  <button type="button" class="btn-tool-tag" onclick="openEstimateModal('${escJs(s.siteKey)}')">수정</button>
+                  <button type="button" class="btn-tool-tag" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2;margin-left:3px;" onclick="openDeleteConfirm('site', '${escJs(s.siteKey)}')">삭제</button>
+                </td>
+              </tr>`;
+          }).join("");
+
+          detailHtml = `
+            <div class="pc-estimate-detail-container">
+              <div class="pc-est-hero-card">
+                <div class="pc-est-hero-top">
+                  <div class="pc-est-title-wrap">
+                    <div class="pc-est-badge-row">
+                      ${statusBadge} ${priorityBadge} ${scopeBadge} ${sourceBadge}
+                    </div>
+                    <h2 class="pc-est-site-name">📋 ${escHtml(siteName)}</h2>
+                    <div class="pc-est-meta-line">
+                      <span>담당자: <strong>${escHtml(manager)}</strong></span>
+                      <span class="pc-est-dot">•</span>
+                      <span>고객: <strong>${escHtml(clientName || "성명 미등록")}</strong></span>
+                      <span class="pc-est-dot">•</span>
+                      <span>${phoneLink}</span>
+                      ${est.inquiryDate ? `<span class="pc-est-dot">•</span><span>문의일: <strong>${escHtml(formatEstimateDateYMD(est.inquiryDate))}</strong></span>` : ""}
+                    </div>
+                  </div>
+                  <div class="pc-est-hero-actions">
+                    <button type="button" class="btn-act-blue" onclick="openSpreadsheetEstimateSheet()" title="스프레드시트 신규견적 탭 열기">📊 시트에서 보기</button>
+                    <button type="button" class="btn-act-blue" style="background:#3b82f6;" onclick="openEstimateModal('${escJs(curSite.siteKey)}')" title="신규현장 정보 수정">✏️ 정보 수정</button>
+                    <button type="button" class="btn-act-danger" onclick="openDeleteConfirm('site', '${escJs(curSite.siteKey)}')" title="이 신규현장 삭제">🗑️ 현장 삭제</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pc-est-grid-cards">
+                <div class="pc-est-card">
+                  <div class="pc-est-card-head"><span class="pc-est-card-icon">👤</span><span class="pc-est-card-title">고객 및 현장 정보</span></div>
+                  <div class="pc-est-card-body">
+                    <div class="pc-est-info-row"><span class="lbl">고객 성명</span><span class="val"><strong>${escHtml(clientName || "-")}</strong></span></div>
+                    <div class="pc-est-info-row"><span class="lbl">연락처</span><span class="val">${hasPhone ? `<a href="tel:${escHtml(cleanPhone)}" style="color:#2563eb;font-weight:700;text-decoration:none;">${escHtml(rawPhone)} 📞</a>` : "-"}</span></div>
+                    <div class="pc-est-info-row"><span class="lbl">담당자</span><span class="val">${escHtml(manager)}</span></div>
+                    <div class="pc-est-info-row"><span class="lbl">현장 주소</span><span class="val">${address ? `<span style="color:#0f172a;font-weight:600;">${escHtml(address)}</span> <a href="https://map.naver.com/p/search/${encodeURIComponent(address)}" target="_blank" rel="noopener noreferrer" style="color:#16a34a;font-size:11px;margin-left:4px;text-decoration:underline;">지도 ↗</a>` : `<span style="color:#94a3b8;">주소 미등록</span>`}</span></div>
+                  </div>
+                </div>
+
+                <div class="pc-est-card highlight-card">
+                  <div class="pc-est-card-head"><span class="pc-est-card-icon">💰</span><span class="pc-est-card-title">견적 및 계약 금액</span></div>
+                  <div class="pc-est-card-body">
+                    <div class="pc-est-info-row"><span class="lbl">예상 공사금액</span><span class="val big-amt" style="color:#2563eb;">${expectedAmtStr}</span></div>
+                    <div class="pc-est-info-row"><span class="lbl">최종 계약금액</span><span class="val big-amt" style="color:${contractAmtStr !== "-" ? "#15803d" : "#94a3b8"};">${contractAmtStr}</span></div>
+                    <div class="pc-est-info-row"><span class="lbl">공사 범위</span><span class="val">${buildEstimateBadgeHtml("scope", est.scope || "-")}</span></div>
+                    <div class="pc-est-info-row"><span class="lbl">유입 경로</span><span class="val">${buildEstimateBadgeHtml("source", est.source || "-")}</span></div>
+                  </div>
+                </div>
+
+                <div class="pc-est-card">
+                  <div class="pc-est-card-head"><span class="pc-est-card-icon">🗓️</span><span class="pc-est-card-title">주요 진행 일정</span></div>
+                  <div class="pc-est-card-body">
+                    <div class="pc-est-info-row"><span class="lbl">문의 접수일</span><span class="val">${escHtml(formatEstimateDateYMD(est.inquiryDate))}</span></div>
+                    <div class="pc-est-info-row"><span class="lbl">1차 상담일</span><span class="val">${escHtml(formatEstimateDateYMD(est.consultDate))}</span></div>
+                    <div class="pc-est-info-row"><span class="lbl">현장 방문일</span><span class="val">${escHtml(formatEstimateDateYMD(est.visitDate))}</span></div>
+                    <div class="pc-est-info-row"><span class="lbl">견적서 전달일</span><span class="val">${escHtml(formatEstimateDateYMD(est.estimateSendDate))}</span></div>
+                    <div class="pc-est-info-row"><span class="lbl">공사 착공예정</span><span class="val" style="color:#b45309;font-weight:700;">${escHtml(formatEstimateDateYMD(est.expectedDate))}</span></div>
+                  </div>
+                </div>
+
+                <div class="pc-est-card">
+                  <div class="pc-est-card-head"><span class="pc-est-card-icon">📌</span><span class="pc-est-card-title">다음 액션 및 상담 메모</span></div>
+                  <div class="pc-est-card-body">
+                    <div class="pc-est-next-action-box">
+                      <div class="action-tag">⚡ 다음 해야 할 일 (Next Action)</div>
+                      <div class="action-text">${escHtml(est.nextAction || "지정된 다음 액션이 없습니다.")}</div>
+                    </div>
+                    ${est.memo ? `<div class="pc-est-memo-box"><strong>상담 메모:</strong> ${escHtml(est.memo)}</div>` : ""}
+                    ${est.failReason ? `<div class="pc-est-fail-box"><strong>⚠️ 보류/실패 사유:</strong> ${escHtml(est.failReason)}</div>` : ""}
+                    ${est.estimateFile ? `<div class="pc-est-info-row" style="margin-top:4px;"><span class="lbl">견적서 파일</span><span class="val"><a href="${escHtml(est.estimateFile)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;">파일 열기 ↗</a></span></div>` : ""}
+                  </div>
+                </div>
+              </div>
+
+              <div class="pc-est-table-card">
+                <div class="pc-est-table-header">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:16px;">${isDoneView ? "🎉" : "📋"}</span>
+                    <h3 style="margin:0;font-size:15px;font-weight:800;color:#0f172a;">${isDoneView ? "신규견적 계약 완료 데이터 현황" : "신규견적 시트 전체 데이터 현황"}</h3>
+                    <span class="pc-est-table-count">${filtered.length}건</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="text" id="pcEstimateSearchInput" value="${escHtml(state.quoteTableSearch)}" placeholder="현장명, 고객명, 연락처 검색..." oninput="onFilterQuoteTable(this.value)" style="padding:6px 12px;border:1.5px solid #cbd5e1;border-radius:7px;font-size:12px;outline:none;width:210px;">
+                  </div>
+                </div>
+                <div style="overflow-x:auto;">
+                  <table class="pc-est-table" id="pcEstimateDataTable">
+                    <thead>
+                      <tr>
+                        <th style="width:38px;text-align:center;">No</th>
+                        <th style="min-width:155px;">현장명</th>
+                        <th style="width:105px;text-align:center;">진행 단계</th>
+                        <th style="width:78px;text-align:center;">우선순위</th>
+                        <th style="width:92px;text-align:center;">공사 범위</th>
+                        <th style="width:82px;text-align:center;">유입 경로</th>
+                        <th style="min-width:85px;text-align:center;">고객명</th>
+                        <th style="min-width:120px;text-align:center;">연락처</th>
+                        <th style="width:72px;text-align:center;">담당자</th>
+                        <th style="min-width:105px;text-align:right;">예상 공사금액</th>
+                        <th style="width:96px;text-align:center;">공사 예정일</th>
+                        <th style="width:100px;text-align:center;">관리</th>
+                      </tr>
+                    </thead>
+                    <tbody>${tableRowsHtml}</tbody>
+                  </table>
+                </div>
+              </div>
+            </div>`;
+        }
 
         document.getElementById("pcQuoteMain").innerHTML = `
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-            <div>
-              <h2 style="font-size:20px;font-weight:800;">📋 신규 현장 문의 및 견적 파이프라인 (${filtered.length}건)</h2>
-              <p style="font-size:12.5px;color:var(--text-muted);margin-top:3px;">Google Sheets [신규견적] 시트 연동 · 행 클릭 시 상세 수정</p>
+          <div class="site-carousel-controls">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="pc-est-status-tabs">
+                <button type="button" class="pc-c-status-tab ${!isDoneView ? "active" : ""}" onclick="setQuoteStatusFilter('active')">📋 신규현장 <span class="pc-badge-count">${activeQuotes.length}</span></button>
+                <button type="button" class="pc-c-status-tab done-tab ${isDoneView ? "active" : ""}" onclick="setQuoteStatusFilter('done')">🎉 계약 완료 <span class="pc-badge-count-done">${doneQuotes.length}</span></button>
+              </div>
             </div>
-            <div style="display:flex;gap:8px;">
-              <button type="button" class="btn-act-white" onclick="toggleQuoteArchived()">${state.quoteShowArchived ? "진행중만 보기" : "보관/완료 포함 보기"}</button>
-              <button type="button" class="btn-act-blue" onclick="openEstimateModal(null)">+ 신규 견적 등록</button>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <button type="button" class="st-pill ${state.quoteSortBy === "priority" ? "active" : ""}" onclick="setQuoteSort('priority')">우선순위순</button>
+              <button type="button" class="st-pill ${state.quoteSortBy === "inquiry" ? "active" : ""}" onclick="setQuoteSort('inquiry')">문의일순</button>
+              <button type="button" class="btn-act-blue" style="height:29px;padding:0 11px;font-size:12px;" onclick="openEstimateModal(null)">+ 신규 견적 등록</button>
             </div>
           </div>
-          <div class="table-container">
-            <table class="clean-table">
-              <thead><tr><th>문의일</th><th>현장명</th><th>공사 범위</th><th>진행 상태</th><th>예상 금액</th><th>담당자</th><th>다음 일정 / 메모</th><th>연락처 / 관리</th></tr></thead>
-              <tbody>${rowsHtml}</tbody>
-            </table>
-          </div>
+          ${filtered.length ? `<div class="site-carousel-track">${carouselHtml}</div>` : ""}
+          ${detailHtml}
         `;
+        if (state.quoteTableSearch) window.onFilterQuoteTable(state.quoteTableSearch);
       }
 
       // ================= [PC 탭 6: 재무·원장] =================
@@ -2641,28 +3009,98 @@
         `;
       }
 
-      // [모바일 탭 5: 신규] & [모바일 탭 6: 재무]
+      // [모바일 탭 5: 신규 (기존 현장서식.js 동일 아코디언 카드)] & [모바일 탭 6: 재무]
       function renderMobileQuoteTab() {
-        const quotes = getAllSites().filter((s) => s.scope === "newSite" && !s.isArchived);
-        document.getElementById("m-page-quote").innerHTML = `
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <span style="font-size:16px;font-weight:800;">신규 견적 (${quotes.length})</span>
-            <button type="button" class="btn-act-blue" style="padding:5px 10px;font-size:11.5px;" onclick="openEstimateModal(null)">+ 등록</button>
-          </div>
-          ${quotes.map((s) => {
-            const ed = s.estimateData || {};
-            return `
-              <div class="m-card-box" onclick="openEstimateModal('${escJs(s.siteKey)}')">
-                <div style="display:flex;justify-content:space-between;align-items:center;">
-                  <span style="font-size:13.5px;font-weight:800;">${escHtml(s.siteName)}</span>
-                  <span style="font-size:10.5px;background:#dbeafe;color:#1e40af;padding:2px 6px;border-radius:4px;font-weight:700;">${escHtml(ed.status || "진행")}</span>
+        const isDoneMode = state.quoteStatusFilter === "done";
+        const { activeQuotes, doneQuotes, filtered } = getSortedQuotesForTab(state.quoteStatusFilter);
+
+        const headBarHtml = `
+          <div class="mobile-est-head-bar" style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 0 10px;margin-bottom:8px;border-bottom:1px solid #e2e8f0;">
+            <div style="display:flex;background:#f1f5f9;padding:2px;border-radius:8px;gap:2px;">
+              <button type="button" onclick="setQuoteStatusFilter('active')" style="padding:5px 9px;font-size:11.5px;font-weight:700;border:none;border-radius:6px;cursor:pointer;background:${!isDoneMode ? "#ffffff" : "transparent"};color:${!isDoneMode ? "#2563eb" : "#64748b"};box-shadow:${!isDoneMode ? "0 1px 3px rgba(0,0,0,0.08)" : "none"};">
+                📋 신규현장 <span style="margin-left:2px;font-size:10px;padding:1px 5px;border-radius:8px;background:${!isDoneMode ? "#eff6ff" : "#e2e8f0"};color:${!isDoneMode ? "#2563eb" : "#64748b"};">${activeQuotes.length}</span>
+              </button>
+              <button type="button" onclick="setQuoteStatusFilter('done')" style="padding:5px 9px;font-size:11.5px;font-weight:700;border:none;border-radius:6px;cursor:pointer;background:${isDoneMode ? "#ffffff" : "transparent"};color:${isDoneMode ? "#059669" : "#64748b"};box-shadow:${isDoneMode ? "0 1px 3px rgba(0,0,0,0.08)" : "none"};">
+                🎉 계약 완료 <span style="margin-left:2px;font-size:10px;padding:1px 5px;border-radius:8px;background:${isDoneMode ? "#ecfdf5" : "#e2e8f0"};color:${isDoneMode ? "#059669" : "#64748b"};">${doneQuotes.length}</span>
+              </button>
+            </div>
+            <div style="display:flex;gap:4px;">
+              <button type="button" onclick="openEstimateModal(null)" style="padding:5px 8px;font-size:11px;font-weight:800;border:none;background:#2563eb;color:#ffffff;border-radius:6px;cursor:pointer;">+ 등록</button>
+              <button type="button" onclick="openSpreadsheetEstimateSheet()" style="padding:5px 8px;font-size:11px;font-weight:700;border:1px solid #cbd5e1;background:#ffffff;color:#334155;border-radius:6px;cursor:pointer;white-space:nowrap;">📊 시트 ↗</button>
+            </div>
+          </div>`;
+
+        const cardsHtml = filtered.length ? filtered.map((s) => {
+          const eData = s.estimateData || {};
+          const eSt = eData.status || "신규 문의";
+          const stStyle = getEstimateBadgeStyle("status", eSt);
+          const eAmtStr = formatEstimateAmtStr(eData.expectedAmount);
+          const sMgr = eData.manager || s.primaryManager || "미지정";
+          const isExpanded = state.mobileExpandedQuoteKeys.has(s.siteKey);
+          const mRawPhone = String(eData.clientPhone || "").trim();
+          const mCleanPhone = mRawPhone.replace(/[^0-9+]/g, "");
+          const mHasPhone = Boolean(mCleanPhone && mCleanPhone.length >= 7 && mRawPhone !== "-" && mRawPhone !== "미등록");
+
+          return `
+            <div class="mobile-est-card" style="background:#ffffff;border:1.5px solid ${isExpanded ? "#93c5fd" : "#e2e8f0"};border-radius:10px;padding:12px 14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.04);cursor:pointer;" onclick="toggleMobileQuoteCard('${escJs(s.siteKey)}')">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+                <div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1;">
+                  <span style="width:8px;height:8px;border-radius:50%;background:${stStyle.fg};flex-shrink:0;"></span>
+                  <span style="font-size:14px;font-weight:800;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.siteName)}</span>
                 </div>
-                <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">${escHtml(ed.scope || "-")} · ${ed.expectedAmount ? formatKrw(ed.expectedAmount) : "금액 미정"}</div>
-                <div style="font-size:11px;color:#2563eb;margin-top:5px;font-weight:700;">담당: ${escHtml(ed.manager || "-")} ${ed.nextAction ? "· " + escHtml(ed.nextAction) : ""}</div>
-                ${ed.clientPhone ? `<a href="tel:${escHtml(ed.clientPhone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" class="m-call-btn-large">📞 ${escHtml(ed.clientPhone)} 전화 걸기</a>` : ""}
-              </div>`;
-          }).join("")}
-        `;
+                <span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;background:${stStyle.bg};color:${stStyle.fg};border:1px solid ${stStyle.border};white-space:nowrap;flex-shrink:0;">${escHtml(eSt)}</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-bottom:6px;color:#475569;">
+                <span style="display:inline-flex;align-items:center;gap:4px;font-weight:600;color:#334155;">👤 ${escHtml(sMgr)}</span>
+                ${buildEstimateBadgeHtml("priority", eData.priority || "보통")}
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;">
+                <span>${buildEstimateBadgeHtml("scope", eData.scope || "전체공사")}</span>
+                <span style="color:#2563eb;font-weight:800;font-size:13px;">${eAmtStr}</span>
+              </div>
+              ${isExpanded ? `
+                <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #cbd5e1;font-size:12px;display:flex;flex-direction:column;gap:6px;" onclick="event.stopPropagation()">
+                  <div style="display:flex;align-items:center;justify-content:space-between;background:#f8fafc;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0;">
+                    <div>
+                      <div style="font-size:11px;color:#64748b;">고객 성명 / 연락처</div>
+                      <div style="font-size:13px;font-weight:800;color:#0f172a;margin-top:1px;">${escHtml(eData.clientName || "성명 미등록")}${mHasPhone ? ` <span style="font-size:12px;color:#475569;font-weight:600;margin-left:4px;">(${escHtml(mRawPhone)})</span>` : ""}</div>
+                    </div>
+                    ${mHasPhone ? `<a href="tel:${escHtml(mCleanPhone)}" style="width:34px;height:34px;border-radius:8px;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;display:inline-flex;align-items:center;justify-content:center;">📞</a>` : `<span style="color:#94a3b8;font-size:11px;font-weight:600;">연락처 미등록</span>`}
+                  </div>
+                  ${eData.address ? `
+                    <div style="background:#f8fafc;padding:6px 10px;border-radius:8px;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;">
+                      <span style="color:#475569;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:6px;">📍 ${escHtml(eData.address)}</span>
+                      <a href="https://map.naver.com/p/search/${encodeURIComponent(eData.address)}" target="_blank" rel="noopener noreferrer" style="color:#16a34a;font-weight:700;font-size:11px;white-space:nowrap;text-decoration:underline;">지도 ↗</a>
+                    </div>` : ""}
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                    <div style="background:#f8fafc;padding:6px 8px;border-radius:6px;border:1px solid #e2e8f0;"><span style="color:#64748b;font-size:10.5px;">문의 접수일:</span> <strong style="color:#0f172a;">${escHtml(formatEstimateDateYMD(eData.inquiryDate))}</strong></div>
+                    <div style="background:#f8fafc;padding:6px 8px;border-radius:6px;border:1px solid #e2e8f0;"><span style="color:#64748b;font-size:10.5px;">현장 방문일:</span> <strong style="color:#0f172a;">${escHtml(formatEstimateDateYMD(eData.visitDate))}</strong></div>
+                    <div style="background:#f8fafc;padding:6px 8px;border-radius:6px;border:1px solid #e2e8f0;"><span style="color:#64748b;font-size:10.5px;">견적서 전달:</span> <strong style="color:#0f172a;">${escHtml(formatEstimateDateYMD(eData.estimateSendDate))}</strong></div>
+                    <div style="background:#f8fafc;padding:6px 8px;border-radius:6px;border:1px solid #e2e8f0;"><span style="color:#64748b;font-size:10.5px;">착공 예정일:</span> <strong style="color:#b45309;">${escHtml(formatEstimateDateYMD(eData.expectedDate))}</strong></div>
+                  </div>
+                  ${eData.contractAmount ? `
+                    <div style="background:#f0fdf4;padding:6px 10px;border-radius:6px;border:1px solid #86efac;display:flex;justify-content:space-between;align-items:center;">
+                      <span style="color:#166534;font-weight:700;">최종 계약금액</span>
+                      <span style="color:#15803d;font-weight:900;font-size:13px;">${formatEstimateAmtStr(eData.contractAmount)}</span>
+                    </div>` : ""}
+                  ${eData.nextAction ? `
+                    <div style="background:#fffbeb;padding:6px 10px;border-radius:6px;border:1px solid #fde68a;">
+                      <div style="color:#92400e;font-size:10.5px;font-weight:800;">⚡ 다음 해야 할 일</div>
+                      <div style="color:#78350f;font-weight:600;margin-top:2px;">${escHtml(eData.nextAction)}</div>
+                    </div>` : ""}
+                  ${eData.memo ? `<div style="background:#f8fafc;padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;color:#334155;"><strong>상담 메모:</strong> ${escHtml(eData.memo)}</div>` : ""}
+                  <div style="display:flex;gap:6px;margin-top:4px;">
+                    <button type="button" onclick="openEstimateModal('${escJs(s.siteKey)}')" style="flex:1;padding:7px;background:#3b82f6;color:#ffffff;border:none;border-radius:6px;font-weight:700;font-size:11.5px;cursor:pointer;">✏️ 정보 수정</button>
+                    <button type="button" onclick="openSpreadsheetEstimateSheet()" style="flex:1;padding:7px;background:#2563eb;color:#ffffff;border:none;border-radius:6px;font-weight:700;font-size:11.5px;cursor:pointer;">📊 시트에서 보기</button>
+                    <button type="button" onclick="openDeleteConfirm('site', '${escJs(s.siteKey)}')" style="padding:7px 9px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-weight:700;font-size:11.5px;cursor:pointer;">🗑️</button>
+                    <button type="button" onclick="toggleMobileQuoteCard('${escJs(s.siteKey)}')" style="padding:7px 10px;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;border-radius:6px;font-weight:700;font-size:11.5px;cursor:pointer;">접기 ▲</button>
+                  </div>
+                </div>
+              ` : `<div style="text-align:center;margin-top:6px;font-size:10.5px;color:#94a3b8;font-weight:600;">▼ 탭하여 상세 정보 보기</div>`}
+            </div>`;
+        }).join("") : `<div style="text-align:center;padding:36px 16px;color:#94a3b8;font-size:13px;background:#ffffff;border-radius:10px;border:1px dashed #cbd5e1;"><div style="font-size:24px;margin-bottom:6px;">📋</div><div>${isDoneMode ? "계약 완료된 신규현장이 없습니다." : "진행 중인 신규현장이 없습니다."}</div></div>`;
+
+        document.getElementById("m-page-quote").innerHTML = headBarHtml + cardsHtml;
       }
 
       function renderMobileFinanceTab() {
@@ -3611,7 +4049,7 @@
         };
         state._estCtx = { siteKey, isEdit: !!site, ed: Object.assign({}, ed) };
         const members = getMembersList();
-        const statuses = ["문의 접수", "1차상담 예정", "현장 방문 예정", "견적 작성 중", "견적서 전달", "피드백 대기", "2차상담 예정", "계약 완료", "보류", "실패"];
+        const statuses = ["신규 문의", "상담 중", "1차상담 예정", "2차상담 예정", "현장 방문 예정", "현장 방문 완료", "견적 작성 중", "견적서 전달", "피드백 대기", "계약 완료", "보류", "수주 실패", "문의 접수", "실패"];
         document.getElementById("estimateModalTitle").textContent = site ? `📋 [${ed.siteName}] 신규 견적 수정` : "📋 신규 현장 견적 등록";
         document.getElementById("estimateModalBody").innerHTML = `
           <div class="form-grid-3">
@@ -3683,14 +4121,18 @@
           if (s) {
             s.siteName = siteName;
             s.estimateData = ed;
-            s.isArchived = ed.status === "계약 완료" || ed.status === "실패";
+            s.isArchived = ed.status === "계약 완료" || ed.status === "수주 실패" || ed.status === "실패";
+            s.isAllCompleted = s.isArchived;
+            state.selectedQuoteKey = s.siteKey;
           }
         } else {
+          const newKey = "NEWSITE::" + siteName;
           state.dashData.sites.unshift({
-            siteKey: "NEWSITE::" + siteName, siteName, colorCode: "1", colorHex: "#0284c7",
+            siteKey: newKey, siteName, colorCode: "1", colorHex: "#0284c7",
             tasks: [{ id: "est_" + Date.now(), taskName: ed.status, dateDisplay: ed.inquiryDate, startDateStr: ed.inquiryDate, endDateStr: ed.inquiryDate, manager: ed.manager, status: ed.status, scope: "newSite" }],
-            scope: "newSite", isArchived: false, estimateData: ed, totalTasksCount: 1, completedTasksCount: 0, delayedTasksCount: 0, progressRate: 0
+            scope: "newSite", isArchived: false, isAllCompleted: false, estimateData: ed, totalTasksCount: 1, completedTasksCount: 0, delayedTasksCount: 0, progressRate: 0
           });
+          state.selectedQuoteKey = newKey;
         }
         if (window.WSDataService) window.WSDataService.saveEstimate(ctx.isEdit, ed, state.dashData);
         window.closeModal("estimateEditModal");
@@ -3975,6 +4417,17 @@
       window.switchMainTab = function (tabKey) {
         if (state.device === "mobile" && IS_PREVIEW_MODE) window.switchDeviceMode("pc");
         state.pcTab = tabKey;
+        if (tabKey === "quote") {
+          if (state.scope !== "newSite") {
+            state.scope = "newSite";
+            markAllDirty();
+          }
+        } else if ((tabKey === "sites" || tabKey === "calendar") && state.scope === "newSite") {
+          state.scope = "site";
+          state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
+          state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
+          markAllDirty();
+        }
         document.querySelectorAll(".nav-tab-item").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-tab") === tabKey));
         document.querySelectorAll(".page-container").forEach((page) => page.classList.remove("active"));
         const target = document.getElementById("page-" + tabKey);
@@ -3984,6 +4437,17 @@
 
       window.switchMobileTab = function (tabKey) {
         state.mobileTab = tabKey;
+        if (tabKey === "quote") {
+          if (state.scope !== "newSite") {
+            state.scope = "newSite";
+            markAllDirty();
+          }
+        } else if ((tabKey === "sites" || tabKey === "calendar") && state.scope === "newSite") {
+          state.scope = "site";
+          state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
+          state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
+          markAllDirty();
+        }
         document.querySelectorAll(".m-bottom-btn").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-mtab") === tabKey));
         document.querySelectorAll(".m-page-pane").forEach((p) => p.classList.remove("active"));
         const target = document.getElementById("m-page-" + tabKey);
@@ -3997,6 +4461,7 @@
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
         markAllDirty();
         if (scope === "newSite") window.switchMainTab("quote");
+        else if (state.pcTab === "quote") window.switchMainTab("sites");
         else renderActiveViews();
       };
 
@@ -4006,6 +4471,7 @@
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
         markAllDirty();
         if (scope === "newSite") window.switchMobileTab("quote");
+        else if (state.mobileTab === "quote") window.switchMobileTab("sites");
         else renderActiveViews();
       };
 
@@ -4071,6 +4537,13 @@
       };
       window.onSidebarSiteClick = function (siteKey, ev) {
         if (ev && ev.target && ev.target.tagName === "INPUT") return;
+        const site = getAllSites().find((s) => s.siteKey === siteKey);
+        if (state.pcTab === "quote" || (site && site.scope === "newSite")) {
+          state.selectedQuoteKey = siteKey;
+          state.dirtyPcTabs.quote = true;
+          if (state.pcTab === "quote") renderActiveViews(); else window.switchMainTab("quote");
+          return;
+        }
         state.selectedSiteKey = siteKey; state.siteTaskStatusFilter = "all"; state.checkedTableTaskIds.clear();
         state.dirtyPcTabs.sites = true;
         if (state.pcTab === "sites") renderActiveViews(); else window.switchMainTab("sites");
@@ -4078,6 +4551,12 @@
       window.openSiteDetail = function (siteKey) {
         const site = getAllSites().find((s) => s.siteKey === siteKey);
         if (site && site.scope) state.scope = site.scope;
+        if (site && site.scope === "newSite") {
+          state.selectedQuoteKey = siteKey;
+          markAllDirty();
+          window.switchMainTab("quote");
+          return;
+        }
         state.selectedSiteKey = siteKey; state.siteTaskStatusFilter = "all"; state.checkedTableTaskIds.clear();
         markAllDirty(); window.switchMainTab("sites");
       };
