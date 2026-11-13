@@ -486,7 +486,7 @@
     .badge-red { background: #fee2e2; color: #dc2626; }
     .badge-green { background: #dcfce7; color: #16a34a; }
 
-    .header-center { flex: 1; max-width: 250px; min-width: 130px; position: relative; }
+    .header-center { flex: 1; max-width: 480px; min-width: 180px; position: relative; }
     .header-search-input {
       width: 100%; height: 34px; background: #f1f5f9; border: 1px solid transparent; border-radius: 6px;
       padding: 0 46px 0 28px; font-size: 12px; color: var(--text); outline: none; transition: all 0.15s;
@@ -971,6 +971,63 @@
       border-radius: 6px; padding: 7px 12px; margin-bottom: 10px; font-size: 12px; font-weight: 700; color: #1e40af;
     }
 
+    .site-task-search-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      box-sizing: border-box;
+    }
+    .site-task-search-wrap .search-icon {
+      position: absolute;
+      left: 9px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 11.5px;
+      color: #94a3b8;
+      pointer-events: none;
+      line-height: 1;
+      user-select: none;
+      z-index: 1;
+    }
+    .site-task-search-wrap input {
+      width: 100%;
+      box-sizing: border-box;
+      padding-left: 28px !important;
+      padding-right: 34px !important;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .site-task-search-wrap input:focus {
+      border-color: #2563eb !important;
+      box-shadow: 0 0 0 2px rgba(37,99,235,0.15) !important;
+    }
+    .site-task-search-wrap .search-clear-btn {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #cbd5e1;
+      color: #334155;
+      border: none;
+      font-size: 10px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      line-height: 1;
+      z-index: 2;
+      transition: background 0.15s, color 0.15s;
+    }
+    .site-task-search-wrap .search-clear-btn:hover {
+      background: #94a3b8;
+      color: #ffffff;
+    }
+
     /* ================= 7. To-Do 매트릭스 & 테이블 ================= */
     .todo-workspace-view, .standard-page-view { flex: 1; padding: 20px 26px; overflow-y: auto; background: var(--bg); }
     .todo-member-chip-bar { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -1441,13 +1498,6 @@
         </div>
 
         <div class="header-right">
-          <div class="date-control-group">
-            <button type="button" class="btn-icon-square" onclick="moveCalendarMonth(-1)">◀</button>
-            <button type="button" class="btn-icon-square" onclick="moveCalendarMonth(1)">▶</button>
-            <button type="button" class="btn-today-pill" onclick="resetCalendarToday()">오늘</button>
-            <span class="date-title-bold" id="pcMonthTitle">2026년 11월</span>
-          </div>
-
           <div class="user-select-pill">
             <span>👤</span>
             <select id="userSelector" onchange="onUserChanged(this.value)">
@@ -1459,7 +1509,6 @@
             </select>
           </div>
 
-          <button type="button" class="btn-header-tool" onclick="captureCurrentScreen()" title="현재 화면 캡쳐">📸 캡쳐</button>
           <button type="button" class="btn-header-tool" onclick="openMonthlyReportModal()">📊 월간집계</button>
           <button type="button" class="btn-header-tool" onclick="openSettingsModal()">⚙️ 설정</button>
           <button type="button" class="sync-btn" onclick="triggerLiveSync(true)">🔄 동기화</button>
@@ -1511,6 +1560,7 @@
               <option value="한송이">한송이</option>
               <option value="차정률">차정률</option>
             </select>
+            <button type="button" class="btn-m-header-capture" onclick="captureCurrentScreen()" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="화면 캡쳐">📸</button>
             <button type="button" onclick="triggerLiveSync(true)" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="새로고침">🔄</button>
             <button type="button" onclick="logoutDashboardAuth()" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="잠금 / 로그아웃">🔒</button>
           </div>
@@ -2992,16 +3042,24 @@
 
         const pcCalEl = document.getElementById("pcCalMain");
         pcCalEl.innerHTML = `
-          <div class="pc-cal-toolbar">
-            <div class="pc-cal-filter-banner">
+          <div class="pc-cal-toolbar" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div class="date-control-group" style="display:inline-flex;align-items:center;gap:3px;background:#f8fafc;padding:3px 6px;border-radius:6px;border:1px solid var(--border);">
+                <button type="button" class="btn-icon-square" onclick="moveCalendarMonth(-1)" title="이전 달">◀</button>
+                <button type="button" class="btn-icon-square" onclick="moveCalendarMonth(1)" title="다음 달">▶</button>
+                <button type="button" class="btn-today-pill" onclick="resetCalendarToday()">오늘</button>
+                <span class="date-title-bold" id="pcMonthTitle" style="font-size:15px;font-weight:800;color:#0f172a;margin-left:4px;white-space:nowrap;">${state.calYear}년 ${state.calMonth}월</span>
+              </div>
+            </div>
+            <div class="pc-cal-filter-banner" style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;overflow-x:auto;">
               ${chips.join("")}
-              <span style="margin-left:auto;font-weight:800;color:#1d4ed8;">표시 공정 ${events.length}건 (다중일자 포함)</span>
+              <span style="margin-left:auto;font-weight:800;color:#1d4ed8;font-size:12px;white-space:nowrap;">표시 공정 ${events.length}건 (다중일자 포함)</span>
               ${(hasSubsetSites || state.memberFilter || state.searchQuery.trim()) ? `<button type="button" class="btn-tool-tag" onclick="resetAllFilters()">초기화</button>` : ""}
             </div>
-            <div class="cal-view-switch" style="display:flex;align-items:center;gap:6px;">
-              <button type="button" class="btn-tool-tag" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐" style="font-weight:700;">📸 캡쳐</button>
+            <div class="cal-view-switch" style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
               <button type="button" class="cal-view-btn ${state.calViewMode === "month" ? "active" : ""}" onclick="setCalViewMode('month')">월간</button>
               <button type="button" class="cal-view-btn ${state.calViewMode === "week" ? "active" : ""}" onclick="setCalViewMode('week')">주간</button>
+              <button type="button" class="btn-tool-tag btn-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐" style="font-weight:700;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:4px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:4px;">📸 캡쳐</button>
             </div>
           </div>
           <div class="calendar-paper">
@@ -3016,6 +3074,82 @@
         `;
         state._lastCalSlideDir = "";
         setupCalendarSwipe(pcCalEl);
+      }
+
+      function renderPcSiteTaskRowsHtml(filteredRows) {
+        if (!filteredRows || !filteredRows.length) {
+          return `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px;">조건에 맞는 공정이 없습니다.</td></tr>`;
+        }
+        return filteredRows.map((t) => {
+          const tid = t.id || t.taskId;
+          const isRowChecked = state.checkedTableTaskIds.has(tid);
+          const isDone = t.status === "완료";
+          const isDelay = t.isDelayed && !isDone;
+          const hasPartner = Boolean(t.partner && String(t.partner).trim() && !["미등록", "업체 미등록", "-"].includes(String(t.partner).trim()));
+          const phone = hasPartner ? lookupPartnerPhone(t.partner) : "";
+          const badgeStyle = isDone ? "background:#dcfce7;color:#15803d;" : isDelay ? "background:#fee2e2;color:#dc2626;" : "background:#dbeafe;color:#1e40af;";
+          const badgeLabel = isDone ? "✓ 완료" : isDelay ? "⚠️ 지연" : escHtml(t.status || "예정");
+          return `
+            <tr style="cursor:pointer;" onclick="openTaskEditModal('${escJs(tid)}')">
+              <td onclick="event.stopPropagation();"><input type="checkbox" ${isRowChecked ? "checked" : ""} onchange="toggleSiteTableRowCheck('${escJs(tid)}', this.checked)" style="width:15px;height:15px;accent-color:#1e40af;cursor:pointer;"></td>
+              <td><span style="${badgeStyle}padding:2px 8px;border-radius:4px;font-weight:700;font-size:11px;display:inline-block;">${badgeLabel}</span></td>
+              <td>
+                <span style="display:inline-flex;align-items:center;gap:5px;font-weight:700;color:#1e3a8a;">
+                  <span class="cal-sh-box ${t.isShared ? "blue" : "red"}" title="${t.isShared ? "공유됨" : "미공유"}"></span>
+                  ${escHtml(t.taskName)}
+                </span>
+              </td>
+              <td>${escHtml(parseYmdFromTask(t) || t.dateDisplay || "-")}</td>
+              <td>👤 ${escHtml(t.manager || "-")}</td>
+              <td>${escHtml(hasPartner ? t.partner : "미등록")}${hasPartner && phone ? ` <a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="color:#10b981;font-weight:700;text-decoration:none;margin-left:4px;">📞</a>` : ""}</td>
+              <td style="color:var(--text-sub);max-width:240px;">${escHtml(t.memo || "-")}</td>
+              <td onclick="event.stopPropagation();" style="white-space:nowrap;">
+                <button type="button" class="btn-tool-tag" onclick="openTaskEditModal('${escJs(tid)}')">수정</button>
+                <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="openDeleteConfirm('task', '${escJs(tid)}')">삭제</button>
+              </td>
+            </tr>`;
+        }).join("");
+      }
+
+      function updatePcSiteTasksPartial() {
+        const sitesPool = getScopeSites(true);
+        const selectedSite = sitesPool.find((s) => s.siteKey === state.selectedSiteKey) || sitesPool[0];
+        if (!selectedSite) return;
+
+        const tasks = selectedSite.tasks || [];
+        const curFilter = state.siteTaskStatusFilter || "all";
+        const curSearch = (state.siteTaskSearch || "").trim();
+
+        const filteredRows = tasks.filter((t) => {
+          if (curFilter === "done" && t.status !== "완료") return false;
+          if (curFilter === "delay" && !(t.isDelayed && t.status !== "완료")) return false;
+          if (curFilter === "active" && (t.status === "완료" || (t.isDelayed && t.status !== "완료"))) return false;
+          if (curSearch && !matchesQuery([t.taskName, t.partner, t.manager, t.memo].join(" "), curSearch)) return false;
+          return true;
+        });
+
+        const allChecked = filteredRows.length > 0 && filteredRows.every((t) => state.checkedTableTaskIds.has(t.id || t.taskId));
+        const checkedCount = filteredRows.filter((t) => state.checkedTableTaskIds.has(t.id || t.taskId)).length;
+
+        const tbody = document.getElementById("pcSiteTaskTbody");
+        if (tbody) tbody.innerHTML = renderPcSiteTaskRowsHtml(filteredRows);
+
+        const allCheckEl = document.getElementById("pcSiteTableAllCheck");
+        if (allCheckEl) allCheckEl.checked = allChecked;
+
+        const bulkContainer = document.getElementById("pcSiteBulkBarContainer");
+        if (bulkContainer) {
+          bulkContainer.innerHTML = checkedCount > 0 ? `
+            <div class="bulk-action-bar">
+              <span>☑️ 선택된 공정 <strong>${checkedCount}건</strong></span>
+              <div style="display:flex;gap:6px;">
+                <button type="button" class="btn-tool-tag" onclick="bulkUpdateSiteTasks('status', '완료')">✓ 일괄 완료</button>
+                <button type="button" class="btn-tool-tag" onclick="bulkUpdateSiteTasks('status', '예정')">↩️ 예정 복원</button>
+                <button type="button" class="btn-tool-tag" onclick="bulkUpdateSiteTasks('shared', true)">🟦 공유 ON</button>
+                <button type="button" class="btn-tool-tag" onclick="openPartnerGuideForSite('${escJs(selectedSite.siteKey)}')">📋 선택 안내문 생성</button>
+              </div>
+            </div>` : "";
+        }
       }
 
       // ================= [PC 탭 4: 현장 목록 (체크박스/모달 완비)] =================
@@ -3101,35 +3235,7 @@
           const allChecked = filteredRows.length > 0 && filteredRows.every((t) => state.checkedTableTaskIds.has(t.id || t.taskId));
           const checkedCount = filteredRows.filter((t) => state.checkedTableTaskIds.has(t.id || t.taskId)).length;
 
-          const tableRowsHtml = filteredRows.map((t) => {
-            const tid = t.id || t.taskId;
-            const isRowChecked = state.checkedTableTaskIds.has(tid);
-            const isDone = t.status === "완료";
-            const isDelay = t.isDelayed && !isDone;
-            const hasPartner = Boolean(t.partner && String(t.partner).trim() && !["미등록", "업체 미등록", "-"].includes(String(t.partner).trim()));
-            const phone = hasPartner ? lookupPartnerPhone(t.partner) : "";
-            const badgeStyle = isDone ? "background:#dcfce7;color:#15803d;" : isDelay ? "background:#fee2e2;color:#dc2626;" : "background:#dbeafe;color:#1e40af;";
-            const badgeLabel = isDone ? "✓ 완료" : isDelay ? "⚠️ 지연" : escHtml(t.status || "예정");
-            return `
-              <tr style="cursor:pointer;" onclick="openTaskEditModal('${escJs(tid)}')">
-                <td onclick="event.stopPropagation();"><input type="checkbox" ${isRowChecked ? "checked" : ""} onchange="toggleSiteTableRowCheck('${escJs(tid)}', this.checked)" style="width:15px;height:15px;accent-color:#1e40af;cursor:pointer;"></td>
-                <td><span style="${badgeStyle}padding:2px 8px;border-radius:4px;font-weight:700;font-size:11px;display:inline-block;">${badgeLabel}</span></td>
-                <td>
-                  <span style="display:inline-flex;align-items:center;gap:5px;font-weight:700;color:#1e3a8a;">
-                    <span class="cal-sh-box ${t.isShared ? "blue" : "red"}" title="${t.isShared ? "공유됨" : "미공유"}"></span>
-                    ${escHtml(t.taskName)}
-                  </span>
-                </td>
-                <td>${escHtml(parseYmdFromTask(t) || t.dateDisplay || "-")}</td>
-                <td>👤 ${escHtml(t.manager || "-")}</td>
-                <td>${escHtml(hasPartner ? t.partner : "미등록")}${hasPartner && phone ? ` <a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="color:#10b981;font-weight:700;text-decoration:none;margin-left:4px;">📞</a>` : ""}</td>
-                <td style="color:var(--text-sub);max-width:240px;">${escHtml(t.memo || "-")}</td>
-                <td onclick="event.stopPropagation();" style="white-space:nowrap;">
-                  <button type="button" class="btn-tool-tag" onclick="openTaskEditModal('${escJs(tid)}')">수정</button>
-                  <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="openDeleteConfirm('task', '${escJs(tid)}')">삭제</button>
-                </td>
-              </tr>`;
-          }).join("") || `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px;">조건에 맞는 공정이 없습니다.</td></tr>`;
+          const tableRowsHtml = renderPcSiteTaskRowsHtml(filteredRows);
 
           detailHtml = `
             <div class="detail-card-panel">
@@ -3196,30 +3302,36 @@
 
               <div class="site-task-filter-row">
                 <div style="display:flex;gap:6px;">
-                  <button type="button" class="st-pill ${state.siteTaskStatusFilter === "all" ? "active" : ""}" onclick="setSiteTaskFilter('all')">전체 (${tasks.length})</button>
-                  <button type="button" class="st-pill ${state.siteTaskStatusFilter === "delay" ? "active" : ""}" onclick="setSiteTaskFilter('delay')">⚠️ 지연 (${delayCnt})</button>
-                  <button type="button" class="st-pill ${state.siteTaskStatusFilter === "active" ? "active" : ""}" onclick="setSiteTaskFilter('active')">예정·진행 (${planCnt + progCnt})</button>
-                  <button type="button" class="st-pill ${state.siteTaskStatusFilter === "done" ? "active" : ""}" onclick="setSiteTaskFilter('done')">✓ 완료 (${doneCnt})</button>
+                  <button type="button" class="st-pill btn-pc-task-filter ${state.siteTaskStatusFilter === "all" ? "active" : ""}" data-filter="all" onclick="setSiteTaskFilter('all')">전체 (${tasks.length})</button>
+                  <button type="button" class="st-pill btn-pc-task-filter ${state.siteTaskStatusFilter === "delay" ? "active" : ""}" data-filter="delay" onclick="setSiteTaskFilter('delay')">⚠️ 지연 (${delayCnt})</button>
+                  <button type="button" class="st-pill btn-pc-task-filter ${state.siteTaskStatusFilter === "active" ? "active" : ""}" data-filter="active" onclick="setSiteTaskFilter('active')">예정·진행 (${planCnt + progCnt})</button>
+                  <button type="button" class="st-pill btn-pc-task-filter ${state.siteTaskStatusFilter === "done" ? "active" : ""}" data-filter="done" onclick="setSiteTaskFilter('done')">✓ 완료 (${doneCnt})</button>
                 </div>
-                <input type="text" value="${escHtml(state.siteTaskSearch)}" placeholder="공종 / 업체 / 메모 검색" oninput="setSiteTaskSearch(this.value)" style="height:30px;padding:0 10px;border:1px solid var(--border-dark);border-radius:6px;font-size:12px;">
+                <div class="site-task-search-wrap" style="width:280px;box-sizing:border-box;">
+                  <span class="search-icon">🔍</span>
+                  <input type="text" id="pcSiteTaskSearchInput" class="ws-input" value="${escHtml(state.siteTaskSearch)}" placeholder="공종 / 업체 / 메모 검색" oninput="setSiteTaskSearch(this.value)" onkeydown="if(event.key==='Escape')clearSiteTaskSearch()" style="height:30px;font-size:12px;">
+                  <button type="button" id="pcSiteTaskSearchClear" class="search-clear search-clear-btn" onclick="clearSiteTaskSearch()" style="display:${state.siteTaskSearch ? "flex" : "none"};" title="검색어 지우기">✕</button>
+                </div>
               </div>
 
-              ${checkedCount > 0 ? `
-                <div class="bulk-action-bar">
-                  <span>☑️ 선택된 공정 <strong>${checkedCount}건</strong></span>
-                  <div style="display:flex;gap:6px;">
-                    <button type="button" class="btn-tool-tag" onclick="bulkUpdateSiteTasks('status', '완료')">✓ 일괄 완료</button>
-                    <button type="button" class="btn-tool-tag" onclick="bulkUpdateSiteTasks('status', '예정')">↩️ 예정 복원</button>
-                    <button type="button" class="btn-tool-tag" onclick="bulkUpdateSiteTasks('shared', true)">🟦 공유 ON</button>
-                    <button type="button" class="btn-tool-tag" onclick="openPartnerGuideForSite('${escJs(selectedSite.siteKey)}')">📋 선택 안내문 생성</button>
-                  </div>
-                </div>` : ""}
+              <div id="pcSiteBulkBarContainer">
+                ${checkedCount > 0 ? `
+                  <div class="bulk-action-bar">
+                    <span>☑️ 선택된 공정 <strong>${checkedCount}건</strong></span>
+                    <div style="display:flex;gap:6px;">
+                      <button type="button" class="btn-tool-tag" onclick="bulkUpdateSiteTasks('status', '완료')">✓ 일괄 완료</button>
+                      <button type="button" class="btn-tool-tag" onclick="bulkUpdateSiteTasks('status', '예정')">↩️ 예정 복원</button>
+                      <button type="button" class="btn-tool-tag" onclick="bulkUpdateSiteTasks('shared', true)">🟦 공유 ON</button>
+                      <button type="button" class="btn-tool-tag" onclick="openPartnerGuideForSite('${escJs(selectedSite.siteKey)}')">📋 선택 안내문 생성</button>
+                    </div>
+                  </div>` : ""}
+              </div>
 
               <div class="table-container">
                 <table class="clean-table">
                   <thead>
                     <tr>
-                      <th style="width:32px;"><input type="checkbox" ${allChecked ? "checked" : ""} onchange="toggleSiteTableAllCheck(this.checked)" style="width:15px;height:15px;accent-color:#1e40af;cursor:pointer;"></th>
+                      <th style="width:32px;"><input type="checkbox" id="pcSiteTableAllCheck" ${allChecked ? "checked" : ""} onchange="toggleSiteTableAllCheck(this.checked)" style="width:15px;height:15px;accent-color:#1e40af;cursor:pointer;"></th>
                       <th style="width:82px;">상태</th>
                       <th style="width:130px;">공종</th>
                       <th style="width:110px;">일정</th>
@@ -3229,7 +3341,7 @@
                       <th style="width:105px;">관리</th>
                     </tr>
                   </thead>
-                  <tbody>${tableRowsHtml}</tbody>
+                  <tbody id="pcSiteTaskTbody">${tableRowsHtml}</tbody>
                 </table>
               </div>
             </div>
@@ -4362,9 +4474,12 @@
               <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(1)">▶</button>
               <button type="button" class="m-cal-nav-btn" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;" onclick="resetCalendarToday()">오늘</button>
             </div>
-            <div style="display:flex;gap:2px;background:#f1f5f9;padding:2px;border-radius:6px;">
-              <button type="button" onclick="setMobileCalMode('month')" style="border:none;background:${state.mobileCalMode === "month" ? "#fff" : "transparent"};font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:4px;color:${state.mobileCalMode === "month" ? "#1d4ed8" : "var(--text-muted)"};cursor:pointer;">월간</button>
-              <button type="button" onclick="setMobileCalMode('week')" style="border:none;background:${state.mobileCalMode === "week" ? "#fff" : "transparent"};font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:4px;color:${state.mobileCalMode === "week" ? "#1d4ed8" : "var(--text-muted)"};cursor:pointer;">주간</button>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <div style="display:flex;gap:2px;background:#f1f5f9;padding:2px;border-radius:6px;">
+                <button type="button" onclick="setMobileCalMode('month')" style="border:none;background:${state.mobileCalMode === "month" ? "#fff" : "transparent"};font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:4px;color:${state.mobileCalMode === "month" ? "#1d4ed8" : "var(--text-muted)"};cursor:pointer;">월간</button>
+                <button type="button" onclick="setMobileCalMode('week')" style="border:none;background:${state.mobileCalMode === "week" ? "#fff" : "transparent"};font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:4px;color:${state.mobileCalMode === "week" ? "#1d4ed8" : "var(--text-muted)"};cursor:pointer;">주간</button>
+              </div>
+              <button type="button" class="btn-m-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐" style="border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;font-size:10.5px;font-weight:800;padding:3px 7px;border-radius:6px;display:inline-flex;align-items:center;gap:2px;cursor:pointer;">📸 캡쳐</button>
             </div>
           </div>
           <div class="m-cal-site-filter-bar" style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin:2px 0 8px 0;">
@@ -4385,6 +4500,79 @@
         `;
         state._lastCalSlideDir = "";
         setupCalendarSwipe(mCalEl);
+      }
+
+      function renderMobileSiteTasksListHtml(filteredTasks) {
+        if (!filteredTasks || !filteredTasks.length) {
+          return `<div style="font-size:11.5px;color:var(--text-muted);text-align:center;padding:10px;">조건에 일치하는 공정이 없습니다.</div>`;
+        }
+        return filteredTasks.map((t) => {
+          const tid = t.id || t.taskId;
+          const isDone = isTaskCompleted(t);
+          const isDel = !isDone && t.isDelayed;
+          const pPhone = lookupPartnerPhone(t.partner);
+          const checked = state.checkedMobileTaskIds.has(tid);
+          const ymd = parseYmdFromTask(t);
+          return `
+            <div class="m-site-bundle-task-row ${isDel ? "is-delayed" : ""}" onclick="openTaskEditModal('${escJs(tid)}')">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <input type="checkbox" ${checked ? "checked" : ""} onclick="event.stopPropagation();" onchange="toggleMobileTaskCheck('${escJs(tid)}', this.checked)" style="width:15px;height:15px;accent-color:var(--site-accent, #0f766e);cursor:pointer;flex-shrink:0;" />
+                <span title="${t.isShared ? "공유됨" : "미공유"}" style="font-size:11px;flex-shrink:0;">${t.isShared ? "🟦" : "🟥"}</span>
+                <span style="font-size:10px;padding:1.5px 5px;border-radius:4px;font-weight:800;background:${isDel ? "#fee2e2" : (isDone ? "#dcfce7" : "#eff6ff")};color:${isDel ? "#dc2626" : (isDone ? "#059669" : "#1d4ed8")};flex-shrink:0;">${isDel ? "지연 ⚠️" : escHtml(t.status || "예정")}</span>
+                <span style="font-size:12.5px;font-weight:800;color:${isDone ? "#64748b" : "#0f172a"};${isDone ? "text-decoration:line-through;" : ""}overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(t.taskName)}</span>
+                <span style="font-size:10.5px;color:var(--text-muted);font-weight:700;flex-shrink:0;">${escHtml(ymd || "-")}</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:4px;padding-left:21px;font-size:11px;color:var(--text-sub);">
+                <span>👤 ${escHtml(filterRegisteredManagers(t.manager).join(", ") || "-")} · 🤝 ${escHtml(t.partner || "미등록")}</span>
+                ${pPhone ? `<a href="tel:${escHtml(pPhone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;padding:2px 7px;border-radius:6px;font-weight:800;text-decoration:none;font-size:10.5px;flex-shrink:0;">📞 ${escHtml(pPhone)}</a>` : ""}
+              </div>
+              ${t.memo ? `<div style="margin-top:3px;padding-left:21px;font-size:10.5px;color:#475569;">📝 ${escHtml(t.memo)}</div>` : ""}
+            </div>`;
+        }).join("");
+      }
+
+      function updateMobileSiteTasksPartial(siteKey) {
+        const site = getAllSites().find((s) => s.siteKey === siteKey);
+        if (!site) return;
+
+        const tasks = site.tasks || [];
+        const curFilter = state.siteTaskStatusFilter || "all";
+        const curSearch = (state.siteTaskSearch || "").trim();
+
+        const filteredTasks = tasks.filter((t) => {
+          if (curFilter === "done" && t.status !== "완료") return false;
+          if (curFilter === "delay" && !(t.isDelayed && t.status !== "완료")) return false;
+          if (curFilter === "active" && (t.status === "완료" || (t.isDelayed && t.status !== "완료"))) return false;
+          if (curSearch && !matchesQuery([t.taskName, t.partner, t.manager, t.memo].join(" "), curSearch)) return false;
+          return true;
+        });
+
+        const allChecked = filteredTasks.length > 0 && filteredTasks.every((t) => state.checkedMobileTaskIds.has(t.id || t.taskId));
+
+        const listContainer = document.getElementById(`mSiteTasksContainer_${siteKey}`);
+        if (listContainer) {
+          listContainer.innerHTML = renderMobileSiteTasksListHtml(filteredTasks);
+        }
+
+        const countBadge = document.getElementById(`mSiteBundleCount_${siteKey}`);
+        if (countBadge) {
+          countBadge.textContent = `${filteredTasks.length}건`;
+        }
+
+        const checkEl = document.getElementById(`mSiteBundleCheck_${siteKey}`);
+        if (checkEl) {
+          checkEl.checked = allChecked;
+        }
+
+        const clearBtn = document.getElementById(`mSiteTaskClear_${siteKey}`);
+        if (clearBtn) {
+          clearBtn.style.display = curSearch ? "flex" : "none";
+        }
+
+        const searchInput = document.getElementById(`mSiteTaskSearch_${siteKey}`);
+        if (searchInput && document.activeElement !== searchInput && searchInput.value !== (state.siteTaskSearch || "")) {
+          searchInput.value = state.siteTaskSearch || "";
+        }
       }
 
       // [모바일 탭 4: 현장 목록 — 진행/완료 토글 & 아코디언 전체 공정/길안내/업로드/안내문]
@@ -4449,29 +4637,7 @@
 
             const allChecked = filteredTasks.length > 0 && filteredTasks.every((t) => state.checkedMobileTaskIds.has(t.id || t.taskId));
 
-            const tasksListHtml = filteredTasks.map((t) => {
-              const tid = t.id || t.taskId;
-              const isDone = isTaskCompleted(t);
-              const isDel = !isDone && t.isDelayed;
-              const pPhone = lookupPartnerPhone(t.partner);
-              const checked = state.checkedMobileTaskIds.has(tid);
-              const ymd = parseYmdFromTask(t);
-              return `
-                <div class="m-site-bundle-task-row ${isDel ? "is-delayed" : ""}" onclick="openTaskEditModal('${escJs(tid)}')">
-                  <div style="display:flex;align-items:center;gap:6px;">
-                    <input type="checkbox" ${checked ? "checked" : ""} onclick="event.stopPropagation();" onchange="toggleMobileTaskCheck('${escJs(tid)}', this.checked)" style="width:15px;height:15px;accent-color:var(--site-accent, #0f766e);cursor:pointer;flex-shrink:0;" />
-                    <span title="${t.isShared ? "공유됨" : "미공유"}" style="font-size:11px;flex-shrink:0;">${t.isShared ? "🟦" : "🟥"}</span>
-                    <span style="font-size:10px;padding:1.5px 5px;border-radius:4px;font-weight:800;background:${isDel ? "#fee2e2" : (isDone ? "#dcfce7" : "#eff6ff")};color:${isDel ? "#dc2626" : (isDone ? "#059669" : "#1d4ed8")};flex-shrink:0;">${isDel ? "지연 ⚠️" : escHtml(t.status || "예정")}</span>
-                    <span style="font-size:12.5px;font-weight:800;color:${isDone ? "#64748b" : "#0f172a"};${isDone ? "text-decoration:line-through;" : ""}overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(t.taskName)}</span>
-                    <span style="font-size:10.5px;color:var(--text-muted);font-weight:700;flex-shrink:0;">${escHtml(ymd || "-")}</span>
-                  </div>
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:4px;padding-left:21px;font-size:11px;color:var(--text-sub);">
-                    <span>👤 ${escHtml(filterRegisteredManagers(t.manager).join(", ") || "-")} · 🤝 ${escHtml(t.partner || "미등록")}</span>
-                    ${pPhone ? `<a href="tel:${escHtml(pPhone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;padding:2px 7px;border-radius:6px;font-weight:800;text-decoration:none;font-size:10.5px;flex-shrink:0;">📞 ${escHtml(pPhone)}</a>` : ""}
-                  </div>
-                  ${t.memo ? `<div style="margin-top:3px;padding-left:21px;font-size:10.5px;color:#475569;">📝 ${escHtml(t.memo)}</div>` : ""}
-                </div>`;
-            }).join("") || `<div style="font-size:11.5px;color:var(--text-muted);text-align:center;padding:10px;">조건에 일치하는 공정이 없습니다.</div>`;
+            const tasksListHtml = renderMobileSiteTasksListHtml(filteredTasks);
 
             bodyHtml = `
               <div class="m-site-acc-body">
@@ -4547,10 +4713,10 @@
                       <button type="button" class="st-pill btn-task-pill ${curFilter === "active" ? "active" : ""}" style="font-size:11px;padding:3px 8px;" onclick="setSiteTaskFilter('active')">예정·진행 (${planCnt + progCnt})</button>
                       <button type="button" class="st-pill btn-task-pill ${curFilter === "done" ? "active" : ""}" style="font-size:11px;padding:3px 8px;" onclick="setSiteTaskFilter('done')">✓ 완료 (${doneCnt})</button>
                     </div>
-                    <div class="search-box" style="width:100%;box-sizing:border-box;margin:0;">
-                      <span>🔍</span>
-                      <input type="text" class="ws-input" style="padding:4px 8px 4px 26px;font-size:11.5px;height:28px;" placeholder="공종 / 업체 / 메모 검색" value="${escHtml(curSearch)}" oninput="setSiteTaskSearch(this.value)">
-                      ${curSearch ? `<button type="button" class="search-clear" onclick="setSiteTaskSearch('')">✕</button>` : ""}
+                    <div class="site-task-search-wrap" style="width:100%;margin:0;">
+                      <span class="search-icon">🔍</span>
+                      <input type="text" class="ws-input m-site-task-search-input" id="mSiteTaskSearch_${escJs(s.siteKey)}" style="font-size:11.5px;height:28px;" placeholder="공종 / 업체 / 메모 검색" value="${escHtml(curSearch)}" oninput="setSiteTaskSearch(this.value)" onkeydown="if(event.key==='Escape')clearSiteTaskSearch()">
+                      <button type="button" class="search-clear search-clear-btn" id="mSiteTaskClear_${escJs(s.siteKey)}" onclick="clearSiteTaskSearch()" style="display:${curSearch ? "flex" : "none"};" title="검색어 지우기">✕</button>
                     </div>
                   </div>
                 </div>
@@ -4558,12 +4724,12 @@
                 <div class="m-site-tasks-bundle" style="border-left-color:var(--site-accent, ${escHtml(s.colorHex || "#0f766e")});">
                   <div class="m-site-bundle-head">
                     <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;color:color-mix(in srgb, var(--site-accent, #0f766e) 80%, #0f172a);cursor:pointer;">
-                      <input type="checkbox" ${allChecked ? "checked" : ""} onchange="toggleMobileSiteAllTasks('${escJs(s.siteKey)}', this.checked)" style="width:15px;height:15px;accent-color:var(--site-accent, #0f766e);" />
-                      공정 묶음 <span style="display:inline-flex;align-items:center;background:color-mix(in srgb, var(--site-accent, #0f766e) 20%, #ffffff);color:var(--site-accent, #0f766e);font-weight:800;padding:1px 6px;border-radius:999px;font-size:10px;border:1px solid color-mix(in srgb, var(--site-accent, #0f766e) 30%, transparent);">${filteredTasks.length}건</span>
+                      <input type="checkbox" id="mSiteBundleCheck_${escJs(s.siteKey)}" ${allChecked ? "checked" : ""} onchange="toggleMobileSiteAllTasks('${escJs(s.siteKey)}', this.checked)" style="width:15px;height:15px;accent-color:var(--site-accent, #0f766e);" />
+                      공정 묶음 <span id="mSiteBundleCount_${escJs(s.siteKey)}" style="display:inline-flex;align-items:center;background:color-mix(in srgb, var(--site-accent, #0f766e) 20%, #ffffff);color:var(--site-accent, #0f766e);font-weight:800;padding:1px 6px;border-radius:999px;font-size:10px;border:1px solid color-mix(in srgb, var(--site-accent, #0f766e) 30%, transparent);">${filteredTasks.length}건</span>
                     </label>
                     <span style="font-size:10.5px;color:var(--text-muted);font-weight:700;">🟦 공유 / 🟥 미공유</span>
                   </div>
-                  <div>
+                  <div id="mSiteTasksContainer_${escJs(s.siteKey)}">
                     ${tasksListHtml}
                   </div>
                 </div>
@@ -4571,7 +4737,7 @@
           }
 
           return `
-            <div class="m-site-acc-card ${isExpanded ? "expanded" : ""}" style="--site-accent:${escHtml(s.colorHex || "#0f766e")};${isExpanded ? "border-color:var(--site-accent);" : ""}">
+            <div class="m-site-acc-card ${isExpanded ? "expanded" : ""}" data-site-key="${escHtml(s.siteKey)}" style="--site-accent:${escHtml(s.colorHex || "#0f766e")};${isExpanded ? "border-color:var(--site-accent);" : ""}">
               <div class="m-site-acc-head" onclick="toggleMobileSiteCard('${escJs(s.siteKey)}')">
                 <div style="min-width:0;flex:1;">
                   <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;">
@@ -6754,8 +6920,13 @@
       window.toggleSiteTableRowCheck = function (tid, checked) {
         if (checked) state.checkedTableTaskIds.add(tid);
         else state.checkedTableTaskIds.delete(tid);
-        state.dirtyPcTabs.sites = true;
-        renderActiveViews();
+        const pcTbody = document.getElementById("pcSiteTaskTbody");
+        if (pcTbody) {
+          updatePcSiteTasksPartial();
+        } else {
+          state.dirtyPcTabs.sites = true;
+          renderActiveViews();
+        }
       };
       window.toggleSiteTableAllCheck = function (checked) {
         const site = getAllSites().find((s) => s.siteKey === state.selectedSiteKey);
@@ -6765,8 +6936,13 @@
           if (checked) state.checkedTableTaskIds.add(tid);
           else state.checkedTableTaskIds.delete(tid);
         });
-        state.dirtyPcTabs.sites = true;
-        renderActiveViews();
+        const pcTbody = document.getElementById("pcSiteTaskTbody");
+        if (pcTbody) {
+          updatePcSiteTasksPartial();
+        } else {
+          state.dirtyPcTabs.sites = true;
+          renderActiveViews();
+        }
       };
       window.bulkUpdateSiteTasks = function (field, val) {
         const site = getAllSites().find((s) => s.siteKey === state.selectedSiteKey);
@@ -7647,6 +7823,27 @@
       window.toggleMobileTaskCheck = function (tid, checked) {
         if (checked) state.checkedMobileTaskIds.add(tid);
         else state.checkedMobileTaskIds.delete(tid);
+        const mExpandedCards = document.querySelectorAll(".m-site-acc-card.expanded");
+        mExpandedCards.forEach((card) => {
+          const siteKey = card.getAttribute("data-site-key");
+          if (siteKey) {
+            const site = getAllSites().find((s) => s.siteKey === siteKey);
+            if (site) {
+              const curFilter = state.siteTaskStatusFilter || "all";
+              const curSearch = (state.siteTaskSearch || "").trim();
+              const filtered = (site.tasks || []).filter((t) => {
+                if (curFilter === "done" && t.status !== "완료") return false;
+                if (curFilter === "delay" && !(t.isDelayed && t.status !== "완료")) return false;
+                if (curFilter === "active" && (t.status === "완료" || (t.isDelayed && t.status !== "완료"))) return false;
+                if (curSearch && !matchesQuery([t.taskName, t.partner, t.manager, t.memo].join(" "), curSearch)) return false;
+                return true;
+              });
+              const allChecked = filtered.length > 0 && filtered.every((t) => state.checkedMobileTaskIds.has(t.id || t.taskId));
+              const checkEl = document.getElementById(`mSiteBundleCheck_${siteKey}`);
+              if (checkEl) checkEl.checked = allChecked;
+            }
+          }
+        });
       };
       window.toggleMobileSiteAllTasks = function (siteKey, checked) {
         const site = getAllSites().find((s) => s.siteKey === siteKey);
@@ -7656,8 +7853,13 @@
           if (checked) state.checkedMobileTaskIds.add(tid);
           else state.checkedMobileTaskIds.delete(tid);
         });
-        state.dirtyMobileTabs.sites = true;
-        renderActiveViews();
+        const listContainer = document.getElementById(`mSiteTasksContainer_${siteKey}`);
+        if (listContainer) {
+          updateMobileSiteTasksPartial(siteKey);
+        } else {
+          state.dirtyMobileTabs.sites = true;
+          renderActiveViews();
+        }
       };
       window.resetCalendarToday = function () {
         const ymd = getTodayYmd();
@@ -7746,8 +7948,136 @@
       };
       window.toggleArchivedSites = function () { state.showArchivedSites = !state.showArchivedSites; markAllDirty(); renderActiveViews(); };
       window.setSiteSort = function (sortBy) { state.siteSortBy = sortBy; state.dirtyPcTabs.sites = true; state.dirtyMobileTabs.sites = true; renderActiveViews(); };
-      window.setSiteTaskFilter = function (f) { state.siteTaskStatusFilter = f; state.dirtyPcTabs.sites = true; state.dirtyMobileTabs.sites = true; renderActiveViews(); };
-      window.setSiteTaskSearch = function (q) { state.siteTaskSearch = q || ""; state.dirtyPcTabs.sites = true; state.dirtyMobileTabs.sites = true; renderActiveViews(); };
+      window.setSiteTaskFilter = function (f) {
+        state.siteTaskStatusFilter = f;
+
+        const pcPills = document.querySelectorAll(".btn-pc-task-filter");
+        if (pcPills.length > 0) {
+          pcPills.forEach((p) => {
+            if (p.getAttribute("data-filter") === f) p.classList.add("active");
+            else p.classList.remove("active");
+          });
+        }
+
+        const mPills = document.querySelectorAll(".btn-task-pill");
+        if (mPills.length > 0) {
+          mPills.forEach((p) => {
+            const isDelay = p.textContent.includes("지연");
+            const isDone = p.textContent.includes("완료");
+            const isActive = p.textContent.includes("예정·진행");
+            const isAll = p.textContent.includes("전체");
+            const match = (f === "delay" && isDelay) || (f === "done" && isDone) || (f === "active" && isActive) || (f === "all" && isAll);
+            if (match) {
+              p.classList.add("active");
+              if (isDelay) {
+                p.style.background = "#ef4444";
+                p.style.borderColor = "#ef4444";
+                p.style.color = "#fff";
+              }
+            } else {
+              p.classList.remove("active");
+              if (isDelay) {
+                p.style.background = "";
+                p.style.borderColor = "";
+                p.style.color = "";
+              }
+            }
+          });
+        }
+
+        const pcTbody = document.getElementById("pcSiteTaskTbody");
+        if (pcTbody) {
+          updatePcSiteTasksPartial();
+        } else {
+          state.dirtyPcTabs.sites = true;
+        }
+
+        const mExpandedCards = document.querySelectorAll(".m-site-acc-card.expanded");
+        if (mExpandedCards.length > 0) {
+          mExpandedCards.forEach((card) => {
+            const siteKey = card.getAttribute("data-site-key");
+            if (siteKey) updateMobileSiteTasksPartial(siteKey);
+          });
+        } else {
+          state.dirtyMobileTabs.sites = true;
+        }
+
+        if (!pcTbody && state.pcTab === "sites") {
+          state.dirtyPcTabs.sites = true;
+          renderActiveViews();
+        }
+        if (mExpandedCards.length === 0 && state.mobileTab === "sites") {
+          state.dirtyMobileTabs.sites = true;
+          renderActiveViews();
+        }
+      };
+
+      window.setSiteTaskSearch = function (q) {
+        state.siteTaskSearch = q || "";
+
+        const pcTbody = document.getElementById("pcSiteTaskTbody");
+        const pcSearchInput = document.getElementById("pcSiteTaskSearchInput");
+        const pcClearBtn = document.getElementById("pcSiteTaskSearchClear");
+
+        if (pcClearBtn) {
+          pcClearBtn.style.display = state.siteTaskSearch ? "flex" : "none";
+        }
+        if (pcSearchInput && document.activeElement !== pcSearchInput && pcSearchInput.value !== state.siteTaskSearch) {
+          pcSearchInput.value = state.siteTaskSearch;
+        }
+
+        let pcUpdated = false;
+        if (pcTbody) {
+          updatePcSiteTasksPartial();
+          pcUpdated = true;
+        } else {
+          state.dirtyPcTabs.sites = true;
+        }
+
+        let mUpdated = false;
+        const mExpandedCards = document.querySelectorAll(".m-site-acc-card.expanded");
+        if (mExpandedCards.length > 0) {
+          mExpandedCards.forEach((card) => {
+            const siteKey = card.getAttribute("data-site-key");
+            if (siteKey) {
+              updateMobileSiteTasksPartial(siteKey);
+              mUpdated = true;
+            }
+          });
+        } else {
+          state.dirtyMobileTabs.sites = true;
+        }
+
+        if (!pcUpdated && state.pcTab === "sites") {
+          state.dirtyPcTabs.sites = true;
+          renderActiveViews();
+        }
+        if (!mUpdated && state.mobileTab === "sites" && mExpandedCards.length === 0) {
+          state.dirtyMobileTabs.sites = true;
+          renderActiveViews();
+        }
+      };
+
+      window.clearSiteTaskSearch = function () {
+        setSiteTaskSearch("");
+        if (state.device === "pc") {
+          const pcInput = document.getElementById("pcSiteTaskSearchInput");
+          if (pcInput) {
+            pcInput.value = "";
+            pcInput.focus();
+          }
+        } else {
+          const mActiveCard = document.querySelector(".m-site-acc-card.expanded");
+          if (mActiveCard) {
+            const siteKey = mActiveCard.getAttribute("data-site-key");
+            const mInput = document.getElementById(`mSiteTaskSearch_${siteKey}`);
+            if (mInput) {
+              mInput.value = "";
+              mInput.focus();
+            }
+          }
+        }
+      };
       window.filterTodoMember = function (mem) { state.todoMemberFilter = mem; state.dirtyPcTabs.todo = true; renderActiveViews(); };
       window.toggleQuoteArchived = function () { state.quoteShowArchived = !state.quoteShowArchived; state.dirtyPcTabs.quote = true; renderActiveViews(); };
       window.setFinancePartner = function (partner) { state.financePartnerFilter = partner; state.dirtyPcTabs.finance = true; renderActiveViews(); };
@@ -7794,28 +8124,45 @@
 
       // 화면 캡쳐 모달 기능
       window.captureCurrentScreen = async function () {
-        showToast("📸 화면 캡쳐 준비 중...", 3000);
+        // 1. 하단 토스트가 캡쳐 이미지에 찍히지 않도록 사전 숨김 처리
+        const toastEl = document.getElementById("toastBanner");
+        if (toastEl) toastEl.classList.remove("show");
+
         try {
           let targetEl = null;
           if (state.device === "pc") {
             if (state.pcTab === "calendar") {
-              targetEl = document.getElementById("pcCalendarView") || document.getElementById("pcCalendarContent");
+              // 캘린더 탭: 상단 헤더와 좌측 사이드바 제외, 순수 캘린더 작업 영역만 캡쳐
+              targetEl = document.getElementById("pcCalMain") || document.getElementById("page-calendar");
             } else if (state.pcTab === "sites") {
-              targetEl = document.getElementById("pcSitesMain");
+              targetEl = document.getElementById("pcSiteMain") || document.getElementById("page-sites");
             } else if (state.pcTab === "todo") {
-              targetEl = document.getElementById("pcTodoMain");
+              targetEl = document.getElementById("pcTodoMain") || document.getElementById("page-todo");
+            } else if (state.pcTab === "home") {
+              targetEl = document.getElementById("page-home");
+            } else if (state.pcTab === "quote") {
+              targetEl = document.getElementById("page-quote");
+            } else if (state.pcTab === "finance") {
+              targetEl = document.getElementById("page-finance");
             } else {
-              targetEl = document.querySelector(".app-body") || document.body;
+              targetEl = document.querySelector(".page-container.active") || document.querySelector(".app-workspace") || document.body;
             }
           } else {
             if (state.mobileTab === "calendar") {
-              targetEl = document.getElementById("mCalendarContent") || document.getElementById("tab-mobile-calendar");
+              // 모바일 캘린더: 상단 헤더와 하단 탭바 제외, 모바일 캘린더 영역만 캡쳐
+              targetEl = document.getElementById("m-page-calendar");
             } else if (state.mobileTab === "sites") {
-              targetEl = document.getElementById("tab-mobile-sites");
+              targetEl = document.getElementById("m-page-sites");
             } else if (state.mobileTab === "todo") {
-              targetEl = document.getElementById("tab-mobile-todo");
+              targetEl = document.getElementById("m-page-todo");
+            } else if (state.mobileTab === "home") {
+              targetEl = document.getElementById("m-page-home");
+            } else if (state.mobileTab === "quote") {
+              targetEl = document.getElementById("m-page-quote");
+            } else if (state.mobileTab === "finance") {
+              targetEl = document.getElementById("m-page-finance");
             } else {
-              targetEl = document.querySelector(".m-app-body") || document.body;
+              targetEl = document.querySelector(".m-page-pane.active") || document.getElementById("mPageScroll") || document.body;
             }
           }
           if (!targetEl) targetEl = document.body;
@@ -7826,7 +8173,8 @@
               useCORS: true,
               scale: Math.min(2, window.devicePixelRatio || 1.5),
               logging: false,
-              backgroundColor: "#f8fafc"
+              backgroundColor: "#ffffff",
+              ignoreElements: (el) => el.id === "toastBanner" || (el.classList && el.classList.contains("toast-banner")) || el.id === "captureModal"
             });
           } else {
             // fallback canvas (offline/mock)
