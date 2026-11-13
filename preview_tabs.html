@@ -558,11 +558,38 @@
       box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04); margin-bottom: 16px;
     }
     .hp-header {
-      display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
-      padding-bottom: 9px; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 12px; padding-bottom: 9px; border-bottom: 1px solid var(--border);
     }
     .hp-title { font-size: 14.5px; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 6px; }
-    .hp-link { font-size: 12px; color: #2563eb; font-weight: 700; cursor: pointer; text-decoration: none; }
+    .hp-link { font-size: 12px; color: #2563eb; font-weight: 700; cursor: pointer; text-decoration: none; white-space: nowrap; }
+    .home-task-filter-group {
+      display: inline-flex; align-items: center; gap: 3px;
+      background: #f1f5f9; padding: 3px; border-radius: 8px; border: 1px solid #e2e8f0;
+    }
+    .home-task-filter-btn {
+      border: none; background: transparent; color: #475569;
+      font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px;
+      cursor: pointer; line-height: 1.2; transition: all 0.15s ease; white-space: nowrap;
+    }
+    .home-task-filter-btn:hover { color: #0f172a; background: rgba(255, 255, 255, 0.7); }
+    .home-task-filter-btn.active {
+      background: #ffffff; color: #1e40af; font-weight: 800;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+    .home-task-filter-btn.active[data-filter="delayed"] { color: #dc2626; }
+    .home-task-filter-btn.active[data-filter="progress"] { color: #15803d; }
+    .home-memo-toggle-btn {
+      width: 100%; margin-top: 2px; padding: 8px 10px; border-radius: 8px;
+      border: 1px solid #cbd5e1; background: #f8fafc; color: #334155;
+      font-size: 11.5px; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      transition: background 0.15s ease;
+    }
+    .home-memo-toggle-btn:hover { background: #eff6ff; color: #1e40af; border-color: #93c5fd; }
+    .m-home-task-scroll {
+      max-height: 405px; overflow-y: auto; padding-right: 2px; -webkit-overflow-scrolling: touch;
+    }
 
     .home-todo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .home-todo-row {
@@ -1411,6 +1438,8 @@
         weatherData: {},
         _lastCalSlideDir: "",
         financePartnerFilter: "all",
+        homeTaskFilter: "all",
+        homeMemoExpanded: false,
         dirtyPcTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true },
         dirtyMobileTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true },
         syncSource: "snapshot",
@@ -1995,6 +2024,85 @@
         else window.switchMainTab("sites");
       };
 
+      function getHomeTaskCategory(task, ymd, todayYmd) {
+        if (task && (task.isDelayed || (ymd && ymd < todayYmd))) return "delayed";
+        if (task && (task.isToday || ymd === todayYmd || String(task.status || "").includes("진행"))) return "progress";
+        return "planned";
+      }
+
+      function renderHomeTaskFilterGroupHtml(tasksList, todayYmd) {
+        const counts = { all: tasksList.length, progress: 0, delayed: 0, planned: 0 };
+        tasksList.forEach(({ task, ymd }) => {
+          const cat = getHomeTaskCategory(task, ymd, todayYmd);
+          if (counts[cat] !== undefined) counts[cat]++;
+        });
+        const items = [
+          { key: "all", label: "전체" },
+          { key: "progress", label: "진행" },
+          { key: "delayed", label: "지연" },
+          { key: "planned", label: "예정" }
+        ];
+        const cur = state.homeTaskFilter || "all";
+        return `
+          <div class="home-task-filter-group" role="group" aria-label="공정 상태 필터">
+            ${items.map((it) => `
+              <button type="button" class="home-task-filter-btn ${cur === it.key ? "active" : ""}" data-filter="${it.key}" onclick="setHomeTaskFilter('${it.key}')">
+                ${it.label} ${counts[it.key]}
+              </button>
+            `).join("")}
+          </div>`;
+      }
+
+      function getTaskMemoModifiedMs(task) {
+        if (!task) return 0;
+        const explicitMs = Number(task.memoUpdatedAtMs || task.updatedAtMs || 0);
+        if (explicitMs > 0) return explicitMs;
+        const memoStr = String(task.memo || "");
+        let maxStampMs = 0;
+        const re = /\[\s*(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})/g;
+        const baseYear = state.calYear || new Date().getFullYear();
+        let m;
+        while ((m = re.exec(memoStr)) !== null) {
+          const mm = parseInt(m[1], 10);
+          const dd = parseInt(m[2], 10);
+          const hh = parseInt(m[3], 10);
+          const mi = parseInt(m[4], 10);
+          const dt = new Date(baseYear, mm - 1, dd, hh, mi, 0, 0).getTime();
+          if (Number.isFinite(dt) && dt > maxStampMs) maxStampMs = dt;
+        }
+        if (maxStampMs > 0) return maxStampMs;
+        const idStr = String(task.id || task.taskId || "");
+        const idMatch = idStr.match(/task_(\d{12,14})/);
+        if (idMatch) return Number(idMatch[1]) || 0;
+        return (Number(task.dateMs) || 0) - 86400000 * 60 + (Number(task.row) || 0);
+      }
+
+      function renderHomeMemoBriefingHtml(tasksList) {
+        const memoTasks = tasksList
+          .filter((x) => x && x.task && String(x.task.memo || "").trim())
+          .slice()
+          .sort((a, b) => getTaskMemoModifiedMs(b.task) - getTaskMemoModifiedMs(a.task));
+        if (!memoTasks.length) {
+          return `<div style="font-size:12px;color:var(--text-muted);">최근 메모가 없습니다.</div>`;
+        }
+        const limit = 5;
+        const isExpanded = Boolean(state.homeMemoExpanded);
+        const visibleMemos = isExpanded ? memoTasks : memoTasks.slice(0, limit);
+        const hiddenCount = memoTasks.length - visibleMemos.length;
+        return `
+          ${visibleMemos.map((x) => `
+            <div class="home-memo-item" style="font-size:12px;line-height:1.45;color:var(--text-sub);background:#f8fafc;padding:10px 11px;border-radius:8px;border:1px solid var(--border);border-left:3px solid #3b82f6;cursor:pointer;" onclick="openTaskEditModal('${escJs(x.task.id || x.taskId)}')">
+              <strong style="color:#1e3a8a;display:block;margin-bottom:2px;">[${escHtml(x.site.siteName)}]</strong>${escHtml(x.task.memo)}
+            </div>
+          `).join("")}
+          ${memoTasks.length > limit ? `
+            <button type="button" class="home-memo-toggle-btn" onclick="toggleHomeMemoExpand()">
+              ${isExpanded ? `▲ 메모 접기 (최근 ${limit}개만 보기)` : `▼ 이전 메모 ${hiddenCount}개 더보기 (전체 ${memoTasks.length}건)`}
+            </button>
+          ` : ""}
+        `;
+      }
+
       // ================= [PC 탭 1: 홈 — 모던 벤토 카드 (완료 항목 제외 & To-Do 최상단 배치)] =================
       function renderPcHomeTab() {
         const user = state.user;
@@ -2035,6 +2143,11 @@
           });
         const todayTasks = myTasks.filter((x) => x.task.isToday || x.ymd === todayYmd);
         const delayedTasks = myTasks.filter((x) => x.task.isDelayed || (x.ymd && x.ymd < todayYmd));
+        const activeFilter = state.homeTaskFilter || "all";
+        const filteredHomeTasks = activeFilter === "all"
+          ? activeOrToday
+          : activeOrToday.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === activeFilter);
+        const taskFilterGroupHtml = renderHomeTaskFilterGroupHtml(activeOrToday, todayYmd);
 
         const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s));
         const allTodos = (state.todoData && state.todoData.list) || [];
@@ -2070,8 +2183,8 @@
             </div>`;
         }).join("") || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;padding:16px;text-align:center;background:#f8fafc;border-radius:10px;">남은 To-Do 업무가 없습니다.</div>`;
 
-        // 2) 아래 주요 현장 공정 2열 카드 그리드 (미완료 공정만 표시, 헤더 건수와 일치)
-        const scheduleItemsHtml = activeOrToday.map(({ site, task, ymd }) => {
+        // 2) 아래 주요 현장 공정 2열 카드 그리드 (미완료 공정만 표시, 상태 필터 반영)
+        const scheduleItemsHtml = filteredHomeTasks.map(({ site, task, ymd }) => {
           const isDel = Boolean(task.isDelayed || (ymd && ymd < todayYmd));
           const isToday = Boolean(task.isToday || ymd === todayYmd);
           const cls = isDel ? "danger" : isToday ? "" : "warning";
@@ -2239,7 +2352,10 @@
                 <!-- 2순위: 주요 현장 공정 카드 그리드 -->
                 <div class="home-panel-box">
                   <div class="hp-header">
-                    <span class="hp-title">🔨 ${escHtml(user)}님 주요 현장 공정 (${activeOrToday.length}건)</span>
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                      <span class="hp-title">🔨 ${escHtml(user)}님 주요 현장 공정 (${filteredHomeTasks.length}건)</span>
+                      ${taskFilterGroupHtml}
+                    </div>
                     <a class="hp-link" onclick="switchMainTab('calendar')">캘린더 전체보기 ➔</a>
                   </div>
                   <div class="home-task-grid" style="max-height:420px;overflow-y:auto;padding-right:2px;">${scheduleItemsHtml}</div>
@@ -2272,14 +2388,10 @@
                   <div style="display:flex;flex-direction:column;gap:8px;">${quotePreviewHtml}</div>
                 </div>
 
-                <div class="home-panel-box">
+                <div class="home-panel-box home-memo-panel">
                   <div class="hp-header"><span class="hp-title">📌 최근 현장 메모 브리핑</span></div>
-                  <div style="display:flex;flex-direction:column;gap:8px;">
-                    ${myTasks.filter((x) => x.task.memo).slice(0, 3).map((x) => `
-                      <div style="font-size:12px;line-height:1.45;color:var(--text-sub);background:#f8fafc;padding:10px 11px;border-radius:8px;border:1px solid var(--border);border-left:3px solid #3b82f6;cursor:pointer;" onclick="openTaskEditModal('${escJs(x.task.id || x.taskId)}')">
-                        <strong style="color:#1e3a8a;display:block;margin-bottom:2px;">[${escHtml(x.site.siteName)}]</strong>${escHtml(x.task.memo)}
-                      </div>
-                    `).join("") || `<div style="font-size:12px;color:var(--text-muted);">최근 메모가 없습니다.</div>`}
+                  <div class="home-memo-list" style="display:flex;flex-direction:column;gap:8px;">
+                    ${renderHomeMemoBriefingHtml(myTasks)}
                   </div>
                 </div>
               </div>
@@ -3282,6 +3394,11 @@
 
         const todayTasks = tasks.filter((x) => x.task.isToday || x.ymd === todayYmd);
         const delayed = tasks.filter((x) => x.task.isDelayed || (x.ymd && x.ymd < todayYmd));
+        const activeFilter = state.homeTaskFilter || "all";
+        const filteredMobileTasks = activeFilter === "all"
+          ? tasks
+          : tasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === activeFilter);
+        const mTaskFilterGroupHtml = renderHomeTaskFilterGroupHtml(tasks, todayYmd);
         const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s));
         const todos = ((state.todoData && state.todoData.list) || []).filter((t) => !t.manager || t.manager.includes(user));
         const pendingTodos = todos.filter((t) => t.status !== "완료");
@@ -3346,27 +3463,41 @@
           </div>
 
           <div class="m-card-box">
-            <div class="m-card-title-row">
-              <span class="m-card-title">🔨 주요 공정 (${tasks.length}건)</span>
+            <div class="m-card-title-row" style="flex-wrap:wrap;gap:6px;">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span class="m-card-title">🔨 주요 공정 (${filteredMobileTasks.length}건)</span>
+                ${mTaskFilterGroupHtml}
+              </div>
               <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMobileTab('calendar')">캘린더 ➔</span>
             </div>
-            ${tasks.slice(0, 8).map(({ site, task, ymd }) => {
-              const phone = lookupPartnerPhone(task.partner);
-              const tid = task.id || task.taskId;
-              const isDel = Boolean(task.isDelayed || (ymd && ymd < todayYmd));
-              return `
-                <div class="m-site-box ${isDel ? "danger" : ""}" style="border-radius:9px;" onclick="openTaskEditModal('${escJs(tid)}')">
-                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-                    <span style="font-size:12.5px;font-weight:800;">${escHtml(site.siteName)}</span>
-                    <button type="button" onclick="event.stopPropagation(); openSiteDetailMobile('${escJs(site.siteKey)}')" style="border:1px solid #cbd5e1;background:#fff;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:700;color:#334155;">상세 ➔</button>
-                  </div>
-                  <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px;">${escHtml(task.taskName)} · ${escHtml(task.partner || filterRegisteredManagers(task.manager).join(", ") || "-")}</div>
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">
-                    <span style="font-size:10.5px;font-weight:700;color:${isDel ? "#dc2626" : "#1e40af"};">${escHtml(ymd)} (${isDel ? "⚠️ 지연" : escHtml(task.status || "예정")})</span>
-                    ${phone ? `<a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="font-size:11px;color:#166534;font-weight:700;text-decoration:none;">📞 통화</a>` : ""}
-                  </div>
-                </div>`;
-            }).join("") || `<div style="font-size:12px;color:var(--text-muted);">남은 공정이 없습니다.</div>`}
+            <div class="m-home-task-scroll">
+              ${filteredMobileTasks.map(({ site, task, ymd }) => {
+                const phone = lookupPartnerPhone(task.partner);
+                const tid = task.id || task.taskId;
+                const isDel = Boolean(task.isDelayed || (ymd && ymd < todayYmd));
+                return `
+                  <div class="m-site-box ${isDel ? "danger" : ""}" style="border-radius:9px;" onclick="openTaskEditModal('${escJs(tid)}')">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                      <span style="font-size:12.5px;font-weight:800;">${escHtml(site.siteName)}</span>
+                      <button type="button" onclick="event.stopPropagation(); openSiteDetailMobile('${escJs(site.siteKey)}')" style="border:1px solid #cbd5e1;background:#fff;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:700;color:#334155;">상세 ➔</button>
+                    </div>
+                    <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px;">${escHtml(task.taskName)} · ${escHtml(task.partner || filterRegisteredManagers(task.manager).join(", ") || "-")}</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">
+                      <span style="font-size:10.5px;font-weight:700;color:${isDel ? "#dc2626" : "#1e40af"};">${escHtml(ymd)} (${isDel ? "⚠️ 지연" : escHtml(task.status || "예정")})</span>
+                      ${phone ? `<a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="font-size:11px;color:#166534;font-weight:700;text-decoration:none;">📞 통화</a>` : ""}
+                    </div>
+                  </div>`;
+              }).join("") || `<div style="font-size:12px;color:var(--text-muted);padding:8px 2px;">해당 상태의 공정이 없습니다.</div>`}
+            </div>
+          </div>
+
+          <div class="m-card-box m-home-memo-panel">
+            <div class="m-card-title-row">
+              <span class="m-card-title">📌 최근 현장 메모 브리핑</span>
+            </div>
+            <div class="home-memo-list" style="display:flex;flex-direction:column;gap:8px;">
+              ${renderHomeMemoBriefingHtml(tasks)}
+            </div>
           </div>
 
           <div class="m-card-box">
@@ -4476,6 +4607,10 @@
           task.status = ctx.status;
           task.isShared = ctx.isShared;
           task.memo = finalMemo;
+          task.updatedAtMs = Date.now();
+          if (finalMemo !== origMemoStr && String(finalMemo).trim()) {
+            task.memoUpdatedAtMs = Date.now();
+          }
           task.isToday = ctx.startYmd === todayYmd;
           task.isDelayed = ctx.startYmd < todayYmd && ctx.status !== "완료";
           if (String(ctx.status || "").indexOf("완료") === -1 && String(ctx.status || "").indexOf("취소") === -1) {
@@ -4566,12 +4701,14 @@
             });
           }
           const newId = "task_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+          const nowMs = Date.now();
           const newTask = {
             id: newId, taskId: newId, row: "", taskName: ctx.taskName.trim(),
             dateDisplay: dateDisp, dateMs: new Date(ctx.startYmd + "T00:00:00").getTime(),
             startDateStr: ctx.startYmd, endDateStr: ctx.isRange ? ctx.endYmd : ctx.startYmd,
             partner: ctx.partner, manager: managerCombined, manager1: ctx.manager1, manager2: ctx.manager2,
             status: ctx.status, isShared: ctx.isShared, memo: finalMemo,
+            updatedAtMs: nowMs, memoUpdatedAtMs: String(finalMemo).trim() ? nowMs : 0,
             isToday: ctx.startYmd === todayYmd, isDelayed: ctx.startYmd < todayYmd && ctx.status !== "완료",
             hasCal: true, scope: ctx.scope, sheetName: targetSheetName, isArchived: false
           };
@@ -5616,6 +5753,8 @@
       window.filterTodoMember = function (mem) { state.todoMemberFilter = mem; state.dirtyPcTabs.todo = true; renderActiveViews(); };
       window.toggleQuoteArchived = function () { state.quoteShowArchived = !state.quoteShowArchived; state.dirtyPcTabs.quote = true; renderActiveViews(); };
       window.setFinancePartner = function (partner) { state.financePartnerFilter = partner; state.dirtyPcTabs.finance = true; renderActiveViews(); };
+      window.setHomeTaskFilter = function (filter) { state.homeTaskFilter = filter || "all"; state.dirtyPcTabs.home = true; state.dirtyMobileTabs.home = true; renderActiveViews(); };
+      window.toggleHomeMemoExpand = function () { state.homeMemoExpanded = !state.homeMemoExpanded; state.dirtyPcTabs.home = true; state.dirtyMobileTabs.home = true; renderActiveViews(); };
       window.copyText = copyText;
       window.showToast = showToast;
 
