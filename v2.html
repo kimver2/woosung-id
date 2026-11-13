@@ -397,28 +397,75 @@
       background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; font-size: 11.5px; font-weight: 700; color: var(--text-sub); cursor: pointer;
     }
 
-    /* ================= 4. [탭 1: 홈 (기본 진입화면, To-Do 최상단)] ================= */
-    .home-workspace { flex: 1; padding: 20px 26px; overflow-y: auto; background: var(--bg); }
+    /* ================= 4. [탭 1: 홈 (기본 진입화면, 모던 벤토 카드)] ================= */
+    .home-workspace { flex: 1; padding: 20px 26px 28px; overflow-y: auto; background: #f1f5f9; }
     .home-hero-card {
-      background: #ffffff; border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px;
-      margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm);
+      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 58%, #3b82f6 100%);
+      border: 1px solid #1d4ed8; border-radius: 14px; padding: 20px 24px; color: #ffffff;
+      margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      box-shadow: 0 10px 24px -8px rgba(30, 64, 175, 0.35); flex-wrap: wrap;
     }
-    .home-user-greeting h2 { font-size: 19px; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 8px; }
-    .home-user-greeting p { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
+    .home-hero-left { display: flex; align-items: center; gap: 15px; min-width: 0; }
+    .home-hero-avatar {
+      width: 48px; height: 48px; border-radius: 13px; background: rgba(255, 255, 255, 0.18);
+      border: 1.5px solid rgba(255, 255, 255, 0.35); color: #ffffff;
+      display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; flex-shrink: 0;
+    }
+    .home-user-greeting h2 { font-size: 19px; font-weight: 800; color: #ffffff; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .home-hero-date-pill {
+      font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+      background: rgba(255, 255, 255, 0.18); border: 1px solid rgba(255, 255, 255, 0.28); color: #eff6ff;
+    }
+    .home-user-greeting p { font-size: 12.5px; color: #dbeafe; margin-top: 4px; }
+    .home-hero-chips { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 9px; }
+    .home-hero-chip {
+      font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+      background: rgba(15, 23, 42, 0.22); border: 1px solid rgba(255, 255, 255, 0.2); color: #ffffff;
+      cursor: pointer; transition: background 0.12s;
+    }
+    .home-hero-chip:hover { background: rgba(15, 23, 42, 0.36); }
+    .home-hero-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .btn-hero-glass {
+      background: rgba(255, 255, 255, 0.16); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.32);
+      border-radius: 8px; padding: 8px 13px; font-size: 12px; font-weight: 700; cursor: pointer;
+    }
+    .btn-hero-glass:hover { background: rgba(255, 255, 255, 0.26); }
+    .btn-hero-solid {
+      background: #ffffff; color: #1e3a8a; border: none; border-radius: 8px;
+      padding: 8px 14px; font-size: 12px; font-weight: 800; cursor: pointer;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.16);
+    }
+    .btn-hero-solid:hover { background: #eff6ff; }
+
     .home-kpi-4grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
     .home-kpi-card {
-      background: #ffffff; border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px;
-      box-shadow: var(--shadow-sm); cursor: pointer; transition: transform 0.15s;
+      background: #ffffff; border: 1px solid var(--border); border-top: 3px solid #2563eb;
+      border-radius: 12px; padding: 15px 16px; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+      cursor: pointer; transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+      display: flex; flex-direction: column; justify-content: space-between;
     }
-    .home-kpi-card:hover { transform: translateY(-2px); border-color: #bfdbfe; }
-    .hk-lbl { font-size: 12px; font-weight: 700; color: var(--text-muted); }
-    .hk-val { font-size: 22px; font-weight: 800; color: var(--text); margin-top: 4px; }
-    .hk-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .home-kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(37, 99, 235, 0.1); border-color: #93c5fd; }
+    .home-kpi-card.kpi-blue { border-top-color: #2563eb; }
+    .home-kpi-card.kpi-green { border-top-color: #10b981; }
+    .home-kpi-card.kpi-red { border-top-color: #ef4444; }
+    .home-kpi-card.kpi-amber { border-top-color: #f59e0b; }
+    .hk-top-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .hk-icon-box {
+      width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center;
+      justify-content: center; font-size: 17px; flex-shrink: 0;
+    }
+    .hk-lbl { font-size: 12px; font-weight: 700; color: var(--text-sub); }
+    .hk-val { font-size: 24px; font-weight: 800; color: var(--text); margin-top: 4px; letter-spacing: -0.3px; }
+    .hk-sub {
+      font-size: 11.5px; color: var(--text-muted); margin-top: 8px; padding-top: 7px; border-top: 1px dashed #e2e8f0;
+      display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    }
+    .hk-sub-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    .home-main-split { display: grid; grid-template-columns: 1fr 350px; gap: 18px; }
+    .home-main-split { display: grid; grid-template-columns: 1fr 345px; gap: 18px; align-items: start; }
     .home-panel-box {
-      background: #ffffff; border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px;
-      box-shadow: var(--shadow-sm); margin-bottom: 16px;
+      background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04); margin-bottom: 16px;
     }
     .hp-header {
       display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
@@ -426,21 +473,57 @@
     }
     .hp-title { font-size: 14.5px; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 6px; }
     .hp-link { font-size: 12px; color: #2563eb; font-weight: 700; cursor: pointer; text-decoration: none; }
-    .task-timeline-item {
-      display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #f8fafc;
-      border-left: 4px solid #2563eb; border-radius: 6px; margin-bottom: 8px; cursor: pointer; gap: 10px;
-    }
-    .task-timeline-item:hover { background: #eff6ff; }
-    .task-timeline-item.warning { border-left-color: var(--warning); background: #fffdf5; }
-    .task-timeline-item.danger { border-left-color: var(--danger); background: #fef2f2; }
 
+    .home-todo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .home-todo-row {
-      display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 7px;
-      background: #f8fafc; border: 1px solid var(--border); transition: all 0.12s;
+      display: flex; flex-direction: column; justify-content: space-between; gap: 8px; padding: 11px 13px;
+      border-radius: 10px; background: #f8fafc; border: 1px solid var(--border); transition: all 0.14s;
     }
-    .home-todo-row:hover { border-color: #93c5fd; background: #eff6ff; }
+    .home-todo-row:hover { border-color: #93c5fd; background: #eff6ff; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(37, 99, 235, 0.08); }
     .home-todo-row.imp { background: #fffbeb; border-color: #fde68a; }
     .home-todo-row.overdue { background: #fef2f2; border-color: #fecaca; }
+    .htc-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .htc-site-pill {
+      font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 6px;
+      background: #dbeafe; color: #1e40af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;
+    }
+    .htc-title { font-size: 13px; font-weight: 800; color: var(--text); line-height: 1.38; cursor: pointer; }
+    .htc-detail { font-size: 11.5px; color: var(--text-sub); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .htc-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11px; color: var(--text-muted); padding-top: 6px; border-top: 1px dashed rgba(148, 163, 184, 0.35); }
+
+    .home-task-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .task-timeline-item {
+      display: flex; flex-direction: column; justify-content: space-between; gap: 8px; padding: 12px 13px;
+      background: #ffffff; border: 1px solid var(--border); border-left: 4px solid #2563eb; border-radius: 10px;
+      cursor: pointer; transition: all 0.14s; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+    }
+    .task-timeline-item:hover { background: #f8fafc; border-color: #93c5fd; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08); }
+    .task-timeline-item.warning { border-left-color: var(--warning); background: #fffdf7; }
+    .task-timeline-item.danger { border-left-color: var(--danger); background: #fef6f6; }
+    .hti-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .hti-status-pill { font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 6px; white-space: nowrap; }
+    .hti-mid { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .hti-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11.5px; color: var(--text-muted); }
+
+    .home-sites-mini-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .home-site-mini-card {
+      background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px;
+      cursor: pointer; transition: all 0.14s; display: flex; flex-direction: column; gap: 7px;
+    }
+    .home-site-mini-card:hover { background: #eff6ff; border-color: #93c5fd; transform: translateY(-1px); }
+    .hsm-bar { height: 6px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+    .hsm-bar-fill { height: 100%; border-radius: 999px; }
+
+    .home-quote-mini-card {
+      background: #f8fafc; border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px;
+      cursor: pointer; transition: all 0.12s; display: flex; flex-direction: column; gap: 4px;
+    }
+    .home-quote-mini-card:hover { background: #eff6ff; border-color: #93c5fd; }
+
+    @media (max-width: 1180px) {
+      .home-todo-grid, .home-task-grid { grid-template-columns: 1fr; }
+      .home-sites-mini-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
 
     /* ================= 5. [캘린더] (기존 운영 버전 공종 알약 100% 재현) ================= */
     .calendar-workspace-view {
@@ -1703,11 +1786,13 @@
         else window.switchMainTab("sites");
       };
 
-      // ================= [PC 탭 1: 홈 — To-Do 최상단 배치!] =================
+      // ================= [PC 탭 1: 홈 — 모던 벤토 카드 (To-Do 최상단 배치)] =================
       function renderPcHomeTab() {
         const user = state.user;
         const roleLabel = getMemberRoleTitle(user) + "님";
         const todayYmd = getTodayYmd();
+        const dowNames = ["일", "월", "화", "수", "목", "금", "토"];
+        const todayDow = dowNames[new Date(todayYmd + "T00:00:00").getDay()] || "";
         const q = state.searchQuery.trim();
         const allActiveSites = getAllSites().filter((s) => s.scope !== "newSite" && !s.isArchived && !s.isAllCompleted);
         const userSites = allActiveSites.filter((s) => (s.tasks || []).some((t) => taskMatchesMember(t, user)));
@@ -1728,12 +1813,13 @@
         const todayTasks = myTasks.filter((x) => x.task.isToday && x.task.status !== "완료");
         const delayedTasks = myTasks.filter((x) => x.task.isDelayed && x.task.status !== "완료");
 
+        const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !s.isArchived && !s.isAllCompleted);
         const allTodos = (state.todoData && state.todoData.list) || [];
         const myTodos = allTodos.filter((t) => !t.manager || t.manager.includes(user));
         const myPendingTodos = myTodos.filter((t) => t.status !== "완료");
         const myPayable = (state.financeData && state.financeData.summary && state.financeData.summary.totalPayable) || 0;
 
-        // 1) 최상단 To-Do 섹션
+        // 1) 최상단 To-Do 2열 카드 그리드
         const todoItemsHtml = myTodos.slice(0, 8).map((t) => {
           const isDone = t.status === "완료";
           const dueYmd = (t.dueDate || "").replace(/\./g, "-");
@@ -1743,89 +1829,178 @@
           if (isOverdue) cls.push("overdue");
           else if (isImp) cls.push("imp");
           return `
-            <div class="${cls.join(" ")}" style="${isDone ? "opacity:0.65;" : ""}">
-              <input type="checkbox" ${isDone ? "checked" : ""} onclick="event.stopPropagation(); toggleTodoItem('${escJs(t.id)}')" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
-              <div style="flex:1;cursor:pointer;min-width:0;" onclick="openTodoModal('${escJs(t.id)}')">
-                <div style="font-size:13px;font-weight:700;${isDone ? "text-decoration:line-through;color:var(--text-muted);" : ""}">
-                  ${t.siteName ? `<span style="color:#1e40af;">[${escHtml(t.siteName)}]</span> ` : ""}${escHtml(t.title)}
+            <div class="${cls.join(" ")}" style="${isDone ? "opacity:0.65;" : ""}" onclick="openTodoModal('${escJs(t.id)}')">
+              <div class="htc-top">
+                <div style="display:flex;align-items:center;gap:7px;min-width:0;">
+                  <input type="checkbox" ${isDone ? "checked" : ""} onclick="event.stopPropagation(); toggleTodoItem('${escJs(t.id)}')" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;flex-shrink:0;">
+                  ${t.siteName ? `<span class="htc-site-pill" title="${escHtml(t.siteName)}">${escHtml(t.siteName)}</span>` : `<span class="htc-site-pill" style="background:#e2e8f0;color:#475569;">일반 업무</span>`}
                 </div>
-                ${t.detail ? `<div style="font-size:11.5px;color:var(--text-sub);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(t.detail)}</div>` : ""}
+                <button type="button" onclick="event.stopPropagation(); toggleTodoImportant('${escJs(t.id)}')" title="중요 표시" style="border:none;background:transparent;font-size:15px;cursor:pointer;line-height:1;">${t.isImportant || t.status === "중요" ? "⭐" : "☆"}</button>
               </div>
-              <button type="button" onclick="event.stopPropagation(); toggleTodoImportant('${escJs(t.id)}')" title="중요 표시" style="border:none;background:transparent;font-size:14px;cursor:pointer;">${t.isImportant || t.status === "중요" ? "⭐" : "☆"}</button>
-              <span style="font-size:11px;font-weight:700;white-space:nowrap;color:${isOverdue ? "#dc2626" : isImp ? "#d97706" : "var(--text-muted)"};">${isOverdue ? "🚨 " + escHtml(t.dueDate) : escHtml(t.dueDate || "기한없음")}</span>
+              <div style="cursor:pointer;min-width:0;">
+                <div class="htc-title" style="${isDone ? "text-decoration:line-through;color:var(--text-muted);" : ""}">${escHtml(t.title)}</div>
+                ${t.detail ? `<div class="htc-detail">${escHtml(t.detail)}</div>` : ""}
+              </div>
+              <div class="htc-foot">
+                <span style="font-weight:700;color:${isOverdue ? "#dc2626" : isImp ? "#d97706" : "var(--text-muted)"};">${isDone ? "✓ 완료됨" : isOverdue ? "🚨 기한지남 (" + escHtml(t.dueDate) + ")" : escHtml(t.dueDate || "기한없음")}</span>
+                <span>👤 ${escHtml(t.manager || "미지정")}</span>
+              </div>
             </div>`;
-        }).join("") || `<div style="color:var(--text-muted);font-size:13px;padding:12px;">할당된 To-Do 업무가 없습니다.</div>`;
+        }).join("") || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;padding:16px;text-align:center;background:#f8fafc;border-radius:10px;">할당된 To-Do 업무가 없습니다.</div>`;
 
-        // 2) 아래 주요 현장 공정 섹션
-        const scheduleItemsHtml = activeOrToday.slice(0, 7).map(({ site, task, ymd }) => {
+        // 2) 아래 주요 현장 공정 2열 카드 그리드
+        const scheduleItemsHtml = activeOrToday.slice(0, 6).map(({ site, task, ymd }) => {
           const isDel = task.isDelayed;
-          const cls = isDel ? "danger" : task.isToday ? "" : "warning";
+          const isToday = task.isToday;
+          const cls = isDel ? "danger" : isToday ? "" : "warning";
+          const stBg = isDel ? "#fee2e2" : isToday ? "#dcfce7" : "#dbeafe";
+          const stFg = isDel ? "#dc2626" : isToday ? "#15803d" : "#1e40af";
+          const stLabel = isDel ? "⚠️ 지연" : isToday ? "🔥 오늘 진행" : escHtml(task.status || "예정");
           return `
             <div class="task-timeline-item ${cls}" onclick="openTaskEditModal('${escJs(task.id || task.taskId)}')">
-              <div style="min-width:0;flex:1;">
-                <strong>${escHtml(site.siteName)}</strong>
-                <span style="font-size:11px;background:${isDel ? "#fee2e2" : "#dbeafe"};color:${isDel ? "#991b1b" : "#1e40af"};padding:2px 6px;border-radius:4px;margin-left:6px;font-weight:700;">${escHtml(task.taskName)}</span>
-                <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">${escHtml(task.partner || task.manager || "-")}</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-                <div style="white-space:nowrap;font-size:11.5px;font-weight:700;color:${isDel ? "#dc2626" : "#1d4ed8"};">
-                  ${isDel ? "⚠️ 지연 (" + escHtml(ymd) + ")" : escHtml(ymd || task.status)}
+              <div class="hti-top">
+                <span class="hti-status-pill" style="background:${stBg};color:${stFg};">${stLabel}</span>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span style="font-size:11.5px;font-weight:700;color:${isDel ? "#dc2626" : "#475569"};">${escHtml(ymd || task.dateDisplay || "-")}</span>
+                  <button type="button" class="home-detail-chip-btn" onclick="event.stopPropagation(); openSiteDetail('${escJs(site.siteKey)}')" title="해당 현장 상세 보기">현장 상세 ➔</button>
                 </div>
-                <button type="button" class="home-detail-chip-btn" onclick="event.stopPropagation(); openSiteDetail('${escJs(site.siteKey)}')" title="해당 현장 상세 보기">현장 상세 ➔</button>
+              </div>
+              <div class="hti-mid">
+                <span style="width:8px;height:8px;border-radius:50%;background:${escHtml(site.colorHex || "#2563eb")};flex-shrink:0;"></span>
+                <strong style="font-size:13.5px;color:#0f172a;">${escHtml(site.siteName)}</strong>
+                <span style="font-size:11px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:2px 7px;border-radius:6px;font-weight:800;">${escHtml(task.taskName)}</span>
+              </div>
+              <div class="hti-foot">
+                <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🤝 ${escHtml(task.partner || "업체 미등록")}</span>
+                <span style="white-space:nowrap;font-weight:700;color:#334155;">👤 ${escHtml(filterRegisteredManagers(task.manager).join(", ") || "미지정")}</span>
               </div>
             </div>`;
-        }).join("") || `<div style="color:var(--text-muted);font-size:13px;padding:12px;">확인할 예정/진행 공정이 없습니다.</div>`;
+        }).join("") || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;padding:16px;text-align:center;background:#f8fafc;border-radius:10px;">확인할 예정/진행 공정이 없습니다.</div>`;
 
-        // 우측 미니 캘린더
+        // 3) 내 담당 진행 현장 미니 카드 그리드
+        const mySitesCardsHtml = mySites.slice(0, 6).map((s) => {
+          const pct = s.progressRate || 0;
+          const barCol = pct >= 80 ? "#10b981" : pct >= 40 ? "#2563eb" : "#f59e0b";
+          const mgrText = filterRegisteredManagers((s.tasks || []).map((t) => t.manager).filter(Boolean).join(", ")).slice(0, 2).join(", ") || "미지정";
+          return `
+            <div class="home-site-mini-card" onclick="openSiteDetail('${escJs(s.siteKey)}')">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                <span style="font-size:12.5px;font-weight:800;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                  <span style="color:${escHtml(s.colorHex || "#2563eb")};">●</span> ${escHtml(s.siteName)}
+                </span>
+                <span style="font-size:12px;font-weight:800;color:${barCol};flex-shrink:0;">${pct}%</span>
+              </div>
+              <div class="hsm-bar"><div class="hsm-bar-fill" style="width:${pct}%;background:${barCol};"></div></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-muted);">
+                <span>👤 ${escHtml(mgrText)} · ${s.completedTasksCount || 0}/${s.totalTasksCount || 0}</span>
+                ${s.delayedTasksCount > 0 ? `<span style="color:#dc2626;font-weight:800;">⚠️ 지연 ${s.delayedTasksCount}</span>` : `<span style="color:#059669;font-weight:700;">정상</span>`}
+              </div>
+            </div>`;
+        }).join("");
+
+        // 우측 미니 캘린더 (일정 도트 표시)
         const year = state.calYear, month = state.calMonth;
         const firstDow = new Date(year, month - 1, 1).getDay();
         const daysInMonth = new Date(year, month, 0).getDate();
+        const ymPrefix = year + "-" + String(month).padStart(2, "0");
+        const dayHasEvent = {};
+        myTasks.forEach(({ ymd }) => { if (ymd && ymd.startsWith(ymPrefix)) dayHasEvent[ymd] = true; });
         let miniCells = `<span class="mc-head" style="color:#ef4444;">일</span><span class="mc-head">월</span><span class="mc-head">화</span><span class="mc-head">수</span><span class="mc-head">목</span><span class="mc-head">금</span><span class="mc-head" style="color:#2563eb;">토</span>`;
         for (let i = 0; i < firstDow; i++) miniCells += `<span class="mc-cell other"></span>`;
         for (let d = 1; d <= daysInMonth; d++) {
-          const ymd = year + "-" + String(month).padStart(2, "0") + "-" + String(d).padStart(2, "0");
-          miniCells += `<span class="mc-cell ${ymd === todayYmd ? "today" : ""}" onclick="selectCalDay('${ymd}'); switchMainTab('calendar');">${d}</span>`;
+          const ymd = ymPrefix + "-" + String(d).padStart(2, "0");
+          const cls = ["mc-cell"];
+          if (ymd === todayYmd) cls.push("today");
+          if (dayHasEvent[ymd]) cls.push("has-ev");
+          miniCells += `<span class="${cls.join(" ")}" onclick="selectCalDay('${ymd}'); switchMainTab('calendar');">${d}</span>`;
         }
+
+        // 우측 신규 견적 파이프라인 카드
+        const quotePreviewHtml = activeNewQuotes.slice(0, 3).map((qs) => {
+          const ed = qs.estimateData || {};
+          const stStyle = getEstimateBadgeStyle("status", ed.status || "신규 문의");
+          return `
+            <div class="home-quote-mini-card" onclick="openSiteDetail('${escJs(qs.siteKey)}')">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                <strong style="font-size:12.5px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(qs.siteName)}</strong>
+                <span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:8px;background:${stStyle.bg};color:${stStyle.fg};border:1px solid ${stStyle.border};white-space:nowrap;">${escHtml(ed.status || "신규 문의")}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-muted);">
+                <span>${escHtml(ed.scope || "전체공사")} · ${escHtml(ed.manager || "미지정")}</span>
+                <span style="color:#2563eb;font-weight:800;">${formatEstimateAmtStr(ed.expectedAmount)}</span>
+              </div>
+            </div>`;
+        }).join("") || `<div style="font-size:12px;color:var(--text-muted);">진행 중인 신규 견적이 없습니다.</div>`;
 
         document.getElementById("page-home").innerHTML = `
           <div class="home-workspace">
             <div class="home-hero-card">
-              <div class="home-user-greeting">
-                <h2>좋은 하루입니다, ${escHtml(user)} ${roleLabel} ☕</h2>
-                <p>Google Sheets 실시간 기준 — 미완료 To-Do ${myPendingTodos.length}건 · 담당 진행 현장 ${mySites.length}개소</p>
+              <div class="home-hero-left">
+                <div class="home-hero-avatar">${escHtml(user.slice(0, 1))}</div>
+                <div class="home-user-greeting">
+                  <h2>좋은 하루입니다, ${escHtml(user)} ${roleLabel} ☕ <span class="home-hero-date-pill">📅 ${escHtml(todayYmd)} (${todayDow})</span></h2>
+                  <p>Google Sheets 실시간 기준 — 오늘 챙겨야 할 업무와 현장 현황을 카드별로 한눈에 확인하세요.</p>
+                  <div class="home-hero-chips">
+                    <span class="home-hero-chip" onclick="switchMainTab('todo')">✅ 미완료 To-Do ${myPendingTodos.length}건</span>
+                    <span class="home-hero-chip" onclick="switchMainTab('calendar')">🔨 오늘 공정 ${todayTasks.length}건</span>
+                    <span class="home-hero-chip" onclick="switchMainTab('sites')">🏢 담당 현장 ${mySites.length}개소</span>
+                    <span class="home-hero-chip" onclick="switchMainTab('quote')">📋 신규 견적 ${activeNewQuotes.length}건</span>
+                  </div>
+                </div>
               </div>
-              <div style="display:flex;gap:8px;align-items:center;">
-                <button type="button" class="btn-act-white" onclick="openTodoModal(null)">+ To-Do 추가</button>
-                <button type="button" class="btn-act-blue" onclick="openNewTaskModal('', state.selectedDayStr)">➕ 새 일정 등록</button>
+              <div class="home-hero-actions">
+                <button type="button" class="btn-hero-glass" onclick="openTodoModal(null)">+ To-Do 추가</button>
+                <button type="button" class="btn-hero-glass" onclick="openEstimateModal(null)">+ 신규 견적</button>
+                <button type="button" class="btn-hero-solid" onclick="openNewTaskModal('', state.selectedDayStr)">➕ 새 일정 등록</button>
               </div>
             </div>
 
             <div class="home-kpi-4grid">
-              <div class="home-kpi-card" onclick="switchMainTab('todo')">
-                <div class="hk-lbl">남은 내 To-Do</div>
-                <div class="hk-val" style="color:#1e40af;">${myPendingTodos.length}건</div>
-                <div class="hk-sub">전체 ${myTodos.length}건 중 미완료</div>
+              <div class="home-kpi-card kpi-blue" onclick="switchMainTab('todo')">
+                <div class="hk-top-row">
+                  <div>
+                    <div class="hk-lbl">남은 내 To-Do</div>
+                    <div class="hk-val" style="color:#1e40af;">${myPendingTodos.length}건</div>
+                  </div>
+                  <div class="hk-icon-box" style="background:#eff6ff;color:#2563eb;">✅</div>
+                </div>
+                <div class="hk-sub"><span class="hk-sub-txt">전체 ${myTodos.length}건 중 미완료</span><span>➔</span></div>
               </div>
-              <div class="home-kpi-card" onclick="switchMainTab('calendar')">
-                <div class="hk-lbl">오늘 챙길 내 공정</div>
-                <div class="hk-val" style="color:#10b981;">${todayTasks.length}건</div>
-                <div class="hk-sub">${escHtml(todayTasks.slice(0, 2).map((x) => x.task.taskName).join(", ") || "금일 예정 없음")}</div>
+              <div class="home-kpi-card kpi-green" onclick="switchMainTab('calendar')">
+                <div class="hk-top-row">
+                  <div>
+                    <div class="hk-lbl">오늘 챙길 내 공정</div>
+                    <div class="hk-val" style="color:#10b981;">${todayTasks.length}건</div>
+                  </div>
+                  <div class="hk-icon-box" style="background:#ecfdf5;color:#10b981;">🔨</div>
+                </div>
+                <div class="hk-sub"><span class="hk-sub-txt">${escHtml(todayTasks.slice(0, 2).map((x) => x.task.taskName).join(", ") || "금일 예정 없음")}</span><span>➔</span></div>
               </div>
-              <div class="home-kpi-card" onclick="openDelayedSitesFromHome(false)">
-                <div class="hk-lbl">나의 지연 / 확인 공정</div>
-                <div class="hk-val" style="color:#ef4444;">${delayedTasks.length}건 ⚠️</div>
-                <div class="hk-sub">${escHtml(delayedTasks[0] ? delayedTasks[0].site.siteName + " · " + delayedTasks[0].task.taskName : "지연 공정 없음")}</div>
+              <div class="home-kpi-card kpi-red" onclick="openDelayedSitesFromHome(false)">
+                <div class="hk-top-row">
+                  <div>
+                    <div class="hk-lbl">나의 지연 / 확인 공정</div>
+                    <div class="hk-val" style="color:#ef4444;">${delayedTasks.length}건 ⚠️</div>
+                  </div>
+                  <div class="hk-icon-box" style="background:#fef2f2;color:#ef4444;">⚠️</div>
+                </div>
+                <div class="hk-sub"><span class="hk-sub-txt">${escHtml(delayedTasks[0] ? delayedTasks[0].site.siteName + " · " + delayedTasks[0].task.taskName : "지연 공정 없음")}</span><span>➔</span></div>
               </div>
-              <div class="home-kpi-card" onclick="switchMainTab('finance')">
-                <div class="hk-lbl">거래처 미지급 잔액</div>
-                <div class="hk-val" style="color:#dc2626;">${formatKrw(myPayable)}</div>
-                <div class="hk-sub">전체 현장 거래원장 합산</div>
+              <div class="home-kpi-card kpi-amber" onclick="switchMainTab('finance')">
+                <div class="hk-top-row">
+                  <div>
+                    <div class="hk-lbl">거래처 미지급 잔액</div>
+                    <div class="hk-val" style="color:#dc2626;">${formatKrw(myPayable)}</div>
+                  </div>
+                  <div class="hk-icon-box" style="background:#fffbeb;color:#d97706;">💰</div>
+                </div>
+                <div class="hk-sub"><span class="hk-sub-txt">전체 현장 거래원장 합산</span><span>➔</span></div>
               </div>
             </div>
 
             <div class="home-main-split">
               <div class="home-left-col">
-                <!-- 1순위: To-Do가 위로 배치됨 -->
+                <!-- 1순위: To-Do 카드 그리드 -->
                 <div class="home-panel-box">
                   <div class="hp-header">
                     <span class="hp-title">✅ 나에게 할당된 To-Do (${myPendingTodos.length}건 남음)</span>
@@ -1834,16 +2009,25 @@
                       <a class="hp-link" onclick="switchMainTab('todo')">To-Do 전체보기 ➔</a>
                     </div>
                   </div>
-                  <div style="display:flex;flex-direction:column;gap:7px;">${todoItemsHtml}</div>
+                  <div class="home-todo-grid">${todoItemsHtml}</div>
                 </div>
 
-                <!-- 2순위: 주요 현장 공정 -->
+                <!-- 2순위: 주요 현장 공정 카드 그리드 -->
                 <div class="home-panel-box">
                   <div class="hp-header">
                     <span class="hp-title">🔨 ${escHtml(user)}님 주요 현장 공정 (${activeOrToday.length}건)</span>
                     <a class="hp-link" onclick="switchMainTab('calendar')">캘린더 전체보기 ➔</a>
                   </div>
-                  ${scheduleItemsHtml}
+                  <div class="home-task-grid">${scheduleItemsHtml}</div>
+                </div>
+
+                <!-- 3순위: 담당 진행 현장 카드 요약 -->
+                <div class="home-panel-box">
+                  <div class="hp-header">
+                    <span class="hp-title">🏢 내 담당 진행 현장 (${mySites.length}개소)</span>
+                    <a class="hp-link" onclick="switchMainTab('sites')">현장 전체보기 ➔</a>
+                  </div>
+                  <div class="home-sites-mini-grid">${mySitesCardsHtml || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;">진행 중인 현장이 없습니다.</div>`}</div>
                 </div>
               </div>
 
@@ -1857,11 +2041,19 @@
                 </div>
 
                 <div class="home-panel-box">
+                  <div class="hp-header">
+                    <span class="hp-title">📋 신규 견적 (${activeNewQuotes.length}건)</span>
+                    <a class="hp-link" onclick="switchMainTab('quote')">전체보기 ➔</a>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:8px;">${quotePreviewHtml}</div>
+                </div>
+
+                <div class="home-panel-box">
                   <div class="hp-header"><span class="hp-title">📌 최근 현장 메모 브리핑</span></div>
                   <div style="display:flex;flex-direction:column;gap:8px;">
                     ${myTasks.filter((x) => x.task.memo).slice(0, 3).map((x) => `
-                      <div style="font-size:12px;line-height:1.45;color:var(--text-sub);background:#f8fafc;padding:10px;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="openTaskEditModal('${escJs(x.task.id || x.task.taskId)}')">
-                        <strong style="color:#1e3a8a;">[${escHtml(x.site.siteName)}]</strong> ${escHtml(x.task.memo)}
+                      <div style="font-size:12px;line-height:1.45;color:var(--text-sub);background:#f8fafc;padding:10px 11px;border-radius:8px;border:1px solid var(--border);border-left:3px solid #3b82f6;cursor:pointer;" onclick="openTaskEditModal('${escJs(x.task.id || x.taskId)}')">
+                        <strong style="color:#1e3a8a;display:block;margin-bottom:2px;">[${escHtml(x.site.siteName)}]</strong>${escHtml(x.task.memo)}
                       </div>
                     `).join("") || `<div style="font-size:12px;color:var(--text-muted);">최근 메모가 없습니다.</div>`}
                   </div>
@@ -2824,7 +3016,7 @@
         `;
       }
 
-      // [모바일 탭 1: 홈 (기본) — To-Do 최상단!]
+      // [모바일 탭 1: 홈 (기본) — 모던 카드형 브리핑 & To-Do 최상단!]
       function renderMobileHomeTab() {
         const user = state.user;
         const roleLabel = getMemberRoleTitle(user) + "님";
@@ -2837,24 +3029,42 @@
           if (mySites.length && !taskMatchesMember(task, user)) return;
           if (task.status !== "완료") tasks.push({ site, task });
         }));
+        const todayTasks = tasks.filter((x) => x.task.isToday);
         const delayed = tasks.filter((x) => x.task.isDelayed);
+        const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !s.isArchived && !s.isAllCompleted);
         const todos = ((state.todoData && state.todoData.list) || []).filter((t) => !t.manager || t.manager.includes(user));
         const pendingTodos = todos.filter((t) => t.status !== "완료");
 
         document.getElementById("m-page-home").innerHTML = `
-          <div style="margin-bottom:10px;">
-            <div style="font-size:11.5px;color:var(--text-muted);">${escHtml(getTodayYmd())} 기준 · Google Sheets 연동</div>
-            <div style="font-size:16.5px;font-weight:800;color:var(--text);margin-top:2px;">${escHtml(user)} ${roleLabel} 맞춤 브리핑</div>
+          <div style="background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 65%,#3b82f6 100%);border-radius:14px;padding:15px 16px;color:#fff;margin-bottom:12px;box-shadow:0 8px 18px -6px rgba(37,99,235,0.4);">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+              <div>
+                <div style="font-size:11px;color:#dbeafe;font-weight:700;">📅 ${escHtml(getTodayYmd())} · Google Sheets 연동</div>
+                <div style="font-size:17px;font-weight:800;margin-top:3px;">${escHtml(user)} ${roleLabel} 브리핑 ☕</div>
+              </div>
+              <button type="button" onclick="openTodoModal(null)" style="border:none;background:rgba(255,255,255,0.2);color:#fff;font-size:11px;font-weight:800;padding:5px 9px;border-radius:8px;cursor:pointer;">+ To-Do</button>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+              <span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.22);">🏢 담당 현장 ${pool.length}</span>
+              <span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.22);">🔨 오늘 공정 ${todayTasks.length}</span>
+              <span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.22);">📋 신규 ${activeNewQuotes.length}</span>
+            </div>
           </div>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-            <div class="m-card-box" style="padding:10px;margin-bottom:0;" onclick="switchMobileTab('todo')">
-              <div style="font-size:11px;color:var(--text-muted);font-weight:700;">남은 To-Do</div>
-              <div style="font-size:18px;font-weight:800;color:#1e40af;margin-top:2px;">${pendingTodos.length}건</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+            <div class="m-card-box" style="padding:11px 12px;margin-bottom:0;border-top:3px solid #2563eb;" onclick="switchMobileTab('todo')">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:11px;color:var(--text-muted);font-weight:700;">남은 To-Do</span>
+                <span style="font-size:14px;">✅</span>
+              </div>
+              <div style="font-size:19px;font-weight:800;color:#1e40af;margin-top:3px;">${pendingTodos.length}건</div>
             </div>
-            <div class="m-card-box" style="padding:10px;margin-bottom:0;" onclick="openDelayedSitesFromHome(true)">
-              <div style="font-size:11px;color:var(--text-muted);font-weight:700;">지연 / 확인</div>
-              <div style="font-size:18px;font-weight:800;color:#ef4444;margin-top:2px;">${delayed.length}건 ⚠️</div>
+            <div class="m-card-box" style="padding:11px 12px;margin-bottom:0;border-top:3px solid #ef4444;" onclick="openDelayedSitesFromHome(true)">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:11px;color:var(--text-muted);font-weight:700;">지연 / 확인</span>
+                <span style="font-size:14px;">⚠️</span>
+              </div>
+              <div style="font-size:19px;font-weight:800;color:#ef4444;margin-top:3px;">${delayed.length}건</div>
             </div>
           </div>
 
@@ -2868,12 +3078,18 @@
               </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:7px;font-size:12px;">
-              ${todos.slice(0, 5).map((t) => `
-                <div style="display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:6px;background:#f8fafc;border:1px solid var(--border);" onclick="openTodoModal('${escJs(t.id)}')">
-                  <input type="checkbox" ${t.status === "완료" ? "checked" : ""} onclick="event.stopPropagation(); toggleTodoItem('${escJs(t.id)}')">
-                  <span style="flex:1;${t.status === "완료" ? "text-decoration:line-through;color:var(--text-muted);" : ""}">${t.siteName ? `<strong>[${escHtml(t.siteName)}]</strong> ` : ""}${escHtml(t.title)}</span>
-                  <span style="font-size:10.5px;color:${t.isImportant ? "#d97706" : "var(--text-muted)"};font-weight:700;">${t.isImportant ? "⭐" : escHtml(t.dueDate || "")}</span>
-                </div>`).join("") || `<div style="color:var(--text-muted);">할당된 To-Do가 없습니다.</div>`}
+              ${todos.slice(0, 5).map((t) => {
+                const isDone = t.status === "완료";
+                const isImp = !isDone && (t.isImportant || t.status === "중요");
+                return `
+                <div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:9px;background:${isImp ? "#fffbeb" : "#f8fafc"};border:1px solid ${isImp ? "#fde68a" : "var(--border)"};" onclick="openTodoModal('${escJs(t.id)}')">
+                  <input type="checkbox" ${isDone ? "checked" : ""} onclick="event.stopPropagation(); toggleTodoItem('${escJs(t.id)}')">
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-weight:700;${isDone ? "text-decoration:line-through;color:var(--text-muted);" : ""}">${t.siteName ? `<span style="color:#1e40af;">[${escHtml(t.siteName)}]</span> ` : ""}${escHtml(t.title)}</div>
+                  </div>
+                  <span style="font-size:10.5px;color:${isImp ? "#d97706" : "var(--text-muted)"};font-weight:700;white-space:nowrap;">${isImp ? "⭐" : escHtml(t.dueDate || "")}</span>
+                </div>`;
+              }).join("") || `<div style="color:var(--text-muted);">할당된 To-Do가 없습니다.</div>`}
             </div>
           </div>
 
@@ -2886,15 +3102,40 @@
               const phone = lookupPartnerPhone(task.partner, task.manager);
               const tid = task.id || task.taskId;
               return `
-                <div class="m-site-box ${task.isDelayed ? "danger" : ""}" onclick="openTaskEditModal('${escJs(tid)}')">
-                  <div style="font-size:12.5px;font-weight:800;">${escHtml(site.siteName)}</div>
-                  <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">${escHtml(task.taskName)} · ${escHtml(task.partner || task.manager || "-")}</div>
+                <div class="m-site-box ${task.isDelayed ? "danger" : ""}" style="border-radius:9px;" onclick="openTaskEditModal('${escJs(tid)}')">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                    <span style="font-size:12.5px;font-weight:800;">${escHtml(site.siteName)}</span>
+                    <button type="button" onclick="event.stopPropagation(); openSiteDetailMobile('${escJs(site.siteKey)}')" style="border:1px solid #cbd5e1;background:#fff;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:700;color:#334155;">상세 ➔</button>
+                  </div>
+                  <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px;">${escHtml(task.taskName)} · ${escHtml(task.partner || filterRegisteredManagers(task.manager).join(", ") || "-")}</div>
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">
                     <span style="font-size:10.5px;font-weight:700;color:${task.isDelayed ? "#dc2626" : "#1e40af"};">${escHtml(parseYmdFromTask(task))} (${escHtml(task.status)})</span>
                     ${phone ? `<a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="font-size:11px;color:#166534;font-weight:700;text-decoration:none;">📞 통화</a>` : ""}
                   </div>
                 </div>`;
             }).join("") || `<div style="font-size:12px;color:var(--text-muted);">예정된 공정이 없습니다.</div>`}
+          </div>
+
+          <div class="m-card-box">
+            <div class="m-card-title-row">
+              <span class="m-card-title">🏢 내 담당 현장 (${pool.length}개소)</span>
+              <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMobileTab('sites')">전체 ➔</span>
+            </div>
+            <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;">
+              ${pool.slice(0, 6).map((s) => {
+                const pct = s.progressRate || 0;
+                const col = pct >= 80 ? "#10b981" : pct >= 40 ? "#2563eb" : "#f59e0b";
+                return `
+                  <div onclick="openSiteDetailMobile('${escJs(s.siteKey)}')" style="min-width:155px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:9px 10px;flex-shrink:0;cursor:pointer;">
+                    <div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><span style="color:${escHtml(s.colorHex || "#2563eb")};">●</span> ${escHtml(s.siteName)}</div>
+                    <div style="height:5px;border-radius:999px;background:#e2e8f0;margin:6px 0;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${col};"></div></div>
+                    <div style="display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;color:var(--text-muted);">
+                      <span style="color:${col};">${pct}%</span>
+                      <span>${s.delayedTasksCount > 0 ? "⚠️ 지연 " + s.delayedTasksCount : (s.completedTasksCount || 0) + "/" + (s.totalTasksCount || 0)}</span>
+                    </div>
+                  </div>`;
+              }).join("")}
+            </div>
           </div>
         `;
       }
