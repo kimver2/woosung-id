@@ -939,6 +939,42 @@
     }
     .ws-input:focus, .ws-select:focus, .ws-textarea:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
     .ws-textarea { resize: vertical; min-height: 76px; line-height: 1.45; }
+    .sheet-partner-wrap { position: relative; }
+    .sheet-partner-search-box { position: relative; display: flex; align-items: center; }
+    .sheet-partner-search-box input { padding-right: 42px; cursor: pointer; background: #ffffff; }
+    .sheet-partner-arrow {
+      position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+      font-size: 10px; color: #94a3b8; cursor: pointer; user-select: none;
+    }
+    .sheet-partner-clear {
+      position: absolute; right: 24px; top: 50%; transform: translateY(-50%);
+      font-size: 12px; color: #94a3b8; cursor: pointer; padding: 2px 4px; line-height: 1;
+    }
+    .sheet-partner-clear:hover { color: #ef4444; }
+    .sheet-partner-dropdown-popover {
+      display: none; position: absolute; left: 0; right: 0; top: calc(100% + 3px);
+      max-height: 220px; overflow-y: auto; background: #ffffff;
+      border: 1.5px solid #3b82f6; border-radius: 8px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18); z-index: 2500; font-size: 12.5px;
+    }
+    .partner-drop-item {
+      padding: 8.5px 11px; cursor: pointer; border-bottom: 1px solid #f1f5f9;
+      display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    }
+    .partner-drop-item:hover { background: #eff6ff; }
+    .partner-drop-item.selected { background: #eff6ff; color: #2563eb; font-weight: 700; }
+    .partner-drop-custom {
+      padding: 10px 11px; cursor: pointer; background: #f0fdf4;
+      border-top: 1.5px solid #bbf7d0; color: #15803d; font-weight: 700;
+      display: flex; align-items: center; gap: 6px; position: sticky; bottom: 0;
+    }
+    .partner-drop-custom:hover { background: #dcfce7; }
+    .sheet-call-btn {
+      width: 34px; height: 34px; min-width: 34px; border-radius: 8px;
+      background: #22c55e; color: #ffffff; display: inline-flex; align-items: center;
+      justify-content: center; text-decoration: none; font-size: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1); flex-shrink: 0;
+    }
 
     .seg-row { display: flex; gap: 6px; flex-wrap: wrap; }
     .seg-btn {
@@ -1175,11 +1211,11 @@
           <div class="user-select-pill">
             <span>👤</span>
             <select id="userSelector" onchange="onUserChanged(this.value)">
-              <option value="조항만">조항만 대표</option>
-              <option value="송지은">송지은 소장</option>
-              <option value="전예린">전예린 소장</option>
-              <option value="한송이">한송이 소장</option>
-              <option value="차정률">차정률 소장</option>
+              <option value="조항만">조항만</option>
+              <option value="송지은">송지은</option>
+              <option value="전예린">전예린</option>
+              <option value="한송이">한송이</option>
+              <option value="차정률">차정률</option>
             </select>
           </div>
 
@@ -1569,11 +1605,19 @@
         return raw.map((m) => String(m || "").trim()).filter(Boolean);
       }
       function getMemberRoleTitle(name) {
+        const cleanName = String(name || "").trim();
+        if (!cleanName) return "님";
+        const snapRoleMap = (state.dashData && state.dashData.memberRoleMap) || {};
+        const fallbackRoleMap = { "차정률": "현장소장", "조항만": "대표", "송지은": "과장", "전예린": "대리", "한송이": "주임" };
         if (state.settingsData && Array.isArray(state.settingsData.members)) {
-          const found = state.settingsData.members.find((m) => m && m.name === name);
-          if (found && found.role) return found.role;
+          const found = state.settingsData.members.find((m) => m && String(m.name || "").trim() === cleanName);
+          if (found && String(found.role || "").trim()) {
+            const r = String(found.role).trim();
+            if (r === "소장" && snapRoleMap[cleanName]) return snapRoleMap[cleanName];
+            return r;
+          }
         }
-        return name === "조항만" ? "대표" : "소장";
+        return snapRoleMap[cleanName] || fallbackRoleMap[cleanName] || "소장";
       }
       function syncUserSelectorOptions() {
         const members = getMembersList();
@@ -1583,7 +1627,7 @@
           state.user = members.includes("조항만") ? "조항만" : members[0];
         }
         if (pcSel) {
-          pcSel.innerHTML = members.map((m) => `<option value="${escHtml(m)}" ${m === state.user ? "selected" : ""}>${escHtml(m)} ${escHtml(getMemberRoleTitle(m))}</option>`).join("");
+          pcSel.innerHTML = members.map((m) => `<option value="${escHtml(m)}" ${m === state.user ? "selected" : ""}>${escHtml(m)}</option>`).join("");
         }
         if (mobSel) {
           mobSel.innerHTML = members.map((m) => `<option value="${escHtml(m)}" ${m === state.user ? "selected" : ""}>${escHtml(m)}</option>`).join("");
@@ -4190,6 +4234,10 @@
           manager1: task.manager1 || mgrParts[0] || "",
           manager2: task.manager2 || mgrParts[1] || "",
           partner: task.partner || "",
+          isCustomPartner: false,
+          customPartnerName: "",
+          partnerSearchQuery: "",
+          partnerDropOpen: false,
           partnerPhone: lookupPartnerPhone(task.partner),
           status: task.status || "예정",
           isShared: !!task.isShared,
@@ -4225,6 +4273,10 @@
           manager1: state.user || "조항만",
           manager2: "",
           partner: "",
+          isCustomPartner: false,
+          customPartnerName: "",
+          partnerSearchQuery: "",
+          partnerDropOpen: false,
           partnerPhone: "",
           status: "예정",
           isShared: false,
@@ -4451,11 +4503,37 @@
           <div class="form-grid-2">
             <div class="fg">
               <label>협력업체</label>
-              <input class="ws-input" list="wsPartnersDl" value="${escHtml(ctx.partner)}" placeholder="업체 검색/선택" oninput="onSheetPartnerChange(this.value)">
+              <div class="sheet-partner-wrap">
+                <div class="sheet-partner-search-box">
+                  <input type="text" id="sheetPartnerSearchInput" class="ws-input"
+                    value="${escHtml(ctx.isCustomPartner ? "➕ 새 협력업체 직접 입력" : (ctx.partnerDropOpen ? (ctx.partnerSearchQuery || "") : (ctx.partner || "")))}"
+                    placeholder="🔍 협력업체 검색 / 선택" autocomplete="off"
+                    style="color:${ctx.isCustomPartner ? "#2563eb" : ctx.partner ? "#0f172a" : "#94a3b8"};font-weight:${ctx.isCustomPartner || ctx.partner ? "700" : "500"};"
+                    onclick="openSheetPartnerDropdown()" onfocus="openSheetPartnerDropdown()"
+                    oninput="onSheetPartnerSearchInput(this.value)" onkeydown="onSheetPartnerSearchKeydown(event)">
+                  ${(ctx.partner || ctx.isCustomPartner) ? `<span id="sheetPartnerSearchClear" class="sheet-partner-clear" onclick="clearSheetPartnerSelection()" title="선택 해제">✕</span>` : ""}
+                  <span id="sheetPartnerSearchArrow" class="sheet-partner-arrow" onclick="toggleSheetPartnerDropdown()">▼</span>
+                </div>
+                <input type="text" id="sheetPartnerCustomInput" class="ws-input"
+                  value="${escHtml(ctx.customPartnerName || "")}"
+                  placeholder="새 협력업체/반장명 입력"
+                  style="display:${ctx.isCustomPartner ? "block" : "none"};margin-top:5px;"
+                  oninput="onSheetPartnerCustomNameInput(this.value)">
+                <div id="sheetPartnerDropdownList" class="sheet-partner-dropdown-popover" style="display:${ctx.partnerDropOpen ? "block" : "none"};">
+                  ${renderSheetPartnerDropdownHtml(ctx.partnerSearchQuery || "")}
+                </div>
+              </div>
             </div>
             <div class="fg">
-              <label>업체/반장님 연락처 ${ctx.partnerPhone ? `<a href="tel:${escHtml(ctx.partnerPhone.replace(/[^0-9]/g, ""))}" style="color:#10b981;text-decoration:none;">📞 전화걸기</a>` : ""}</label>
-              <input class="ws-input" value="${escHtml(ctx.partnerPhone)}" placeholder="010-0000-0000" oninput="state_sheetUpdate('partnerPhone', this.value)">
+              <label>📞 업체/반장님 연락처 ${!ctx.isCustomPartner && ctx.partnerPhone ? `<a id="sheetPartnerCallInline" href="tel:${escHtml(ctx.partnerPhone.replace(/[^0-9+]/g, ""))}" style="color:#10b981;text-decoration:none;">전화걸기</a>` : ""}</label>
+              <div style="display:flex;gap:5px;align-items:center;">
+                <input type="text" id="sheetPartnerPhoneInput" class="ws-input"
+                  value="${escHtml(ctx.partnerPhone || "")}"
+                  placeholder="${ctx.isCustomPartner ? "연락처 입력 (예: 010-0000-0000)" : (ctx.partner ? "연락처 직접 입력 가능" : "연락처 미등록")}"
+                  style="flex:1;min-width:0;background:#ffffff;color:${ctx.partnerPhone ? "#0f172a" : "#64748b"};font-weight:${ctx.partnerPhone ? "700" : "500"};"
+                  oninput="onSheetPartnerPhoneInput(this)">
+                <a id="sheetPartnerCallBtn" href="${ctx.partnerPhone ? "tel:" + escHtml(ctx.partnerPhone.replace(/[^0-9+]/g, "")) : "javascript:void(0)"}" class="sheet-call-btn" style="display:${ctx.partnerPhone ? "inline-flex" : "none"};" title="전화 걸기">📞</a>
+              </div>
             </div>
           </div>
 
@@ -4552,11 +4630,244 @@
         if (field === "startYmd" && (!ctx.isRange || ctx.endYmd < val)) ctx.endYmd = val;
         renderTaskSheetModal();
       };
+      function formatPartnerPhoneInputValue(raw) {
+        const digits = String(raw || "").replace(/[^0-9]/g, "");
+        if (!digits) return String(raw || "").trim();
+        if (digits.startsWith("02")) {
+          if (digits.length <= 2) return digits;
+          if (digits.length <= 5) return digits.replace(/^(\d{2})(\d+)/, "$1-$2");
+          if (digits.length <= 9) return digits.replace(/^(\d{2})(\d{3})(\d+)/, "$1-$2-$3");
+          return digits.slice(0, 10).replace(/^(\d{2})(\d{4})(\d{4})/, "$1-$2-$3");
+        }
+        if (digits.length <= 3) return digits;
+        if (digits.length <= 7) return digits.replace(/^(\d{3})(\d+)/, "$1-$2");
+        if (digits.length <= 10) return digits.replace(/^(\d{3})(\d{3})(\d+)/, "$1-$2-$3");
+        return digits.slice(0, 11).replace(/^(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+      }
+
+      function renderSheetPartnerDropdownHtml(query) {
+        const ctx = state.sheetCtx || {};
+        const list = getPartnersMasterList().filter((p) => p && String(p).trim() && p !== "__CUSTOM__");
+        const q = String(query || "").trim().toLowerCase();
+        const curTask = String(ctx.taskName || "").trim().toLowerCase();
+        const selVal = ctx.isCustomPartner ? "__CUSTOM__" : String(ctx.partner || "").trim();
+
+        let filtered = list;
+        if (q) {
+          filtered = list.filter((p) => {
+            const pStr = String(p).toLowerCase();
+            const phoneStr = String(lookupPartnerPhone(p) || "").toLowerCase();
+            return pStr.includes(q) || (phoneStr && phoneStr.includes(q));
+          });
+        } else if (curTask) {
+          const matched = [];
+          const others = [];
+          list.forEach((p) => {
+            if (String(p).toLowerCase().includes(curTask)) matched.push(p);
+            else others.push(p);
+          });
+          filtered = matched.concat(others);
+        }
+
+        const unregHtml = `
+          <div class="partner-drop-item" style="color:#94a3b8;font-size:12px;" onmousedown="event.preventDefault()" onclick="selectSheetPartnerFromDropdown('')">
+            <span>협력업체 미등록 (선택 해제)</span>
+          </div>`;
+
+        let listHtml = "";
+        if (filtered.length > 0) {
+          listHtml = filtered.map((p) => {
+            const pStr = String(p).trim();
+            const isSel = pStr === selVal;
+            const isMatch = Boolean(!q && curTask && pStr.toLowerCase().includes(curTask));
+            const phone = lookupPartnerPhone(pStr);
+            return `
+              <div class="partner-drop-item ${isSel ? "selected" : ""}" onmousedown="event.preventDefault()" onclick="selectSheetPartnerFromDropdown('${escJs(pStr)}')">
+                <span style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                  <span>${escHtml(pStr)}</span>
+                  ${isMatch ? `<span style="font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 5px;border-radius:4px;font-weight:700;flex-shrink:0;">추천</span>` : ""}
+                </span>
+                <span style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                  ${phone ? `<span style="font-size:11px;color:#64748b;font-weight:600;">${escHtml(phone)}</span>` : ""}
+                  ${isSel ? `<span style="color:#2563eb;font-weight:800;">✓</span>` : ""}
+                </span>
+              </div>`;
+          }).join("");
+        } else if (q) {
+          listHtml = `<div style="padding:10px 11px;color:#64748b;font-size:12px;background:#f8fafc;border-bottom:1px solid #f1f5f9;">검색 결과가 없습니다.</div>`;
+        }
+
+        const customHtml = `
+          <div class="partner-drop-custom" onmousedown="event.preventDefault()" onclick="selectSheetPartnerFromDropdown('__CUSTOM__')">
+            <span>➕ 새 협력업체 직접 입력...</span>
+            ${q ? `<span style="font-size:11px;color:#16a34a;font-weight:600;">('${escHtml(String(query || "").trim())}' 등록)</span>` : ""}
+          </div>`;
+
+        return unregHtml + listHtml + customHtml;
+      }
+
+      window.openSheetPartnerDropdown = function () {
+        const ctx = state.sheetCtx; if (!ctx) return;
+        ctx.partnerDropOpen = true;
+        ctx.partnerSearchQuery = "";
+        const drop = document.getElementById("sheetPartnerDropdownList");
+        const inp = document.getElementById("sheetPartnerSearchInput");
+        if (drop) {
+          drop.innerHTML = renderSheetPartnerDropdownHtml("");
+          drop.style.display = "block";
+        }
+        if (inp && typeof inp.select === "function") inp.select();
+      };
+      window.toggleSheetPartnerDropdown = function () {
+        const ctx = state.sheetCtx; if (!ctx) return;
+        if (ctx.partnerDropOpen) window.closeSheetPartnerDropdown();
+        else window.openSheetPartnerDropdown();
+      };
+      window.closeSheetPartnerDropdown = function () {
+        const ctx = state.sheetCtx;
+        if (ctx) ctx.partnerDropOpen = false;
+        const drop = document.getElementById("sheetPartnerDropdownList");
+        if (drop) drop.style.display = "none";
+        const inp = document.getElementById("sheetPartnerSearchInput");
+        if (inp && ctx && !ctx.partnerSearchQuery) {
+          inp.value = ctx.isCustomPartner ? "➕ 새 협력업체 직접 입력" : (ctx.partner || "");
+        }
+      };
+      window.onSheetPartnerSearchInput = function (val) {
+        const ctx = state.sheetCtx; if (!ctx) return;
+        ctx.partnerSearchQuery = val;
+        ctx.partnerDropOpen = true;
+        const drop = document.getElementById("sheetPartnerDropdownList");
+        if (drop) {
+          drop.innerHTML = renderSheetPartnerDropdownHtml(val);
+          drop.style.display = "block";
+        }
+      };
+      window.onSheetPartnerSearchKeydown = function (event) {
+        if (event.key === "Escape") {
+          window.closeSheetPartnerDropdown();
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          const drop = document.getElementById("sheetPartnerDropdownList");
+          if (drop) {
+            const firstItem = drop.querySelector(".partner-drop-item, .partner-drop-custom");
+            if (firstItem) firstItem.click();
+          }
+        }
+      };
+      window.selectSheetPartnerFromDropdown = function (val) {
+        const ctx = state.sheetCtx; if (!ctx) return;
+        const typedQ = String(ctx.partnerSearchQuery || "").trim();
+        ctx.partnerDropOpen = false;
+        ctx.partnerSearchQuery = "";
+        if (val === "__CUSTOM__") {
+          ctx.isCustomPartner = true;
+          ctx.partner = "";
+          if (typedQ && !typedQ.startsWith("🔍") && typedQ !== "➕ 새 협력업체 직접 입력") {
+            ctx.customPartnerName = typedQ;
+          }
+          ctx.partnerPhone = "";
+          renderTaskSheetModal();
+          setTimeout(() => {
+            const cEl = document.getElementById("sheetPartnerCustomInput");
+            const pEl = document.getElementById("sheetPartnerPhoneInput");
+            if (cEl && !cEl.value) cEl.focus();
+            else if (pEl) pEl.focus();
+          }, 10);
+          return;
+        }
+        ctx.isCustomPartner = false;
+        ctx.customPartnerName = "";
+        ctx.partner = String(val || "").trim();
+        ctx.partnerPhone = lookupPartnerPhone(ctx.partner);
+        renderTaskSheetModal();
+      };
+      window.clearSheetPartnerSelection = function () {
+        const ctx = state.sheetCtx; if (!ctx) return;
+        ctx.isCustomPartner = false;
+        ctx.customPartnerName = "";
+        ctx.partner = "";
+        ctx.partnerPhone = "";
+        ctx.partnerSearchQuery = "";
+        ctx.partnerDropOpen = false;
+        renderTaskSheetModal();
+      };
+      window.onSheetPartnerCustomNameInput = function (val) {
+        const ctx = state.sheetCtx; if (!ctx) return;
+        ctx.customPartnerName = val;
+      };
+      window.onSheetPartnerPhoneInput = function (el) {
+        const ctx = state.sheetCtx; if (!ctx || !el) return;
+        const formatted = formatPartnerPhoneInputValue(el.value);
+        if (el.value !== formatted && /[0-9]/.test(formatted)) {
+          el.value = formatted;
+        }
+        ctx.partnerPhone = formatted;
+        const callBtn = document.getElementById("sheetPartnerCallBtn");
+        const cleanTel = String(formatted || "").replace(/[^0-9+]/g, "");
+        if (callBtn) {
+          callBtn.href = cleanTel ? "tel:" + cleanTel : "javascript:void(0)";
+          callBtn.style.display = cleanTel ? "inline-flex" : "none";
+        }
+      };
       window.onSheetPartnerChange = function (val) {
         const ctx = state.sheetCtx; if (!ctx) return;
         ctx.partner = val;
         ctx.partnerPhone = lookupPartnerPhone(val);
       };
+
+      function getResolvedSheetPartner(ctx) {
+        if (!ctx) return { partnerVal: "", partnerPhone: "", isCustom: false };
+        const cleanPhone = formatPartnerPhoneInputValue(ctx.partnerPhone || "");
+        if (ctx.isCustomPartner) {
+          const rawName = String(ctx.customPartnerName || "").trim();
+          if (!rawName) return { partnerVal: "", partnerPhone: cleanPhone, isCustom: true };
+          const taskPrefix = String(ctx.taskName || "").trim();
+          const resolved = rawName.includes("_") ? rawName : (taskPrefix ? `${taskPrefix}_${rawName}` : rawName);
+          return { partnerVal: resolved, partnerPhone: cleanPhone, isCustom: true };
+        }
+        return { partnerVal: String(ctx.partner || "").trim(), partnerPhone: cleanPhone, isCustom: false };
+      }
+
+      function registerOptimisticCustomPartner(partnerVal, phoneVal) {
+        const pFull = String(partnerVal || "").trim();
+        const pPhone = String(phoneVal || "").trim();
+        if (!pFull) return;
+        if (state.dashData) {
+          if (!Array.isArray(state.dashData.partners)) state.dashData.partners = [];
+          if (!state.dashData.partners.includes(pFull)) {
+            state.dashData.partners.push(pFull);
+            state.dashData.partners.sort((a, b) => String(a).localeCompare(String(b), "ko"));
+          }
+          if (!state.dashData.partnerPhoneMap || typeof state.dashData.partnerPhoneMap !== "object") {
+            state.dashData.partnerPhoneMap = {};
+          }
+          if (pPhone) {
+            state.dashData.partnerPhoneMap[pFull] = pPhone;
+            if (pFull.includes("_")) {
+              const pure = pFull.split("_").slice(1).join("_").trim();
+              if (pure) state.dashData.partnerPhoneMap[pure] = pPhone;
+            }
+          }
+        }
+        if (state.settingsData) {
+          if (!Array.isArray(state.settingsData.partners)) state.settingsData.partners = [];
+          const existing = state.settingsData.partners.find((p) => {
+            if (!p) return false;
+            const fn = p.fullName || p.dropdownVal || (p.biz ? `${p.biz}_${p.name}` : p.name);
+            return fn === pFull || p.name === pFull;
+          });
+          if (existing) {
+            if (pPhone) existing.phone = pPhone;
+          } else {
+            const usIdx = pFull.indexOf("_");
+            const biz = usIdx > -1 ? pFull.slice(0, usIdx) : "";
+            const name = usIdx > -1 ? pFull.slice(usIdx + 1) : pFull;
+            state.settingsData.partners.unshift({ category: biz, biz, name, phone: pPhone, fullName: pFull });
+          }
+          if (window.WSDataService) window.WSDataService.saveSettingsCache(state.settingsData);
+        }
+      }
       window.navSameDayTask = function (delta) {
         const ctx = state.sheetCtx;
         if (!ctx || !ctx.sameDayList || ctx.sameDayList.length < 2) return;
@@ -4571,6 +4882,15 @@
         const finalSiteName = ctx.siteName === "__NEW__" ? (ctx.newSiteName || "").trim() : (ctx.siteName || "").trim();
         if (!finalSiteName) return showToast("⚠️ 현장명을 입력하거나 선택해주세요.");
         if (!ctx.taskName.trim()) return showToast("⚠️ 공종명을 입력해주세요.");
+        if (ctx.isCustomPartner && !String(ctx.customPartnerName || "").trim()) {
+          return showToast("⚠️ 새 협력업체명을 입력해주세요.");
+        }
+        const resolvedPartner = getResolvedSheetPartner(ctx);
+        const finalPartner = resolvedPartner.partnerVal;
+        const finalPartnerPhone = resolvedPartner.partnerPhone;
+        if (finalPartner && (resolvedPartner.isCustom || (finalPartnerPhone && finalPartnerPhone !== lookupPartnerPhone(finalPartner)))) {
+          registerOptimisticCustomPartner(finalPartner, finalPartnerPhone);
+        }
         const managerCombined = [ctx.manager1, ctx.manager2].filter(Boolean).join(", ");
         const dateParam = ctx.isRange && ctx.endYmd > ctx.startYmd ? `${ctx.startYmd} ~ ${ctx.endYmd}` : ctx.startYmd;
         const dateDisp = ctx.isRange && ctx.endYmd > ctx.startYmd
@@ -4603,7 +4923,7 @@
           task.manager1 = ctx.manager1;
           task.manager2 = ctx.manager2;
           task.manager = managerCombined;
-          task.partner = ctx.partner;
+          task.partner = finalPartner;
           task.status = ctx.status;
           task.isShared = ctx.isShared;
           task.memo = finalMemo;
@@ -4646,7 +4966,7 @@
               partner: task.partner, sheetName: task.sheetName || "현장데이터",
               id: task.taskId || task.id, taskId: task.taskId || task.id,
               isArchived: wasArchived, origDate: origDateStr, origTask: origTaskName,
-              origMgr: origMgrStr, origMemo: origMemoStr, partnerPhone: ctx.partnerPhone || ""
+              origMgr: origMgrStr, origMemo: origMemoStr, partnerPhone: finalPartnerPhone || ""
             }, state.dashData);
             if (req && typeof req.then === "function") {
               req.then((res) => {
@@ -4706,7 +5026,7 @@
             id: newId, taskId: newId, row: "", taskName: ctx.taskName.trim(),
             dateDisplay: dateDisp, dateMs: new Date(ctx.startYmd + "T00:00:00").getTime(),
             startDateStr: ctx.startYmd, endDateStr: ctx.isRange ? ctx.endYmd : ctx.startYmd,
-            partner: ctx.partner, manager: managerCombined, manager1: ctx.manager1, manager2: ctx.manager2,
+            partner: finalPartner, manager: managerCombined, manager1: ctx.manager1, manager2: ctx.manager2,
             status: ctx.status, isShared: ctx.isShared, memo: finalMemo,
             updatedAtMs: nowMs, memoUpdatedAtMs: String(finalMemo).trim() ? nowMs : 0,
             isToday: ctx.startYmd === todayYmd, isDelayed: ctx.startYmd < todayYmd && ctx.status !== "완료",
@@ -4717,8 +5037,8 @@
           if (window.WSDataService) {
             const req = window.WSDataService.saveTask(false, {
               site: finalSiteName, task: newTask.taskName, date: dateParam, manager: managerCombined,
-              status: ctx.status, shared: ctx.isShared, memo: finalMemo, partner: ctx.partner,
-              category: ctx.scope, partnerPhone: ctx.partnerPhone
+              status: ctx.status, shared: ctx.isShared, memo: finalMemo, partner: finalPartner,
+              category: ctx.scope, partnerPhone: finalPartnerPhone || ""
             }, state.dashData);
             if (req && typeof req.then === "function") {
               req.then((res) => {
@@ -5770,10 +6090,14 @@
           if (manual) showToast("로컬 file:// 환경에서는 분리된 Google Sheets 스냅샷으로 동작합니다.");
           return;
         }
-        window.WSDataService.syncLiveFromGAS(({ dashData, todoData, meta }) => {
+        window.WSDataService.syncLiveFromGAS(({ dashData, todoData, settingsData, meta }) => {
           let updated = false;
           if (dashData) { state.dashData = dashData; updated = true; }
           if (todoData) { state.todoData = todoData; updated = true; }
+          if (settingsData) {
+            state.settingsData = settingsData;
+            updated = true;
+          }
           state.syncSource = meta.source; state.syncTime = meta.updatedAt;
           if (updated) {
             sanitizeUnregisteredMembers();
@@ -6021,6 +6345,15 @@
           loadWeatherData();
         }
       }
+
+      document.addEventListener("mousedown", (e) => {
+        if (state.sheetCtx && state.sheetCtx.partnerDropOpen) {
+          const wrap = e.target && typeof e.target.closest === "function" ? e.target.closest(".sheet-partner-wrap") : null;
+          if (!wrap && typeof window.closeSheetPartnerDropdown === "function") {
+            window.closeSheetPartnerDropdown();
+          }
+        }
+      });
 
       document.addEventListener("keydown", (e) => {
         if (e.altKey && (e.key === "s" || e.key === "S")) {
