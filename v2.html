@@ -215,9 +215,30 @@
         background-color: #ffffff;
       }
     }
-    .home-panel-box.section-pulse-highlight {
+    .home-panel-box.section-pulse-highlight,
+    .m-card-box.section-pulse-highlight,
+    .section-pulse-highlight {
       animation: sectionPulseHighlight 2s ease-out !important;
       border-color: #2563eb !important;
+    }
+
+    .m-hero-chip-btn {
+      border: none;
+      background: rgba(15, 23, 42, 0.28);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 9px;
+      border-radius: 999px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+    .m-hero-chip-btn:active {
+      background: rgba(255, 255, 255, 0.25);
+      transform: scale(0.97);
     }
 
     .m-cal-filter-banner {
@@ -969,6 +990,101 @@
     .todo-stat-pill.imp { background: #fffbeb; border-color: #fde68a; color: #d97706; }
     .todo-stat-pill.done { background: #ecfdf5; border-color: #a7f3d0; color: #059669; }
 
+    /* To-Do Quick Add Bar */
+    .todo-quick-add-bar {
+      display: flex; align-items: center; gap: 8px; background: #ffffff; border: 1px solid var(--border);
+      border-radius: 12px; padding: 8px 12px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    .todo-quick-site-select {
+      padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px;
+      font-weight: 700; color: var(--text-sub); background: #f8fafc; outline: none; max-width: 190px;
+    }
+    .todo-quick-input {
+      flex: 1; min-width: 0; padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font-size: 13px; color: var(--text); outline: none; background: #ffffff;
+    }
+    .todo-quick-input:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15); }
+    .todo-quick-due-group { display: flex; background: #f1f5f9; border-radius: 8px; padding: 2px; gap: 2px; }
+    .todo-quick-due-btn {
+      border: none; background: transparent; color: var(--text-sub); font-size: 11.5px;
+      font-weight: 700; padding: 5px 9px; border-radius: 6px; cursor: pointer;
+    }
+    .todo-quick-due-btn.active { background: #ffffff; color: #2563eb; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); font-weight: 800; }
+    .todo-quick-submit-btn {
+      border: none; background: #2563eb; color: #ffffff; font-size: 12.5px; font-weight: 800;
+      padding: 7px 14px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+    }
+    .todo-quick-submit-btn:hover { background: #1d4ed8; }
+
+    /* Smart Grouping Tabs */
+    .todo-group-nav { display: flex; align-items: center; gap: 4px; background: #f1f5f9; padding: 3px; border-radius: 9px; width: fit-content; }
+    .todo-group-tab-btn {
+      border: none; background: transparent; padding: 6px 12px; font-size: 12px; font-weight: 700;
+      color: #64748b; border-radius: 7px; cursor: pointer; transition: all 0.15s ease;
+    }
+    .todo-group-tab-btn.active { background: #ffffff; color: #0f172a; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); font-weight: 800; }
+
+    /* To-Do Section & Cards */
+    .todo-section-box { margin-bottom: 18px; }
+    .todo-section-header {
+      display: flex; align-items: center; justify-content: space-between; padding: 6px 2px 8px 2px;
+      margin-bottom: 8px; border-bottom: 1.5px solid var(--border);
+    }
+    .todo-section-title { font-size: 13.5px; font-weight: 800; display: flex; align-items: center; gap: 6px; color: var(--text); }
+    .todo-count-badge { font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: #e2e8f0; color: #475569; }
+    .todo-section-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+    @media (max-width: 640px) { .todo-section-grid { grid-template-columns: 1fr; } }
+
+    .todo-modern-card {
+      background: #ffffff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04); transition: border-color 0.15s ease, box-shadow 0.15s ease; position: relative;
+    }
+    .todo-modern-card:hover { border-color: #93c5fd; box-shadow: 0 3px 8px rgba(37, 99, 235, 0.08); }
+    .todo-modern-card.overdue { border-left: 3.5px solid #ef4444; background: #fffdfd; }
+    .todo-modern-card.today { border-left: 3.5px solid #f59e0b; background: #fffefb; }
+    .todo-modern-card.imp { background: #fffdfa; }
+    .todo-modern-card.done { opacity: 0.68; background: #f8fafc; }
+
+    .todo-card-top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .todo-site-pill {
+      font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 6px; background: #eff6ff;
+      color: #1e40af; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+    }
+    .todo-site-pill:hover { background: #dbeafe; }
+    .todo-star-btn { border: none; background: transparent; font-size: 14px; cursor: pointer; padding: 0; line-height: 1; }
+    .todo-card-mid-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+    .todo-card-cb { width: 17px; height: 17px; accent-color: #2563eb; cursor: pointer; margin-top: 2px; flex-shrink: 0; }
+    .todo-card-body { flex: 1; min-width: 0; cursor: pointer; }
+    .todo-card-title { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; word-break: break-word; }
+    .todo-card-detail { font-size: 11.5px; color: var(--text-sub); margin-top: 3px; line-height: 1.35; }
+    .todo-card-bottom-row {
+      display: flex; align-items: center; justify-content: space-between; padding-top: 6px;
+      border-top: 1px dashed #e2e8f0; gap: 6px;
+    }
+    .todo-due-quick-pills { display: inline-flex; align-items: center; gap: 3px; }
+    .todo-pill-action {
+      border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-size: 10px;
+      font-weight: 700; padding: 2px 6px; border-radius: 4px; cursor: pointer;
+    }
+    .todo-pill-action:hover { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+    .todo-pill-action.active { background: #eff6ff; border-color: #2563eb; color: #2563eb; font-weight: 800; }
+    .todo-due-badge { font-size: 10.5px; font-weight: 700; color: var(--text-muted); }
+    .todo-due-badge.overdue { color: #dc2626; font-weight: 800; }
+    .todo-due-badge.today { color: #d97706; font-weight: 800; }
+    .todo-inline-mgr-select {
+      border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; font-size: 11px;
+      font-weight: 700; padding: 2px 6px; border-radius: 6px; outline: none; cursor: pointer;
+    }
+
+    /* Collapsible Completed Section */
+    .todo-completed-section { margin-top: 24px; border-top: 1.5px solid var(--border); padding-top: 12px; }
+    .todo-completed-toggle-btn {
+      display: flex; align-items: center; justify-content: space-between; width: 100%; border: 1px solid var(--border);
+      background: #f8fafc; border-radius: 8px; padding: 9px 12px; cursor: pointer; font-size: 12.5px;
+      font-weight: 800; color: #334155;
+    }
+    .todo-completed-toggle-btn:hover { background: #f1f5f9; }
+
     .todo-matrix-table {
       width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--border);
       border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm);
@@ -1584,6 +1700,10 @@
         homeTaskFilter: "all",
         homeMemoExpanded: false,
         mobileHomeTasksExpanded: false,
+        mobileHomeMemoExpanded: false,
+        todoGroupBy: "due",
+        todoCompletedExpanded: false,
+        quickAddDueMode: "today",
         dirtyPcTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true },
         dirtyMobileTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true },
         syncSource: "snapshot",
@@ -2196,9 +2316,12 @@
       };
 
       function getHomeTaskCategory(task, ymd, todayYmd) {
-        if (task && (task.isDelayed || (ymd && ymd < todayYmd))) return "delayed";
-        if (task && (task.isToday || ymd === todayYmd || String(task.status || "").includes("진행"))) return "progress";
-        return "planned";
+        if (!task) return "";
+        if (task.isDelayed || (ymd && ymd < todayYmd)) return "delayed";
+        if (task.isToday || ymd === todayYmd || String(task.status || "").includes("진행")) return "progress";
+        const maxPlannedYmd = addDaysYmd(todayYmd, 7);
+        if (ymd && ymd > todayYmd && ymd <= maxPlannedYmd) return "planned";
+        return "";
       }
 
       function renderHomeTaskFilterGroupHtml(tasksList, todayYmd) {
@@ -2248,31 +2371,85 @@
         return (Number(task.dateMs) || 0) - 86400000 * 60 + (Number(task.row) || 0);
       }
 
-      function renderHomeMemoBriefingHtml(tasksList) {
-        const memoTasks = tasksList
-          .filter((x) => x && x.task && String(x.task.memo || "").trim())
+      function getTaskMemoYmd(task) {
+        if (!task || !task.memo || !String(task.memo).trim()) return "";
+        const memoStr = String(task.memo || "");
+        const explicitMs = Number(task.memoUpdatedAtMs || 0);
+        if (explicitMs > 0) {
+          const d = new Date(explicitMs);
+          if (!isNaN(d.getTime())) {
+            return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+          }
+        }
+        const re = /\[\s*(\d{1,2})\/(\d{1,2})/g;
+        const baseYear = (getTodayYmd() || "").slice(0, 4) || String(state.calYear || new Date().getFullYear());
+        let latestYmd = "";
+        let m;
+        while ((m = re.exec(memoStr)) !== null) {
+          const mm = parseInt(m[1], 10);
+          const dd = parseInt(m[2], 10);
+          const ymd = baseYear + "-" + String(mm).padStart(2, "0") + "-" + String(dd).padStart(2, "0");
+          if (!latestYmd || ymd > latestYmd) latestYmd = ymd;
+        }
+        if (latestYmd) return latestYmd;
+
+        const isoMatch = memoStr.match(/(\d{4})[.-](\d{1,2})[.-](\d{1,2})/);
+        if (isoMatch) {
+          return isoMatch[1] + "-" + String(isoMatch[2]).padStart(2, "0") + "-" + String(isoMatch[3]).padStart(2, "0");
+        }
+        return "";
+      }
+
+      function renderHomeMemoBriefingHtml(tasksList, isMobile) {
+        const todayYmd = getTodayYmd();
+        const minMemoYmd = addDaysYmd(todayYmd, -2);
+        const memoTasks = (tasksList || [])
+          .filter((x) => {
+            if (!x || !x.task || !String(x.task.memo || "").trim()) return false;
+            const memoYmd = getTaskMemoYmd(x.task);
+            if (!memoYmd) return false;
+            return memoYmd >= minMemoYmd && memoYmd <= todayYmd;
+          })
           .slice()
           .sort((a, b) => getTaskMemoModifiedMs(b.task) - getTaskMemoModifiedMs(a.task));
         if (!memoTasks.length) {
-          return `<div style="font-size:12px;color:var(--text-muted);">최근 메모가 없습니다.</div>`;
+          return `<div style="font-size:12px;color:var(--text-muted);padding:4px 0;">최근 3일 이내 작성된 현장 메모가 없습니다.</div>`;
         }
-        const limit = 5;
-        const isExpanded = Boolean(state.homeMemoExpanded);
+        const limit = isMobile ? 3 : 5;
+        const isExpanded = isMobile ? Boolean(state.mobileHomeMemoExpanded) : Boolean(state.homeMemoExpanded);
         const visibleMemos = isExpanded ? memoTasks : memoTasks.slice(0, limit);
         const hiddenCount = memoTasks.length - visibleMemos.length;
         return `
-          ${visibleMemos.map((x) => `
+          ${visibleMemos.map((x) => {
+            const memoYmd = getTaskMemoYmd(x.task);
+            return `
             <div class="home-memo-item" style="font-size:12px;line-height:1.45;color:var(--text-sub);background:#f8fafc;padding:10px 11px;border-radius:8px;border:1px solid var(--border);border-left:3px solid #3b82f6;cursor:pointer;" onclick="openTaskEditModal('${escJs(x.task.id || x.taskId)}')">
-              <strong style="color:#1e3a8a;display:block;margin-bottom:2px;">[${escHtml(x.site.siteName)}]</strong>${escHtml(x.task.memo)}
-            </div>
-          `).join("")}
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+                <strong style="color:#1e3a8a;">[${escHtml(x.site.siteName)}]</strong>
+                ${memoYmd ? `<span style="font-size:10.5px;font-weight:700;color:var(--text-muted);">${escHtml(memoYmd)}</span>` : ""}
+              </div>
+              <div>${escHtml(x.task.memo)}</div>
+            </div>`;
+          }).join("")}
           ${memoTasks.length > limit ? `
-            <button type="button" class="home-memo-toggle-btn" onclick="toggleHomeMemoExpand()">
-              ${isExpanded ? `▲ 메모 접기 (최근 ${limit}개만 보기)` : `▼ 이전 메모 ${hiddenCount}개 더보기 (전체 ${memoTasks.length}건)`}
+            <button type="button" class="home-memo-toggle-btn" onclick="${isMobile ? "toggleMobileHomeMemoExpand()" : "toggleHomeMemoExpand()"}">
+              ${isExpanded ? `▲ 메모 접기 (기본 ${limit}개만 보기)` : `▼ 이전 메모 ${hiddenCount}개 더보기 (전체 ${memoTasks.length}건)`}
             </button>
           ` : ""}
         `;
       }
+
+      window.toggleHomeMemoExpand = function () {
+        state.homeMemoExpanded = !state.homeMemoExpanded;
+        state.dirtyPcTabs.home = true;
+        renderActiveViews();
+      };
+
+      window.toggleMobileHomeMemoExpand = function () {
+        state.mobileHomeMemoExpanded = !state.mobileHomeMemoExpanded;
+        state.dirtyMobileTabs.home = true;
+        renderActiveViews();
+      };
 
       // ================= [PC 탭 1: 홈 — 모던 벤토 카드 (완료 항목 제외 & To-Do 최상단 배치)] =================
       function renderPcHomeTab() {
@@ -2303,7 +2480,8 @@
           });
         });
 
-        const activeOrToday = myTasks
+        const homeEligibleTasks = myTasks.filter((x) => Boolean(getHomeTaskCategory(x.task, x.ymd, todayYmd)));
+        const activeOrToday = homeEligibleTasks
           .slice()
           .sort((a, b) => {
             if (a.task.isToday !== b.task.isToday) return a.task.isToday ? -1 : 1;
@@ -2447,7 +2625,7 @@
                 <div class="home-hero-avatar">${escHtml(user.slice(0, 1))}</div>
                 <div class="home-user-greeting">
                   <h2>좋은 하루입니다, ${escHtml(user)} ${roleLabel} ☕ <span class="home-hero-date-pill">📅 ${escHtml(todayYmd)} (${todayDow})</span></h2>
-                  <p>Google Sheets 실시간 기준 — 진행 중인 현장과 남은 업무만 간추려 한눈에 확인하세요.</p>
+                  <p>진행 중인 현장과 남은 업무만 간추려 한눈에 확인하세요.</p>
                   <div class="home-hero-chips">
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecTodo')">✅ 미완료 To-Do ${myPendingTodos.length}건</span>
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecTasks')">🔨 오늘 공정 ${todayTasks.length}건</span>
@@ -2562,7 +2740,7 @@
                 <div class="home-panel-box home-memo-panel">
                   <div class="hp-header"><span class="hp-title">📌 최근 현장 메모 브리핑</span></div>
                   <div class="home-memo-list" style="display:flex;flex-direction:column;gap:8px;">
-                    ${renderHomeMemoBriefingHtml(myTasks)}
+                    ${renderHomeMemoBriefingHtml(myTasks, false)}
                   </div>
                 </div>
               </div>
@@ -2991,103 +3169,271 @@
         `;
       }
 
-      // ================= [PC 탭 2: To-Do 매트릭스] =================
+      // ================= [PC 탭 2: To-Do 리스트 (스마트 그룹핑 & 빠른 액션)] =================
+      function renderModernTodoCard(t, isMobile) {
+        const isDone = t.status === "완료";
+        const todayYmd = getTodayYmd();
+        const dueYmd = (t.dueDate || "").replace(/\./g, "-");
+        const isOverdue = !isDone && Boolean(dueYmd && dueYmd < todayYmd);
+        const isTodayDue = !isDone && Boolean(dueYmd && dueYmd === todayYmd);
+        const isImp = !isDone && Boolean(t.isImportant || t.status === "중요");
+        const members = getMembersList();
+        const siteObj = t.siteName ? getAllSites().find((s) => s.siteName === t.siteName) : null;
+        const siteCol = (siteObj && siteObj.colorHex) || "#2563eb";
+
+        const cardCls = ["todo-modern-card"];
+        if (isDone) cardCls.push("done");
+        else if (isOverdue) cardCls.push("overdue");
+        else if (isTodayDue) cardCls.push("today");
+        if (isImp) cardCls.push("imp");
+
+        let dueDisplayHtml = "";
+        if (isOverdue) {
+          dueDisplayHtml = `<span class="todo-due-badge overdue">🚨 기한 지남 (${escHtml(t.dueDate)})</span>`;
+        } else if (isTodayDue) {
+          dueDisplayHtml = `<span class="todo-due-badge today">🟡 오늘 마감</span>`;
+        } else if (t.dueDate) {
+          dueDisplayHtml = `<span class="todo-due-badge">📅 ${escHtml(t.dueDate)}</span>`;
+        } else {
+          dueDisplayHtml = `<span class="todo-due-badge" style="color:#94a3b8;">기한 없음</span>`;
+        }
+
+        return `
+          <div class="${cardCls.join(" ")}" onclick="openTodoModal('${escJs(t.id)}')">
+            <div class="todo-card-top-row">
+              <span class="todo-site-pill" onclick="event.stopPropagation(); navigateToSiteDetail('${escJs(t.siteName || "")}', ${isMobile ? "true" : "false"})">
+                <span style="color:${escHtml(siteCol)};font-size:12px;">●</span>
+                <span>${escHtml(t.siteName || t.tag || "일반업무")}</span>
+              </span>
+              <button type="button" class="todo-star-btn" onclick="event.stopPropagation(); toggleTodoImportant('${escJs(t.id)}')" title="중요 표시">
+                ${isImp ? "⭐" : "☆"}
+              </button>
+            </div>
+
+            <div class="todo-card-mid-row">
+              <input type="checkbox" class="todo-card-cb" ${isDone ? "checked" : ""} onclick="event.stopPropagation(); toggleTodoItem('${escJs(t.id)}')">
+              <div class="todo-card-body">
+                <div class="todo-card-title" style="${isDone ? "text-decoration:line-through;color:var(--text-muted);" : ""}">${escHtml(t.title)}</div>
+                ${t.detail ? `<div class="todo-card-detail">${escHtml(t.detail)}</div>` : ""}
+              </div>
+            </div>
+
+            <div class="todo-card-bottom-row" onclick="event.stopPropagation()">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                ${dueDisplayHtml}
+                ${!isDone ? `
+                  <div class="todo-due-quick-pills">
+                    <button type="button" class="todo-pill-action ${isTodayDue ? "active" : ""}" onclick="quickUpdateTodoDue('${escJs(t.id)}', 'today')" title="오늘 마감으로 설정">오늘</button>
+                    <button type="button" class="todo-pill-action" onclick="quickUpdateTodoDue('${escJs(t.id)}', 'tomorrow')" title="내일 마감으로 설정">내일</button>
+                  </div>
+                ` : ""}
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <select class="todo-inline-mgr-select" onchange="quickUpdateTodoManager('${escJs(t.id)}', this.value)">
+                  <option value="">👤 미지정</option>
+                  ${members.map((m) => `<option value="${m}" ${t.manager && t.manager.includes(m) ? "selected" : ""}>👤 ${m}</option>`).join("")}
+                </select>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       function renderPcTodoTab() {
         const list = (state.todoData && state.todoData.list) || [];
         const q = state.searchQuery.trim();
         const todayYmd = getTodayYmd();
-        const filteredList = list.filter((t) => !q || matchesQuery([t.title, t.siteName, t.manager, t.detail, t.tag].join(" "), q));
+        const activeMemberFilter = state.todoMemberFilter || "all";
+        const groupBy = state.todoGroupBy || "due";
+
+        const filteredList = list.filter((t) => {
+          if (activeMemberFilter !== "all") {
+            if (activeMemberFilter === "unassigned") {
+              if (t.manager) return false;
+            } else {
+              if (!t.manager || !t.manager.includes(activeMemberFilter)) return false;
+            }
+          }
+          if (q && !matchesQuery([t.title, t.siteName, t.manager, t.detail, t.tag].join(" "), q)) return false;
+          return true;
+        });
 
         const members = getMembersList();
         const displayMembers = Array.from(new Set(members));
 
-        const activeMemberFilter = state.todoMemberFilter;
-        const rowsToShow = activeMemberFilter === "all" ? [...displayMembers, "unassigned"] : [activeMemberFilter];
+        const pendingList = filteredList.filter((t) => t.status !== "완료");
+        const doneList = filteredList.filter((t) => t.status === "완료");
 
-        const pendingCnt = filteredList.filter((t) => t.status !== "완료").length;
-        const overdueCnt = filteredList.filter((t) => t.status !== "완료" && t.dueDate && t.dueDate.replace(/\./g, "-") < todayYmd).length;
-        const impCnt = filteredList.filter((t) => t.status !== "완료" && (t.isImportant || t.status === "중요")).length;
-        const doneCnt = filteredList.filter((t) => t.status === "완료").length;
+        const pendingCnt = pendingList.length;
+        const overdueCnt = pendingList.filter((t) => t.dueDate && t.dueDate.replace(/\./g, "-") < todayYmd).length;
+        const impCnt = pendingList.filter((t) => t.isImportant || t.status === "중요").length;
+        const doneCnt = doneList.length;
+
+        const ongoingSites = getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
+        const siteOptionsHtml = ongoingSites.map((s) => `<option value="${escHtml(s.siteName)}">🏢 ${escHtml(s.siteName)}</option>`).join("");
 
         const chipsHtml = `
-          <button type="button" class="tm-chip ${activeMemberFilter === "all" ? "active" : ""}" onclick="filterTodoMember('all')">전체 (${filteredList.length})</button>
-          ${displayMembers.map((m) => `<button type="button" class="tm-chip ${activeMemberFilter === m ? "active" : ""}" onclick="filterTodoMember('${escJs(m)}')"><span class="tm-avatar">${escHtml(m.slice(0, 1))}</span><span>${escHtml(m)}</span></button>`).join("")}
-          <button type="button" class="tm-chip ${activeMemberFilter === "unassigned" ? "active" : ""}" onclick="filterTodoMember('unassigned')">담당 미지정</button>
+          <button type="button" class="tm-chip ${activeMemberFilter === "all" ? "active" : ""}" onclick="filterTodoMember('all')">전체 (${list.length})</button>
+          ${displayMembers.map((m) => {
+            const mCnt = list.filter((t) => t.manager && t.manager.includes(m)).length;
+            return `<button type="button" class="tm-chip ${activeMemberFilter === m ? "active" : ""}" onclick="filterTodoMember('${escJs(m)}')"><span class="tm-avatar">${escHtml(m.slice(0, 1))}</span><span>${escHtml(m)} (${mCnt})</span></button>`;
+          }).join("")}
+          <button type="button" class="tm-chip ${activeMemberFilter === "unassigned" ? "active" : ""}" onclick="filterTodoMember('unassigned')">미지정 (${list.filter((t) => !t.manager).length})</button>
         `;
 
-        function renderTodoCard(t) {
-          const isDone = t.status === "완료";
-          const dueYmd = (t.dueDate || "").replace(/\./g, "-");
-          const isOverdue = !isDone && dueYmd && dueYmd < todayYmd;
-          const isImp = t.isImportant || t.status === "중요";
-          const cls = ["todo-item-card"];
-          if (isOverdue) cls.push("danger");
-          else if (isImp && !isDone) cls.push("imp");
-          return `
-            <div class="${cls.join(" ")}" style="${isDone ? "opacity:0.72;" : ""}" onclick="openTodoModal('${escJs(t.id)}')">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
-                <span class="tic-site" style="margin:0;">${t.siteName ? `[${escHtml(t.siteName)}]` : (t.tag || "일반업무")}</span>
-                <button type="button" onclick="event.stopPropagation(); toggleTodoImportant('${escJs(t.id)}')" style="border:none;background:transparent;font-size:13px;cursor:pointer;">${isImp ? "⭐" : "☆"}</button>
-              </div>
-              <div style="display:flex;align-items:flex-start;gap:7px;">
-                <input type="checkbox" ${isDone ? "checked" : ""} onclick="event.stopPropagation(); toggleTodoItem('${escJs(t.id)}')" style="margin-top:3px;accent-color:#2563eb;cursor:pointer;">
-                <div style="flex:1;">
-                  <div class="tic-title" style="${isDone ? "text-decoration:line-through;color:var(--text-muted);" : ""}">${escHtml(t.title)}</div>
-                  ${t.detail ? `<div style="font-size:11px;color:var(--text-sub);margin-top:2px;">${escHtml(t.detail)}</div>` : ""}
-                  <div class="tic-due" style="${isOverdue ? "color:#dc2626;" : ""}">${isOverdue ? "🚨 기한 지남 (" + escHtml(t.dueDate) + ")" : t.dueDate ? "📅 " + escHtml(t.dueDate) : "기한 미지정"}</div>
+        let groupedHtml = "";
+        if (groupBy === "due") {
+          const overdue = pendingList.filter((t) => t.dueDate && t.dueDate.replace(/\./g, "-") < todayYmd);
+          const todayDue = pendingList.filter((t) => t.dueDate && t.dueDate.replace(/\./g, "-") === todayYmd);
+          const upcoming = pendingList.filter((t) => t.dueDate && t.dueDate.replace(/\./g, "-") > todayYmd);
+          const noDue = pendingList.filter((t) => !t.dueDate);
+
+          groupedHtml = `
+            ${overdue.length ? `
+              <div class="todo-section-box">
+                <div class="todo-section-header">
+                  <div class="todo-section-title" style="color:#dc2626;">🔴 기한 지남 <span class="todo-count-badge" style="background:#fee2e2;color:#dc2626;">${overdue.length}</span></div>
                 </div>
-              </div>
-            </div>`;
-        }
+                <div class="todo-section-grid">${overdue.map((t) => renderModernTodoCard(t, false)).join("")}</div>
+              </div>` : ""}
+            ${todayDue.length ? `
+              <div class="todo-section-box">
+                <div class="todo-section-header">
+                  <div class="todo-section-title" style="color:#d97706;">🟡 오늘 마감 <span class="todo-count-badge" style="background:#fef3c7;color:#d97706;">${todayDue.length}</span></div>
+                </div>
+                <div class="todo-section-grid">${todayDue.map((t) => renderModernTodoCard(t, false)).join("")}</div>
+              </div>` : ""}
+            ${upcoming.length ? `
+              <div class="todo-section-box">
+                <div class="todo-section-header">
+                  <div class="todo-section-title" style="color:#2563eb;">🔵 다가오는 일정 <span class="todo-count-badge" style="background:#eff6ff;color:#2563eb;">${upcoming.length}</span></div>
+                </div>
+                <div class="todo-section-grid">${upcoming.map((t) => renderModernTodoCard(t, false)).join("")}</div>
+              </div>` : ""}
+            ${noDue.length ? `
+              <div class="todo-section-box">
+                <div class="todo-section-header">
+                  <div class="todo-section-title" style="color:#64748b;">⚪ 기한 없음 <span class="todo-count-badge">${noDue.length}</span></div>
+                </div>
+                <div class="todo-section-grid">${noDue.map((t) => renderModernTodoCard(t, false)).join("")}</div>
+              </div>` : ""}
+            ${!pendingList.length ? `<div style="text-align:center;padding:32px;color:var(--text-muted);background:#fff;border-radius:10px;border:1px dashed var(--border);">남은 To-Do 업무가 없습니다. 🎉</div>` : ""}
+          `;
+        } else if (groupBy === "site") {
+          const siteMap = new Map();
+          pendingList.forEach((t) => {
+            const sName = t.siteName || "일반 업무";
+            if (!siteMap.has(sName)) siteMap.set(sName, []);
+            siteMap.get(sName).push(t);
+          });
+          const sortedSiteKeys = Array.from(siteMap.keys()).sort((a, b) => {
+            if (a === "일반 업무") return 1;
+            if (b === "일반 업무") return -1;
+            return a.localeCompare(b, "ko");
+          });
 
-        const matrixRows = rowsToShow.map((mKey) => {
-          const mine = filteredList.filter((t) => mKey === "unassigned" ? !t.manager : t.manager && t.manager.includes(mKey));
-          if (activeMemberFilter === "all" && mine.length === 0 && mKey === "unassigned") return "";
-          const impCards = mine.filter((t) => t.status !== "완료" && (t.isImportant || t.status === "중요"));
-          const normCards = mine.filter((t) => t.status !== "완료" && !(t.isImportant || t.status === "중요"));
-          const doneCards = mine.filter((t) => t.status === "완료");
-          const labelName = mKey === "unassigned" ? "담당 미지정" : mKey;
-
-          return `
-            <tr class="todo-row">
-              <td style="font-weight:800;background:#f8fafc;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <span style="width:26px;height:26px;border-radius:50%;background:#eff6ff;color:#1d4ed8;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;border:1px solid #bfdbfe;">${escHtml(labelName.slice(0, 1))}</span>
-                  <div>
-                    <div>${escHtml(labelName)}</div>
-                    <div style="font-size:11px;color:var(--text-muted);font-weight:500;">중요 ${impCards.length} · 미완료 ${normCards.length} · 완료 ${doneCards.length}</div>
+          groupedHtml = sortedSiteKeys.map((sName) => {
+            const items = siteMap.get(sName) || [];
+            const siteObj = getAllSites().find((s) => s.siteName === sName);
+            const siteCol = (siteObj && siteObj.colorHex) || "#2563eb";
+            return `
+              <div class="todo-section-box">
+                <div class="todo-section-header">
+                  <div class="todo-section-title" style="cursor:pointer;" onclick="navigateToSiteDetail('${escJs(sName)}', false)">
+                    <span style="color:${siteCol};font-size:14px;">●</span>
+                    <span>${escHtml(sName)}</span>
+                    <span class="todo-count-badge">${items.length}</span>
+                  </div>
+                  ${sName !== "일반 업무" ? `<span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="navigateToSiteDetail('${escJs(sName)}', false)">현장 바로가기 ➔</span>` : ""}
+                </div>
+                <div class="todo-section-grid">${items.map((t) => renderModernTodoCard(t, false)).join("")}</div>
+              </div>`;
+          }).join("") || `<div style="text-align:center;padding:32px;color:var(--text-muted);background:#fff;border-radius:10px;border:1px dashed var(--border);">남은 To-Do 업무가 없습니다. 🎉</div>`;
+        } else if (groupBy === "manager") {
+          const mgrKeys = [...displayMembers, "unassigned"];
+          groupedHtml = mgrKeys.map((mKey) => {
+            const items = pendingList.filter((t) => mKey === "unassigned" ? !t.manager : t.manager && t.manager.includes(mKey));
+            if (!items.length) return "";
+            const labelName = mKey === "unassigned" ? "담당 미지정" : mKey;
+            const impCount = items.filter((t) => t.isImportant || t.status === "중요").length;
+            return `
+              <div class="todo-section-box">
+                <div class="todo-section-header">
+                  <div class="todo-section-title">
+                    <span class="tm-avatar" style="width:24px;height:24px;font-size:11px;">${escHtml(labelName.slice(0, 1))}</span>
+                    <span>${escHtml(labelName)}</span>
+                    <span class="todo-count-badge">${items.length}</span>
+                    ${impCount > 0 ? `<span style="font-size:11px;color:#d97706;font-weight:700;margin-left:4px;">⭐ 중요 ${impCount}</span>` : ""}
                   </div>
                 </div>
-              </td>
-              <td style="background:#fffdfa;">${impCards.map(renderTodoCard).join("") || `<div style="font-size:11.5px;color:#cbd5e1;">-</div>`}</td>
-              <td>${normCards.map(renderTodoCard).join("") || `<div style="font-size:11.5px;color:#cbd5e1;">-</div>`}</td>
-              <td style="background:#fcfdfc;">${doneCards.map(renderTodoCard).join("") || `<div style="font-size:11.5px;color:#cbd5e1;">-</div>`}</td>
-            </tr>`;
-        }).join("");
+                <div class="todo-section-grid">${items.map((t) => renderModernTodoCard(t, false)).join("")}</div>
+              </div>`;
+          }).join("") || `<div style="text-align:center;padding:32px;color:var(--text-muted);background:#fff;border-radius:10px;border:1px dashed var(--border);">남은 To-Do 업무가 없습니다. 🎉</div>`;
+        }
+
+        const isDoneExpanded = Boolean(state.todoCompletedExpanded);
+        const completedSectionHtml = `
+          <div class="todo-completed-section">
+            <button type="button" class="todo-completed-toggle-btn" onclick="toggleTodoCompletedExpand()">
+              <span style="display:flex;align-items:center;gap:7px;">
+                <span>✅ 완료된 항목</span>
+                <span class="todo-count-badge" style="background:#ecfdf5;color:#059669;">${doneCnt}건</span>
+              </span>
+              <span style="font-size:12px;color:var(--text-muted);">${isDoneExpanded ? "▲ 접기" : "▼ 펼쳐서 확인 및 복구"}</span>
+            </button>
+            ${isDoneExpanded ? `
+              <div class="todo-section-grid" style="margin-top:12px;">
+                ${doneList.map((t) => renderModernTodoCard(t, false)).join("")}
+              </div>` : ""}
+          </div>
+        `;
 
         document.getElementById("pcTodoMain").innerHTML = `
-          <div class="todo-member-chip-bar"><span style="font-size:12px;font-weight:800;color:var(--text-muted);margin-right:4px;">담당자</span>${chipsHtml}</div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <h2 style="font-size:18px;font-weight:900;color:var(--text);">To-Do List</h2>
-            <button type="button" class="btn-act-blue" onclick="openTodoModal(null)">+ 업무 추가</button>
+            <div style="display:flex;align-items:baseline;gap:8px;">
+              <h2 style="font-size:19px;font-weight:900;color:var(--text);margin:0;">To-Do List</h2>
+              <span style="font-size:12.5px;color:var(--text-muted);font-weight:700;">미완료 ${pendingCnt}건 / 전체 ${filteredList.length}건</span>
+            </div>
+            <button type="button" class="btn-act-blue" onclick="openTodoModal(null)">+ 상세 To-Do 등록</button>
           </div>
-          <div class="todo-stat-bar">
-            <div class="todo-stat-pill">미완료 <span style="margin-left:4px;color:#2563eb;">${pendingCnt}</span></div>
-            <div class="todo-stat-pill overdue">지남 <span style="margin-left:4px;">${overdueCnt}</span></div>
-            <div class="todo-stat-pill imp">중요 <span style="margin-left:4px;">${impCnt}</span></div>
-            <div class="todo-stat-pill done">완료 <span style="margin-left:4px;">${doneCnt}</span></div>
+
+          <!-- 한 줄 빠른 추가 바 (Quick Add) -->
+          <div class="todo-quick-add-bar">
+            <select id="pcQuickTodoSite" class="todo-quick-site-select">
+              <option value="">🏢 일반 업무 (현장 선택)</option>
+              ${siteOptionsHtml}
+            </select>
+            <input type="text" id="pcQuickTodoTitle" class="todo-quick-input" placeholder="새로운 할 일을 입력하세요 (Enter로 즉시 추가)..." onkeydown="if(event.key==='Enter') quickAddTodo(false)">
+            <div class="todo-quick-due-group">
+              <button type="button" class="todo-quick-due-btn ${state.quickAddDueMode === "today" ? "active" : ""}" onclick="setQuickAddDueMode('today', false)">오늘</button>
+              <button type="button" class="todo-quick-due-btn ${state.quickAddDueMode === "tomorrow" ? "active" : ""}" onclick="setQuickAddDueMode('tomorrow', false)">내일</button>
+              <button type="button" class="todo-quick-due-btn ${state.quickAddDueMode === "none" ? "active" : ""}" onclick="setQuickAddDueMode('none', false)">기한없음</button>
+            </div>
+            <button type="button" class="todo-quick-submit-btn" onclick="quickAddTodo(false)">+ 빠른 추가</button>
           </div>
-          <table class="todo-matrix-table">
-            <thead>
-              <tr style="background:#f8fafc;">
-                <th style="width:175px;text-align:left;color:var(--text-muted);">담당자 \\ 상태</th>
-                <th style="width:30%;text-align:center;color:#d97706;background:#fffdfa;">⭐ 중요</th>
-                <th style="width:32%;text-align:center;color:#334155;">📌 미완료</th>
-                <th style="width:28%;text-align:center;color:#16a34a;background:#fcfdfc;">✓ 완료</th>
-              </tr>
-            </thead>
-            <tbody>${matrixRows}</tbody>
-          </table>
+
+          <!-- 스마트 그룹핑 및 툴바 -->
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+            <div class="todo-group-nav">
+              <button type="button" class="todo-group-tab-btn ${groupBy === "due" ? "active" : ""}" onclick="setTodoGroupBy('due')">📅 기한별</button>
+              <button type="button" class="todo-group-tab-btn ${groupBy === "site" ? "active" : ""}" onclick="setTodoGroupBy('site')">🏗️ 현장별</button>
+              <button type="button" class="todo-group-tab-btn ${groupBy === "manager" ? "active" : ""}" onclick="setTodoGroupBy('manager')">👤 담당자별</button>
+            </div>
+            <div class="todo-stat-bar" style="margin-bottom:0;">
+              <div class="todo-stat-pill">미완료 <span style="margin-left:4px;color:#2563eb;">${pendingCnt}</span></div>
+              <div class="todo-stat-pill overdue">지남 <span style="margin-left:4px;">${overdueCnt}</span></div>
+              <div class="todo-stat-pill imp">중요 <span style="margin-left:4px;">${impCnt}</span></div>
+              <div class="todo-stat-pill done">완료 <span style="margin-left:4px;">${doneCnt}</span></div>
+            </div>
+          </div>
+
+          <div class="todo-member-chip-bar"><span style="font-size:12px;font-weight:800;color:var(--text-muted);margin-right:4px;">필터</span>${chipsHtml}</div>
+
+          <!-- 그룹핑된 목록 본문 -->
+          ${groupedHtml}
+
+          <!-- 접을 수 있는 완료 영역 -->
+          ${completedSectionHtml}
         `;
       }
 
@@ -3536,6 +3882,8 @@
         const user = state.user;
         const roleLabel = getMemberRoleTitle(user) + "님";
         const todayYmd = getTodayYmd();
+        const dowNames = ["일", "월", "화", "수", "목", "금", "토"];
+        const todayDow = dowNames[new Date(todayYmd + "T00:00:00").getDay()] || "";
         const q = state.searchQuery.trim();
         const targetScope = state.scope === "newSite" ? "site" : (state.scope || "site");
         const filterMember = state.memberFilter || user;
@@ -3557,7 +3905,9 @@
           if (q && !matchesQuery([site.siteName, task.taskName, task.partner, task.manager, task.memo].join(" "), q)) return;
           tasks.push({ site, task, ymd: parseYmdFromTask(task) });
         }));
-        tasks.sort((a, b) => {
+
+        const homeEligibleTasks = tasks.filter((x) => Boolean(getHomeTaskCategory(x.task, x.ymd, todayYmd)));
+        homeEligibleTasks.sort((a, b) => {
           if (a.task.isToday !== b.task.isToday) return a.task.isToday ? -1 : 1;
           const aDel = Boolean(a.task.isDelayed || (a.ymd && a.ymd < todayYmd));
           const bDel = Boolean(b.task.isDelayed || (b.ymd && b.ymd < todayYmd));
@@ -3569,10 +3919,10 @@
         const delayed = tasks.filter((x) => x.task.isDelayed || (x.ymd && x.ymd < todayYmd));
         const activeFilter = state.homeTaskFilter || "all";
         const filteredMobileTasks = activeFilter === "all"
-          ? tasks
-          : tasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === activeFilter);
-        const mTaskFilterGroupHtml = renderHomeTaskFilterGroupHtml(tasks, todayYmd);
-        const limitTasks = 5;
+          ? homeEligibleTasks
+          : homeEligibleTasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === activeFilter);
+        const mTaskFilterGroupHtml = renderHomeTaskFilterGroupHtml(homeEligibleTasks, todayYmd);
+        const limitTasks = 3;
         const isTasksExpanded = Boolean(state.mobileHomeTasksExpanded);
         const visibleMobileTasks = isTasksExpanded ? filteredMobileTasks : filteredMobileTasks.slice(0, limitTasks);
         const hiddenTasksCount = filteredMobileTasks.length - visibleMobileTasks.length;
@@ -3581,18 +3931,19 @@
         const pendingTodos = todos.filter((t) => t.status !== "완료");
 
         document.getElementById("m-page-home").innerHTML = `
-          <div style="background:linear-gradient(135deg,#134e4a 0%,#0f766e 60%,#0d9488 100%);border-radius:14px;padding:15px 16px;color:#fff;margin-bottom:12px;box-shadow:0 8px 18px -6px rgba(15,118,110,0.4);">
+          <div class="m-home-hero" style="background:linear-gradient(135deg,#134e4a 0%,#0f766e 60%,#0d9488 100%);border-radius:14px;padding:15px 16px;color:#fff;margin-bottom:12px;box-shadow:0 8px 18px -6px rgba(15,118,110,0.4);">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
               <div>
-                <div style="font-size:11px;color:#ccfbf1;font-weight:700;">📅 ${escHtml(todayYmd)} · Google Sheets 연동</div>
+                <div style="font-size:11px;color:#ccfbf1;font-weight:700;">📅 ${escHtml(todayYmd)} (${todayDow})</div>
                 <div style="font-size:17px;font-weight:800;margin-top:3px;">${escHtml(user)} ${roleLabel} 브리핑 ☕</div>
               </div>
               <button type="button" onclick="openTodoModal(null)" style="border:none;background:rgba(255,255,255,0.2);color:#fff;font-size:11px;font-weight:800;padding:5px 9px;border-radius:8px;cursor:pointer;">+ To-Do</button>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
-              <span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.22);">🏢 담당 현장 ${mySites.length}</span>
-              <span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.22);">🔨 오늘 공정 ${todayTasks.length}</span>
-              <span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.22);">📋 신규 ${activeNewQuotes.length}</span>
+              <button type="button" class="m-hero-chip-btn" data-target="mHomeSecTodo" onclick="scrollAndHighlightHomeSection('mHomeSecTodo')">✅ To-Do ${pendingTodos.length}건</button>
+              <button type="button" class="m-hero-chip-btn" data-target="mHomeSecTasks" onclick="scrollAndHighlightHomeSection('mHomeSecTasks')">🔨 오늘 공정 ${todayTasks.length}건</button>
+              <button type="button" class="m-hero-chip-btn" data-target="mHomeSecSites" onclick="scrollAndHighlightHomeSection('mHomeSecSites')">🏢 담당 현장 ${mySites.length}개소</button>
+              <button type="button" class="m-hero-chip-btn" data-target="mHomeSecQuotes" onclick="scrollAndHighlightHomeSection('mHomeSecQuotes')">📋 신규 견적 ${activeNewQuotes.length}건</button>
             </div>
           </div>
 
@@ -3614,7 +3965,7 @@
           </div>
 
           <!-- 모바일 홈에서도 To-Do가 최상단! (완료 항목 제외) -->
-          <div class="m-card-box">
+          <div class="m-card-box" id="mHomeSecTodo">
             <div class="m-card-title-row">
               <span class="m-card-title">✅ 내 To-Do 업무 (${pendingTodos.length}건 남음)</span>
               <div style="display:flex;gap:8px;align-items:center;">
@@ -3639,7 +3990,7 @@
             </div>
           </div>
 
-          <div class="m-card-box">
+          <div class="m-card-box" id="mHomeSecTasks">
             <div class="m-card-title-row" style="flex-wrap:wrap;gap:6px;">
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                 <span class="m-card-title">🔨 주요 공정 (${filteredMobileTasks.length}건)</span>
@@ -3667,22 +4018,22 @@
               }).join("") || `<div style="font-size:12px;color:var(--text-muted);padding:8px 2px;">해당 상태의 공정이 없습니다.</div>`}
             </div>
             ${filteredMobileTasks.length > limitTasks ? `
-              <button type="button" class="home-memo-toggle-btn m-home-tasks-toggle-btn" onclick="toggleMobileHomeTasksExpand()" style="margin-top:8px;">
+              <button type="button" class="m-home-tasks-toggle-btn" onclick="toggleMobileHomeTasksExpand()" style="margin-top:8px;width:100%;padding:8px 10px;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;color:#334155;font-size:11.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
                 ${isTasksExpanded ? `▲ 공정 접기 (기본 ${limitTasks}개만 보기)` : `▼ 공정 ${hiddenTasksCount}개 더보기 (전체 ${filteredMobileTasks.length}건)`}
               </button>
             ` : ""}
           </div>
 
-          <div class="m-card-box m-home-memo-panel">
+          <div class="m-card-box m-home-memo-panel" id="mHomeSecMemos">
             <div class="m-card-title-row">
               <span class="m-card-title">📌 최근 현장 메모 브리핑</span>
             </div>
             <div class="home-memo-list" style="display:flex;flex-direction:column;gap:8px;">
-              ${renderHomeMemoBriefingHtml(tasks)}
+              ${renderHomeMemoBriefingHtml(tasks, true)}
             </div>
           </div>
 
-          <div class="m-card-box">
+          <div class="m-card-box" id="mHomeSecSites">
             <div class="m-card-title-row">
               <span class="m-card-title">🏢 내 담당 진행 현장 (${mySites.length}개소)</span>
               <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMobileTab('sites')">전체 ➔</span>
@@ -3702,6 +4053,30 @@
                     </div>
                   </div>`;
               }).join("") || `<div style="font-size:12px;color:var(--text-muted);">진행 중인 현장이 없습니다.</div>`}
+            </div>
+          </div>
+
+          <div class="m-card-box" id="mHomeSecQuotes">
+            <div class="m-card-title-row">
+              <span class="m-card-title">📋 신규 상담 및 견적 (${activeNewQuotes.length}건)</span>
+              <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMobileTab('quote')">전체 ➔</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:7px;">
+              ${activeNewQuotes.slice(0, 3).map((s) => {
+                const ed = s.estimateData || {};
+                const st = ed.status || "신규 문의";
+                return `
+                  <div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:9px 10px;cursor:pointer;" onclick="switchMobileTab('quote')">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                      <span style="font-size:12.5px;font-weight:800;color:#0f172a;">${escHtml(s.siteName)}</span>
+                      <span style="font-size:10.5px;font-weight:700;color:#2563eb;padding:1px 6px;border-radius:4px;background:#eff6ff;">${escHtml(st)}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:11px;color:var(--text-muted);">
+                      <span>👤 ${escHtml(ed.manager || s.primaryManager || "미지정")} · ${escHtml(ed.scope || "전체공사")}</span>
+                      <span style="font-weight:700;color:#1e40af;">${formatEstimateAmtStr(ed.expectedAmount)}</span>
+                    </div>
+                  </div>`;
+              }).join("") || `<div style="font-size:12px;color:var(--text-muted);padding:4px 0;">진행 중인 신규 견적이 없습니다.</div>`}
             </div>
           </div>
         `;
@@ -3988,6 +4363,7 @@
               <div class="m-site-acc-body">
                 <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">
                   <button type="button" class="btn-tool-tag" onclick="openPartnerGuideForSite('${escJs(s.siteKey)}')">📋 안내문 확인</button>
+                  <button type="button" class="btn-tool-tag" onclick="focusSiteOnCalendar('${escJs(s.siteKey)}', true)">📅 캘린더 보기</button>
                   <button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(s.siteName)}')">✏️ 정보 수정</button>
                   <button type="button" class="btn-tool-tag" onclick="openSiteFileUploadModal('${escJs(s.siteName)}')">📤 파일 업로드</button>
                   <button type="button" class="btn-tool-tag" onclick="openNewTaskModal('${escJs(s.siteName)}', '')">+ 새 공정</button>
@@ -4062,44 +4438,174 @@
         }).join("") || `<div class="m-card-box" style="text-align:center;color:var(--text-muted);font-size:12px;">조건에 맞는 현장이 없습니다.</div>`);
       }
 
-      // [모바일 탭 2: To-Do]
+      // [모바일 탭 2: To-Do (스마트 그룹핑 & 빠른 추가 & 빠른 액션)]
       function renderMobileTodoTab() {
         const list = (state.todoData && state.todoData.list) || [];
         const q = state.searchQuery.trim();
         const m = state.memberFilter;
-        const filtered = list.filter((t) => {
+        const groupBy = state.todoGroupBy || "due";
+        const todayYmd = getTodayYmd();
+
+        const filteredList = list.filter((t) => {
           if (m && !(t.manager || "").includes(m)) return false;
           if (q && !matchesQuery([t.title, t.siteName, t.manager, t.detail].join(" "), q)) return false;
           return true;
         });
 
-        const todayYmd = getTodayYmd();
-        const overdue = filtered.filter((t) => t.status !== "완료" && t.dueDate && t.dueDate.replace(/\./g, "-") < todayYmd);
-        const imp = filtered.filter((t) => t.status !== "완료" && (t.isImportant || t.status === "중요") && !overdue.includes(t));
-        const normal = filtered.filter((t) => t.status !== "완료" && !overdue.includes(t) && !imp.includes(t));
-        const done = filtered.filter((t) => t.status === "완료");
+        const pendingList = filteredList.filter((t) => t.status !== "완료");
+        const doneList = filteredList.filter((t) => t.status === "완료");
+        const pendingCnt = pendingList.length;
+        const doneCnt = doneList.length;
 
-        function mTodoCard(t, borderColor, badgeText) {
-          return `
-            <div class="m-card-box" style="border-left:3.5px solid ${borderColor};" onclick="openTodoModal('${escJs(t.id)}')">
-              <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span style="font-size:10.5px;font-weight:700;color:${borderColor};">${escHtml(t.siteName || badgeText)}</span>
-                <input type="checkbox" ${t.status === "완료" ? "checked" : ""} onclick="event.stopPropagation(); toggleTodoItem('${escJs(t.id)}')">
-              </div>
-              <div style="font-size:12.5px;font-weight:700;margin-top:3px;${t.status === "완료" ? "text-decoration:line-through;color:var(--text-muted);" : ""}">${escHtml(t.title)}</div>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">담당: ${escHtml(t.manager || "미지정")} · ${escHtml(t.dueDate || "-")}</div>
-            </div>`;
+        const ongoingSites = getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
+        const siteOptionsHtml = ongoingSites.map((s) => `<option value="${escHtml(s.siteName)}">🏢 ${escHtml(s.siteName)}</option>`).join("");
+
+        let groupedHtml = "";
+        if (groupBy === "due") {
+          const overdue = pendingList.filter((t) => t.dueDate && t.dueDate.replace(/\./g, "-") < todayYmd);
+          const todayDue = pendingList.filter((t) => t.dueDate && t.dueDate.replace(/\./g, "-") === todayYmd);
+          const upcoming = pendingList.filter((t) => t.dueDate && t.dueDate.replace(/\./g, "-") > todayYmd);
+          const noDue = pendingList.filter((t) => !t.dueDate);
+
+          groupedHtml = `
+            ${overdue.length ? `
+              <div class="todo-section-box">
+                <div class="todo-section-header">
+                  <div class="todo-section-title" style="color:#dc2626;font-size:12.5px;">🔴 기한 지남 <span class="todo-count-badge" style="background:#fee2e2;color:#dc2626;">${overdue.length}</span></div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;">${overdue.map((t) => renderModernTodoCard(t, true)).join("")}</div>
+              </div>` : ""}
+            ${todayDue.length ? `
+              <div class="todo-section-box">
+                <div class="todo-section-header">
+                  <div class="todo-section-title" style="color:#d97706;font-size:12.5px;">🟡 오늘 마감 <span class="todo-count-badge" style="background:#fef3c7;color:#d97706;">${todayDue.length}</span></div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;">${todayDue.map((t) => renderModernTodoCard(t, true)).join("")}</div>
+              </div>` : ""}
+            ${upcoming.length ? `
+              <div class="todo-section-box">
+                <div class="todo-section-header">
+                  <div class="todo-section-title" style="color:#2563eb;font-size:12.5px;">🔵 다가오는 일정 <span class="todo-count-badge" style="background:#eff6ff;color:#2563eb;">${upcoming.length}</span></div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;">${upcoming.map((t) => renderModernTodoCard(t, true)).join("")}</div>
+              </div>` : ""}
+            ${noDue.length ? `
+              <div class="todo-section-box">
+                <div class="todo-section-header">
+                  <div class="todo-section-title" style="color:#64748b;font-size:12.5px;">⚪ 기한 없음 <span class="todo-count-badge">${noDue.length}</span></div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;">${noDue.map((t) => renderModernTodoCard(t, true)).join("")}</div>
+              </div>` : ""}
+            ${!pendingList.length ? `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:12.5px;">남은 To-Do 업무가 없습니다. 🎉</div>` : ""}
+          `;
+        } else if (groupBy === "site") {
+          const siteMap = new Map();
+          pendingList.forEach((t) => {
+            const sName = t.siteName || "일반 업무";
+            if (!siteMap.has(sName)) siteMap.set(sName, []);
+            siteMap.get(sName).push(t);
+          });
+          const sortedSiteKeys = Array.from(siteMap.keys()).sort((a, b) => {
+            if (a === "일반 업무") return 1;
+            if (b === "일반 업무") return -1;
+            return a.localeCompare(b, "ko");
+          });
+
+          groupedHtml = sortedSiteKeys.map((sName) => {
+            const items = siteMap.get(sName) || [];
+            const siteObj = getAllSites().find((s) => s.siteName === sName);
+            const siteCol = (siteObj && siteObj.colorHex) || "#2563eb";
+            return `
+              <div class="todo-section-box">
+                <div class="todo-section-header">
+                  <div class="todo-section-title" style="font-size:12.5px;cursor:pointer;" onclick="navigateToSiteDetail('${escJs(sName)}', true)">
+                    <span style="color:${siteCol};font-size:13px;">●</span>
+                    <span>${escHtml(sName)}</span>
+                    <span class="todo-count-badge">${items.length}</span>
+                  </div>
+                  ${sName !== "일반 업무" ? `<span style="font-size:10.5px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="navigateToSiteDetail('${escJs(sName)}', true)">상세 ➔</span>` : ""}
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;">${items.map((t) => renderModernTodoCard(t, true)).join("")}</div>
+              </div>`;
+          }).join("") || `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:12.5px;">남은 To-Do 업무가 없습니다. 🎉</div>`;
+        } else if (groupBy === "manager") {
+          const members = getMembersList();
+          const mgrKeys = [...Array.from(new Set(members)), "unassigned"];
+          groupedHtml = mgrKeys.map((mKey) => {
+            const items = pendingList.filter((t) => mKey === "unassigned" ? !t.manager : t.manager && t.manager.includes(mKey));
+            if (!items.length) return "";
+            const labelName = mKey === "unassigned" ? "담당 미지정" : mKey;
+            return `
+              <div class="todo-section-box">
+                <div class="todo-section-header">
+                  <div class="todo-section-title" style="font-size:12.5px;">
+                    <span class="tm-avatar" style="width:20px;height:20px;font-size:10px;">${escHtml(labelName.slice(0, 1))}</span>
+                    <span>${escHtml(labelName)}</span>
+                    <span class="todo-count-badge">${items.length}</span>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;">${items.map((t) => renderModernTodoCard(t, true)).join("")}</div>
+              </div>`;
+          }).join("") || `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:12.5px;">남은 To-Do 업무가 없습니다. 🎉</div>`;
         }
+
+        const isDoneExpanded = Boolean(state.todoCompletedExpanded);
+        const completedSectionHtml = `
+          <div class="todo-completed-section" style="margin-top:16px;">
+            <button type="button" class="todo-completed-toggle-btn" onclick="toggleTodoCompletedExpand()">
+              <span style="display:flex;align-items:center;gap:6px;">
+                <span>✅ 완료된 항목</span>
+                <span class="todo-count-badge" style="background:#ecfdf5;color:#059669;">${doneCnt}건</span>
+              </span>
+              <span style="font-size:11px;color:var(--text-muted);">${isDoneExpanded ? "▲ 접기" : "▼ 펼쳐서 확인 및 복구"}</span>
+            </button>
+            ${isDoneExpanded ? `
+              <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+                ${doneList.map((t) => renderModernTodoCard(t, true)).join("")}
+              </div>` : ""}
+          </div>
+        `;
 
         document.getElementById("m-page-todo").innerHTML = `
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <span style="font-size:16px;font-weight:800;">To-Do 업무 (${filtered.length})</span>
-            <button type="button" class="btn-act-blue" style="padding:5px 10px;font-size:11.5px;" onclick="openTodoModal(null)">+ 추가</button>
+            <div>
+              <span style="font-size:16px;font-weight:800;">To-Do 업무</span>
+              <span style="font-size:12px;color:var(--text-muted);font-weight:700;margin-left:4px;">(${pendingCnt}건 남음)</span>
+            </div>
+            <button type="button" class="btn-act-blue" style="padding:5px 10px;font-size:11.5px;" onclick="openTodoModal(null)">+ 상세</button>
           </div>
-          ${overdue.length ? `<div style="font-size:12px;font-weight:800;color:#dc2626;margin-bottom:6px;">🚨 기한 지난 업무 (${overdue.length})</div>` + overdue.map((t) => mTodoCard(t, "#ef4444", "기한지남")).join("") : ""}
-          ${imp.length ? `<div style="font-size:12px;font-weight:800;color:#d97706;margin:8px 0 6px;">⭐ 중요 업무 (${imp.length})</div>` + imp.map((t) => mTodoCard(t, "#f59e0b", "중요")).join("") : ""}
-          ${normal.length ? `<div style="font-size:12px;font-weight:800;color:#2563eb;margin:8px 0 6px;">📌 진행 업무 (${normal.length})</div>` + normal.map((t) => mTodoCard(t, "#2563eb", "미완료")).join("") : ""}
-          ${done.length ? `<div style="font-size:12px;font-weight:800;color:#10b981;margin:8px 0 6px;">✓ 완료 (${done.length})</div>` + done.map((t) => mTodoCard(t, "#10b981", "완료")).join("") : ""}
+
+          <!-- 모바일 한 줄 빠른 추가 바 -->
+          <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:9px 10px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <div style="display:flex;gap:6px;margin-bottom:6px;">
+              <select id="mQuickTodoSite" style="flex:1;min-width:0;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11.5px;font-weight:700;background:#f8fafc;outline:none;">
+                <option value="">🏢 일반 업무 (현장 선택)</option>
+                ${siteOptionsHtml}
+              </select>
+              <div style="display:flex;background:#f1f5f9;border-radius:6px;padding:2px;gap:2px;">
+                <button type="button" class="todo-quick-due-btn ${state.quickAddDueMode === "today" ? "active" : ""}" onclick="setQuickAddDueMode('today', true)">오늘</button>
+                <button type="button" class="todo-quick-due-btn ${state.quickAddDueMode === "tomorrow" ? "active" : ""}" onclick="setQuickAddDueMode('tomorrow', true)">내일</button>
+                <button type="button" class="todo-quick-due-btn ${state.quickAddDueMode === "none" ? "active" : ""}" onclick="setQuickAddDueMode('none', true)">없음</button>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <input type="text" id="mQuickTodoTitle" placeholder="할 일 입력 (Enter로 즉시 추가)..." style="flex:1;min-width:0;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;outline:none;" onkeydown="if(event.key==='Enter') quickAddTodo(true)">
+              <button type="button" class="btn-act-blue" style="padding:6px 12px;font-size:11.5px;border-radius:6px;white-space:nowrap;" onclick="quickAddTodo(true)">+ 추가</button>
+            </div>
+          </div>
+
+          <!-- 모바일 스마트 그룹핑 탭 -->
+          <div class="todo-group-nav" style="width:100%;justify-content:space-around;margin-bottom:12px;">
+            <button type="button" class="todo-group-tab-btn ${groupBy === "due" ? "active" : ""}" style="flex:1;text-align:center;" onclick="setTodoGroupBy('due')">📅 기한별</button>
+            <button type="button" class="todo-group-tab-btn ${groupBy === "site" ? "active" : ""}" style="flex:1;text-align:center;" onclick="setTodoGroupBy('site')">🏗️ 현장별</button>
+            <button type="button" class="todo-group-tab-btn ${groupBy === "manager" ? "active" : ""}" style="flex:1;text-align:center;" onclick="setTodoGroupBy('manager')">👤 담당자별</button>
+          </div>
+
+          <!-- 그룹핑된 목록 본문 -->
+          ${groupedHtml}
+
+          <!-- 접을 수 있는 완료 영역 -->
+          ${completedSectionHtml}
         `;
       }
 
@@ -5494,7 +6000,13 @@
       // ================= 모바일 캘린더 현장 필터 모달 함수 =================
       window.scrollAndHighlightHomeSection = function (sectionId) {
         const el = document.getElementById(sectionId);
-        if (!el) return;
+        if (!el) {
+          if (sectionId === "homeSecQuotes" || sectionId === "mHomeSecQuotes") {
+            if (state.device === "mobile") window.switchMobileTab("quote");
+            else window.switchMainTab("quote");
+          }
+          return;
+        }
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         el.classList.remove("section-pulse-highlight");
         void el.offsetWidth;
@@ -5911,6 +6423,123 @@
         if (window.WSDataService) window.WSDataService.toggleTodoStatus({ id: item.id, status: item.status, manager: item.manager || "", isImportant: item.isImportant }, state.todoData);
         markAllDirty();
         renderActiveViews();
+      };
+
+      window.setQuickAddDueMode = function (mode, isMobile) {
+        const pcInput = document.getElementById("pcQuickTodoTitle");
+        const pcSite = document.getElementById("pcQuickTodoSite");
+        const mInput = document.getElementById("mQuickTodoTitle");
+        const mSite = document.getElementById("mQuickTodoSite");
+        const savedPcVal = pcInput ? pcInput.value : "";
+        const savedPcSite = pcSite ? pcSite.value : "";
+        const savedMVal = mInput ? mInput.value : "";
+        const savedMSite = mSite ? mSite.value : "";
+        state.quickAddDueMode = mode;
+        state.dirtyPcTabs.todo = true;
+        state.dirtyMobileTabs.todo = true;
+        renderActiveViews();
+        const newPc = document.getElementById("pcQuickTodoTitle");
+        const newPcSite = document.getElementById("pcQuickTodoSite");
+        const newM = document.getElementById("mQuickTodoTitle");
+        const newMSite = document.getElementById("mQuickTodoSite");
+        if (newPc && savedPcVal) newPc.value = savedPcVal;
+        if (newPcSite && savedPcSite) newPcSite.value = savedPcSite;
+        if (newM && savedMVal) newM.value = savedMVal;
+        if (newMSite && savedMSite) newMSite.value = savedMSite;
+      };
+
+      window.setTodoGroupBy = function (groupBy) {
+        state.todoGroupBy = groupBy;
+        state.dirtyPcTabs.todo = true;
+        state.dirtyMobileTabs.todo = true;
+        renderActiveViews();
+      };
+
+      window.toggleTodoCompletedExpand = function () {
+        state.todoCompletedExpanded = !state.todoCompletedExpanded;
+        state.dirtyPcTabs.todo = true;
+        state.dirtyMobileTabs.todo = true;
+        renderActiveViews();
+      };
+
+      window.quickAddTodo = function (isMobile) {
+        const titleEl = document.getElementById(isMobile ? "mQuickTodoTitle" : "pcQuickTodoTitle");
+        const siteEl = document.getElementById(isMobile ? "mQuickTodoSite" : "pcQuickTodoSite");
+        const title = (titleEl ? titleEl.value : "").trim();
+        if (!title) {
+          showToast("⚠️ 할 일을 입력해 주세요.");
+          if (titleEl) titleEl.focus();
+          return;
+        }
+        const siteName = (siteEl ? siteEl.value : "").trim();
+        const todayYmd = getTodayYmd();
+        let dueDate = "";
+        const mode = state.quickAddDueMode || "today";
+        if (mode === "today") dueDate = todayYmd.replace(/-/g, ".");
+        else if (mode === "tomorrow") dueDate = addDaysYmd(todayYmd, 1).replace(/-/g, ".");
+        else dueDate = "";
+
+        const newId = "todo_" + Date.now();
+        const payload = {
+          id: newId,
+          title: title,
+          dueDate: dueDate,
+          manager: state.user || "",
+          siteName: siteName,
+          tag: siteName ? "현장" : "일반",
+          detail: "",
+          status: "미완료",
+          isImportant: false
+        };
+
+        if (!state.todoData) state.todoData = { list: [] };
+        state.todoData.list.unshift(payload);
+        if (window.WSDataService) window.WSDataService.saveTodo(false, payload, state.todoData);
+        if (titleEl) titleEl.value = "";
+        markAllDirty();
+        renderActiveViews();
+        showToast("✅ To-Do가 추가되었습니다.");
+      };
+
+      window.quickUpdateTodoDue = function (id, dueMode) {
+        const item = ((state.todoData && state.todoData.list) || []).find((t) => t.id === id);
+        if (!item) return;
+        const todayYmd = getTodayYmd();
+        if (dueMode === "today") item.dueDate = todayYmd.replace(/-/g, ".");
+        else if (dueMode === "tomorrow") item.dueDate = addDaysYmd(todayYmd, 1).replace(/-/g, ".");
+        else if (dueMode === "none") item.dueDate = "";
+        if (window.WSDataService) window.WSDataService.saveTodo(true, item, state.todoData);
+        state.dirtyPcTabs.todo = true;
+        state.dirtyPcTabs.home = true;
+        state.dirtyMobileTabs.todo = true;
+        state.dirtyMobileTabs.home = true;
+        renderActiveViews();
+        showToast("✅ 기한이 변경되었습니다.");
+      };
+
+      window.quickUpdateTodoManager = function (id, newManager) {
+        const item = ((state.todoData && state.todoData.list) || []).find((t) => t.id === id);
+        if (!item) return;
+        item.manager = (newManager || "").trim();
+        if (window.WSDataService) window.WSDataService.saveTodo(true, item, state.todoData);
+        state.dirtyPcTabs.todo = true;
+        state.dirtyPcTabs.home = true;
+        state.dirtyMobileTabs.todo = true;
+        state.dirtyMobileTabs.home = true;
+        renderActiveViews();
+        showToast(`✅ 담당자가 ${item.manager ? item.manager + "님으로" : "미지정으로"} 변경되었습니다.`);
+      };
+
+      window.navigateToSiteDetail = function (siteName, isMobile) {
+        if (!siteName) return;
+        const site = getAllSites().find((s) => s.siteName === siteName);
+        if (isMobile) {
+          if (site && window.openSiteDetailMobile) window.openSiteDetailMobile(site.siteKey);
+          else if (window.switchMobileTab) window.switchMobileTab("sites");
+        } else {
+          if (site && window.selectSiteCard) window.selectSiteCard(site.siteKey);
+          if (window.switchMainTab) window.switchMainTab("sites");
+        }
       };
 
       // ================= 모달 7: 신규 견적 등록/수정 모달 =================
@@ -6511,10 +7140,34 @@
         renderActiveViews();
       };
       window.selectSiteCard = function (siteKey) { state.selectedSiteKey = siteKey; state.siteTaskStatusFilter = "all"; state.checkedTableTaskIds.clear(); state.dirtyPcTabs.sites = true; renderActiveViews(); };
-      window.focusSiteOnCalendar = function (siteKey) {
+      window.focusSiteOnCalendar = function (siteKey, isMobile) {
         const site = getAllSites().find((s) => s.siteKey === siteKey);
         if (site && site.scope) state.scope = site.scope;
-        state.checkedSiteKeys = new Set([siteKey]); markAllDirty(); window.switchMainTab("calendar");
+        state.checkedSiteKeys = new Set([siteKey]);
+        if (site && Array.isArray(site.tasks) && site.tasks.length > 0) {
+          let minDateStr = "";
+          site.tasks.forEach((t) => {
+            const ymd = parseYmdFromTask(t);
+            if (ymd && (!minDateStr || ymd < minDateStr)) minDateStr = ymd;
+          });
+          if (minDateStr) {
+            const parts = minDateStr.split("-");
+            const y = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10);
+            if (!isNaN(y) && !isNaN(m)) {
+              state.calYear = y;
+              state.calMonth = m;
+              state.selectedDayStr = minDateStr;
+            }
+          }
+        }
+        markAllDirty();
+        const wantMobile = (typeof isMobile === "boolean") ? isMobile : (state.device === "mobile");
+        if (wantMobile) {
+          window.switchMobileTab("calendar");
+        } else {
+          window.switchMainTab("calendar");
+        }
       };
       window.toggleArchivedSites = function () { state.showArchivedSites = !state.showArchivedSites; markAllDirty(); renderActiveViews(); };
       window.setSiteSort = function (sortBy) { state.siteSortBy = sortBy; state.dirtyPcTabs.sites = true; renderActiveViews(); };
@@ -6528,6 +7181,8 @@
       window.toggleMobileHomeTasksExpand = function () { state.mobileHomeTasksExpanded = !state.mobileHomeTasksExpanded; state.dirtyMobileTabs.home = true; renderActiveViews(); };
       window.copyText = copyText;
       window.showToast = showToast;
+      window.renderActiveViews = renderActiveViews;
+      window.markAllDirty = markAllDirty;
 
       window.scrollCarouselTrack = function (trackId, delta) {
         const el = document.getElementById(trackId);
