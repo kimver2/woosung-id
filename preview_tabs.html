@@ -1525,6 +1525,7 @@
         financePartnerFilter: "all",
         homeTaskFilter: "all",
         homeMemoExpanded: false,
+        mobileHomeTasksExpanded: false,
         dirtyPcTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true },
         dirtyMobileTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true },
         syncSource: "snapshot",
@@ -3511,6 +3512,10 @@
           ? tasks
           : tasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === activeFilter);
         const mTaskFilterGroupHtml = renderHomeTaskFilterGroupHtml(tasks, todayYmd);
+        const limitTasks = 5;
+        const isTasksExpanded = Boolean(state.mobileHomeTasksExpanded);
+        const visibleMobileTasks = isTasksExpanded ? filteredMobileTasks : filteredMobileTasks.slice(0, limitTasks);
+        const hiddenTasksCount = filteredMobileTasks.length - visibleMobileTasks.length;
         const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s));
         const todos = ((state.todoData && state.todoData.list) || []).filter((t) => !t.manager || t.manager.includes(user));
         const pendingTodos = todos.filter((t) => t.status !== "완료");
@@ -3582,8 +3587,8 @@
               </div>
               <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMobileTab('calendar')">캘린더 ➔</span>
             </div>
-            <div class="m-home-task-scroll">
-              ${filteredMobileTasks.map(({ site, task, ymd }) => {
+            <div class="m-home-task-scroll" style="${isTasksExpanded ? 'max-height:none;' : ''}">
+              ${visibleMobileTasks.map(({ site, task, ymd }) => {
                 const phone = lookupPartnerPhone(task.partner);
                 const tid = task.id || task.taskId;
                 const isDel = Boolean(task.isDelayed || (ymd && ymd < todayYmd));
@@ -3601,6 +3606,11 @@
                   </div>`;
               }).join("") || `<div style="font-size:12px;color:var(--text-muted);padding:8px 2px;">해당 상태의 공정이 없습니다.</div>`}
             </div>
+            ${filteredMobileTasks.length > limitTasks ? `
+              <button type="button" class="home-memo-toggle-btn m-home-tasks-toggle-btn" onclick="toggleMobileHomeTasksExpand()" style="margin-top:8px;">
+                ${isTasksExpanded ? `▲ 공정 접기 (기본 ${limitTasks}개만 보기)` : `▼ 공정 ${hiddenTasksCount}개 더보기 (전체 ${filteredMobileTasks.length}건)`}
+              </button>
+            ` : ""}
           </div>
 
           <div class="m-card-box m-home-memo-panel">
@@ -3845,11 +3855,6 @@
           if (q && !matchesQuery([s.siteName, ...(s.tasks || []).map((t) => t.taskName + " " + t.partner + " " + t.memo)].join(" "), q)) return false;
           return true;
         });
-
-        if (!state._mobileSitesAutoInit && visible.length > 0) {
-          state.mobileExpandedSiteKeys.add(visible[0].siteKey);
-          state._mobileSitesAutoInit = true;
-        }
 
         const toggleBarHtml = `
           <div style="display:flex;gap:6px;margin-bottom:10px;">
@@ -5957,6 +5962,7 @@
       window.switchMainTab = function (tabKey) {
         if (state.device === "mobile" && IS_PREVIEW_MODE) window.switchDeviceMode("pc");
         state.pcTab = tabKey;
+        state.dirtyPcTabs[tabKey] = true;
         if (tabKey === "quote") {
           if (state.scope !== "newSite") {
             state.scope = "newSite";
@@ -5977,6 +5983,11 @@
 
       window.switchMobileTab = function (tabKey) {
         state.mobileTab = tabKey;
+        state.mobileExpandedSiteKeys.clear();
+        state.dirtyMobileTabs[tabKey] = true;
+        if (tabKey === "home") {
+          state.mobileHomeTasksExpanded = false;
+        }
         if (tabKey === "quote") {
           if (state.scope !== "newSite") {
             state.scope = "newSite";
@@ -6007,6 +6018,7 @@
 
       window.onMScopeClick = function (scope) {
         state.scope = scope;
+        state.mobileHomeTasksExpanded = false;
         state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
         markAllDirty();
@@ -6015,11 +6027,12 @@
         else renderActiveViews();
       };
 
-      window.onMMemberClick = function (member) { state.memberFilter = member; markAllDirty(); renderActiveViews(); };
-      window.onMemberFilterChange = function (member) { state.memberFilter = member; markAllDirty(); renderActiveViews(); };
+      window.onMMemberClick = function (member) { state.memberFilter = member; state.mobileHomeTasksExpanded = false; markAllDirty(); renderActiveViews(); };
+      window.onMemberFilterChange = function (member) { state.memberFilter = member; state.mobileHomeTasksExpanded = false; markAllDirty(); renderActiveViews(); };
 
       window.onUserChanged = function (userName) {
         state.user = userName;
+        state.mobileHomeTasksExpanded = false;
         const pcSel = document.getElementById("userSelector");
         const mSel = document.getElementById("mUserSelector");
         if (pcSel) pcSel.value = userName;
@@ -6031,6 +6044,7 @@
 
       window.onGlobalSearch = function (query) {
         state.searchQuery = query || "";
+        state.mobileHomeTasksExpanded = false;
         const pcIn = document.getElementById("pcSearchInput");
         const mIn = document.getElementById("mSearchInput");
         const mBox = document.getElementById("mSearchBox");
@@ -6067,7 +6081,6 @@
       };
       window.setMobileSitesArchived = function (archived) {
         state.showArchivedSites = Boolean(archived);
-        state._mobileSitesAutoInit = false;
         state.mobileExpandedSiteKeys.clear();
         state.dirtyMobileTabs.sites = true;
         state.dirtyPcTabs.sites = true;
@@ -6146,7 +6159,11 @@
       window.openSiteDetailMobile = function (siteKey) {
         const site = getAllSites().find((s) => s.siteKey === siteKey);
         if (site && site.scope) state.scope = site.scope;
-        state.selectedSiteKey = siteKey; markAllDirty(); window.switchMobileTab("sites");
+        state.selectedSiteKey = siteKey;
+        markAllDirty();
+        window.switchMobileTab("sites");
+        if (siteKey) state.mobileExpandedSiteKeys.add(siteKey);
+        renderActiveViews();
       };
       window.selectSiteCard = function (siteKey) { state.selectedSiteKey = siteKey; state.siteTaskStatusFilter = "all"; state.checkedTableTaskIds.clear(); state.dirtyPcTabs.sites = true; renderActiveViews(); };
       window.focusSiteOnCalendar = function (siteKey) {
@@ -6161,8 +6178,9 @@
       window.filterTodoMember = function (mem) { state.todoMemberFilter = mem; state.dirtyPcTabs.todo = true; renderActiveViews(); };
       window.toggleQuoteArchived = function () { state.quoteShowArchived = !state.quoteShowArchived; state.dirtyPcTabs.quote = true; renderActiveViews(); };
       window.setFinancePartner = function (partner) { state.financePartnerFilter = partner; state.dirtyPcTabs.finance = true; renderActiveViews(); };
-      window.setHomeTaskFilter = function (filter) { state.homeTaskFilter = filter || "all"; state.dirtyPcTabs.home = true; state.dirtyMobileTabs.home = true; renderActiveViews(); };
+      window.setHomeTaskFilter = function (filter) { state.homeTaskFilter = filter || "all"; state.mobileHomeTasksExpanded = false; state.dirtyPcTabs.home = true; state.dirtyMobileTabs.home = true; renderActiveViews(); };
       window.toggleHomeMemoExpand = function () { state.homeMemoExpanded = !state.homeMemoExpanded; state.dirtyPcTabs.home = true; state.dirtyMobileTabs.home = true; renderActiveViews(); };
+      window.toggleMobileHomeTasksExpand = function () { state.mobileHomeTasksExpanded = !state.mobileHomeTasksExpanded; state.dirtyMobileTabs.home = true; renderActiveViews(); };
       window.copyText = copyText;
       window.showToast = showToast;
 
