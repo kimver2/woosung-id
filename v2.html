@@ -272,14 +272,42 @@
     .m-site-acc-card {
       background: #ffffff; border: 1px solid var(--border); border-radius: 12px;
       margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+      transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+    .m-site-acc-card.expanded {
+      border: 1.5px solid #0f766e;
+      box-shadow: 0 6px 16px -4px rgba(15, 118, 110, 0.16);
     }
     .m-site-acc-head {
       padding: 11px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
       cursor: pointer; background: #ffffff;
     }
-    .m-site-acc-body {
-      padding: 10px 12px 12px; border-top: 1px solid var(--border); background: #f8fafc;
+    .m-site-acc-card.expanded .m-site-acc-head {
+      background: #f0fdfa;
+      border-bottom: 1px solid #ccfbf1;
     }
+    .m-site-acc-body {
+      padding: 10px 11px 12px; background: #f8fafc;
+    }
+    .m-site-tasks-bundle {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-left: 4px solid #0f766e;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    }
+    .m-site-bundle-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 10px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0;
+    }
+    .m-site-bundle-task-row {
+      padding: 8px 10px; cursor: pointer; background: #ffffff;
+      border-bottom: 1px solid #f1f5f9; transition: background 0.12s ease;
+    }
+    .m-site-bundle-task-row:last-child { border-bottom: none; }
+    .m-site-bundle-task-row:active { background: #f8fafc; }
+    .m-site-bundle-task-row.is-delayed { background: #fef2f2; }
 
     .m-app-body { flex: 1; overflow-y: auto; padding: 12px 12px 84px 12px; }
     .m-page-pane { display: none; }
@@ -3777,8 +3805,8 @@
 
         const toggleBarHtml = `
           <div style="display:flex;gap:6px;margin-bottom:10px;">
-            <button type="button" onclick="if(state.showArchivedSites){state.showArchivedSites=false;state._mobileSitesAutoInit=false;state.mobileExpandedSiteKeys.clear();markAllDirty();renderActiveViews();}" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid ${!state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${!state.showArchivedSites ? "#0f766e" : "#fff"};color:${!state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">🏗️ 진행 현장 ${activeCountAll}</button>
-            <button type="button" onclick="if(!state.showArchivedSites){state.showArchivedSites=true;state._mobileSitesAutoInit=false;state.mobileExpandedSiteKeys.clear();markAllDirty();renderActiveViews();}" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid ${state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${state.showArchivedSites ? "#0f766e" : "#fff"};color:${state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">✅ 완료 현장 ${doneCountAll}</button>
+            <button type="button" class="m-sites-archived-btn" data-archived="false" onclick="setMobileSitesArchived(false)" style="flex:1;padding:8px 8px;border-radius:8px;border:1px solid ${!state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${!state.showArchivedSites ? "#0f766e" : "#fff"};color:${!state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">🏗️ 진행 현장 ${activeCountAll}</button>
+            <button type="button" class="m-sites-archived-btn" data-archived="true" onclick="setMobileSitesArchived(true)" style="flex:1;padding:8px 8px;border-radius:8px;border:1px solid ${state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${state.showArchivedSites ? "#0f766e" : "#fff"};color:${state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">✅ 완료 현장 ${doneCountAll}</button>
           </div>`;
 
         document.getElementById("m-page-sites").innerHTML = toggleBarHtml + (visible.map((s) => {
@@ -3803,7 +3831,7 @@
               const checked = state.checkedMobileTaskIds.has(tid);
               const ymd = parseYmdFromTask(t);
               return `
-                <div onclick="openTaskEditModal('${escJs(tid)}')" style="background:#fff;border:1px solid ${isDel ? "#fecaca" : "var(--border)"};border-left:3px solid ${isDel ? "#ef4444" : (isDone ? "#10b981" : "#2563eb")};border-radius:8px;padding:8px 9px;cursor:pointer;">
+                <div class="m-site-bundle-task-row ${isDel ? "is-delayed" : ""}" onclick="openTaskEditModal('${escJs(tid)}')">
                   <div style="display:flex;align-items:center;gap:6px;">
                     <input type="checkbox" ${checked ? "checked" : ""} onclick="event.stopPropagation();" onchange="toggleMobileTaskCheck('${escJs(tid)}', this.checked)" style="width:15px;height:15px;accent-color:#0f766e;cursor:pointer;flex-shrink:0;" />
                     <span title="${t.isShared ? "공유됨" : "미공유"}" style="font-size:11px;flex-shrink:0;">${t.isShared ? "🟦" : "🟥"}</span>
@@ -3812,12 +3840,12 @@
                     <span style="font-size:10.5px;color:var(--text-muted);font-weight:700;flex-shrink:0;">${escHtml(ymd || "-")}</span>
                   </div>
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:4px;padding-left:21px;font-size:11px;color:var(--text-sub);">
-                    <span>👤 ${escHtml(filterRegisteredManagers(t.manager) || "-")} · 🤝 ${escHtml(t.partner || "미등록")}</span>
+                    <span>👤 ${escHtml(filterRegisteredManagers(t.manager).join(", ") || "-")} · 🤝 ${escHtml(t.partner || "미등록")}</span>
                     ${pPhone ? `<a href="tel:${escHtml(pPhone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;padding:2px 7px;border-radius:6px;font-weight:800;text-decoration:none;font-size:10.5px;flex-shrink:0;">📞 ${escHtml(pPhone)}</a>` : ""}
                   </div>
                   ${t.memo ? `<div style="margin-top:3px;padding-left:21px;font-size:10.5px;color:#475569;">📝 ${escHtml(t.memo)}</div>` : ""}
                 </div>`;
-            }).join("") || `<div style="font-size:11.5px;color:var(--text-muted);text-align:center;padding:8px;">등록된 공정이 없습니다.</div>`;
+            }).join("") || `<div style="font-size:11.5px;color:var(--text-muted);text-align:center;padding:10px;">등록된 공정이 없습니다.</div>`;
 
             bodyHtml = `
               <div class="m-site-acc-body">
@@ -3858,22 +3886,23 @@
                   <span class="chip-item ${info.officeNoticeDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;" onclick="togglePreChecklist('${escJs(s.siteName)}', 'officeNoticeDone')">${info.officeNoticeDone ? "✓" : "○"} 관리실신고</span>
                 </div>
 
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding:4px 2px;">
-                  <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;color:var(--text);cursor:pointer;">
-                    <input type="checkbox" ${allChecked ? "checked" : ""} onchange="toggleMobileSiteAllTasks('${escJs(s.siteKey)}', this.checked)" style="width:15px;height:15px;accent-color:#0f766e;" />
-                    전체선택 (${tasks.length}건)
-                  </label>
-                  <span style="font-size:10.5px;color:var(--text-muted);font-weight:700;">🟦 공유 / 🟥 미공유</span>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:6px;">
-                  ${tasksListHtml}
+                <div class="m-site-tasks-bundle" style="border-left-color:${escHtml(s.colorHex || "#0f766e")};">
+                  <div class="m-site-bundle-head">
+                    <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;color:var(--text);cursor:pointer;">
+                      <input type="checkbox" ${allChecked ? "checked" : ""} onchange="toggleMobileSiteAllTasks('${escJs(s.siteKey)}', this.checked)" style="width:15px;height:15px;accent-color:#0f766e;" />
+                      공정 묶음 전체선택 (${tasks.length}건)
+                    </label>
+                    <span style="font-size:10.5px;color:var(--text-muted);font-weight:700;">🟦 공유 / 🟥 미공유</span>
+                  </div>
+                  <div>
+                    ${tasksListHtml}
+                  </div>
                 </div>
               </div>`;
           }
 
           return `
-            <div class="m-site-acc-card">
+            <div class="m-site-acc-card ${isExpanded ? "expanded" : ""}" style="${isExpanded ? "border-color:" + escHtml(s.colorHex || "#0f766e") + ";" : ""}">
               <div class="m-site-acc-head" onclick="toggleMobileSiteCard('${escJs(s.siteKey)}')">
                 <div style="min-width:0;flex:1;">
                   <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;">
@@ -5987,6 +6016,17 @@
           state.selectedDayStr = todayYmd.startsWith(ym) ? todayYmd : ym + "-01";
         }
         markAllDirty(); renderActiveViews();
+      };
+      window.setMobileSitesArchived = function (archived) {
+        state.showArchivedSites = Boolean(archived);
+        state._mobileSitesAutoInit = false;
+        state.mobileExpandedSiteKeys.clear();
+        state.dirtyMobileTabs.sites = true;
+        state.dirtyPcTabs.sites = true;
+        renderActiveViews();
+        const bodyEl = document.getElementById("mAppBody");
+        if (bodyEl) bodyEl.scrollTop = 0;
+        if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
       };
       window.toggleMobileSiteCard = function (siteKey) {
         if (state.mobileExpandedSiteKeys.has(siteKey)) state.mobileExpandedSiteKeys.delete(siteKey);
