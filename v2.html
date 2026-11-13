@@ -194,7 +194,9 @@
       padding: 3px 8px; font-size: 11px; font-weight: 700; color: var(--text-sub); cursor: pointer;
     }
     .m-cal-full-grid {
-      display: grid; grid-template-columns: repeat(7, 1fr); background: var(--surface);
+      display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+      grid-auto-rows: minmax(var(--m-cal-row-min, 72px), auto);
+      background: #e2e8f0; gap: 1px;
       border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 10px;
     }
     .m-cal-head {
@@ -204,27 +206,33 @@
     .m-cal-head.sun { color: #ef4444; }
     .m-cal-head.sat { color: #2563eb; }
     .m-cal-cell {
-      border-right: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; min-height: 60px;
-      padding: 2px; display: flex; flex-direction: column; cursor: pointer; position: relative; min-width: 0;
+      background: #ffffff;
+      min-height: var(--m-cal-row-min, 72px);
+      height: auto;
+      padding: 3px 2px 4px 2px;
+      display: flex; flex-direction: column; cursor: pointer; position: relative; min-width: 0; overflow: hidden;
     }
-    .m-cal-cell:nth-child(7n) { border-right: none; }
     .m-cal-cell.other-month { background: #fafafa; opacity: 0.45; }
     .m-cal-cell.today { background: #f0fdf4; }
     .m-cal-cell.selected { background: #eff6ff; box-shadow: inset 0 0 0 1.5px #2563eb; z-index: 2; }
-    .m-cal-cell-header { display: flex; justify-content: space-between; align-items: center; font-size: 10px; font-weight: 700; margin-bottom: 2px; padding: 0 2px; }
+    .m-cal-cell-header { display: flex; justify-content: space-between; align-items: center; font-size: 10px; font-weight: 700; margin-bottom: 2px; padding: 0 2px; gap: 2px; }
     .m-cal-cell.sun .m-day-num { color: #ef4444; }
     .m-cal-cell.sat .m-day-num { color: #2563eb; }
     .m-cal-cell.today .m-day-num {
       background: #2563eb; color: #ffffff !important; border-radius: 50%; width: 16px; height: 16px;
       display: inline-flex; align-items: center; justify-content: center;
     }
+    .m-cal-hol { font-size: 8px; color: #ef4444; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .m-cal-events-list { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; width: 100%; margin-top: 1px; }
     .m-cal-pill {
-      font-size: 8.5px; font-weight: 700; padding: 1.5px 3px; border-radius: 3px; margin-bottom: 1.5px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.15; color: #fff;
+      display: flex; align-items: center; gap: 2px; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
+      font-size: 8.5px; font-weight: 800; padding: 1.5px 2.5px; border-radius: 3px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25; color: #fff;
     }
+    .m-cal-pill.light-bg { color: #1e293b !important; }
     .m-cal-pill.done { opacity: 0.55; text-decoration: line-through; }
 
-    .m-app-body { flex: 1; overflow-y: auto; padding: 12px 12px 80px 12px; }
+    .m-app-body { flex: 1; overflow-y: auto; padding: 12px 12px 84px 12px; }
     .m-page-pane { display: none; }
     .m-page-pane.active { display: block; }
 
@@ -239,6 +247,29 @@
     }
     .m-bottom-btn.active { color: #2563eb; }
     .m-bottom-btn .icon { font-size: 17px; }
+
+    /* 실제 모바일 브라우저 환경: 100dvh + 문서 스크롤 + 하단 고정 내비게이션으로 주소창/하단바에 가리지 않음 */
+    body:not(.preview-shell) .mobile-phone-frame {
+      width: 100%; max-width: 100%; min-height: 100vh; min-height: 100dvh; height: auto;
+      border: none; border-radius: 0; box-shadow: none; overflow: visible;
+    }
+    body:not(.preview-shell) .mobile-screen-inner {
+      min-height: 100vh; min-height: 100dvh; height: auto; overflow: visible; display: flex; flex-direction: column;
+    }
+    body:not(.preview-shell) .m-header-bar { position: sticky; top: 0; z-index: 200; }
+    body:not(.preview-shell) .m-search-wrap { position: sticky; top: 49px; z-index: 199; }
+    body:not(.preview-shell) .m-filter-bar { position: sticky; top: 97px; z-index: 198; }
+    body:not(.preview-shell) .m-app-body {
+      overflow-y: visible; flex: 1;
+      padding: 12px 12px calc(88px + env(safe-area-inset-bottom, 0px)) 12px;
+    }
+    body:not(.preview-shell) .m-bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: calc(62px + env(safe-area-inset-bottom, 0px));
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      z-index: 950;
+      box-shadow: 0 -2px 10px rgba(15, 23, 42, 0.08);
+    }
 
     .m-card-box {
       background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
@@ -1464,28 +1495,31 @@
       }
       function sanitizeUnregisteredMembers() {
         const members = getMembersList();
-        if (!members.length) return;
         const filterStr = (raw) => filterRegisteredManagers(raw).join(", ");
         if (state.dashData && Array.isArray(state.dashData.sites)) {
           state.dashData.sites.forEach((s) => {
-            if (s.primaryManager) s.primaryManager = filterStr(s.primaryManager);
-            if (s.estimateData && s.estimateData.manager) s.estimateData.manager = filterStr(s.estimateData.manager);
-            (s.tasks || []).forEach((t) => {
-              if (t.manager) t.manager = filterStr(t.manager);
-              if (t.manager1 && !members.includes(t.manager1)) t.manager1 = "";
-              if (t.manager2 && !members.includes(t.manager2)) t.manager2 = "";
-              if (!t.manager1 && t.manager) t.manager1 = t.manager.split(",")[0].trim();
-              if (!t.manager2 && t.manager && t.manager.includes(",")) t.manager2 = (t.manager.split(",")[1] || "").trim();
-            });
+            if (members.length) {
+              if (s.primaryManager) s.primaryManager = filterStr(s.primaryManager);
+              if (s.estimateData && s.estimateData.manager) s.estimateData.manager = filterStr(s.estimateData.manager);
+              (s.tasks || []).forEach((t) => {
+                if (t.manager) t.manager = filterStr(t.manager);
+                if (t.manager1 && !members.includes(t.manager1)) t.manager1 = "";
+                if (t.manager2 && !members.includes(t.manager2)) t.manager2 = "";
+                if (!t.manager1 && t.manager) t.manager1 = t.manager.split(",")[0].trim();
+                if (!t.manager2 && t.manager && t.manager.includes(",")) t.manager2 = (t.manager.split(",")[1] || "").trim();
+              });
+            }
+            recalcSiteStats(s, true);
           });
+          recalcDashMeta();
         }
-        if (state.todoData && Array.isArray(state.todoData.list)) {
+        if (members.length && state.todoData && Array.isArray(state.todoData.list)) {
           state.todoData.list.forEach((t) => {
             if (t.manager) t.manager = filterStr(t.manager);
           });
         }
-        if (state.memberFilter && !members.includes(state.memberFilter)) state.memberFilter = "";
-        if (state.todoMemberFilter && state.todoMemberFilter !== "all" && state.todoMemberFilter !== "unassigned" && !members.includes(state.todoMemberFilter)) {
+        if (members.length && state.memberFilter && !members.includes(state.memberFilter)) state.memberFilter = "";
+        if (members.length && state.todoMemberFilter && state.todoMemberFilter !== "all" && state.todoMemberFilter !== "unassigned" && !members.includes(state.todoMemberFilter)) {
           state.todoMemberFilter = "all";
         }
       }
@@ -1502,15 +1536,47 @@
         return (state.dashData && state.dashData.partners) || [];
       }
       function getAllSites() { return (state.dashData && state.dashData.sites) || []; }
+      function isTaskCompleted(task) {
+        if (!task) return true;
+        if (task.isArchived === true || task.isCompleted === true) return true;
+        const st = String(task.status || "").replace(/\s+/g, "");
+        return st.indexOf("완료") !== -1 || st.indexOf("취소") !== -1 || st.indexOf("제외") !== -1;
+      }
+      function isSiteCompleted(site) {
+        if (!site) return true;
+        const sc = site.scope || "site";
+        if (sc === "newSite") {
+          const ed = site.estimateData || {};
+          const st = String(ed.status || "").trim();
+          return Boolean(site.isArchived || site.isAllCompleted || st === "계약 완료" || st === "수주 실패" || st === "실패");
+        }
+        if (site.isArchived === true || site.isAllCompleted === true) return true;
+        if ((Number(site.progressRate) || 0) >= 100) return true;
+        const tasks = Array.isArray(site.tasks) ? site.tasks : [];
+        if (tasks.length > 0) {
+          const hasActiveTask = tasks.some((t) => !isTaskCompleted(t));
+          if (!hasActiveTask) return true;
+        }
+        return false;
+      }
+      function getUniqueSiteManagers(tasks) {
+        const seen = [];
+        (tasks || []).forEach((t) => {
+          filterRegisteredManagers(t.manager).forEach((name) => {
+            if (name && !seen.includes(name)) seen.push(name);
+          });
+        });
+        return seen;
+      }
       function getScopeSites(includeArchived) {
         return getAllSites().filter((s) => {
           if (s.scope !== state.scope) return false;
-          if (!includeArchived && (s.isArchived || s.isAllCompleted)) return false;
+          if (!includeArchived && isSiteCompleted(s)) return false;
           return true;
         });
       }
       function getActiveScopeSites() { return getScopeSites(false); }
-      function getDoneScopeSites() { return getAllSites().filter((s) => s.scope === state.scope && (s.isArchived || s.isAllCompleted)); }
+      function getDoneScopeSites() { return getAllSites().filter((s) => s.scope === state.scope && isSiteCompleted(s)); }
       function ensureCheckedSitesInitialized() {
         const active = getActiveScopeSites();
         if (!state.checkedSiteKeys) {
@@ -1558,47 +1624,78 @@
         return h === "#F6BF26" || h === "#FACC15" || h === "#EAB308" || h === "#FDE047";
       }
 
-      function recalcSiteStats(site) {
-        if (!site) return;
-        const tasks = site.tasks || [];
-        const active = tasks.filter((t) => t.status !== "취소" && t.status !== "제외");
-        const done = active.filter((t) => t.status === "완료").length;
-        const delayed = active.filter((t) => t.isDelayed && t.status !== "완료").length;
-        site.totalTasksCount = tasks.length;
-        site.completedTasksCount = done;
-        site.delayedTasksCount = delayed;
-        site.progressRate = active.length ? Math.round((done / active.length) * 100) : 0;
-        site.isAllCompleted = active.length > 0 && done === active.length;
-        if (state.dashData && state.dashData.kpi) {
-          let tCnt = 0, dCnt = 0;
-          const todayY = getTodayYmd();
-          getAllSites().forEach((s) => {
-            if (s.scope === "newSite" || s.isArchived || s.isAllCompleted) return;
-            (s.tasks || []).forEach((t) => {
-              if (t.status !== "완료") {
-                const y = parseYmdFromTask(t);
-                if (y === todayY || t.isToday) tCnt++;
-                if (t.isDelayed) dCnt++;
-              }
-            });
+      function recalcDashMeta() {
+        if (!state.dashData) return;
+        const todayY = getTodayYmd();
+        let tCnt = 0, dCnt = 0;
+        const scCounts = { site: 0, single: 0, as: 0, newSite: 0 };
+        getAllSites().forEach((s) => {
+          const sc = s.scope || "site";
+          if (!isSiteCompleted(s)) {
+            if (scCounts[sc] !== undefined) scCounts[sc]++;
+          }
+          if (sc === "newSite" || isSiteCompleted(s)) return;
+          (s.tasks || []).forEach((t) => {
+            if (!isTaskCompleted(t)) {
+              const y = parseYmdFromTask(t);
+              if (y === todayY || t.isToday) tCnt++;
+              if (t.isDelayed || (y && y < todayY)) dCnt++;
+            }
           });
-          state.dashData.kpi.todayCount = tCnt;
-          state.dashData.kpi.delayedCount = dCnt;
-        }
+        });
+        state.dashData.scopeCounts = scCounts;
+        if (!state.dashData.kpi) state.dashData.kpi = {};
+        state.dashData.kpi.todayCount = tCnt;
+        state.dashData.kpi.delayedCount = dCnt;
       }
 
-      // 다중 일자(연속 공정) 포함 필터링
+      function recalcSiteStats(site, skipDashMeta) {
+        if (!site) return;
+        const tasks = Array.isArray(site.tasks) ? site.tasks : [];
+        const todayYmd = getTodayYmd();
+        const done = tasks.filter((t) => isTaskCompleted(t)).length;
+        const validTasks = tasks.filter((t) => {
+          const st = String(t.status || "").replace(/\s+/g, "");
+          return st.indexOf("취소") === -1 && st.indexOf("제외") === -1;
+        });
+        const doneValid = validTasks.filter((t) => isTaskCompleted(t)).length;
+        const delayed = tasks.filter((t) => {
+          if (isTaskCompleted(t)) return false;
+          const ymd = parseYmdFromTask(t);
+          return Boolean(t.isDelayed || (ymd && ymd < todayYmd));
+        }).length;
+        site.totalTasksCount = tasks.length;
+        site.validTasksCount = validTasks.length;
+        site.completedTasksCount = done;
+        site.activeTasksCount = Math.max(0, tasks.length - done);
+        site.delayedTasksCount = delayed;
+        site.progressRate = validTasks.length ? Math.round((doneValid / validTasks.length) * 1000) / 10 : (tasks.length ? 100 : (Number(site.progressRate) || 0));
+        if (site.scope !== "newSite" && tasks.length > 0) {
+          site.isAllCompleted = (done === tasks.length);
+        }
+        site.assignees = getUniqueSiteManagers(tasks);
+        if (!skipDashMeta) recalcDashMeta();
+      }
+
+      // 다중 일자(연속 공정) 포함 필터링 — 현장서식.js renderCalendar 정책과 100% 일치
       function getFilteredCalendarTasks() {
         ensureCheckedSitesInitialized();
-        const activeSites = getActiveScopeSites();
         const checked = state.checkedSiteKeys;
         const q = state.searchQuery.trim();
         const m = state.memberFilter;
+        const hasMemberFilter = !!m;
+        const hasKeywordFilter = !!q;
+        const isGlobalSearch = hasKeywordFilter;
         const result = [];
 
-        activeSites.forEach((site) => {
-          if (checked && !checked.has(site.siteKey)) return;
+        const targetSites = isGlobalSearch
+          ? getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s))
+          : getActiveScopeSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
+
+        targetSites.forEach((site) => {
+          if (!isGlobalSearch && checked && !checked.has(site.siteKey)) return;
           (site.tasks || []).forEach((task) => {
+            if ((hasMemberFilter || hasKeywordFilter) && isTaskCompleted(task)) return;
             if (!taskMatchesMember(task, m)) return;
             const hay = [site.siteName, task.taskName, task.partner, task.manager, task.memo].join(" ");
             if (q && !matchesQuery(hay, q)) return;
@@ -1635,7 +1732,7 @@
       function updateGlobalBadges() {
         const todoList = (state.todoData && state.todoData.list) || [];
         const pendingTodo = todoList.filter((t) => t.status !== "완료").length;
-        const newQuotes = getAllSites().filter((s) => s.scope === "newSite" && !s.isArchived).length;
+        const newQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s)).length;
         const tb = document.getElementById("pcTodoBadge");
         const qb = document.getElementById("pcQuoteBadge");
         const mt = document.getElementById("pcMonthTitle");
@@ -1661,12 +1758,22 @@
         const doneSites = getDoneScopeSites();
         ensureCheckedSitesInitialized();
 
-        const kpiToday = (dash && dash.kpi && dash.kpi.todayCount) || 0;
-        const kpiDelayed = (dash && dash.kpi && dash.kpi.delayedCount) || 0;
+        const todayYmd = getTodayYmd();
+        const kpiScope = state.scope === "newSite" ? "site" : (state.scope || "site");
+        let kpiToday = 0, kpiDelayed = 0;
+        getAllSites().forEach((s) => {
+          if ((s.scope || "site") !== kpiScope || isSiteCompleted(s)) return;
+          (s.tasks || []).forEach((t) => {
+            if (isTaskCompleted(t)) return;
+            const y = parseYmdFromTask(t);
+            if (y === todayYmd || t.isToday) kpiToday++;
+            if (t.isDelayed || (y && y < todayYmd)) kpiDelayed++;
+          });
+        });
+
         const year = state.calYear, month = state.calMonth;
         const firstDay = new Date(year, month - 1, 1).getDay();
         const daysInMonth = new Date(year, month, 0).getDate();
-        const todayYmd = getTodayYmd();
 
         const eventsByDay = expandEventsByDay(getFilteredCalendarTasks());
         const ym = year + "-" + String(month).padStart(2, "0");
@@ -1685,13 +1792,13 @@
         let siteRows = activeSites.map((site) => {
           const isChecked = state.checkedSiteKeys && state.checkedSiteKeys.has(site.siteKey);
           const isSelected = (mode === "sites" && state.selectedSiteKey === site.siteKey) || (mode === "quote" && state.selectedQuoteKey === site.siteKey);
-          const cnt = site.totalTasksCount || (site.tasks && site.tasks.length) || 0;
+          const cnt = (site.tasks || []).filter((t) => !isTaskCompleted(t)).length;
           return `
             <div class="site-check-row ${isSelected ? "selected-site" : ""}" onclick="onSidebarSiteClick('${escJs(site.siteKey)}', event)">
               ${mode === "calendar" ? `<input type="checkbox" ${isChecked ? "checked" : ""} onclick="toggleSiteCheck('${escJs(site.siteKey)}', this.checked, event)">` : ""}
               <span class="site-color-dot" style="background:${escHtml(site.colorHex || "#2563eb")};"></span>
               <span class="site-lbl-name" title="${escHtml(site.siteName)}">${escHtml(site.siteName)}</span>
-              <span class="site-lbl-count">${cnt}건</span>
+              <span class="site-lbl-count">${site.scope === "newSite" ? escHtml((site.estimateData && site.estimateData.status) || "신규") : `${cnt}건`}</span>
             </div>`;
         }).join("") || `<div style="font-size:11.5px;color:var(--text-muted);padding:8px 4px;">진행 중인 현장이 없습니다.</div>`;
 
@@ -1770,8 +1877,8 @@
 
       window.openDelayedSitesFromHome = function (isMobile) {
         const delayedSite = getAllSites().find((s) => {
-          if (s.scope === "newSite" || s.isArchived || s.isAllCompleted) return false;
-          return (s.tasks || []).some((t) => t.isDelayed && t.status !== "완료");
+          if (s.scope === "newSite" || isSiteCompleted(s)) return false;
+          return (s.tasks || []).some((t) => !isTaskCompleted(t) && t.isDelayed);
         });
         if (delayedSite) {
           state.scope = delayedSite.scope || "site";
@@ -1786,7 +1893,7 @@
         else window.switchMainTab("sites");
       };
 
-      // ================= [PC 탭 1: 홈 — 모던 벤토 카드 (To-Do 최상단 배치)] =================
+      // ================= [PC 탭 1: 홈 — 모던 벤토 카드 (완료 항목 제외 & To-Do 최상단 배치)] =================
       function renderPcHomeTab() {
         const user = state.user;
         const roleLabel = getMemberRoleTitle(user) + "님";
@@ -1794,64 +1901,77 @@
         const dowNames = ["일", "월", "화", "수", "목", "금", "토"];
         const todayDow = dowNames[new Date(todayYmd + "T00:00:00").getDay()] || "";
         const q = state.searchQuery.trim();
-        const allActiveSites = getAllSites().filter((s) => s.scope !== "newSite" && !s.isArchived && !s.isAllCompleted);
-        const userSites = allActiveSites.filter((s) => (s.tasks || []).some((t) => taskMatchesMember(t, user)));
-        const mySites = userSites.length ? userSites : allActiveSites;
 
+        const activeConstructionSites = getAllSites().filter((s) => (s.scope || "site") === "site" && !isSiteCompleted(s));
+        const userActiveSites = activeConstructionSites.filter((s) => (s.tasks || []).some((t) => !isTaskCompleted(t) && taskMatchesMember(t, user)));
+        let mySites = userActiveSites.length ? userActiveSites : activeConstructionSites;
+        if (q) {
+          mySites = mySites.filter((s) => matchesQuery([s.siteName, ...(s.tasks || []).map((t) => t.taskName + " " + t.partner + " " + t.memo)].join(" "), q));
+        }
+
+        const taskSourceSites = q
+          ? getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s))
+          : mySites;
         const myTasks = [];
-        mySites.forEach((site) => {
+        taskSourceSites.forEach((site) => {
           (site.tasks || []).forEach((task) => {
-            if (userSites.length && !taskMatchesMember(task, user)) return;
-            if (q && !matchesQuery([site.siteName, task.taskName, task.partner, task.memo].join(" "), q)) return;
+            if (isTaskCompleted(task)) return;
+            if (!q && userActiveSites.length && !taskMatchesMember(task, user)) return;
+            if (q && !matchesQuery([site.siteName, task.taskName, task.partner, task.manager, task.memo].join(" "), q)) return;
             myTasks.push({ site, task, ymd: parseYmdFromTask(task) });
           });
         });
 
         const activeOrToday = myTasks
-          .filter((x) => x.task.status !== "완료")
-          .sort((a, b) => (a.task.isToday === b.task.isToday ? (b.task.isDelayed ? 1 : -1) : a.task.isToday ? -1 : 1));
-        const todayTasks = myTasks.filter((x) => x.task.isToday && x.task.status !== "완료");
-        const delayedTasks = myTasks.filter((x) => x.task.isDelayed && x.task.status !== "완료");
+          .slice()
+          .sort((a, b) => {
+            if (a.task.isToday !== b.task.isToday) return a.task.isToday ? -1 : 1;
+            const aDel = Boolean(a.task.isDelayed || (a.ymd && a.ymd < todayYmd));
+            const bDel = Boolean(b.task.isDelayed || (b.ymd && b.ymd < todayYmd));
+            if (aDel !== bDel) return aDel ? -1 : 1;
+            return String(a.ymd || "9999-99-99").localeCompare(String(b.ymd || "9999-99-99"));
+          });
+        const todayTasks = myTasks.filter((x) => x.task.isToday || x.ymd === todayYmd);
+        const delayedTasks = myTasks.filter((x) => x.task.isDelayed || (x.ymd && x.ymd < todayYmd));
 
-        const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !s.isArchived && !s.isAllCompleted);
+        const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s));
         const allTodos = (state.todoData && state.todoData.list) || [];
         const myTodos = allTodos.filter((t) => !t.manager || t.manager.includes(user));
         const myPendingTodos = myTodos.filter((t) => t.status !== "완료");
         const myPayable = (state.financeData && state.financeData.summary && state.financeData.summary.totalPayable) || 0;
 
-        // 1) 최상단 To-Do 2열 카드 그리드
-        const todoItemsHtml = myTodos.slice(0, 8).map((t) => {
-          const isDone = t.status === "완료";
+        // 1) 최상단 To-Do 2열 카드 그리드 (완료된 To-Do 제외)
+        const todoItemsHtml = myPendingTodos.slice(0, 8).map((t) => {
           const dueYmd = (t.dueDate || "").replace(/\./g, "-");
-          const isOverdue = !isDone && dueYmd && dueYmd < todayYmd;
-          const isImp = !isDone && (t.isImportant || t.status === "중요");
+          const isOverdue = Boolean(dueYmd && dueYmd < todayYmd);
+          const isImp = Boolean(t.isImportant || t.status === "중요");
           const cls = ["home-todo-row"];
           if (isOverdue) cls.push("overdue");
           else if (isImp) cls.push("imp");
           return `
-            <div class="${cls.join(" ")}" style="${isDone ? "opacity:0.65;" : ""}" onclick="openTodoModal('${escJs(t.id)}')">
+            <div class="${cls.join(" ")}" onclick="openTodoModal('${escJs(t.id)}')">
               <div class="htc-top">
                 <div style="display:flex;align-items:center;gap:7px;min-width:0;">
-                  <input type="checkbox" ${isDone ? "checked" : ""} onclick="event.stopPropagation(); toggleTodoItem('${escJs(t.id)}')" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;flex-shrink:0;">
+                  <input type="checkbox" onclick="event.stopPropagation(); toggleTodoItem('${escJs(t.id)}')" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;flex-shrink:0;">
                   ${t.siteName ? `<span class="htc-site-pill" title="${escHtml(t.siteName)}">${escHtml(t.siteName)}</span>` : `<span class="htc-site-pill" style="background:#e2e8f0;color:#475569;">일반 업무</span>`}
                 </div>
-                <button type="button" onclick="event.stopPropagation(); toggleTodoImportant('${escJs(t.id)}')" title="중요 표시" style="border:none;background:transparent;font-size:15px;cursor:pointer;line-height:1;">${t.isImportant || t.status === "중요" ? "⭐" : "☆"}</button>
+                <button type="button" onclick="event.stopPropagation(); toggleTodoImportant('${escJs(t.id)}')" title="중요 표시" style="border:none;background:transparent;font-size:15px;cursor:pointer;line-height:1;">${isImp ? "⭐" : "☆"}</button>
               </div>
               <div style="cursor:pointer;min-width:0;">
-                <div class="htc-title" style="${isDone ? "text-decoration:line-through;color:var(--text-muted);" : ""}">${escHtml(t.title)}</div>
+                <div class="htc-title">${escHtml(t.title)}</div>
                 ${t.detail ? `<div class="htc-detail">${escHtml(t.detail)}</div>` : ""}
               </div>
               <div class="htc-foot">
-                <span style="font-weight:700;color:${isOverdue ? "#dc2626" : isImp ? "#d97706" : "var(--text-muted)"};">${isDone ? "✓ 완료됨" : isOverdue ? "🚨 기한지남 (" + escHtml(t.dueDate) + ")" : escHtml(t.dueDate || "기한없음")}</span>
+                <span style="font-weight:700;color:${isOverdue ? "#dc2626" : isImp ? "#d97706" : "var(--text-muted)"};">${isOverdue ? "🚨 기한지남 (" + escHtml(t.dueDate) + ")" : escHtml(t.dueDate || "기한없음")}</span>
                 <span>👤 ${escHtml(t.manager || "미지정")}</span>
               </div>
             </div>`;
-        }).join("") || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;padding:16px;text-align:center;background:#f8fafc;border-radius:10px;">할당된 To-Do 업무가 없습니다.</div>`;
+        }).join("") || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;padding:16px;text-align:center;background:#f8fafc;border-radius:10px;">남은 To-Do 업무가 없습니다.</div>`;
 
-        // 2) 아래 주요 현장 공정 2열 카드 그리드
-        const scheduleItemsHtml = activeOrToday.slice(0, 6).map(({ site, task, ymd }) => {
-          const isDel = task.isDelayed;
-          const isToday = task.isToday;
+        // 2) 아래 주요 현장 공정 2열 카드 그리드 (미완료 공정만 표시, 헤더 건수와 일치)
+        const scheduleItemsHtml = activeOrToday.map(({ site, task, ymd }) => {
+          const isDel = Boolean(task.isDelayed || (ymd && ymd < todayYmd));
+          const isToday = Boolean(task.isToday || ymd === todayYmd);
           const cls = isDel ? "danger" : isToday ? "" : "warning";
           const stBg = isDel ? "#fee2e2" : isToday ? "#dcfce7" : "#dbeafe";
           const stFg = isDel ? "#dc2626" : isToday ? "#15803d" : "#1e40af";
@@ -1877,11 +1997,13 @@
             </div>`;
         }).join("") || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;padding:16px;text-align:center;background:#f8fafc;border-radius:10px;">확인할 예정/진행 공정이 없습니다.</div>`;
 
-        // 3) 내 담당 진행 현장 미니 카드 그리드
+        // 3) 내 담당 진행 현장 미니 카드 그리드 (완료 현장 제외 + 남은 공정 건수 표시)
         const mySitesCardsHtml = mySites.slice(0, 6).map((s) => {
           const pct = s.progressRate || 0;
           const barCol = pct >= 80 ? "#10b981" : pct >= 40 ? "#2563eb" : "#f59e0b";
-          const mgrText = filterRegisteredManagers((s.tasks || []).map((t) => t.manager).filter(Boolean).join(", ")).slice(0, 2).join(", ") || "미지정";
+          const mgrText = getUniqueSiteManagers(s.tasks).slice(0, 2).join(", ") || "미지정";
+          const remainingCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t)).length;
+          const delayCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t) && (t.isDelayed || (parseYmdFromTask(t) && parseYmdFromTask(t) < todayYmd))).length;
           return `
             <div class="home-site-mini-card" onclick="openSiteDetail('${escJs(s.siteKey)}')">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
@@ -1892,8 +2014,8 @@
               </div>
               <div class="hsm-bar"><div class="hsm-bar-fill" style="width:${pct}%;background:${barCol};"></div></div>
               <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-muted);">
-                <span>👤 ${escHtml(mgrText)} · ${s.completedTasksCount || 0}/${s.totalTasksCount || 0}</span>
-                ${s.delayedTasksCount > 0 ? `<span style="color:#dc2626;font-weight:800;">⚠️ 지연 ${s.delayedTasksCount}</span>` : `<span style="color:#059669;font-weight:700;">정상</span>`}
+                <span>👤 ${escHtml(mgrText)} · 남은 공정 ${remainingCnt}건</span>
+                ${delayCnt > 0 ? `<span style="color:#dc2626;font-weight:800;">⚠️ 지연 ${delayCnt}</span>` : `<span style="color:#059669;font-weight:700;">정상</span>`}
               </div>
             </div>`;
         }).join("");
@@ -1939,7 +2061,7 @@
                 <div class="home-hero-avatar">${escHtml(user.slice(0, 1))}</div>
                 <div class="home-user-greeting">
                   <h2>좋은 하루입니다, ${escHtml(user)} ${roleLabel} ☕ <span class="home-hero-date-pill">📅 ${escHtml(todayYmd)} (${todayDow})</span></h2>
-                  <p>Google Sheets 실시간 기준 — 오늘 챙겨야 할 업무와 현장 현황을 카드별로 한눈에 확인하세요.</p>
+                  <p>Google Sheets 실시간 기준 — 진행 중인 현장과 남은 업무만 간추려 한눈에 확인하세요.</p>
                   <div class="home-hero-chips">
                     <span class="home-hero-chip" onclick="switchMainTab('todo')">✅ 미완료 To-Do ${myPendingTodos.length}건</span>
                     <span class="home-hero-chip" onclick="switchMainTab('calendar')">🔨 오늘 공정 ${todayTasks.length}건</span>
@@ -2018,7 +2140,7 @@
                     <span class="hp-title">🔨 ${escHtml(user)}님 주요 현장 공정 (${activeOrToday.length}건)</span>
                     <a class="hp-link" onclick="switchMainTab('calendar')">캘린더 전체보기 ➔</a>
                   </div>
-                  <div class="home-task-grid">${scheduleItemsHtml}</div>
+                  <div class="home-task-grid" style="max-height:420px;overflow-y:auto;padding-right:2px;">${scheduleItemsHtml}</div>
                 </div>
 
                 <!-- 3순위: 담당 진행 현장 카드 요약 -->
@@ -2241,8 +2363,14 @@
         const m = state.memberFilter;
 
         let visibleSites = sitesPool.filter((s) => {
-          if (!state.showArchivedSites && (s.isArchived || s.isAllCompleted)) return false;
-          if (m && !(s.tasks || []).some((t) => taskMatchesMember(t, m))) return false;
+          const sDone = isSiteCompleted(s);
+          if (!state.showArchivedSites && sDone) return false;
+          if (m) {
+            const hasTask = state.showArchivedSites
+              ? (s.tasks || []).some((t) => taskMatchesMember(t, m))
+              : (s.tasks || []).some((t) => !isTaskCompleted(t) && taskMatchesMember(t, m));
+            if (!hasTask) return false;
+          }
           if (q) {
             const hay = [s.siteName, ...(s.tasks || []).map((t) => t.taskName + " " + t.partner + " " + t.manager + " " + t.memo)].join(" ");
             if (!matchesQuery(hay, q)) return false;
@@ -2259,17 +2387,8 @@
         let selectedSite = visibleSites.find((s) => s.siteKey === state.selectedSiteKey) || visibleSites[0] || sitesPool[0];
         if (selectedSite) state.selectedSiteKey = selectedSite.siteKey;
 
-        function getUniqueSiteManagers(tasks) {
-          const seen = [];
-          (tasks || []).forEach((t) => {
-            filterRegisteredManagers(t.manager).forEach((name) => {
-              if (name && !seen.includes(name)) seen.push(name);
-            });
-          });
-          return seen;
-        }
-        const activeCountAll = sitesPool.filter((s) => !(s.isArchived || s.isAllCompleted)).length;
-        const doneCountAll = sitesPool.filter((s) => (s.isArchived || s.isAllCompleted)).length;
+        const activeCountAll = sitesPool.filter((s) => !isSiteCompleted(s)).length;
+        const doneCountAll = sitesPool.filter((s) => isSiteCompleted(s)).length;
 
         const carouselHtml = visibleSites.map((s) => {
           const uniqueMgrs = getUniqueSiteManagers(s.tasks);
@@ -3016,22 +3135,43 @@
         `;
       }
 
-      // [모바일 탭 1: 홈 (기본) — 모던 카드형 브리핑 & To-Do 최상단!]
+      // [모바일 탭 1: 홈 (기본) — 모던 카드형 브리핑 & 완료 제외 + To-Do 최상단!]
       function renderMobileHomeTab() {
         const user = state.user;
         const roleLabel = getMemberRoleTitle(user) + "님";
-        const allActive = getAllSites().filter((s) => s.scope !== "newSite" && !s.isArchived && !s.isAllCompleted);
-        const mySites = allActive.filter((s) => (s.tasks || []).some((t) => taskMatchesMember(t, user)));
-        const pool = mySites.length ? mySites : allActive;
+        const todayYmd = getTodayYmd();
+        const q = state.searchQuery.trim();
+        const targetScope = state.scope === "newSite" ? "site" : (state.scope || "site");
+        const filterMember = state.memberFilter || user;
 
+        const activeScopeSites = getAllSites().filter((s) => (s.scope || "site") === targetScope && !isSiteCompleted(s));
+        let userScopedSites = activeScopeSites.filter((s) => (s.tasks || []).some((t) => !isTaskCompleted(t) && taskMatchesMember(t, filterMember)));
+        let mySites = userScopedSites.length || state.memberFilter ? userScopedSites : activeScopeSites;
+        if (q) {
+          mySites = mySites.filter((s) => matchesQuery([s.siteName, ...(s.tasks || []).map((t) => t.taskName + " " + t.partner + " " + t.memo)].join(" "), q));
+        }
+
+        const taskSourceSites = q
+          ? getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s))
+          : mySites;
         const tasks = [];
-        pool.forEach((site) => (site.tasks || []).forEach((task) => {
-          if (mySites.length && !taskMatchesMember(task, user)) return;
-          if (task.status !== "완료") tasks.push({ site, task });
+        taskSourceSites.forEach((site) => (site.tasks || []).forEach((task) => {
+          if (isTaskCompleted(task)) return;
+          if (!q && (userScopedSites.length || state.memberFilter) && !taskMatchesMember(task, filterMember)) return;
+          if (q && !matchesQuery([site.siteName, task.taskName, task.partner, task.manager, task.memo].join(" "), q)) return;
+          tasks.push({ site, task, ymd: parseYmdFromTask(task) });
         }));
-        const todayTasks = tasks.filter((x) => x.task.isToday);
-        const delayed = tasks.filter((x) => x.task.isDelayed);
-        const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !s.isArchived && !s.isAllCompleted);
+        tasks.sort((a, b) => {
+          if (a.task.isToday !== b.task.isToday) return a.task.isToday ? -1 : 1;
+          const aDel = Boolean(a.task.isDelayed || (a.ymd && a.ymd < todayYmd));
+          const bDel = Boolean(b.task.isDelayed || (b.ymd && b.ymd < todayYmd));
+          if (aDel !== bDel) return aDel ? -1 : 1;
+          return String(a.ymd || "9999-99-99").localeCompare(String(b.ymd || "9999-99-99"));
+        });
+
+        const todayTasks = tasks.filter((x) => x.task.isToday || x.ymd === todayYmd);
+        const delayed = tasks.filter((x) => x.task.isDelayed || (x.ymd && x.ymd < todayYmd));
+        const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s));
         const todos = ((state.todoData && state.todoData.list) || []).filter((t) => !t.manager || t.manager.includes(user));
         const pendingTodos = todos.filter((t) => t.status !== "완료");
 
@@ -3039,13 +3179,13 @@
           <div style="background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 65%,#3b82f6 100%);border-radius:14px;padding:15px 16px;color:#fff;margin-bottom:12px;box-shadow:0 8px 18px -6px rgba(37,99,235,0.4);">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
               <div>
-                <div style="font-size:11px;color:#dbeafe;font-weight:700;">📅 ${escHtml(getTodayYmd())} · Google Sheets 연동</div>
+                <div style="font-size:11px;color:#dbeafe;font-weight:700;">📅 ${escHtml(todayYmd)} · Google Sheets 연동</div>
                 <div style="font-size:17px;font-weight:800;margin-top:3px;">${escHtml(user)} ${roleLabel} 브리핑 ☕</div>
               </div>
               <button type="button" onclick="openTodoModal(null)" style="border:none;background:rgba(255,255,255,0.2);color:#fff;font-size:11px;font-weight:800;padding:5px 9px;border-radius:8px;cursor:pointer;">+ To-Do</button>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
-              <span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.22);">🏢 담당 현장 ${pool.length}</span>
+              <span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.22);">🏢 담당 현장 ${mySites.length}</span>
               <span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.22);">🔨 오늘 공정 ${todayTasks.length}</span>
               <span style="font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.22);">📋 신규 ${activeNewQuotes.length}</span>
             </div>
@@ -3068,7 +3208,7 @@
             </div>
           </div>
 
-          <!-- 모바일 홈에서도 To-Do가 최상단! -->
+          <!-- 모바일 홈에서도 To-Do가 최상단! (완료 항목 제외) -->
           <div class="m-card-box">
             <div class="m-card-title-row">
               <span class="m-card-title">✅ 내 To-Do 업무 (${pendingTodos.length}건 남음)</span>
@@ -3078,18 +3218,19 @@
               </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:7px;font-size:12px;">
-              ${todos.slice(0, 5).map((t) => {
-                const isDone = t.status === "완료";
-                const isImp = !isDone && (t.isImportant || t.status === "중요");
+              ${pendingTodos.slice(0, 6).map((t) => {
+                const isImp = Boolean(t.isImportant || t.status === "중요");
+                const dueYmd = (t.dueDate || "").replace(/\./g, "-");
+                const isOverdue = Boolean(dueYmd && dueYmd < todayYmd);
                 return `
-                <div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:9px;background:${isImp ? "#fffbeb" : "#f8fafc"};border:1px solid ${isImp ? "#fde68a" : "var(--border)"};" onclick="openTodoModal('${escJs(t.id)}')">
-                  <input type="checkbox" ${isDone ? "checked" : ""} onclick="event.stopPropagation(); toggleTodoItem('${escJs(t.id)}')">
+                <div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:9px;background:${isOverdue ? "#fef2f2" : isImp ? "#fffbeb" : "#f8fafc"};border:1px solid ${isOverdue ? "#fecaca" : isImp ? "#fde68a" : "var(--border)"};" onclick="openTodoModal('${escJs(t.id)}')">
+                  <input type="checkbox" onclick="event.stopPropagation(); toggleTodoItem('${escJs(t.id)}')">
                   <div style="flex:1;min-width:0;">
-                    <div style="font-weight:700;${isDone ? "text-decoration:line-through;color:var(--text-muted);" : ""}">${t.siteName ? `<span style="color:#1e40af;">[${escHtml(t.siteName)}]</span> ` : ""}${escHtml(t.title)}</div>
+                    <div style="font-weight:700;">${t.siteName ? `<span style="color:#1e40af;">[${escHtml(t.siteName)}]</span> ` : ""}${escHtml(t.title)}</div>
                   </div>
-                  <span style="font-size:10.5px;color:${isImp ? "#d97706" : "var(--text-muted)"};font-weight:700;white-space:nowrap;">${isImp ? "⭐" : escHtml(t.dueDate || "")}</span>
+                  <span style="font-size:10.5px;color:${isOverdue ? "#dc2626" : isImp ? "#d97706" : "var(--text-muted)"};font-weight:700;white-space:nowrap;">${isImp ? "⭐ " : ""}${escHtml(t.dueDate || "")}</span>
                 </div>`;
-              }).join("") || `<div style="color:var(--text-muted);">할당된 To-Do가 없습니다.</div>`}
+              }).join("") || `<div style="color:var(--text-muted);">남은 To-Do가 없습니다.</div>`}
             </div>
           </div>
 
@@ -3098,52 +3239,55 @@
               <span class="m-card-title">🔨 주요 공정 (${tasks.length}건)</span>
               <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMobileTab('calendar')">캘린더 ➔</span>
             </div>
-            ${tasks.slice(0, 4).map(({ site, task }) => {
+            ${tasks.slice(0, 8).map(({ site, task, ymd }) => {
               const phone = lookupPartnerPhone(task.partner, task.manager);
               const tid = task.id || task.taskId;
+              const isDel = Boolean(task.isDelayed || (ymd && ymd < todayYmd));
               return `
-                <div class="m-site-box ${task.isDelayed ? "danger" : ""}" style="border-radius:9px;" onclick="openTaskEditModal('${escJs(tid)}')">
+                <div class="m-site-box ${isDel ? "danger" : ""}" style="border-radius:9px;" onclick="openTaskEditModal('${escJs(tid)}')">
                   <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
                     <span style="font-size:12.5px;font-weight:800;">${escHtml(site.siteName)}</span>
                     <button type="button" onclick="event.stopPropagation(); openSiteDetailMobile('${escJs(site.siteKey)}')" style="border:1px solid #cbd5e1;background:#fff;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:700;color:#334155;">상세 ➔</button>
                   </div>
                   <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px;">${escHtml(task.taskName)} · ${escHtml(task.partner || filterRegisteredManagers(task.manager).join(", ") || "-")}</div>
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">
-                    <span style="font-size:10.5px;font-weight:700;color:${task.isDelayed ? "#dc2626" : "#1e40af"};">${escHtml(parseYmdFromTask(task))} (${escHtml(task.status)})</span>
+                    <span style="font-size:10.5px;font-weight:700;color:${isDel ? "#dc2626" : "#1e40af"};">${escHtml(ymd)} (${isDel ? "⚠️ 지연" : escHtml(task.status || "예정")})</span>
                     ${phone ? `<a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="font-size:11px;color:#166534;font-weight:700;text-decoration:none;">📞 통화</a>` : ""}
                   </div>
                 </div>`;
-            }).join("") || `<div style="font-size:12px;color:var(--text-muted);">예정된 공정이 없습니다.</div>`}
+            }).join("") || `<div style="font-size:12px;color:var(--text-muted);">남은 공정이 없습니다.</div>`}
           </div>
 
           <div class="m-card-box">
             <div class="m-card-title-row">
-              <span class="m-card-title">🏢 내 담당 현장 (${pool.length}개소)</span>
+              <span class="m-card-title">🏢 내 담당 진행 현장 (${mySites.length}개소)</span>
               <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMobileTab('sites')">전체 ➔</span>
             </div>
             <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;">
-              ${pool.slice(0, 6).map((s) => {
+              ${mySites.slice(0, 8).map((s) => {
                 const pct = s.progressRate || 0;
                 const col = pct >= 80 ? "#10b981" : pct >= 40 ? "#2563eb" : "#f59e0b";
+                const remainingCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t)).length;
                 return `
-                  <div onclick="openSiteDetailMobile('${escJs(s.siteKey)}')" style="min-width:155px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:9px 10px;flex-shrink:0;cursor:pointer;">
+                  <div onclick="openSiteDetailMobile('${escJs(s.siteKey)}')" style="min-width:162px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:9px 10px;flex-shrink:0;cursor:pointer;">
                     <div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><span style="color:${escHtml(s.colorHex || "#2563eb")};">●</span> ${escHtml(s.siteName)}</div>
                     <div style="height:5px;border-radius:999px;background:#e2e8f0;margin:6px 0;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${col};"></div></div>
                     <div style="display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;color:var(--text-muted);">
                       <span style="color:${col};">${pct}%</span>
-                      <span>${s.delayedTasksCount > 0 ? "⚠️ 지연 " + s.delayedTasksCount : (s.completedTasksCount || 0) + "/" + (s.totalTasksCount || 0)}</span>
+                      <span>${s.delayedTasksCount > 0 ? "⚠️ 지연 " + s.delayedTasksCount : "남은 공정 " + remainingCnt + "건"}</span>
                     </div>
                   </div>`;
-              }).join("")}
+              }).join("") || `<div style="font-size:12px;color:var(--text-muted);">진행 중인 현장이 없습니다.</div>`}
             </div>
           </div>
         `;
       }
 
-      // [모바일 탭 3: 캘린더 — 기존 공종 알약 색상/아이콘 반영 + 모달 연동]
+      // [모바일 탭 3: 캘린더 — 모든 일정 가변 높이 전부 노출 + 기존 공종 알약/공유박스 반영]
       function renderMobileCalendarTab() {
         const events = getFilteredCalendarTasks();
         const todayYmd = getTodayYmd();
+        const holidays = (state.dashData && state.dashData.holidays) || {};
         const scopeNameMap = { site: "현장", single: "단건", as: "AS", newSite: "신규" };
 
         const filterChips = [`<span class="m-pill-chip">📂 <b>${scopeNameMap[state.scope] || state.scope}</b></span>`];
@@ -3162,7 +3306,8 @@
         const prevMonthDays = new Date(year, month - 1, 0).getDate();
         const totalCells = Math.ceil((firstDow + daysInMonth) / 7) * 7;
 
-        let gridCells = "";
+        const targetCellList = [];
+        let maxDayEvents = 0;
         for (let i = 0; i < totalCells; i++) {
           let cellY = year, cellM = month, cellD = 0, isOther = false;
           if (i < firstDow) {
@@ -3178,41 +3323,57 @@
           } else {
             cellD = i - firstDow + 1;
           }
+          if (state.mobileCalMode === "week") {
+            const selD = Number(state.selectedDayStr.slice(8, 10)) || 1;
+            if (Math.floor(i / 7) !== Math.floor((firstDow + selD - 1) / 7)) continue;
+          }
           const ymd = cellY + "-" + String(cellM).padStart(2, "0") + "-" + String(cellD).padStart(2, "0");
-          const dow = i % 7;
+          const dayEvents = eventsByDay[ymd] || [];
+          if (dayEvents.length > maxDayEvents) maxDayEvents = dayEvents.length;
+          targetCellList.push({ i, cellD, isOther, ymd, dow: i % 7, dayEvents });
+        }
+
+        const rowMinPx = state.mobileCalMode === "week"
+          ? Math.max(115, 28 + maxDayEvents * 18)
+          : Math.max(72, 24 + maxDayEvents * 17);
+
+        let gridCells = "";
+        targetCellList.forEach(({ cellD, isOther, ymd, dow, dayEvents }) => {
           const cls = ["m-cal-cell"];
           if (isOther) cls.push("other-month");
           if (dow === 0) cls.push("sun");
           if (dow === 6) cls.push("sat");
           if (ymd === todayYmd) cls.push("today");
           if (ymd === state.selectedDayStr) cls.push("selected");
+          const holName = holidays[ymd] || "";
 
-          if (state.mobileCalMode === "week") {
-            const selD = Number(state.selectedDayStr.slice(8, 10)) || 1;
-            if (Math.floor(i / 7) !== Math.floor((firstDow + selD - 1) / 7)) continue;
-          }
-
-          const dayEvents = eventsByDay[ymd] || [];
-          const pillsHtml = dayEvents.slice(0, 3).map(({ site, task }) => {
-            const isDone = task.status === "완료";
-            const isDel = task.isDelayed && !isDone;
+          const pillsHtml = dayEvents.map(({ site, task }) => {
+            const isDone = isTaskCompleted(task);
+            const isDel = !isDone && (task.isDelayed || ymd < todayYmd);
             const bgCol = isDel ? "#dc2626" : (site.colorHex || "#2563eb");
+            const lightCls = !isDel && isLightHexColor(bgCol) ? "light-bg" : "";
             const sIcon = getTaskStatusIcon(task);
-            return `<div class="m-cal-pill ${isDone ? "done" : ""}" style="background:${escHtml(bgCol)};${isLightHexColor(bgCol) ? "color:#1e293b;" : ""}">${isDel ? "⚠️" : sIcon}${escHtml(task.taskName)}</div>`;
-          }).join("") + (dayEvents.length > 3 ? `<div style="font-size:8px;color:#2563eb;font-weight:800;text-align:right;">+${dayEvents.length - 3}</div>` : "");
+            const tid = task.id || task.taskId;
+            const len = (task.taskName || "").length;
+            const fSize = len > 10 ? "7.5px" : len > 7 ? "8px" : "8.5px";
+            return `<div class="m-cal-pill ${isDone ? "done" : ""} ${lightCls}" style="background:${escHtml(bgCol)};font-size:${fSize};gap:1.5px;padding:1.5px 2px;" onclick="if(state.selectedDayStr==='${ymd}'){event.stopPropagation();openTaskEditModal('${escJs(tid)}');}">${isDel ? "⚠️" : sIcon}<span class="cal-sh-box ${task.isShared ? "blue" : "red"}" style="width:5px;height:5px;"></span><span style="overflow:hidden;text-overflow:ellipsis;">${escHtml(task.taskName)}</span></div>`;
+          }).join("");
 
           gridCells += `
             <div class="${cls.join(" ")}" onclick="selectCalDay('${ymd}')">
-              <div class="m-cal-cell-header"><span class="m-day-num">${cellD}</span></div>
-              ${pillsHtml}
+              <div class="m-cal-cell-header">
+                <span class="m-day-num">${cellD}</span>
+                ${holName ? `<span class="m-cal-hol">${escHtml(holName)}</span>` : ""}
+              </div>
+              <div class="m-cal-events-list">${pillsHtml}</div>
             </div>`;
-        }
+        });
 
         const selEvents = eventsByDay[state.selectedDayStr] || [];
         const selCardsHtml = selEvents.map(({ site, task }) => {
           const info = getSiteInfo(site.siteName);
           const phone = lookupPartnerPhone(task.partner, task.manager);
-          const isDel = task.isDelayed && task.status !== "완료";
+          const isDel = !isTaskCompleted(task) && (task.isDelayed || state.selectedDayStr < todayYmd);
           const tid = task.id || task.taskId;
           return `
             <div class="m-card-box" style="border-left:3.5px solid ${isDel ? "#ef4444" : escHtml(site.colorHex || "#2563eb")};padding:10px;cursor:pointer;" onclick="openTaskEditModal('${escJs(tid)}')">
@@ -3250,7 +3411,7 @@
               <button type="button" onclick="setMobileCalMode('week')" style="border:none;background:${state.mobileCalMode === "week" ? "#fff" : "transparent"};font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:4px;color:${state.mobileCalMode === "week" ? "#1d4ed8" : "var(--text-muted)"};cursor:pointer;">주간</button>
             </div>
           </div>
-          <div class="m-cal-full-grid">
+          <div class="m-cal-full-grid" style="--m-cal-row-min:${rowMinPx}px;">
             <div class="m-cal-head sun">일</div><div class="m-cal-head">월</div><div class="m-cal-head">화</div><div class="m-cal-head">수</div><div class="m-cal-head">목</div><div class="m-cal-head">금</div><div class="m-cal-head sat">토</div>
             ${gridCells}
           </div>
@@ -3262,24 +3423,42 @@
         `;
       }
 
-      // [모바일 탭 4: 현장 목록]
+      // [모바일 탭 4: 현장 목록 — 진행/완료 토글 & 멤버 미완료 기준 필터]
       function renderMobileSitesTab() {
         const q = state.searchQuery.trim();
         const m = state.memberFilter;
-        const active = getActiveScopeSites().filter((s) => {
-          if (m && !(s.tasks || []).some((t) => taskMatchesMember(t, m))) return false;
+        const pool = getScopeSites(true);
+        const activeCountAll = pool.filter((s) => !isSiteCompleted(s)).length;
+        const doneCountAll = pool.filter((s) => isSiteCompleted(s)).length;
+
+        const visible = pool.filter((s) => {
+          const sDone = isSiteCompleted(s);
+          if (!state.showArchivedSites && sDone) return false;
+          if (state.showArchivedSites && !sDone) return false;
+          if (m) {
+            const hasTask = state.showArchivedSites
+              ? (s.tasks || []).some((t) => taskMatchesMember(t, m))
+              : (s.tasks || []).some((t) => !isTaskCompleted(t) && taskMatchesMember(t, m));
+            if (!hasTask) return false;
+          }
           if (q && !matchesQuery([s.siteName, ...(s.tasks || []).map((t) => t.taskName + " " + t.partner + " " + t.memo)].join(" "), q)) return false;
           return true;
         });
 
-        document.getElementById("m-page-sites").innerHTML = active.map((s) => {
+        const toggleBarHtml = `
+          <div style="display:flex;gap:6px;margin-bottom:10px;">
+            <button type="button" onclick="if(state.showArchivedSites){state.showArchivedSites=false;markAllDirty();renderActiveViews();}" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid ${!state.showArchivedSites ? "#1e40af" : "var(--border)"};background:${!state.showArchivedSites ? "#1e40af" : "#fff"};color:${!state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">🏗️ 진행 현장 ${activeCountAll}</button>
+            <button type="button" onclick="if(!state.showArchivedSites){state.showArchivedSites=true;markAllDirty();renderActiveViews();}" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid ${state.showArchivedSites ? "#1e40af" : "var(--border)"};background:${state.showArchivedSites ? "#1e40af" : "#fff"};color:${state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">✅ 완료 현장 ${doneCountAll}</button>
+          </div>`;
+
+        document.getElementById("m-page-sites").innerHTML = toggleBarHtml + (visible.map((s) => {
           const info = getSiteInfo(s.siteName) || {};
           const tasks = s.tasks || [];
-          const nextTask = tasks.find((t) => t.status !== "완료") || tasks[0];
-          const mgrSet = [];
-          tasks.forEach((t) => filterRegisteredManagers(t.manager).forEach((n) => { if (!mgrSet.includes(n)) mgrSet.push(n); }));
+          const nextTask = tasks.find((t) => !isTaskCompleted(t)) || tasks[0];
+          const mgrSet = getUniqueSiteManagers(tasks);
           const mgrs = mgrSet.join(", ") || "-";
           const phone = nextTask ? lookupPartnerPhone(nextTask.partner, nextTask.manager) : "";
+          const remainingCnt = tasks.filter((t) => !isTaskCompleted(t)).length;
 
           return `
             <div class="m-card-box">
@@ -3288,7 +3467,7 @@
                 <span style="font-size:11px;font-weight:800;color:${(s.progressRate || 0) >= 80 ? "#10b981" : "#2563eb"};">${s.progressRate || 0}% 완료</span>
               </div>
               <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">
-                담당: ${escHtml(mgrs)} &nbsp;•&nbsp; 공정 ${s.completedTasksCount || 0}/${s.totalTasksCount || 0}
+                담당: ${escHtml(mgrs)} &nbsp;•&nbsp; 남은 공정 ${remainingCnt}건 (${s.completedTasksCount || 0}/${s.totalTasksCount || 0})
                 ${s.delayedTasksCount ? ` &nbsp;•&nbsp; <span style="color:#dc2626;font-weight:700;">지연 ${s.delayedTasksCount}</span>` : ""}
               </div>
               <div style="background:#f8fafc;padding:8px 10px;border-radius:6px;border:1px solid var(--border);margin-bottom:8px;font-size:11.5px;">
@@ -3314,7 +3493,7 @@
                 </div>
               ` : ""}
             </div>`;
-        }).join("") || `<div class="m-card-box" style="text-align:center;color:var(--text-muted);font-size:12px;">조건에 맞는 현장이 없습니다.</div>`;
+        }).join("") || `<div class="m-card-box" style="text-align:center;color:var(--text-muted);font-size:12px;">조건에 맞는 현장이 없습니다.</div>`);
       }
 
       // [모바일 탭 2: To-Do]
@@ -3693,7 +3872,22 @@
             </div>`;
         }
 
-        const siteNames = Array.from(new Set(getAllSites().filter((s) => s.scope === ctx.scope).map((s) => s.siteName)));
+        const activeNonNewSites = [];
+        const seenSiteNames = new Set();
+        getAllSites().forEach((s) => {
+          if ((s.scope || "site") === "newSite" || isSiteCompleted(s)) return;
+          if (!s.siteName || seenSiteNames.has(s.siteName)) return;
+          seenSiteNames.add(s.siteName);
+          activeNonNewSites.push(s);
+        });
+        const curScope = ctx.scope || "site";
+        const matchingSites = activeNonNewSites
+          .filter((s) => (s.scope || "site") === curScope)
+          .sort((a, b) => String(a.siteName).localeCompare(String(b.siteName), "ko"));
+        const otherActiveSites = activeNonNewSites
+          .filter((s) => (s.scope || "site") !== curScope)
+          .sort((a, b) => String(a.siteName).localeCompare(String(b.siteName), "ko"));
+        const scopeTagMap = { site: "[현장] ", single: "[단독] ", as: "[A/S] " };
 
         document.getElementById("taskSheetBody").innerHTML = `
           ${sameDayBarHtml}
@@ -3711,9 +3905,13 @@
             <div class="form-grid-2">
               <div class="fg">
                 <label>현장 선택</label>
-                <select class="ws-select" onchange="setSheetField('siteName', this.value)">
+                <select id="tsSiteSelect" class="ws-select" onchange="onTaskSheetSiteChange(this.value)">
                   <option value="">-- 현장 선택 --</option>
-                  ${siteNames.map((n) => `<option value="${escHtml(n)}" ${ctx.siteName === n ? "selected" : ""}>${escHtml(n)}</option>`).join("")}
+                  ${matchingSites.map((s) => `<option value="${escHtml(s.siteName)}" ${ctx.siteName === s.siteName ? "selected" : ""}>${escHtml(s.siteName)}</option>`).join("")}
+                  ${otherActiveSites.length ? `
+                    <optgroup label="── 다른 분류 진행 현장 ──">
+                      ${otherActiveSites.map((s) => `<option value="${escHtml(s.siteName)}" ${ctx.siteName === s.siteName ? "selected" : ""}>${escHtml((scopeTagMap[s.scope] || "") + s.siteName)}</option>`).join("")}
+                    </optgroup>` : ""}
                   <option value="__NEW__" ${ctx.siteName === "__NEW__" ? "selected" : ""}>+ 새 현장명 직접 입력</option>
                 </select>
               </div>
@@ -3835,7 +4033,27 @@
       }
 
       window.state_sheetUpdate = function (k, v) { if (state.sheetCtx) state.sheetCtx[k] = v; };
-      window.setSheetField = function (k, v) { if (!state.sheetCtx) return; state.sheetCtx[k] = v; renderTaskSheetModal(); };
+      window.setSheetField = function (k, v) {
+        if (!state.sheetCtx) return;
+        if (k === "scope" && v === "newSite" && state.sheetCtx.mode === "create") {
+          window.closeModal("taskSheetModal");
+          window.openEstimateModal(null);
+          return;
+        }
+        state.sheetCtx[k] = v;
+        renderTaskSheetModal();
+      };
+      window.onTaskSheetSiteChange = function (val) {
+        const ctx = state.sheetCtx; if (!ctx) return;
+        ctx.siteName = val;
+        if (val && val !== "__NEW__") {
+          const matched = getAllSites().find((s) => s.siteName === val && (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
+          if (matched && matched.scope && matched.scope !== ctx.scope) {
+            ctx.scope = matched.scope;
+          }
+        }
+        renderTaskSheetModal();
+      };
       window.toggleSheetRange = function (checked) { if (!state.sheetCtx) return; state.sheetCtx.isRange = checked; if (checked && state.sheetCtx.endYmd < state.sheetCtx.startYmd) state.sheetCtx.endYmd = state.sheetCtx.startYmd; renderTaskSheetModal(); };
       window.toggleSheetDatePop = function () { if (!state.sheetCtx) return; state.sheetCtx.showDatePop = !state.sheetCtx.showDatePop; renderTaskSheetModal(); };
       window.moveSheetPopMonth = function (delta) {
@@ -4312,7 +4530,7 @@
       function renderTodoModal() {
         const d = state._todoDraft;
         const members = getMembersList();
-        const siteNames = Array.from(new Set(getAllSites().map((s) => s.siteName)));
+        const siteNames = Array.from(new Set(getAllSites().filter((s) => !isSiteCompleted(s)).map((s) => s.siteName)));
         document.getElementById("todoModalTitle").textContent = d.id ? "✏️ To-Do 업무 수정" : "➕ 새 To-Do 업무 추가";
         document.getElementById("todoModalBody").innerHTML = `
           <div class="fg"><label>업무 제목</label><input class="ws-input" id="tdTitle" value="${escHtml(d.title)}" placeholder="예: 1205호 자재 발주 확인"></div>
