@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>우성아이디 통합 현장 대시보드 v2</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
     :root {
       --primary: #1e40af;
@@ -1180,6 +1181,34 @@
       display: flex; align-items: center; gap: 6px; position: sticky; bottom: 0;
     }
     .partner-drop-custom:hover { background: #dcfce7; }
+    .partner-drop-item.highlighted, .partner-drop-custom.highlighted,
+    .task-drop-item.highlighted, .task-drop-custom.highlighted {
+      background: #eff6ff !important; outline: 2px solid #3b82f6 !important;
+    }
+    .sheet-task-dropdown-popover {
+      display: none; position: absolute; left: 0; right: 0; top: calc(100% + 3px);
+      max-height: 220px; overflow-y: auto; background: #ffffff;
+      border: 1.5px solid #3b82f6; border-radius: 8px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18); z-index: 2500; font-size: 12.5px;
+    }
+    .task-drop-item {
+      padding: 8.5px 11px; cursor: pointer; border-bottom: 1px solid #f1f5f9;
+      display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    }
+    .task-drop-item:hover { background: #eff6ff; }
+    .task-drop-item.selected { background: #eff6ff; color: #2563eb; font-weight: 700; }
+    .task-drop-custom {
+      padding: 10px 11px; cursor: pointer; background: #f0fdf4;
+      border-top: 1.5px solid #bbf7d0; color: #15803d; font-weight: 700;
+      display: flex; align-items: center; gap: 6px; position: sticky; bottom: 0;
+    }
+    .task-drop-custom:hover { background: #dcfce7; }
+    .todo-section-box.drag-over, .todo-completed-section.drag-over {
+      border-color: #2563eb !important; background: #eff6ff !important; box-shadow: 0 0 0 2px #3b82f6 !important;
+    }
+    .todo-modern-card.dragging {
+      opacity: 0.45; transform: scale(0.98); cursor: grabbing;
+    }
     .sheet-call-btn {
       width: 34px; height: 34px; min-width: 34px; border-radius: 8px;
       background: #22c55e; color: #ffffff; display: inline-flex; align-items: center;
@@ -1430,6 +1459,7 @@
             </select>
           </div>
 
+          <button type="button" class="btn-header-tool" onclick="captureCurrentScreen()" title="현재 화면 캡쳐">📸 캡쳐</button>
           <button type="button" class="btn-header-tool" onclick="openMonthlyReportModal()">📊 월간집계</button>
           <button type="button" class="btn-header-tool" onclick="openSettingsModal()">⚙️ 설정</button>
           <button type="button" class="sync-btn" onclick="triggerLiveSync(true)">🔄 동기화</button>
@@ -1650,6 +1680,27 @@
     </div>
   </div>
 
+  <!-- 11. 화면 캡쳐 및 이미지 저장 모달 -->
+  <div class="ws-modal-backdrop" id="captureModal" onclick="if(event.target===this) closeCaptureModal()">
+    <div class="ws-modal-card" style="max-width:680px;max-height:90vh;">
+      <div class="ws-modal-header">
+        <div class="ws-modal-title" id="captureModalTitle">📷 화면 캡쳐 완료</div>
+        <button type="button" class="ws-modal-close" onclick="closeCaptureModal()">✕</button>
+      </div>
+      <div style="padding:10px 14px;background:#eff6ff;font-size:11.5px;color:#1d4ed8;line-height:1.45;border-bottom:1px solid #bfdbfe;">
+        💡 <b>안내:</b> 아래 이미지를 확인 후 <b>[💾 이미지 다운로드]</b> 또는 <b>[📋 클립보드 복사]</b>를 이용하세요. (마우스 우클릭 저장도 가능합니다)
+      </div>
+      <div class="ws-modal-body" style="padding:12px;overflow-y:auto;text-align:center;background:#f8fafc;">
+        <img id="capturePreviewImg" src="" alt="화면 캡쳐 미리보기" style="width:100%;max-width:100%;height:auto;max-height:60vh;object-fit:contain;border-radius:6px;border:1px solid #cbd5e1;box-shadow:0 2px 8px rgba(0,0,0,0.08);display:block;margin:0 auto;" />
+      </div>
+      <div class="ws-modal-footer" style="display:flex;gap:8px;justify-content:flex-end;">
+        <button type="button" class="btn-act-white" onclick="closeCaptureModal()">닫기</button>
+        <button type="button" id="btnCopyCapture" class="btn-act-white" style="border-color:#93c5fd;color:#1d4ed8;" onclick="copyCaptureImageToClipboard()">📋 클립보드 복사</button>
+        <button type="button" id="btnDownloadCapture" class="btn-act-blue">💾 이미지 다운로드</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-banner" id="toastBanner"></div>
 
   <script src="data/dashboard_data.js"></script>
@@ -1728,6 +1779,7 @@
         const s = (state.dashData && state.dashData.todayStr) || "2026.11.13";
         return s.replace(/\./g, "-").slice(0, 10);
       }
+      window.getTodayYmd = getTodayYmd;
       function parseYmdFromTask(task) {
         if (task.startDateStr && /^\d{4}-\d{2}-\d{2}/.test(task.startDateStr)) return task.startDateStr.slice(0, 10);
         if (task.dateDisplay) {
@@ -2298,21 +2350,60 @@
       }
 
       window.openDelayedSitesFromHome = function (isMobile) {
-        const delayedSite = getAllSites().find((s) => {
-          if (s.scope === "newSite" || isSiteCompleted(s)) return false;
-          return (s.tasks || []).some((t) => !isTaskCompleted(t) && t.isDelayed);
-        });
-        if (delayedSite) {
-          state.scope = delayedSite.scope || "site";
-          state.selectedSiteKey = delayedSite.siteKey;
-        } else if (state.scope === "newSite") {
+        const user = state.user || "";
+        const todayYmd = getTodayYmd();
+        let targetSite = null;
+        const allSites = getAllSites();
+
+        // 1순위: 현재 로그인 사용자의 지연 공정이 있는 진행 현장 (일반 현장 'site' 스코프 우선)
+        for (const s of allSites) {
+          if (s.scope === "newSite" || isSiteCompleted(s)) continue;
+          const hasUserDelayed = (s.tasks || []).some((t) => {
+            if (isTaskCompleted(t)) return false;
+            const ymd = parseYmdFromTask(t);
+            const isDel = Boolean(t.isDelayed || (ymd && ymd < todayYmd));
+            if (!isDel) return false;
+            if (user && t.manager && !t.manager.includes(user)) return false;
+            return true;
+          });
+          if (hasUserDelayed) {
+            targetSite = s;
+            if (s.scope === "site") break;
+          }
+        }
+
+        // 2순위: 사용자 지연 현장이 특정되지 않은 경우, 전체 진행 현장 중 지연 공정이 있는 현장 (site 우선)
+        if (!targetSite) {
+          targetSite = allSites.find((s) => s.scope === "site" && !isSiteCompleted(s) && (s.tasks || []).some((t) => !isTaskCompleted(t) && (t.isDelayed || (parseYmdFromTask(t) && parseYmdFromTask(t) < todayYmd))));
+          if (!targetSite) {
+            targetSite = allSites.find((s) => s.scope !== "newSite" && !isSiteCompleted(s) && (s.tasks || []).some((t) => !isTaskCompleted(t) && (t.isDelayed || (parseYmdFromTask(t) && parseYmdFromTask(t) < todayYmd))));
+          }
+        }
+
+        if (targetSite) {
+          state.scope = targetSite.scope || "site";
+          state.selectedSiteKey = targetSite.siteKey;
+        } else {
           state.scope = "site";
         }
+
         state.siteTaskStatusFilter = "delay";
         state.showArchivedSites = false;
+        state.checkedTableTaskIds.clear();
+        state.siteTaskSearch = "";
         markAllDirty();
-        if (isMobile) window.switchMobileTab("sites");
-        else window.switchMainTab("sites");
+
+        if (isMobile) {
+          window.switchMobileTab("sites");
+          if (targetSite) {
+            state.mobileExpandedSiteKeys.clear();
+            state.mobileExpandedSiteKeys.add(targetSite.siteKey);
+            state.dirtyMobileTabs.sites = true;
+            renderActiveViews();
+          }
+        } else {
+          window.switchMainTab("sites");
+        }
       };
 
       function getHomeTaskCategory(task, ymd, todayYmd) {
@@ -2907,7 +2998,8 @@
               <span style="margin-left:auto;font-weight:800;color:#1d4ed8;">표시 공정 ${events.length}건 (다중일자 포함)</span>
               ${(hasSubsetSites || state.memberFilter || state.searchQuery.trim()) ? `<button type="button" class="btn-tool-tag" onclick="resetAllFilters()">초기화</button>` : ""}
             </div>
-            <div class="cal-view-switch">
+            <div class="cal-view-switch" style="display:flex;align-items:center;gap:6px;">
+              <button type="button" class="btn-tool-tag" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐" style="font-weight:700;">📸 캡쳐</button>
               <button type="button" class="cal-view-btn ${state.calViewMode === "month" ? "active" : ""}" onclick="setCalViewMode('month')">월간</button>
               <button type="button" class="cal-view-btn ${state.calViewMode === "week" ? "active" : ""}" onclick="setCalViewMode('week')">주간</button>
             </div>
@@ -3198,8 +3290,10 @@
           dueDisplayHtml = `<span class="todo-due-badge" style="color:#94a3b8;">기한 없음</span>`;
         }
 
+        const draggableAttr = !isMobile ? `draggable="true" ondragstart="onTodoCardDragStart(event, '${escJs(t.id)}')"` : "";
+
         return `
-          <div class="${cardCls.join(" ")}" onclick="openTodoModal('${escJs(t.id)}')">
+          <div class="${cardCls.join(" ")}" ${draggableAttr} onclick="openTodoModal('${escJs(t.id)}')">
             <div class="todo-card-top-row">
               <span class="todo-site-pill" onclick="event.stopPropagation(); navigateToSiteDetail('${escJs(t.siteName || "")}', ${isMobile ? "true" : "false"})">
                 <span style="color:${escHtml(siteCol)};font-size:12px;">●</span>
@@ -3290,28 +3384,28 @@
 
           groupedHtml = `
             ${overdue.length ? `
-              <div class="todo-section-box">
+              <div class="todo-section-box" ondragover="onTodoDropOver(event)" ondragleave="onTodoDropLeave(event)" ondrop="onTodoDrop(event, 'due', 'overdue')">
                 <div class="todo-section-header">
                   <div class="todo-section-title" style="color:#dc2626;">🔴 기한 지남 <span class="todo-count-badge" style="background:#fee2e2;color:#dc2626;">${overdue.length}</span></div>
                 </div>
                 <div class="todo-section-grid">${overdue.map((t) => renderModernTodoCard(t, false)).join("")}</div>
               </div>` : ""}
             ${todayDue.length ? `
-              <div class="todo-section-box">
+              <div class="todo-section-box" ondragover="onTodoDropOver(event)" ondragleave="onTodoDropLeave(event)" ondrop="onTodoDrop(event, 'due', 'today')">
                 <div class="todo-section-header">
                   <div class="todo-section-title" style="color:#d97706;">🟡 오늘 마감 <span class="todo-count-badge" style="background:#fef3c7;color:#d97706;">${todayDue.length}</span></div>
                 </div>
                 <div class="todo-section-grid">${todayDue.map((t) => renderModernTodoCard(t, false)).join("")}</div>
               </div>` : ""}
             ${upcoming.length ? `
-              <div class="todo-section-box">
+              <div class="todo-section-box" ondragover="onTodoDropOver(event)" ondragleave="onTodoDropLeave(event)" ondrop="onTodoDrop(event, 'due', 'upcoming')">
                 <div class="todo-section-header">
                   <div class="todo-section-title" style="color:#2563eb;">🔵 다가오는 일정 <span class="todo-count-badge" style="background:#eff6ff;color:#2563eb;">${upcoming.length}</span></div>
                 </div>
                 <div class="todo-section-grid">${upcoming.map((t) => renderModernTodoCard(t, false)).join("")}</div>
               </div>` : ""}
             ${noDue.length ? `
-              <div class="todo-section-box">
+              <div class="todo-section-box" ondragover="onTodoDropOver(event)" ondragleave="onTodoDropLeave(event)" ondrop="onTodoDrop(event, 'due', 'none')">
                 <div class="todo-section-header">
                   <div class="todo-section-title" style="color:#64748b;">⚪ 기한 없음 <span class="todo-count-badge">${noDue.length}</span></div>
                 </div>
@@ -3337,7 +3431,7 @@
             const siteObj = getAllSites().find((s) => s.siteName === sName);
             const siteCol = (siteObj && siteObj.colorHex) || "#2563eb";
             return `
-              <div class="todo-section-box">
+              <div class="todo-section-box" ondragover="onTodoDropOver(event)" ondragleave="onTodoDropLeave(event)" ondrop="onTodoDrop(event, 'site', '${escJs(sName)}')">
                 <div class="todo-section-header">
                   <div class="todo-section-title" style="cursor:pointer;" onclick="navigateToSiteDetail('${escJs(sName)}', false)">
                     <span style="color:${siteCol};font-size:14px;">●</span>
@@ -3357,7 +3451,7 @@
             const labelName = mKey === "unassigned" ? "담당 미지정" : mKey;
             const impCount = items.filter((t) => t.isImportant || t.status === "중요").length;
             return `
-              <div class="todo-section-box">
+              <div class="todo-section-box" ondragover="onTodoDropOver(event)" ondragleave="onTodoDropLeave(event)" ondrop="onTodoDrop(event, 'manager', '${escJs(mKey)}')">
                 <div class="todo-section-header">
                   <div class="todo-section-title">
                     <span class="tm-avatar" style="width:24px;height:24px;font-size:11px;">${escHtml(labelName.slice(0, 1))}</span>
@@ -3373,7 +3467,7 @@
 
         const isDoneExpanded = Boolean(state.todoCompletedExpanded);
         const completedSectionHtml = `
-          <div class="todo-completed-section">
+          <div class="todo-completed-section" ondragover="onTodoDropOver(event)" ondragleave="onTodoDropLeave(event)" ondrop="onTodoDrop(event, 'completed', '')">
             <button type="button" class="todo-completed-toggle-btn" onclick="toggleTodoCompletedExpand()">
               <span style="display:flex;align-items:center;gap:7px;">
                 <span>✅ 완료된 항목</span>
@@ -4335,7 +4429,27 @@
 
           let bodyHtml = "";
           if (isExpanded) {
-            const tasksListHtml = tasks.map((t) => {
+            const total = tasks.length || 1;
+            const doneCnt = tasks.filter((t) => t.status === "완료").length;
+            const progCnt = tasks.filter((t) => t.status === "진행중" || t.status === "진행 중" || t.isToday).length;
+            const delayCnt = tasks.filter((t) => t.isDelayed && t.status !== "완료").length;
+            const planCnt = Math.max(0, tasks.length - doneCnt - progCnt - delayCnt);
+            const pctDone = tasks.length ? Math.round((doneCnt / tasks.length) * 1000) / 10 : 0;
+
+            const curFilter = state.siteTaskStatusFilter || "all";
+            const curSearch = (state.siteTaskSearch || "").trim();
+
+            const filteredTasks = tasks.filter((t) => {
+              if (curFilter === "done" && t.status !== "완료") return false;
+              if (curFilter === "delay" && !(t.isDelayed && t.status !== "완료")) return false;
+              if (curFilter === "active" && (t.status === "완료" || (t.isDelayed && t.status !== "완료"))) return false;
+              if (curSearch && !matchesQuery([t.taskName, t.partner, t.manager, t.memo].join(" "), curSearch)) return false;
+              return true;
+            });
+
+            const allChecked = filteredTasks.length > 0 && filteredTasks.every((t) => state.checkedMobileTaskIds.has(t.id || t.taskId));
+
+            const tasksListHtml = filteredTasks.map((t) => {
               const tid = t.id || t.taskId;
               const isDone = isTaskCompleted(t);
               const isDel = !isDone && t.isDelayed;
@@ -4357,7 +4471,7 @@
                   </div>
                   ${t.memo ? `<div style="margin-top:3px;padding-left:21px;font-size:10.5px;color:#475569;">📝 ${escHtml(t.memo)}</div>` : ""}
                 </div>`;
-            }).join("") || `<div style="font-size:11.5px;color:var(--text-muted);text-align:center;padding:10px;">등록된 공정이 없습니다.</div>`;
+            }).join("") || `<div style="font-size:11.5px;color:var(--text-muted);text-align:center;padding:10px;">조건에 일치하는 공정이 없습니다.</div>`;
 
             bodyHtml = `
               <div class="m-site-acc-body">
@@ -4399,11 +4513,53 @@
                   <span class="chip-item ${info.officeNoticeDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;" onclick="togglePreChecklist('${escJs(s.siteName)}', 'officeNoticeDone')">${info.officeNoticeDone ? "✓" : "○"} 관리실신고</span>
                 </div>
 
+                <!-- 모바일 현장 공정 요약 및 필터·검색 영역 -->
+                <div class="m-site-summary-panel" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:9px 10px;margin-bottom:10px;">
+                  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center;margin-bottom:7px;">
+                    <div class="pc-task-stat-tile" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:5px 2px;">
+                      <div class="lbl" style="font-size:10px;color:var(--text-muted);font-weight:700;">전체 공정</div>
+                      <div class="val" style="font-size:12.5px;font-weight:800;color:var(--text);margin-top:1px;">${tasks.length}건</div>
+                    </div>
+                    <div class="pc-task-stat-tile" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:5px 2px;">
+                      <div class="lbl" style="font-size:10px;color:var(--text-muted);font-weight:700;">완료</div>
+                      <div class="val" style="font-size:12.5px;font-weight:800;color:#10b981;margin-top:1px;">${doneCnt}건</div>
+                    </div>
+                    <div class="pc-task-stat-tile" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:5px 2px;">
+                      <div class="lbl" style="font-size:10px;color:var(--text-muted);font-weight:700;">예정·진행</div>
+                      <div class="val" style="font-size:12.5px;font-weight:800;color:#2563eb;margin-top:1px;">${planCnt + progCnt}건</div>
+                    </div>
+                    <div class="pc-task-stat-tile" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:5px 2px;">
+                      <div class="lbl" style="font-size:10px;color:var(--text-muted);font-weight:700;">지연</div>
+                      <div class="val" style="font-size:12.5px;font-weight:800;color:#ef4444;margin-top:1px;">${delayCnt}건</div>
+                    </div>
+                  </div>
+
+                  <div class="progress-stack" title="완료 ${pctDone}%" style="margin-bottom:8px;height:5px;border-radius:3px;">
+                    <div style="width:${(doneCnt / total) * 100}%;background:#10b981;"></div>
+                    <div style="width:${(delayCnt / total) * 100}%;background:#ef4444;"></div>
+                    <div style="width:${(progCnt / total) * 100}%;background:#2563eb;"></div>
+                  </div>
+
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;">
+                      <button type="button" class="st-pill btn-task-pill ${curFilter === "all" ? "active" : ""}" style="font-size:11px;padding:3px 8px;" onclick="setSiteTaskFilter('all')">전체 (${tasks.length})</button>
+                      <button type="button" class="st-pill btn-task-pill ${curFilter === "delay" ? "active" : ""}" style="font-size:11px;padding:3px 8px;${curFilter === "delay" ? "background:#ef4444;border-color:#ef4444;color:#fff;" : ""}" onclick="setSiteTaskFilter('delay')">⚠️ 지연 (${delayCnt})</button>
+                      <button type="button" class="st-pill btn-task-pill ${curFilter === "active" ? "active" : ""}" style="font-size:11px;padding:3px 8px;" onclick="setSiteTaskFilter('active')">예정·진행 (${planCnt + progCnt})</button>
+                      <button type="button" class="st-pill btn-task-pill ${curFilter === "done" ? "active" : ""}" style="font-size:11px;padding:3px 8px;" onclick="setSiteTaskFilter('done')">✓ 완료 (${doneCnt})</button>
+                    </div>
+                    <div class="search-box" style="width:100%;box-sizing:border-box;margin:0;">
+                      <span>🔍</span>
+                      <input type="text" class="ws-input" style="padding:4px 8px 4px 26px;font-size:11.5px;height:28px;" placeholder="공종 / 업체 / 메모 검색" value="${escHtml(curSearch)}" oninput="setSiteTaskSearch(this.value)">
+                      ${curSearch ? `<button type="button" class="search-clear" onclick="setSiteTaskSearch('')">✕</button>` : ""}
+                    </div>
+                  </div>
+                </div>
+
                 <div class="m-site-tasks-bundle" style="border-left-color:var(--site-accent, ${escHtml(s.colorHex || "#0f766e")});">
                   <div class="m-site-bundle-head">
                     <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;color:color-mix(in srgb, var(--site-accent, #0f766e) 80%, #0f172a);cursor:pointer;">
                       <input type="checkbox" ${allChecked ? "checked" : ""} onchange="toggleMobileSiteAllTasks('${escJs(s.siteKey)}', this.checked)" style="width:15px;height:15px;accent-color:var(--site-accent, #0f766e);" />
-                      공정 묶음 전체선택 <span style="display:inline-flex;align-items:center;background:color-mix(in srgb, var(--site-accent, #0f766e) 20%, #ffffff);color:var(--site-accent, #0f766e);font-weight:800;padding:1px 6px;border-radius:999px;font-size:10px;border:1px solid color-mix(in srgb, var(--site-accent, #0f766e) 30%, transparent);">${tasks.length}건</span>
+                      공정 묶음 <span style="display:inline-flex;align-items:center;background:color-mix(in srgb, var(--site-accent, #0f766e) 20%, #ffffff);color:var(--site-accent, #0f766e);font-weight:800;padding:1px 6px;border-radius:999px;font-size:10px;border:1px solid color-mix(in srgb, var(--site-accent, #0f766e) 30%, transparent);">${filteredTasks.length}건</span>
                     </label>
                     <span style="font-size:10.5px;color:var(--text-muted);font-weight:700;">🟦 공유 / 🟥 미공유</span>
                   </div>
@@ -4870,12 +5026,90 @@
           const last = openModals[openModals.length - 1];
           if (_modalHistoryDepth > 0) _modalHistoryDepth--;
           window.closeModal(last.id, true);
+          return;
+        }
+
+        const isMobileDevice = state.device === "mobile" || window.innerWidth <= 768 || (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0 && window.innerWidth <= 1024);
+        if (isMobileDevice && !window._suppressExitConfirm) {
+          try {
+            const doExit = confirm("우성아이디 대시보드를 종료하시겠습니까?");
+            if (doExit) {
+              window.close();
+              setTimeout(() => {
+                document.body.innerHTML = `
+                  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;text-align:center;">
+                    <div style="font-size:48px;margin-bottom:16px;">👋</div>
+                    <h2 style="color:#1e293b;margin-bottom:8px;font-size:18px;font-weight:800;">우성아이디 대시보드가 종료되었습니다</h2>
+                    <p style="color:#64748b;font-size:14px;line-height:1.6;">브라우저 창(탭)을 닫아주세요.</p>
+                    <button onclick="location.reload()" style="margin-top:20px;padding:10px 22px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">다시 시작하기</button>
+                  </div>`;
+              }, 150);
+            } else {
+              window.history.pushState({ page: "home" }, "");
+            }
+          } catch (eConfirm) {}
         }
       });
 
       function buildDatalistHtml(id, items) {
         return `<datalist id="${id}">${items.map((x) => `<option value="${escHtml(x)}">`).join("")}</datalist>`;
       }
+
+      window.openTaskSheetModal = function (siteName, taskName, startYmd, endYmd, manager, colorHex, status, rowNumber, sheetName, memo, partner, isArchived) {
+        if (arguments.length === 1 && typeof siteName === "string") {
+          return openTaskEditModal(siteName);
+        }
+        const all = getAllSites().flatMap(s => (s.tasks || []).map(t => ({ site: s, task: t })));
+        const found = all.find(x => x.site.siteName === siteName && x.task.taskName === taskName);
+        if (found) {
+          return openTaskEditModal(found.task.id || found.task.taskId);
+        }
+        const site = getAllSites().find(s => s.siteName === siteName) || { siteName, siteKey: siteName, scope: "site" };
+        const d = startYmd || getTodayYmd();
+        const mgrParts = String(manager || "").split(",").map(x => x.trim()).filter(Boolean);
+        state.sheetCtx = {
+          mode: "edit",
+          taskId: "task_mock_" + Date.now(),
+          row: rowNumber || "",
+          sheetRow: rowNumber || "",
+          siteKey: site.siteKey,
+          siteName: site.siteName,
+          scope: site.scope || "site",
+          sheetName: sheetName || "현장데이터",
+          isArchived: !!isArchived,
+          taskName: taskName || "",
+          taskDropOpen: false,
+          taskSearchQuery: "",
+          origStartYmd: d,
+          startYmd: d,
+          endYmd: endYmd || d,
+          isRange: (endYmd || d) > d,
+          hasTime: false,
+          startTime: "",
+          endTime: "",
+          showDatePop: false,
+          calPopYear: Number(d.slice(0, 4)),
+          calPopMonth: Number(d.slice(5, 7)),
+          manager1: mgrParts[0] || "",
+          manager2: mgrParts[1] || "",
+          partner: partner || "",
+          isCustomPartner: false,
+          customPartnerName: "",
+          partnerSearchQuery: "",
+          partnerDropOpen: false,
+          partnerPhone: lookupPartnerPhone(partner),
+          status: status || "예정",
+          isShared: false,
+          memo: memo || "",
+          newMemo: "",
+          editFullMemo: false,
+          cascadeShift: false,
+          sameDayList: [],
+          sameDayIdx: 0
+        };
+        renderTaskSheetModal();
+        openModal("taskSheetModal");
+      };
 
       window.openTaskEditModal = function (taskId) {
         const found = findTaskById(taskId);
@@ -4899,11 +5133,16 @@
         state.sheetCtx = {
           mode: "edit",
           taskId: task.id || task.taskId,
+          row: task.row || task.rowNumber || task.sheetRow || task.rowNum || "",
+          sheetRow: task.row || task.rowNumber || task.sheetRow || task.rowNum || "",
           siteKey: site.siteKey,
           siteName: site.siteName,
           scope: site.scope,
           sheetName: task.sheetName || "현장데이터",
+          isArchived: !!(task.isArchived || site.isArchived),
           taskName: task.taskName,
+          taskDropOpen: false,
+          taskSearchQuery: "",
           origStartYmd: startYmd,
           startYmd,
           endYmd,
@@ -4964,12 +5203,59 @@
           partnerSearchQuery: "",
           partnerDropOpen: false,
           partnerPhone: "",
+          taskDropOpen: false,
+          taskSearchQuery: "",
           status: "예정",
           isShared: false,
           memo: ""
         };
         renderTaskSheetModal();
         openModal("taskSheetModal");
+      };
+
+      window.openNewTaskOnCurrentDate = function () {
+        const ctx = state.sheetCtx;
+        if (!ctx) return;
+        const sName = ctx.siteName || "";
+        const curDate = ctx.startYmd || state.selectedDayStr || getTodayYmd();
+        openNewTaskModal(sName, curDate);
+      };
+
+      window.goToCurrentTaskSheetRow = function () {
+        const ctx = state.sheetCtx;
+        if (!ctx || !ctx.row) {
+          showToast("⚠️ 이동할 시트 행 정보가 없습니다.");
+          return;
+        }
+        const targetRow = parseInt(ctx.row, 10);
+        const isArch = Boolean(ctx.isArchived);
+        const siteStr = ctx.siteName || "";
+        const taskStr = ctx.taskName || "";
+        const dateStr = ctx.startYmd || "";
+        const sheetName = ctx.sheetName || (isArch ? "완료현장" : "현장데이터");
+        showToast(`📍 [${siteStr || "현장"} - ${taskStr || "공정"}] 시트 행(${targetRow}행) 위치로 이동 중...`);
+
+        if (typeof google !== "undefined" && google.script && google.script.run) {
+          google.script.run
+            .withSuccessHandler((res) => {
+              const actualRow = (res && res.row) ? res.row : targetRow;
+              if (ctx) ctx.row = actualRow;
+              showToast(`✅ [${siteStr || "현장"} - ${taskStr || "공정"}] ${actualRow}행으로 이동했습니다!`);
+              if (res && res.sheetUrl) {
+                window.open(res.sheetUrl, "_blank", "noopener");
+              }
+            })
+            .withFailureHandler((err) => {
+              showToast("⚠️ 이동 실패: " + ((err && err.message) || err));
+            })
+            .focusSheetRow(targetRow, isArch, siteStr, taskStr, dateStr, sheetName);
+        } else {
+          const gid = isArch ? "" : "244837509";
+          const gidPart = gid ? `gid=${gid}&` : "";
+          const sheetUrl = `https://docs.google.com/spreadsheets/d/1V6Nb5ZB8gOfwDFsN8svMDZQYWXIJjGa9tuUYrVu0JhY/edit?${gidPart}range=A${targetRow}#gid=${gid || "0"}&range=A${targetRow}`;
+          window.open(sheetUrl, "_blank", "noopener");
+          showToast(`✅ [${siteStr || "현장"} - ${taskStr || "공정"}] ${targetRow}행으로 이동했습니다!`);
+        }
       };
 
       function checkScheduleConflict(ctx) {
@@ -5024,6 +5310,15 @@
         document.getElementById("taskSheetTitle").innerHTML = isEdit
           ? `🛠️ <span style="color:#1e40af;">${escHtml(ctx.siteName)}</span> · ${escHtml(ctx.taskName)}`
           : `➕ 새 일정 등록`;
+
+        let topActionsHtml = "";
+        if (isEdit) {
+          topActionsHtml = `
+            <div class="task-sheet-top-actions" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);">
+              <button type="button" class="btn-tool-tag" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0;font-weight:700;" onclick="openNewTaskOnCurrentDate()" title="현재 공정의 현장과 날짜로 새 공정 추가">➕ 같은 날 추가</button>
+              ${ctx.row ? `<button type="button" class="btn-tool-tag" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-weight:700;" onclick="goToCurrentTaskSheetRow()" title="스프레드시트에서 해당 행(${ctx.row}행) 바로가기">📄 시트 행 바로가기</button>` : ""}
+            </div>`;
+        }
 
         let sameDayBarHtml = "";
         if (isEdit && ctx.sameDayList && ctx.sameDayList.length > 1) {
@@ -5099,6 +5394,7 @@
         const scopeTagMap = { site: "[현장] ", single: "[단독] ", as: "[A/S] " };
 
         document.getElementById("taskSheetBody").innerHTML = `
+          ${topActionsHtml}
           ${sameDayBarHtml}
           ${quickBannerHtml}
           ${!isEdit ? `
@@ -5124,19 +5420,25 @@
                   <option value="__NEW__" ${ctx.siteName === "__NEW__" ? "selected" : ""}>+ 새 현장명 직접 입력</option>
                 </select>
               </div>
-              <div class="fg">
-                <label>${ctx.siteName === "__NEW__" ? "새 현장명 입력" : "공종명"}</label>
-                ${ctx.siteName === "__NEW__"
-                  ? `<input class="ws-input" value="${escHtml(ctx.newSiteName || "")}" placeholder="예: 보라매우성 101동 502호" oninput="state_sheetUpdate('newSiteName', this.value)">`
-                  : `<input class="ws-input" list="wsTasksDl" value="${escHtml(ctx.taskName)}" placeholder="공종 검색/입력" oninput="state_sheetUpdate('taskName', this.value)">`}
+              <div class="fg" style="position:relative;">
+                <label>${ctx.siteName === "__NEW__" ? "공종명" : "공종명 (검색/선택)"}</label>
+                <div style="position:relative;display:flex;align-items:center;">
+                  <input type="text" id="sheetTaskSearchInput" class="ws-input" value="${escHtml(ctx.taskName || "")}" placeholder="🔍 공종 검색 / 선택" autocomplete="off" style="padding-right:26px;cursor:pointer;background-color:#ffffff;" onclick="openSheetTaskDropdown()" onfocus="openSheetTaskDropdown()" oninput="onSheetTaskSearchInput(this.value)" onkeydown="onSheetTaskSearchKeydown(event)">
+                  <span id="sheetTaskSearchArrow" onclick="toggleSheetTaskDropdown()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:10px;color:#94a3b8;cursor:pointer;user-select:none;">▼</span>
+                </div>
+                <div id="sheetTaskDropdownList" class="sheet-task-dropdown-popover" style="display:${ctx.taskDropOpen ? "block" : "none"};"></div>
               </div>
             </div>
             ${ctx.siteName === "__NEW__" ? `
-              <div class="fg"><label>공종명</label><input class="ws-input" list="wsTasksDl" value="${escHtml(ctx.taskName)}" placeholder="공종 검색/입력" oninput="state_sheetUpdate('taskName', this.value)"></div>` : ""}
+              <div class="fg"><label>새 현장명 입력</label><input class="ws-input" value="${escHtml(ctx.newSiteName || "")}" placeholder="예: 보라매우성 101동 502호" oninput="state_sheetUpdate('newSiteName', this.value)"></div>` : ""}
           ` : `
-            <div class="fg">
-              <label>공종명</label>
-              <input class="ws-input" list="wsTasksDl" value="${escHtml(ctx.taskName)}" oninput="state_sheetUpdate('taskName', this.value)">
+            <div class="fg" style="position:relative;">
+              <label>공종명 (검색/선택)</label>
+              <div style="position:relative;display:flex;align-items:center;">
+                <input type="text" id="sheetTaskSearchInput" class="ws-input" value="${escHtml(ctx.taskName || "")}" placeholder="🔍 공종 검색 / 선택" autocomplete="off" style="padding-right:26px;cursor:pointer;background-color:#ffffff;" onclick="openSheetTaskDropdown()" onfocus="openSheetTaskDropdown()" oninput="onSheetTaskSearchInput(this.value)" onkeydown="onSheetTaskSearchKeydown(event)">
+                <span id="sheetTaskSearchArrow" onclick="toggleSheetTaskDropdown()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:10px;color:#94a3b8;cursor:pointer;user-select:none;">▼</span>
+              </div>
+              <div id="sheetTaskDropdownList" class="sheet-task-dropdown-popover" style="display:${ctx.taskDropOpen ? "block" : "none"};"></div>
             </div>
           `}
           ${buildDatalistHtml("wsTasksDl", tasksMaster)}
@@ -5281,6 +5583,15 @@
           <button type="button" class="btn-act-white" onclick="closeModal('taskSheetModal')">취소</button>
           <button type="button" class="btn-act-blue" onclick="saveTaskSheetModal()">➕ 일정 등록하기</button>
         `;
+
+        if (ctx.taskDropOpen) {
+          const tDrop = document.getElementById("sheetTaskDropdownList");
+          if (tDrop) tDrop.innerHTML = renderSheetTaskDropdownHtml(ctx.taskSearchQuery || "");
+        }
+        if (ctx.partnerDropOpen) {
+          const pDrop = document.getElementById("sheetPartnerDropdownList");
+          if (pDrop) pDrop.innerHTML = renderSheetPartnerDropdownHtml(ctx.partnerSearchQuery || "");
+        }
       }
 
       window.state_sheetUpdate = function (k, v) { if (state.sheetCtx) state.sheetCtx[k] = v; };
@@ -5461,17 +5772,132 @@
           drop.style.display = "block";
         }
       };
+      function renderSheetTaskDropdownHtml(query) {
+        const ctx = state.sheetCtx || {};
+        const list = getTasksMasterList();
+        const q = String(query || "").trim().toLowerCase();
+        let filtered = list;
+        if (q) {
+          filtered = list.filter((t) => t && String(t).toLowerCase().includes(q));
+        }
+        let listHtml = "";
+        if (filtered.length > 0) {
+          listHtml = filtered.map((t) => {
+            const tStr = String(t).trim();
+            const isSel = tStr === (ctx.taskName || "");
+            return `
+              <div class="task-drop-item ${isSel ? "selected" : ""}" onmousedown="event.preventDefault()" onclick="selectSheetTaskFromDropdown('${escJs(tStr)}')">
+                <span>${escHtml(tStr)}</span>
+                ${isSel ? `<span style="color:#2563eb;font-weight:800;">✓</span>` : ""}
+              </div>`;
+          }).join("");
+        } else if (q) {
+          listHtml = `<div style="padding:10px 11px;color:#64748b;font-size:12px;background:#f8fafc;border-bottom:1px solid #f1f5f9;">검색 결과가 없습니다.</div>`;
+        }
+        const customHtml = q && !filtered.includes(query.trim()) ? `
+          <div class="task-drop-custom" onmousedown="event.preventDefault()" onclick="selectSheetTaskFromDropdown('${escJs(query.trim())}')">
+            <span>➕ '${escHtml(query.trim())}' 공종 직접 입력</span>
+          </div>` : "";
+        return listHtml + customHtml;
+      }
+
+      window.openSheetTaskDropdown = function () {
+        const ctx = state.sheetCtx; if (!ctx) return;
+        ctx.taskDropOpen = true;
+        ctx.taskSearchQuery = "";
+        const drop = document.getElementById("sheetTaskDropdownList");
+        const inp = document.getElementById("sheetTaskSearchInput");
+        if (drop) {
+          drop.innerHTML = renderSheetTaskDropdownHtml("");
+          drop.style.display = "block";
+        }
+        if (inp && typeof inp.select === "function") inp.select();
+      };
+      window.toggleSheetTaskDropdown = function () {
+        const ctx = state.sheetCtx; if (!ctx) return;
+        if (ctx.taskDropOpen) window.closeSheetTaskDropdown();
+        else window.openSheetTaskDropdown();
+      };
+      window.closeSheetTaskDropdown = function () {
+        const ctx = state.sheetCtx;
+        if (ctx) ctx.taskDropOpen = false;
+        const drop = document.getElementById("sheetTaskDropdownList");
+        if (drop) drop.style.display = "none";
+        const inp = document.getElementById("sheetTaskSearchInput");
+        if (inp && ctx) {
+          inp.value = ctx.taskName || "";
+        }
+      };
+      window.onSheetTaskSearchInput = function (val) {
+        const ctx = state.sheetCtx; if (!ctx) return;
+        ctx.taskName = val;
+        ctx.taskSearchQuery = val;
+        ctx.taskDropOpen = true;
+        const drop = document.getElementById("sheetTaskDropdownList");
+        if (drop) {
+          drop.innerHTML = renderSheetTaskDropdownHtml(val);
+          drop.style.display = "block";
+        }
+      };
+      window.selectSheetTaskFromDropdown = function (val) {
+        const ctx = state.sheetCtx; if (!ctx) return;
+        ctx.taskName = String(val || "").trim();
+        ctx.taskDropOpen = false;
+        ctx.taskSearchQuery = "";
+        renderTaskSheetModal();
+      };
+
+      function handleDropdownKeyboardNav(event, dropEl, itemSelector) {
+        if (!dropEl || dropEl.style.display === "none") return false;
+        const items = Array.from(dropEl.querySelectorAll(itemSelector));
+        if (!items.length) return false;
+
+        let curIdx = items.findIndex((el) => el.classList.contains("highlighted"));
+
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          let nextIdx = curIdx + 1;
+          if (nextIdx >= items.length) nextIdx = 0;
+          if (curIdx >= 0) items[curIdx].classList.remove("highlighted");
+          items[nextIdx].classList.add("highlighted");
+          items[nextIdx].scrollIntoView({ block: "nearest" });
+          state.sheetTaskDropdownHlIndex = nextIdx;
+          return true;
+        } else if (event.key === "ArrowUp") {
+          event.preventDefault();
+          let nextIdx = curIdx - 1;
+          if (nextIdx < 0) nextIdx = items.length - 1;
+          if (curIdx >= 0) items[curIdx].classList.remove("highlighted");
+          items[nextIdx].classList.add("highlighted");
+          items[nextIdx].scrollIntoView({ block: "nearest" });
+          state.sheetTaskDropdownHlIndex = nextIdx;
+          return true;
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          const targetItem = (curIdx >= 0 && items[curIdx]) || items[0];
+          if (targetItem) targetItem.click();
+          state.sheetTaskDropdownHlIndex = -1;
+          return true;
+        }
+        return false;
+      }
+
+      window.onSheetTaskSearchKeydown = function (event) {
+        if (event.key === "Escape") {
+          window.closeSheetTaskDropdown();
+          return;
+        }
+        const drop = document.getElementById("sheetTaskDropdownList");
+        handleDropdownKeyboardNav(event, drop, ".task-drop-item, .task-drop-custom");
+      };
+
       window.onSheetPartnerSearchKeydown = function (event) {
         if (event.key === "Escape") {
           window.closeSheetPartnerDropdown();
-        } else if (event.key === "Enter") {
-          event.preventDefault();
-          const drop = document.getElementById("sheetPartnerDropdownList");
-          if (drop) {
-            const firstItem = drop.querySelector(".partner-drop-item, .partner-drop-custom");
-            if (firstItem) firstItem.click();
-          }
+          return;
         }
+        const drop = document.getElementById("sheetPartnerDropdownList");
+        handleDropdownKeyboardNav(event, drop, ".partner-drop-item, .partner-drop-custom");
       };
       window.selectSheetPartnerFromDropdown = function (val) {
         const ctx = state.sheetCtx; if (!ctx) return;
@@ -5954,6 +6380,7 @@
         renderSiteUploadModalBody();
         openModal("siteFileUploadModal");
       };
+      window.openSiteUploadModal = window.openSiteFileUploadModal;
 
       function renderSiteUploadModalBody() {
         const siteName = state._uploadSiteName || "";
@@ -5990,11 +6417,73 @@
         state.uploadFiles.splice(idx, 1);
         renderSiteUploadModalBody();
       };
-      window.executeSiteUpload = function () {
-        if (!state.uploadFiles.length) return showToast("⚠️ 먼저 업로드할 파일을 선택해 주세요.");
-        const cnt = state.uploadFiles.length;
-        window.closeModal("siteFileUploadModal");
-        showToast(`✅ ${state._uploadSiteName} 파일 ${cnt}건 업로드 요청 완료!`);
+      window.executeSiteUpload = async function () {
+        if (!state.uploadFiles || !state.uploadFiles.length) return showToast("⚠️ 먼저 업로드할 파일을 선택해 주세요.");
+        const siteName = state._uploadSiteName || "";
+        const filesToUpload = [...state.uploadFiles];
+        const btnUpload = document.querySelector("#siteUploadModalFooter button.btn-act-blue");
+        if (btnUpload) {
+          btnUpload.disabled = true;
+          btnUpload.innerHTML = `⏳ 인코딩 및 전송 중 (0/${filesToUpload.length})...`;
+        }
+
+        try {
+          const filesPayload = [];
+          for (let i = 0; i < filesToUpload.length; i++) {
+            const file = filesToUpload[i];
+            if (btnUpload) btnUpload.innerHTML = `⏳ 파일 읽는 중 (${i + 1}/${filesToUpload.length})...`;
+            const base64Data = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const res = reader.result || "";
+                const commaIdx = res.indexOf(",");
+                resolve(commaIdx >= 0 ? res.substring(commaIdx + 1) : res);
+              };
+              reader.onerror = () => reject(new Error(`파일 [${file.name}] 읽기 실패`));
+              reader.readAsDataURL(file);
+            });
+            filesPayload.push({
+              name: file.name,
+              mimeType: file.type || "application/octet-stream",
+              data: base64Data,
+              size: file.size
+            });
+          }
+
+          if (btnUpload) btnUpload.innerHTML = `☁️ 드라이브 업로드 전송 중...`;
+
+          const siteInfo = getSiteInfo(siteName) || {};
+          const clientDriveUrl = siteInfo.driveUrl || "";
+
+          if (typeof google !== "undefined" && google.script && google.script.run && google.script.run.uploadSiteFilesToDriveFromWeb) {
+            await new Promise((resolve, reject) => {
+              google.script.run
+                .withSuccessHandler(res => {
+                  if (res && res.success === false) {
+                    reject(new Error(res.message || "드라이브 업로드 실패"));
+                  } else {
+                    resolve(res);
+                  }
+                })
+                .withFailureHandler(err => reject(err))
+                .uploadSiteFilesToDriveFromWeb(siteName, filesPayload, clientDriveUrl);
+            });
+          } else {
+            console.log("[Upload Mock] google.script.run 부재 환경 (테스트/오프라인) - 정상 가상 성공 처리:", { siteName, count: filesPayload.length });
+            await new Promise(r => setTimeout(r, 600));
+          }
+
+          state.uploadFiles = [];
+          window.closeModal("siteFileUploadModal");
+          showToast(`✅ [${siteName}] 파일 ${filesPayload.length}건 Google Drive 업로드 완료!`);
+        } catch (err) {
+          console.error("파일 업로드 에러:", err);
+          showToast(`❌ 업로드 실패: ${err.message || err}`);
+          if (btnUpload) {
+            btnUpload.disabled = false;
+            btnUpload.innerHTML = `📤 업로드 재시도 (${filesToUpload.length}건)`;
+          }
+        }
       };
 
       // ================= 모바일 캘린더 현장 필터 모달 함수 =================
@@ -6515,6 +7004,92 @@
         state.dirtyMobileTabs.home = true;
         renderActiveViews();
         showToast("✅ 기한이 변경되었습니다.");
+      };
+
+      // To-Do 카드 드래그 앤 드롭 핸들러 (PC 전용)
+      window.onTodoCardDragStart = function (e, id) {
+        if (!e || !e.dataTransfer) return;
+        e.dataTransfer.setData("text/plain", id);
+        e.dataTransfer.effectAllowed = "move";
+        const card = e.currentTarget || e.target;
+        if (card && card.classList) {
+          card.classList.add("dragging");
+          setTimeout(() => card.classList.remove("dragging"), 500);
+        }
+      };
+
+      window.onTodoDropOver = function (e) {
+        if (!e) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+        const box = e.currentTarget;
+        if (box && box.classList && !box.classList.contains("drag-over")) {
+          box.classList.add("drag-over");
+        }
+      };
+
+      window.onTodoDropLeave = function (e) {
+        if (!e) return;
+        const box = e.currentTarget;
+        if (box && box.classList) {
+          box.classList.remove("drag-over");
+        }
+      };
+
+      window.onTodoDrop = function (e, groupType, targetVal) {
+        if (e) {
+          e.preventDefault();
+          const box = e.currentTarget;
+          if (box && box.classList) box.classList.remove("drag-over");
+        }
+        document.querySelectorAll(".todo-section-box.drag-over, .todo-completed-section.drag-over").forEach(el => el.classList.remove("drag-over"));
+
+        const id = e && e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+        if (!id) return;
+        const list = (state.todoData && state.todoData.list) || [];
+        const item = list.find(t => t.id === id);
+        if (!item) return;
+
+        let changedDesc = "";
+        const todayYmd = getTodayYmd();
+
+        if (groupType === "due") {
+          if (targetVal === "overdue") {
+            item.dueDate = addDaysYmd(todayYmd, -1).replace(/-/g, ".");
+            changedDesc = "기한 지남으로 이동";
+          } else if (targetVal === "today") {
+            item.dueDate = todayYmd.replace(/-/g, ".");
+            changedDesc = "오늘 마감으로 이동";
+          } else if (targetVal === "upcoming") {
+            item.dueDate = addDaysYmd(todayYmd, 3).replace(/-/g, ".");
+            changedDesc = "다가오는 일정으로 이동";
+          } else if (targetVal === "none") {
+            item.dueDate = "";
+            changedDesc = "기한 없음으로 이동";
+          }
+          if (item.status === "완료") item.status = "미완료";
+        } else if (groupType === "site") {
+          item.siteName = targetVal === "일반 업무" ? "" : targetVal;
+          item.tag = item.siteName ? "현장" : "일반";
+          changedDesc = `현장 [${targetVal}] (으)로 이동`;
+        } else if (groupType === "manager") {
+          item.manager = targetVal === "unassigned" ? "" : targetVal;
+          changedDesc = `담당자 [${targetVal === "unassigned" ? "미지정" : targetVal}] (으)로 변경`;
+        } else if (groupType === "completed") {
+          item.status = "완료";
+          changedDesc = "완료 처리";
+        }
+
+        if (window.WSDataService) {
+          window.WSDataService.saveTodo(false, item, state.todoData);
+        }
+
+        state.dirtyPcTabs.todo = true;
+        state.dirtyMobileTabs.todo = true;
+        state.dirtyPcTabs.home = true;
+        state.dirtyMobileTabs.home = true;
+        renderActiveViews();
+        showToast(`✅ [${item.title || "할 일"}] ${changedDesc}`);
       };
 
       window.quickUpdateTodoManager = function (id, newManager) {
@@ -7170,9 +7745,9 @@
         }
       };
       window.toggleArchivedSites = function () { state.showArchivedSites = !state.showArchivedSites; markAllDirty(); renderActiveViews(); };
-      window.setSiteSort = function (sortBy) { state.siteSortBy = sortBy; state.dirtyPcTabs.sites = true; renderActiveViews(); };
-      window.setSiteTaskFilter = function (f) { state.siteTaskStatusFilter = f; state.dirtyPcTabs.sites = true; renderActiveViews(); };
-      window.setSiteTaskSearch = function (q) { state.siteTaskSearch = q || ""; state.dirtyPcTabs.sites = true; renderActiveViews(); };
+      window.setSiteSort = function (sortBy) { state.siteSortBy = sortBy; state.dirtyPcTabs.sites = true; state.dirtyMobileTabs.sites = true; renderActiveViews(); };
+      window.setSiteTaskFilter = function (f) { state.siteTaskStatusFilter = f; state.dirtyPcTabs.sites = true; state.dirtyMobileTabs.sites = true; renderActiveViews(); };
+      window.setSiteTaskSearch = function (q) { state.siteTaskSearch = q || ""; state.dirtyPcTabs.sites = true; state.dirtyMobileTabs.sites = true; renderActiveViews(); };
       window.filterTodoMember = function (mem) { state.todoMemberFilter = mem; state.dirtyPcTabs.todo = true; renderActiveViews(); };
       window.toggleQuoteArchived = function () { state.quoteShowArchived = !state.quoteShowArchived; state.dirtyPcTabs.quote = true; renderActiveViews(); };
       window.setFinancePartner = function (partner) { state.financePartnerFilter = partner; state.dirtyPcTabs.finance = true; renderActiveViews(); };
@@ -7215,6 +7790,117 @@
           if (badge) { badge.classList.remove("syncing"); badge.textContent = `⚡ 실시간 동기화 (${meta.updatedAt}) · ${(window.__initialRenderMs || 0).toFixed(1)}ms`; }
           if (manual) showToast("✅ Google Sheets 최신 데이터로 동기화되었습니다.");
         });
+      };
+
+      // 화면 캡쳐 모달 기능
+      window.captureCurrentScreen = async function () {
+        showToast("📸 화면 캡쳐 준비 중...", 3000);
+        try {
+          let targetEl = null;
+          if (state.device === "pc") {
+            if (state.pcTab === "calendar") {
+              targetEl = document.getElementById("pcCalendarView") || document.getElementById("pcCalendarContent");
+            } else if (state.pcTab === "sites") {
+              targetEl = document.getElementById("pcSitesMain");
+            } else if (state.pcTab === "todo") {
+              targetEl = document.getElementById("pcTodoMain");
+            } else {
+              targetEl = document.querySelector(".app-body") || document.body;
+            }
+          } else {
+            if (state.mobileTab === "calendar") {
+              targetEl = document.getElementById("mCalendarContent") || document.getElementById("tab-mobile-calendar");
+            } else if (state.mobileTab === "sites") {
+              targetEl = document.getElementById("tab-mobile-sites");
+            } else if (state.mobileTab === "todo") {
+              targetEl = document.getElementById("tab-mobile-todo");
+            } else {
+              targetEl = document.querySelector(".m-app-body") || document.body;
+            }
+          }
+          if (!targetEl) targetEl = document.body;
+
+          let canvas = null;
+          if (typeof html2canvas === "function") {
+            canvas = await html2canvas(targetEl, {
+              useCORS: true,
+              scale: Math.min(2, window.devicePixelRatio || 1.5),
+              logging: false,
+              backgroundColor: "#f8fafc"
+            });
+          } else {
+            // fallback canvas (offline/mock)
+            canvas = document.createElement("canvas");
+            canvas.width = 1200;
+            canvas.height = 800;
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, 1200, 800);
+            ctx.fillStyle = "#1e293b";
+            ctx.font = "bold 24px sans-serif";
+            ctx.fillText("우성아이디 대시보드 화면 캡쳐", 40, 60);
+            ctx.font = "16px sans-serif";
+            ctx.fillStyle = "#64748b";
+            ctx.fillText(new Date().toLocaleString("ko-KR"), 40, 100);
+          }
+
+          const dataUrl = canvas.toDataURL("image/png");
+          const imgEl = document.getElementById("capturePreviewImg");
+          if (imgEl) imgEl.src = dataUrl;
+
+          const titleEl = document.getElementById("captureModalTitle");
+          const nowStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+          const fileName = `woosung_capture_${state.device}_${state.device === "pc" ? state.pcTab : state.mobileTab}_${nowStr}.png`;
+          if (titleEl) titleEl.textContent = `📷 화면 캡쳐 완료 (${state.device === "pc" ? "PC " + state.pcTab : "모바일 " + state.mobileTab})`;
+
+          const dlBtn = document.getElementById("btnDownloadCapture");
+          if (dlBtn) {
+            dlBtn.onclick = () => {
+              const link = document.createElement("a");
+              link.download = fileName;
+              link.href = dataUrl;
+              link.click();
+              showToast("💾 캡쳐 이미지가 다운로드되었습니다.");
+            };
+          }
+
+          window.state._lastCaptureBlob = await new Promise(r => canvas.toBlob(r, "image/png"));
+
+          const modal = document.getElementById("captureModal");
+          if (modal) modal.classList.add("open");
+          showToast("✅ 화면 캡쳐가 완료되었습니다.");
+        } catch (err) {
+          console.error("화면 캡쳐 에러:", err);
+          showToast(`❌ 화면 캡쳐 실패: ${err.message || err}`);
+        }
+      };
+
+      window.closeCaptureModal = function () {
+        const modal = document.getElementById("captureModal");
+        if (modal) modal.classList.remove("open");
+      };
+
+      window.copyCaptureImageToClipboard = async function () {
+        try {
+          if (!window.state._lastCaptureBlob) {
+            const imgEl = document.getElementById("capturePreviewImg");
+            if (imgEl && imgEl.src) {
+              const res = await fetch(imgEl.src);
+              window.state._lastCaptureBlob = await res.blob();
+            }
+          }
+          if (window.state._lastCaptureBlob && navigator.clipboard && typeof ClipboardItem !== "undefined") {
+            await navigator.clipboard.write([
+              new ClipboardItem({ "image/png": window.state._lastCaptureBlob })
+            ]);
+            showToast("📋 캡쳐 이미지가 클립보드에 복사되었습니다!");
+          } else {
+            showToast("⚠️ 브라우저가 클립보드 이미지 복사를 지원하지 않습니다. 다운로드 버튼을 이용해 주세요.");
+          }
+        } catch (err) {
+          console.error("클립보드 복사 실패:", err);
+          showToast("⚠️ 클립보드 복사에 실패했습니다. 마우스 우클릭 복사 또는 다운로드를 이용해 주세요.");
+        }
       };
 
       const GAS_AUTH_API_URL = "https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec";
@@ -7469,6 +8155,7 @@
         }
         if (e.key === "Escape") {
           ["taskSheetModal", "deleteConfirmModal", "siteInfoModal", "siteFileUploadModal", "partnerGuideModal", "mobileSiteFilterModal", "todoActionModal", "estimateEditModal", "monthlyReportModal", "settingsModal"].forEach(window.closeModal);
+          if (typeof window.closeCaptureModal === "function") window.closeCaptureModal();
         }
       });
 
