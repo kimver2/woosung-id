@@ -1440,17 +1440,32 @@
         const key = Object.keys(map).find((k) => siteName.includes(k) || k.includes(siteName));
         return key ? map[key] : null;
       }
-      function lookupPartnerPhone(partner, manager) {
+      function lookupPartnerPhone(partner) {
+        const cleanRaw = String(partner || "").trim();
+        if (!cleanRaw || ["-", "미등록", "업체 미등록", "미지정", "없음"].includes(cleanRaw)) return "";
         const pMap = (state.dashData && state.dashData.partnerPhoneMap) || {};
-        const mMap = (state.dashData && state.dashData.memberPhoneMap) || {};
-        if (partner) {
-          if (pMap[partner]) return pMap[partner];
-          const clean = partner.split("_").pop().trim();
-          if (pMap[clean]) return pMap[clean];
+        if (pMap[cleanRaw]) return pMap[cleanRaw];
+        const clean = cleanRaw.split("_").pop().trim();
+        if (clean && pMap[clean]) return pMap[clean];
+        if (state.settingsData && Array.isArray(state.settingsData.partners)) {
+          const found = state.settingsData.partners.find((p) => {
+            if (!p) return false;
+            const fName = String(p.fullName || (p.category ? p.category + "_" + p.name : p.name) || "").trim();
+            const nName = String(p.name || "").trim();
+            return fName === cleanRaw || nName === cleanRaw || (clean && (fName === clean || nName === clean));
+          });
+          if (found && found.phone) return String(found.phone).trim();
         }
-        if (manager) {
-          const first = String(manager).split(",")[0].trim();
-          if (mMap[first]) return mMap[first];
+        return "";
+      }
+      function lookupMemberPhone(manager) {
+        const first = String(manager || "").split(",")[0].trim();
+        if (!first) return "";
+        const mMap = (state.dashData && state.dashData.memberPhoneMap) || {};
+        if (mMap[first]) return mMap[first];
+        if (state.settingsData && Array.isArray(state.settingsData.members)) {
+          const found = state.settingsData.members.find((m) => m && String(m.name || "").trim() === first);
+          if (found && found.phone) return String(found.phone).trim();
         }
         return "";
       }
@@ -2442,7 +2457,8 @@
             const isRowChecked = state.checkedTableTaskIds.has(tid);
             const isDone = t.status === "완료";
             const isDelay = t.isDelayed && !isDone;
-            const phone = lookupPartnerPhone(t.partner, t.manager);
+            const hasPartner = Boolean(t.partner && String(t.partner).trim() && !["미등록", "업체 미등록", "-"].includes(String(t.partner).trim()));
+            const phone = hasPartner ? lookupPartnerPhone(t.partner) : "";
             const badgeStyle = isDone ? "background:#dcfce7;color:#15803d;" : isDelay ? "background:#fee2e2;color:#dc2626;" : "background:#dbeafe;color:#1e40af;";
             const badgeLabel = isDone ? "✓ 완료" : isDelay ? "⚠️ 지연" : escHtml(t.status || "예정");
             return `
@@ -2457,7 +2473,7 @@
                 </td>
                 <td>${escHtml(parseYmdFromTask(t) || t.dateDisplay || "-")}</td>
                 <td>👤 ${escHtml(t.manager || "-")}</td>
-                <td>${escHtml(t.partner || "미등록")} ${phone ? `<a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="color:#10b981;font-weight:700;text-decoration:none;margin-left:4px;">📞</a>` : ""}</td>
+                <td>${escHtml(hasPartner ? t.partner : "미등록")}${hasPartner && phone ? ` <a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="color:#10b981;font-weight:700;text-decoration:none;margin-left:4px;">📞</a>` : ""}</td>
                 <td style="color:var(--text-sub);max-width:240px;">${escHtml(t.memo || "-")}</td>
                 <td onclick="event.stopPropagation();" style="white-space:nowrap;">
                   <button type="button" class="btn-tool-tag" onclick="openTaskEditModal('${escJs(tid)}')">수정</button>
@@ -3240,7 +3256,7 @@
               <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMobileTab('calendar')">캘린더 ➔</span>
             </div>
             ${tasks.slice(0, 8).map(({ site, task, ymd }) => {
-              const phone = lookupPartnerPhone(task.partner, task.manager);
+              const phone = lookupPartnerPhone(task.partner);
               const tid = task.id || task.taskId;
               const isDel = Boolean(task.isDelayed || (ymd && ymd < todayYmd));
               return `
@@ -3372,7 +3388,7 @@
         const selEvents = eventsByDay[state.selectedDayStr] || [];
         const selCardsHtml = selEvents.map(({ site, task }) => {
           const info = getSiteInfo(site.siteName);
-          const phone = lookupPartnerPhone(task.partner, task.manager);
+          const phone = lookupPartnerPhone(task.partner);
           const isDel = !isTaskCompleted(task) && (task.isDelayed || state.selectedDayStr < todayYmd);
           const tid = task.id || task.taskId;
           return `
@@ -3457,7 +3473,7 @@
           const nextTask = tasks.find((t) => !isTaskCompleted(t)) || tasks[0];
           const mgrSet = getUniqueSiteManagers(tasks);
           const mgrs = mgrSet.join(", ") || "-";
-          const phone = nextTask ? lookupPartnerPhone(nextTask.partner, nextTask.manager) : "";
+          const phone = nextTask ? lookupPartnerPhone(nextTask.partner) : "";
           const remainingCnt = tasks.filter((t) => !isTaskCompleted(t)).length;
 
           return `
@@ -3723,7 +3739,7 @@
           manager1: task.manager1 || mgrParts[0] || "",
           manager2: task.manager2 || mgrParts[1] || "",
           partner: task.partner || "",
-          partnerPhone: lookupPartnerPhone(task.partner, task.manager),
+          partnerPhone: lookupPartnerPhone(task.partner),
           status: task.status || "예정",
           isShared: !!task.isShared,
           memo: task.memo || "",
@@ -4084,8 +4100,7 @@
       window.onSheetPartnerChange = function (val) {
         const ctx = state.sheetCtx; if (!ctx) return;
         ctx.partner = val;
-        const p = lookupPartnerPhone(val, ctx.manager1);
-        if (p) ctx.partnerPhone = p;
+        ctx.partnerPhone = lookupPartnerPhone(val);
       };
       window.navSameDayTask = function (delta) {
         const ctx = state.sheetCtx;
@@ -4404,7 +4419,7 @@
         const info = getSiteInfo(site.siteName) || {};
         const sup = (state.dashData && state.dashData.siteSuperintendents && state.dashData.siteSuperintendents[0]) || { name: "차정률", phone: "010-8734-8586" };
         const mgr = task.manager || sup.name;
-        const mgrPhone = lookupPartnerPhone("", mgr) || sup.phone;
+        const mgrPhone = lookupMemberPhone(mgr) || sup.phone;
         return [
           `[우성아이디 작업 안내]`,
           `■ 현장명: ${site.siteName}`,
