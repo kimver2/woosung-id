@@ -272,42 +272,57 @@
     .m-site-acc-card {
       background: #ffffff; border: 1px solid var(--border); border-radius: 12px;
       margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-      transition: box-shadow 0.15s ease, border-color 0.15s ease;
+      transition: box-shadow 0.18s ease, border-color 0.18s ease;
     }
     .m-site-acc-card.expanded {
-      border: 1.5px solid #0f766e;
-      box-shadow: 0 6px 16px -4px rgba(15, 118, 110, 0.16);
+      border: 2px solid var(--site-accent, #0f766e);
+      box-shadow: 0 8px 22px -4px color-mix(in srgb, var(--site-accent, #0f766e) 28%, transparent), 0 2px 6px -2px rgba(15, 23, 42, 0.06);
     }
     .m-site-acc-head {
       padding: 11px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      cursor: pointer; background: #ffffff;
+      cursor: pointer; background: #ffffff; transition: background 0.15s ease;
     }
     .m-site-acc-card.expanded .m-site-acc-head {
-      background: #f0fdfa;
-      border-bottom: 1px solid #ccfbf1;
+      background: color-mix(in srgb, var(--site-accent, #0f766e) 12%, #ffffff);
+      border-bottom: 1.5px solid color-mix(in srgb, var(--site-accent, #0f766e) 24%, #e2e8f0);
     }
     .m-site-acc-body {
-      padding: 10px 11px 12px; background: #f8fafc;
+      padding: 11px 11px 13px; background: color-mix(in srgb, var(--site-accent, #0f766e) 4%, #f8fafc);
     }
     .m-site-tasks-bundle {
-      background: #ffffff;
-      border: 1px solid #cbd5e1;
-      border-left: 4px solid #0f766e;
-      border-radius: 10px;
+      background: color-mix(in srgb, var(--site-accent, #0f766e) 8%, #f8fafc);
+      border: 1.5px solid color-mix(in srgb, var(--site-accent, #0f766e) 32%, #cbd5e1);
+      border-left: 5px solid var(--site-accent, #0f766e);
+      border-radius: 11px;
       overflow: hidden;
-      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+      box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--site-accent, #0f766e) 22%, transparent);
+      padding: 4px 4px 6px;
     }
     .m-site-bundle-head {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 8px 10px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0;
+      padding: 8px 10px 9px;
+      background: color-mix(in srgb, var(--site-accent, #0f766e) 16%, #f1f5f9);
+      border-radius: 7px;
+      margin-bottom: 5px;
+      border: 1px solid color-mix(in srgb, var(--site-accent, #0f766e) 22%, #e2e8f0);
     }
     .m-site-bundle-task-row {
       padding: 8px 10px; cursor: pointer; background: #ffffff;
-      border-bottom: 1px solid #f1f5f9; transition: background 0.12s ease;
+      border: 1px solid color-mix(in srgb, var(--site-accent, #0f766e) 16%, #e2e8f0);
+      border-radius: 7px;
+      margin-bottom: 4px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      transition: background 0.12s ease, transform 0.08s ease;
     }
-    .m-site-bundle-task-row:last-child { border-bottom: none; }
-    .m-site-bundle-task-row:active { background: #f8fafc; }
-    .m-site-bundle-task-row.is-delayed { background: #fef2f2; }
+    .m-site-bundle-task-row:last-child { margin-bottom: 0; }
+    .m-site-bundle-task-row:active {
+      background: color-mix(in srgb, var(--site-accent, #0f766e) 6%, #ffffff);
+    }
+    .m-site-bundle-task-row.is-delayed {
+      background: #fff5f5;
+      border-color: #fca5a5;
+      box-shadow: 0 1px 3px rgba(239, 68, 68, 0.12);
+    }
 
     .m-app-body { flex: 1; overflow-y: auto; padding: 12px 12px 84px 12px; }
     .m-page-pane { display: none; }
@@ -3833,7 +3848,7 @@
               return `
                 <div class="m-site-bundle-task-row ${isDel ? "is-delayed" : ""}" onclick="openTaskEditModal('${escJs(tid)}')">
                   <div style="display:flex;align-items:center;gap:6px;">
-                    <input type="checkbox" ${checked ? "checked" : ""} onclick="event.stopPropagation();" onchange="toggleMobileTaskCheck('${escJs(tid)}', this.checked)" style="width:15px;height:15px;accent-color:#0f766e;cursor:pointer;flex-shrink:0;" />
+                    <input type="checkbox" ${checked ? "checked" : ""} onclick="event.stopPropagation();" onchange="toggleMobileTaskCheck('${escJs(tid)}', this.checked)" style="width:15px;height:15px;accent-color:var(--site-accent, #0f766e);cursor:pointer;flex-shrink:0;" />
                     <span title="${t.isShared ? "공유됨" : "미공유"}" style="font-size:11px;flex-shrink:0;">${t.isShared ? "🟦" : "🟥"}</span>
                     <span style="font-size:10px;padding:1.5px 5px;border-radius:4px;font-weight:800;background:${isDel ? "#fee2e2" : (isDone ? "#dcfce7" : "#eff6ff")};color:${isDel ? "#dc2626" : (isDone ? "#059669" : "#1d4ed8")};flex-shrink:0;">${isDel ? "지연 ⚠️" : escHtml(t.status || "예정")}</span>
                     <span style="font-size:12.5px;font-weight:800;color:${isDone ? "#64748b" : "#0f172a"};${isDone ? "text-decoration:line-through;" : ""}overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(t.taskName)}</span>
@@ -3886,11 +3901,11 @@
                   <span class="chip-item ${info.officeNoticeDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;" onclick="togglePreChecklist('${escJs(s.siteName)}', 'officeNoticeDone')">${info.officeNoticeDone ? "✓" : "○"} 관리실신고</span>
                 </div>
 
-                <div class="m-site-tasks-bundle" style="border-left-color:${escHtml(s.colorHex || "#0f766e")};">
+                <div class="m-site-tasks-bundle" style="border-left-color:var(--site-accent, ${escHtml(s.colorHex || "#0f766e")});">
                   <div class="m-site-bundle-head">
-                    <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:800;color:var(--text);cursor:pointer;">
-                      <input type="checkbox" ${allChecked ? "checked" : ""} onchange="toggleMobileSiteAllTasks('${escJs(s.siteKey)}', this.checked)" style="width:15px;height:15px;accent-color:#0f766e;" />
-                      공정 묶음 전체선택 (${tasks.length}건)
+                    <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;color:color-mix(in srgb, var(--site-accent, #0f766e) 80%, #0f172a);cursor:pointer;">
+                      <input type="checkbox" ${allChecked ? "checked" : ""} onchange="toggleMobileSiteAllTasks('${escJs(s.siteKey)}', this.checked)" style="width:15px;height:15px;accent-color:var(--site-accent, #0f766e);" />
+                      공정 묶음 전체선택 <span style="display:inline-flex;align-items:center;background:color-mix(in srgb, var(--site-accent, #0f766e) 20%, #ffffff);color:var(--site-accent, #0f766e);font-weight:800;padding:1px 6px;border-radius:999px;font-size:10px;border:1px solid color-mix(in srgb, var(--site-accent, #0f766e) 30%, transparent);">${tasks.length}건</span>
                     </label>
                     <span style="font-size:10.5px;color:var(--text-muted);font-weight:700;">🟦 공유 / 🟥 미공유</span>
                   </div>
@@ -3902,7 +3917,7 @@
           }
 
           return `
-            <div class="m-site-acc-card ${isExpanded ? "expanded" : ""}" style="${isExpanded ? "border-color:" + escHtml(s.colorHex || "#0f766e") + ";" : ""}">
+            <div class="m-site-acc-card ${isExpanded ? "expanded" : ""}" style="--site-accent:${escHtml(s.colorHex || "#0f766e")};${isExpanded ? "border-color:var(--site-accent);" : ""}">
               <div class="m-site-acc-head" onclick="toggleMobileSiteCard('${escJs(s.siteKey)}')">
                 <div style="min-width:0;flex:1;">
                   <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;">
