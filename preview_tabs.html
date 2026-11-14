@@ -2055,7 +2055,7 @@
           </div>
 
           <div style="display:flex;align-items:center;gap:6px;">
-            <button type="button" onclick="openNewTaskModal('', state.selectedDayStr)" style="border:none;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:800;padding:4px 8px;border-radius:12px;cursor:pointer;">+ 일정</button>
+            <button type="button" id="mHeaderAddBtn" onclick="openNewTaskModal('', state.selectedDayStr)" style="border:none;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:800;padding:4px 8px;border-radius:12px;cursor:pointer;">+ 일정</button>
             <select id="mUserSelector" style="padding:3px 7px;border:1px solid #86efac;background:#f0fdf4;color:#0f766e;font-size:11px;font-weight:700;border-radius:12px;outline:none;" onchange="onUserChanged(this.value)">
               <option value="조항만">조항만</option>
               <option value="송지은">송지은</option>
@@ -2620,6 +2620,12 @@
         if ((Number(site.progressRate) || 0) >= 100) return true;
         return false;
       }
+      function isQuoteTabContext() {
+        const dev = state.device || "pc";
+        const curTab = (dev === "mobile") ? state.mobileTab : state.pcTab;
+        return curTab === "quote" || curTab === "newSite";
+      }
+      window.isQuoteTabContext = isQuoteTabContext;
       function getUniqueSiteManagers(tasks) {
         const seen = [];
         (tasks || []).forEach((t) => {
@@ -6332,14 +6338,22 @@
       };
 
       window.openNewTaskModal = function (presetSiteName, presetDateYmd) {
+        const isQuote = isQuoteTabContext();
+        if (isQuote && !presetSiteName) {
+          openEstimateModal(null);
+          return;
+        }
         const d = presetDateYmd || state.selectedDayStr || getTodayYmd();
         const matchedSiteForPreset = presetSiteName
           ? (getAllSites().find((s) => s.siteName === presetSiteName && s.scope === state.scope)
              || getAllSites().find((s) => s.siteName === presetSiteName && (s.scope || "site") !== "newSite"))
           : null;
+        const initialScope = isQuote
+          ? "newSite"
+          : (matchedSiteForPreset ? (matchedSiteForPreset.scope || "site") : ((state.scope === "newSite" || !state.scope) ? "site" : state.scope));
         state.sheetCtx = {
           mode: "create",
-          scope: matchedSiteForPreset ? matchedSiteForPreset.scope : (state.scope === "newSite" ? "site" : state.scope),
+          scope: initialScope,
           siteName: presetSiteName || "",
           newSiteName: "",
           taskName: "",
@@ -6441,16 +6455,15 @@
         const tasksMaster = getTasksMasterList();
         const partnersMaster = getPartnersMasterList();
         const info = getSiteInfo(ctx.siteName) || {};
+        const isQuote = isQuoteTabContext();
 
-        if (ctx.mode === "create" && ctx.scope === "newSite") {
+        if (ctx.mode === "create" && (ctx.scope === "newSite" || isQuote)) {
+          ctx.scope = "newSite";
           document.getElementById("taskSheetTitle").innerHTML = `📋 신규 현장(신규 견적) 등록`;
           document.getElementById("taskSheetBody").innerHTML = `
             <div class="fg">
               <label>등록 분류 선택</label>
               <div class="seg-row">
-                <button type="button" class="seg-btn" onclick="setSheetField('scope','site')">🏗️ 현장</button>
-                <button type="button" class="seg-btn" onclick="setSheetField('scope','single')">⚡ 단건</button>
-                <button type="button" class="seg-btn" onclick="setSheetField('scope','as')">🔧 AS</button>
                 <button type="button" class="seg-btn active">📋 신규현장</button>
               </div>
             </div>
@@ -6461,6 +6474,10 @@
             <button type="button" class="btn-act-white" onclick="closeModal('taskSheetModal')">취소</button>
             <button type="button" class="btn-act-blue" onclick="closeModal('taskSheetModal'); openEstimateModal(null);">📋 신규 견적 양식 열기</button>`;
           return;
+        }
+
+        if (ctx.mode === "create" && ctx.scope === "newSite") {
+          ctx.scope = "site";
         }
 
         const isEdit = ctx.mode === "edit";
@@ -6562,7 +6579,6 @@
                 <button type="button" class="seg-btn ${ctx.scope === "site" ? "active" : ""}" onclick="setSheetField('scope','site')">🏗️ 현장</button>
                 <button type="button" class="seg-btn ${ctx.scope === "single" ? "active" : ""}" onclick="setSheetField('scope','single')">⚡ 단건</button>
                 <button type="button" class="seg-btn ${ctx.scope === "as" ? "active" : ""}" onclick="setSheetField('scope','as')">🔧 AS</button>
-                <button type="button" class="seg-btn" onclick="setSheetField('scope','newSite')">📋 신규현장</button>
               </div>
             </div>
             <div class="form-grid-2">
@@ -6757,14 +6773,23 @@
           if (pDrop) pDrop.innerHTML = renderSheetPartnerDropdownHtml(ctx.partnerSearchQuery || "");
         }
       }
+      window.renderTaskSheetModal = renderTaskSheetModal;
 
       window.state_sheetUpdate = function (k, v) { if (state.sheetCtx) state.sheetCtx[k] = v; };
       window.setSheetField = function (k, v) {
         if (!state.sheetCtx) return;
-        if (k === "scope" && v === "newSite" && state.sheetCtx.mode === "create") {
-          window.closeModal("taskSheetModal");
-          window.openEstimateModal(null);
-          return;
+        const isQuote = isQuoteTabContext();
+        if (k === "scope") {
+          if (!isQuote && v === "newSite") {
+            v = "site";
+          } else if (isQuote && v !== "newSite") {
+            v = "newSite";
+          }
+          if (v === "newSite" && state.sheetCtx.mode === "create") {
+            window.closeModal("taskSheetModal");
+            window.openEstimateModal(null);
+            return;
+          }
         }
         state.sheetCtx[k] = v;
         renderTaskSheetModal();
@@ -9248,7 +9273,7 @@
             state.scope = "newSite";
             markAllDirty();
           }
-        } else if ((tabKey === "sites" || tabKey === "calendar") && state.scope === "newSite") {
+        } else if (state.scope === "newSite") {
           state.scope = "site";
           state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
           state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
@@ -9300,7 +9325,7 @@
             state.scope = "newSite";
             markAllDirty();
           }
-        } else if ((tabKey === "sites" || tabKey === "calendar") && state.scope === "newSite") {
+        } else if (state.scope === "newSite") {
           state.scope = "site";
           state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
           state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
