@@ -17,3 +17,7 @@ node_modules/
 tmp/
 temp/
 *.tmp
+
+# Excel & Internal Finance Payloads
+*.xlsx
+data/finance_migration_payload.json

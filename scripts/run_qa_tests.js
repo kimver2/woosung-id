@@ -2149,7 +2149,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
 
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
-  assertTest('index.html 내 exec?v=240 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=240'));
+  assertTest('index.html 내 exec?v=241 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=241'));
   assertTest('v2.html, preview_tabs.html, docs/v2.html, docs/preview_tabs.html 4개 파일 100% 동일 동기화 검증',
     v2RootHtml === previewHtml && v2RootHtml === v2DocsHtml && v2RootHtml === previewDocsHtml
   );
@@ -2158,6 +2158,16 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     v2RootHtml.includes('openPromoteEstimateModal') &&
     v2RootHtml.includes('isEstimatePromotedToSite') &&
     v2RootHtml.includes('getDefaultProcessSchedule')
+  );
+  assertTest('v2.html 내 재무 권한 제어(canViewFinance) 및 헤더 그리드 레이아웃 검증',
+    v2RootHtml.includes('function canViewFinance()') &&
+    v2RootHtml.includes('function syncFinanceNavVisibility()') &&
+    v2RootHtml.includes('grid-auto-flow: column; grid-auto-columns: 114px;')
+  );
+  assertTest('현장서식.js 내 FINANCE_DB_SPREADSHEET_ID 상수 및 setupFinanceDbAndMigrate 검증',
+    code.includes('FINANCE_DB_SPREADSHEET_ID = "1rmH7176tFYRk97qGjdI-ztn6UMnWwyNBNl06wexFOYc"') &&
+    code.includes('function setupFinanceDbAndMigrate') &&
+    code.includes('action === "setupFinanceDbAndMigrate"')
   );
 }
 console.log('\n========================================================');

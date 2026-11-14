@@ -17,9 +17,10 @@
  */
 
 // ========================================================
-// [설정] 구글 캘린더 연동 잔여 정리 헬퍼
+// [설정] 구글 캘린더 연동 잔여 정리 헬퍼 & 재무 전용 DB 상수
 // ========================================================
 var DEFAULT_CALENDAR_ID_OR_NAME = "현장 일정";
+var FINANCE_DB_SPREADSHEET_ID = "1rmH7176tFYRk97qGjdI-ztn6UMnWwyNBNl06wexFOYc";
 
 /**
  * [구글 캘린더 연동 완전 제거] 프로젝트 내 모든 캘린더 동기화 트리거 삭제 및 설정 정리
@@ -10337,6 +10338,200 @@ function promoteEstimateToSite(data) {
   }
 }
 
+// ========================================================
+// [재무 전용 DB 연동 및 시트 초기 구축 엔진]
+// ========================================================
+function getOrCreateSheet_(ss, sheetName) {
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+  return sheet;
+}
+
+function ensureSheetDimensions_(sheet, requiredRows, requiredCols) {
+  var currentRows = sheet.getMaxRows();
+  var currentCols = sheet.getMaxColumns();
+  if (currentRows < requiredRows) {
+    sheet.insertRowsAfter(currentRows, requiredRows - currentRows);
+  }
+  if (currentCols < requiredCols) {
+    sheet.insertColumnsAfter(currentCols, requiredCols - currentCols);
+  }
+}
+
+/**
+ * [재무 DB] 5대 시트 초기 구축 및 데이터 마이그레이션 함수
+ * 1. 원본_수금현황
+ * 2. 원본_비용마감
+ * 3. 수금현황 (정규화 DB 시트)
+ * 4. 비용마감 (세로형 정규화 DB 시트)
+ * 5. 비용마감_고정 (마스터 시트)
+ */
+function setupFinanceDbAndMigrate(p) {
+  try {
+    var ssId = (p && p.spreadsheetId) || FINANCE_DB_SPREADSHEET_ID;
+    var ss = SpreadsheetApp.openById(ssId);
+    if (!ss) {
+      return { success: false, error: "재무 DB 스프레드시트를 열 수 없습니다: " + ssId };
+    }
+
+    var payload = (p && p.data) || p || {};
+    var rawCollection = payload.rawCollection || [];
+    var rawExpense = payload.rawExpense || [];
+    var collectionRows = payload.collectionRows || [];
+    var expenseRows = payload.expenseRows || [];
+    var fixedMasterRows = payload.fixedMasterRows || [];
+
+    var headerBg = "#1e293b"; // 진한 네이비/슬레이트 배경
+    var headerColor = "#ffffff"; // 흰색 볼드 글씨
+    var results = {};
+
+    // 1. 원본_수금현황
+    var sheetRawCol = getOrCreateSheet_(ss, "원본_수금현황");
+    sheetRawCol.clear();
+    if (rawCollection && rawCollection.length > 0) {
+      var rLen1 = rawCollection.length;
+      var cLen1 = rawCollection[0].length;
+      ensureSheetDimensions_(sheetRawCol, rLen1 + 5, cLen1 + 2);
+      sheetRawCol.getRange(1, 1, rLen1, cLen1).setValues(rawCollection);
+      sheetRawCol.setFrozenRows(1);
+      sheetRawCol.getRange(1, 1, 1, cLen1).setBackground(headerBg).setFontColor(headerColor).setFontWeight("bold");
+      results.rawCollection = { rows: rLen1, cols: cLen1 };
+    } else {
+      results.rawCollection = { rows: 0, cols: 0 };
+    }
+
+    // 2. 원본_비용마감
+    var sheetRawExp = getOrCreateSheet_(ss, "원본_비용마감");
+    sheetRawExp.clear();
+    if (rawExpense && rawExpense.length > 0) {
+      var rLen2 = rawExpense.length;
+      var cLen2 = rawExpense[0].length;
+      ensureSheetDimensions_(sheetRawExp, rLen2 + 5, cLen2 + 2);
+      sheetRawExp.getRange(1, 1, rLen2, cLen2).setValues(rawExpense);
+      sheetRawExp.setFrozenRows(1);
+      sheetRawExp.getRange(1, 1, 1, cLen2).setBackground(headerBg).setFontColor(headerColor).setFontWeight("bold");
+      results.rawExpense = { rows: rLen2, cols: cLen2 };
+    } else {
+      results.rawExpense = { rows: 0, cols: 0 };
+    }
+
+    // 3. 수금현황 (정규화 DB 시트)
+    // ID | 현장명 | 공사기간 | 담당자 | 구분 | 수금여부 | 계약자명 | 계약금액 | 증감액 | 추가삭제내역 | 공사진행율 | 최종금액 | 계약금 | 착수금 | 중도금1차 | 중도금2차 | 중도금3차 | 잔금 | 미수금 | 계산서발행 | 비고
+    var colHeaders = [
+      "ID", "현장명", "공사기간", "담당자", "구분", "수금여부", "계약자명",
+      "계약금액", "증감액", "추가삭제내역", "공사진행율", "최종금액",
+      "계약금", "착수금", "중도금1차", "중도금2차", "중도금3차",
+      "잔금", "미수금", "계산서발행", "비고"
+    ];
+    var sheetCol = getOrCreateSheet_(ss, "수금현황");
+    sheetCol.clear();
+    ensureSheetDimensions_(sheetCol, Math.max(collectionRows.length + 5, 20), colHeaders.length + 2);
+    sheetCol.getRange(1, 1, 1, colHeaders.length).setValues([colHeaders]);
+    sheetCol.getRange(1, 1, 1, colHeaders.length)
+      .setBackground(headerBg)
+      .setFontColor(headerColor)
+      .setFontWeight("bold")
+      .setHorizontalAlignment("center");
+    sheetCol.setFrozenRows(1);
+
+    if (collectionRows && collectionRows.length > 0) {
+      var maxCols3 = colHeaders.length;
+      var safeRows3 = collectionRows.map(function (r) {
+        var arr = (r || []).slice(0, maxCols3);
+        while (arr.length < maxCols3) arr.push("");
+        return arr;
+      });
+      sheetCol.getRange(2, 1, safeRows3.length, maxCols3).setValues(safeRows3);
+      var colAmountIndices = [8, 9, 12, 13, 14, 15, 16, 17, 18, 19];
+      colAmountIndices.forEach(function (colIdx) {
+        sheetCol.getRange(2, colIdx, safeRows3.length, 1).setNumberFormat("#,##0");
+      });
+      results.collection = { rows: safeRows3.length, cols: maxCols3 };
+    } else {
+      results.collection = { rows: 0, cols: colHeaders.length };
+    }
+
+    // 4. 비용마감 (세로형 정규화 DB 시트)
+    // ID | 정산월 | 항목 | 구분 | 업체 | 구분2 | 현장명 | 청구금액 | 지급금액 | 잔금 | 지급일 | 비고
+    var expHeaders = [
+      "ID", "정산월", "항목", "구분", "업체", "구분2", "현장명",
+      "청구금액", "지급금액", "잔금", "지급일", "비고"
+    ];
+    var sheetExp = getOrCreateSheet_(ss, "비용마감");
+    sheetExp.clear();
+    ensureSheetDimensions_(sheetExp, Math.max(expenseRows.length + 5, 20), expHeaders.length + 2);
+    sheetExp.getRange(1, 1, 1, expHeaders.length).setValues([expHeaders]);
+    sheetExp.getRange(1, 1, 1, expHeaders.length)
+      .setBackground(headerBg)
+      .setFontColor(headerColor)
+      .setFontWeight("bold")
+      .setHorizontalAlignment("center");
+    sheetExp.setFrozenRows(1);
+
+    if (expenseRows && expenseRows.length > 0) {
+      var maxCols4 = expHeaders.length;
+      var safeRows4 = expenseRows.map(function (r) {
+        var arr = (r || []).slice(0, maxCols4);
+        while (arr.length < maxCols4) arr.push("");
+        return arr;
+      });
+      sheetExp.getRange(2, 1, safeRows4.length, maxCols4).setValues(safeRows4);
+      var expAmountIndices = [8, 9, 10];
+      expAmountIndices.forEach(function (colIdx) {
+        sheetExp.getRange(2, colIdx, safeRows4.length, 1).setNumberFormat("#,##0");
+      });
+      results.expense = { rows: safeRows4.length, cols: maxCols4 };
+    } else {
+      results.expense = { rows: 0, cols: expHeaders.length };
+    }
+
+    // 5. 비용마감_고정 (마스터 시트)
+    // ID | 사용여부 | 항목 | 구분 | 업체 | 구분2 | 기본청구액 | 비고
+    var fixedHeaders = [
+      "ID", "사용여부", "항목", "구분", "업체", "구분2", "기본청구액", "비고"
+    ];
+    var sheetFixed = getOrCreateSheet_(ss, "비용마감_고정");
+    sheetFixed.clear();
+    ensureSheetDimensions_(sheetFixed, Math.max(fixedMasterRows.length + 5, 20), fixedHeaders.length + 2);
+    sheetFixed.getRange(1, 1, 1, fixedHeaders.length).setValues([fixedHeaders]);
+    sheetFixed.getRange(1, 1, 1, fixedHeaders.length)
+      .setBackground(headerBg)
+      .setFontColor(headerColor)
+      .setFontWeight("bold")
+      .setHorizontalAlignment("center");
+    sheetFixed.setFrozenRows(1);
+
+    if (fixedMasterRows && fixedMasterRows.length > 0) {
+      var maxCols5 = fixedHeaders.length;
+      var safeRows5 = fixedMasterRows.map(function (r) {
+        var arr = (r || []).slice(0, maxCols5);
+        while (arr.length < maxCols5) arr.push("");
+        return arr;
+      });
+      sheetFixed.getRange(2, 1, safeRows5.length, maxCols5).setValues(safeRows5);
+      sheetFixed.getRange(2, 7, safeRows5.length, 1).setNumberFormat("#,##0");
+      results.fixedMaster = { rows: safeRows5.length, cols: maxCols5 };
+    } else {
+      results.fixedMaster = { rows: 0, cols: fixedHeaders.length };
+    }
+
+    return {
+      success: true,
+      spreadsheetId: ssId,
+      message: "재무 전용 DB 5개 시트 생성 및 초기 데이터 마이그레이션 완료",
+      results: results
+    };
+  } catch (err) {
+    Logger.log("setupFinanceDbAndMigrate error: " + err.toString());
+    return {
+      success: false,
+      error: "setupFinanceDbAndMigrate 실행 실패: " + (err.message || String(err))
+    };
+  }
+}
+
 /**
  * 모바일 웹 드롭다운 상태 변경 화면 (doGet)
  */
@@ -10359,6 +10554,17 @@ function doGet(e) {
   var needSheet = (row >= 2 || !!action || !!targetId || !!targetSite || !!targetTask) && (view !== "dashboard" || !!action);
   var ss = needSheet ? getAppSpreadsheet() : null;
   var sheet = ss ? findSiteScheduleSheet(ss) : null;
+
+  // 0-0-0-Finance) 재무 전용 DB 스프레드시트 5개 시트 초기 구축 및 데이터 마이그레이션 (action=setupFinanceDbAndMigrate)
+  if (action === "setupFinanceDbAndMigrate") {
+    var pFinance = p;
+    if (typeof p.data === "string") {
+      try { pFinance = Object.assign({}, p, { data: JSON.parse(p.data) }); } catch (eFin) {}
+    }
+    var financeRes = setupFinanceDbAndMigrate(pFinance);
+    return ContentService.createTextOutput(JSON.stringify(financeRes))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 
   // 0-0-0-Promote) 신규견적 -> 진행 현장 승격 요청 (action=promoteEstimateToSite)
   if (action === "promoteEstimateToSite") {
@@ -11188,6 +11394,17 @@ function doPost(e) {
     }
 
     var action = p.action;
+
+    // 재무 전용 DB 스프레드시트 5개 시트 초기 구축 및 데이터 마이그레이션
+    if (action === "setupFinanceDbAndMigrate") {
+      var pFinance = p;
+      if (typeof p.data === "string") {
+        try { pFinance = Object.assign({}, p, { data: JSON.parse(p.data) }); } catch (eFin) {}
+      }
+      var financeRes = setupFinanceDbAndMigrate(pFinance);
+      return ContentService.createTextOutput(JSON.stringify(financeRes))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
 
     // 현장 파일 구글 드라이브 업로드
     if (action === "uploadSiteFiles" || action === "uploadSiteFilesToDriveFromWeb") {

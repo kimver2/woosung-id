@@ -722,9 +722,10 @@
       display: none;
     }
     .header-nav-tabs {
-      display: grid; grid-template-columns: repeat(6, 114px); gap: 5px;
+      display: inline-grid; grid-auto-flow: column; grid-auto-columns: 114px; gap: 5px;
       background: #eef2f6; padding: 3px 4px; border-radius: 10px;
       border: 1px solid #cbd5e1;
+      width: max-content;
     }
     .nav-tab-item {
       height: 32px; width: 114px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 4px; font-size: 12.5px;
@@ -2521,6 +2522,28 @@
         if (!authU) return true; // 미인증 상태 또는 noauth/로컬 환경 기본 관리자 권한 허용
         return authU === "조항만" || authU === "admin" || authU === "chohangman";
       }
+      function canViewFinance() {
+        const authU = String(getActualAuthUser() || "").trim().toLowerCase();
+        return authU === "조항만" || authU === "admin" || authU === "chohangman";
+      }
+      function syncFinanceNavVisibility() {
+        const canView = canViewFinance();
+        const pcNavBtn = document.querySelector('.header-nav-tabs .nav-tab-item[data-tab="finance"]');
+        if (pcNavBtn) pcNavBtn.style.display = canView ? "" : "none";
+        const mobNavBtn = document.querySelector('.m-bottom-nav .m-bottom-btn[data-mtab="finance"]');
+        if (mobNavBtn) mobNavBtn.style.display = canView ? "" : "none";
+        const jumpBtn = document.querySelector('.preview-global-bar .pg-jump-btn[onclick*="finance"]');
+        if (jumpBtn) jumpBtn.style.display = canView ? "" : "none";
+
+        if (!canView) {
+          if (state.pcTab === "finance") {
+            window.switchMainTab("home");
+          }
+          if (state.mobileTab === "finance") {
+            window.switchMobileTab("home");
+          }
+        }
+      }
       function getMemberRoleTitle(name) {
         const cleanName = String(name || "").trim();
         if (!cleanName) return "님";
@@ -2583,10 +2606,13 @@
           }
         }
         populateAuthMembersDatalist();
+        syncFinanceNavVisibility();
       }
       window.isUserAssignedTodo = isUserAssignedTodo;
       window.getActualAuthUser = getActualAuthUser;
       window.canSwitchUser = canSwitchUser;
+      window.canViewFinance = canViewFinance;
+      window.syncFinanceNavVisibility = syncFinanceNavVisibility;
       window.syncUserSelectorOptions = syncUserSelectorOptions;
       window.applyAuthenticatedUser = applyAuthenticatedUser;
       function filterRegisteredManagers(rawStr) {
@@ -3593,7 +3619,7 @@
               </div>
             </div>
 
-            <div class="home-kpi-4grid">
+            <div class="home-kpi-4grid" style="${canViewFinance() ? '' : 'grid-template-columns: repeat(3, 1fr);'}">
               <div class="home-kpi-card kpi-blue" onclick="switchMainTab('todo')">
                 <div class="hk-top-row">
                   <div>
@@ -3624,6 +3650,7 @@
                 </div>
                 <div class="hk-sub"><span class="hk-sub-txt">${escHtml(delayedTasks[0] ? delayedTasks[0].site.siteName + " · " + delayedTasks[0].task.taskName : "지연 공정 없음")}</span><span>➔</span></div>
               </div>
+              ${canViewFinance() ? `
               <div class="home-kpi-card kpi-amber" onclick="switchMainTab('finance')">
                 <div class="hk-top-row">
                   <div>
@@ -3633,7 +3660,7 @@
                   <div class="hk-icon-box" style="background:#fffbeb;color:#d97706;">💰</div>
                 </div>
                 <div class="hk-sub"><span class="hk-sub-txt">전체 현장 거래원장 합산</span><span>➔</span></div>
-              </div>
+              </div>` : ""}
             </div>
 
             <div class="home-main-split">
@@ -4987,6 +5014,11 @@
 
       // ================= [PC 탭 6: 재무·원장] =================
       function renderPcFinanceTab() {
+        if (!canViewFinance()) {
+          const el = document.getElementById("pcFinanceMain");
+          if (el) el.innerHTML = `<div style="padding:48px 24px;text-align:center;color:var(--text-muted);font-weight:700;font-size:14px;">재무·원장 조회 권한이 없습니다. (조항만 대표 / 관리자 전용)</div>`;
+          return;
+        }
         const fin = state.financeData || { summary: {}, ledger: [] };
         const q = state.searchQuery.trim();
         const ledger = fin.ledger || [];
@@ -6116,6 +6148,11 @@
       }
 
       function renderMobileFinanceTab() {
+        if (!canViewFinance()) {
+          const el = document.getElementById("m-page-finance");
+          if (el) el.innerHTML = `<div style="padding:48px 20px;text-align:center;color:var(--text-muted);font-weight:700;font-size:13px;">재무·원장 조회 권한이 없습니다. (조항만 대표 / 관리자 전용)</div>`;
+          return;
+        }
         const fin = state.financeData || { summary: {}, ledger: [] };
         document.getElementById("m-page-finance").innerHTML = `
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -9798,6 +9835,9 @@
       };
 
       window.switchMainTab = function (tabKey) {
+        if (tabKey === "finance" && !canViewFinance()) {
+          tabKey = "home";
+        }
         if (state.device === "mobile" && IS_PREVIEW_MODE) window.switchDeviceMode("pc");
         state.pcTab = tabKey;
         state.dirtyPcTabs[tabKey] = true;
@@ -9847,6 +9887,9 @@
       window.resetMobileScrollTop = resetMobileScrollTop;
 
       window.switchMobileTab = function (tabKey) {
+        if (tabKey === "finance" && !canViewFinance()) {
+          tabKey = "home";
+        }
         state.mobileTab = tabKey;
         state.mobileExpandedSiteKeys.clear();
         state.dirtyMobileTabs[tabKey] = true;
@@ -9935,6 +9978,7 @@
         if (mSel) mSel.value = userName;
         if (pcBadge) pcBadge.textContent = userName;
         if (mBadge) mBadge.textContent = "👤 " + userName;
+        syncFinanceNavVisibility();
         state.dirtyPcTabs.home = true;
         state.dirtyMobileTabs.home = true;
         renderActiveViews();
@@ -10700,7 +10744,7 @@
           else if (hash.includes("mtab=sites")) state.mobileTab = "sites";
           else if (hash.includes("mtab=todo")) state.mobileTab = "todo";
           else if (hash.includes("mtab=quote")) state.mobileTab = "quote";
-          else if (hash.includes("mtab=finance")) state.mobileTab = "finance";
+          else if (hash.includes("mtab=finance")) state.mobileTab = canViewFinance() ? "finance" : "home";
           else state.mobileTab = "home";
           window.switchDeviceMode("mobile");
           window.switchMobileTab(state.mobileTab);
@@ -10709,7 +10753,7 @@
           else if (hash.includes("tab=sites")) state.pcTab = "sites";
           else if (hash.includes("tab=todo")) state.pcTab = "todo";
           else if (hash.includes("tab=quote")) state.pcTab = "quote";
-          else if (hash.includes("tab=finance")) state.pcTab = "finance";
+          else if (hash.includes("tab=finance")) state.pcTab = canViewFinance() ? "finance" : "home";
           else state.pcTab = "home";
           window.switchMainTab(state.pcTab);
         }
