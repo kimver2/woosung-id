@@ -1588,7 +1588,8 @@
           </div>
 
           <button type="button" class="btn-header-tool" onclick="openMonthlyReportModal()">📊 월간집계</button>
-          <button type="button" class="btn-header-tool" onclick="openSettingsModal()">⚙️ 설정</button>
+          <button type="button" class="btn-header-tool" onclick="state.settingsTab='tools'; openSettingsModal();" title="시트 정렬 / 아카이브 / 캘린더 동기화 도구">🛠️ 데이터 관리</button>
+          <button type="button" class="btn-header-tool" onclick="state.settingsTab='partners'; openSettingsModal();">⚙️ 설정</button>
           <button type="button" class="sync-btn" onclick="triggerLiveSync(true)">🔄 동기화</button>
           <button type="button" class="btn-header-tool" onclick="logoutDashboardAuth()" title="잠금 / 로그아웃">🔒 로그아웃</button>
         </div>
@@ -1639,6 +1640,7 @@
               <option value="차정률">차정률</option>
             </select>
             <button type="button" class="btn-m-header-capture" onclick="captureCurrentScreen()" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="화면 캡쳐">📸</button>
+            <button type="button" onclick="openSettingsModal()" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="설정 및 도구">⚙️</button>
             <button type="button" onclick="triggerLiveSync(true)" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="새로고침">🔄</button>
             <button type="button" onclick="logoutDashboardAuth()" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="잠금 / 로그아웃">🔒</button>
           </div>
@@ -1909,10 +1911,11 @@
       }
       window.getTodayYmd = getTodayYmd;
       function parseYmdFromTask(task) {
+        if (!task) return "";
         if (task.startDateStr && /^\d{4}-\d{2}-\d{2}/.test(task.startDateStr)) return task.startDateStr.slice(0, 10);
         if (task.dateDisplay) {
-          const m = String(task.dateDisplay).match(/(\d{4})[.\-](\d{2})[.\-](\d{2})/);
-          if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+          const m = String(task.dateDisplay).match(/(\d{4})[.\s\-]+(\d{1,2})[.\s\-]+(\d{1,2})/);
+          if (m) return `${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
         }
         if (task.dateMs) {
           const d = new Date(task.dateMs);
@@ -1923,10 +1926,16 @@
         return "";
       }
       function parseEndYmdFromTask(task, startYmd) {
+        if (!task) return startYmd || "";
         if (task.endDateStr && /^\d{4}-\d{2}-\d{2}/.test(task.endDateStr)) return task.endDateStr.slice(0, 10);
         if (task.dateDisplay) {
-          const ms = String(task.dateDisplay).match(/(\d{4})[.\-](\d{2})[.\-](\d{2})/g);
-          if (ms && ms.length > 1) return ms[1].replace(/\./g, "-");
+          const re = /(\d{4})[.\s\-]+(\d{1,2})[.\s\-]+(\d{1,2})/g;
+          const matches = [];
+          let match;
+          while ((match = re.exec(String(task.dateDisplay))) !== null) {
+            matches.push(`${match[1]}-${String(match[2]).padStart(2, "0")}-${String(match[3]).padStart(2, "0")}`);
+          }
+          if (matches.length > 1) return matches[1];
         }
         return startYmd;
       }
@@ -2142,8 +2151,8 @@
           if (e && e !== s) ymds.push(e);
         });
         if (site.estimateData && site.estimateData.inquiryDate) {
-          const m = String(site.estimateData.inquiryDate).match(/(\d{4})[.\-](\d{2})[.\-](\d{2})/);
-          if (m) ymds.push(`${m[1]}-${m[2]}-${m[3]}`);
+          const m = String(site.estimateData.inquiryDate).match(/(\d{4})[.\s\-]+(\d{1,2})[.\s\-]+(\d{1,2})/);
+          if (m) ymds.push(`${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`);
         }
         if (ymds.length === 0) {
           return { earliest: "", latest: "", earliestMs: 0, latestMs: 0 };
@@ -2157,14 +2166,12 @@
       }
 
       function compareDoneSites(a, b) {
-        const ma = getSiteDateMetrics(a);
-        const mb = getSiteDateMetrics(b);
-        const da = a.latestDateMs || ma.latestMs;
-        const db = b.latestDateMs || mb.latestMs;
+        const da = (typeof a.latestDateMs === "number" && a.latestDateMs > 0) ? a.latestDateMs : (getSiteDateMetrics(a).latestMs || 0);
+        const db = (typeof b.latestDateMs === "number" && b.latestDateMs > 0) ? b.latestDateMs : (getSiteDateMetrics(b).latestMs || 0);
         if (db !== da) return db - da;
-        if (mb.latest && ma.latest && mb.latest !== ma.latest) return mb.latest.localeCompare(ma.latest);
-        const startDiff = (b.earliestDateMs || mb.earliestMs) - (a.earliestDateMs || ma.earliestMs);
-        if (startDiff !== 0) return startDiff;
+        const ea = (typeof a.earliestDateMs === "number" && a.earliestDateMs > 0) ? a.earliestDateMs : (getSiteDateMetrics(a).earliestMs || 0);
+        const eb = (typeof b.earliestDateMs === "number" && b.earliestDateMs > 0) ? b.earliestDateMs : (getSiteDateMetrics(b).earliestMs || 0);
+        if (eb !== ea) return eb - ea;
         return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
       }
 
@@ -2172,8 +2179,8 @@
         const prA = (typeof a.progressRate === "number") ? a.progressRate : 0;
         const prB = (typeof b.progressRate === "number") ? b.progressRate : 0;
         if (prB !== prA) return prB - prA;
-        const da = a.earliestDateMs || (getSiteDateMetrics(a).earliestMs);
-        const db = b.earliestDateMs || (getSiteDateMetrics(b).earliestMs);
+        const da = (typeof a.earliestDateMs === "number" && a.earliestDateMs > 0) ? a.earliestDateMs : (getSiteDateMetrics(a).earliestMs || 0);
+        const db = (typeof b.earliestDateMs === "number" && b.earliestDateMs > 0) ? b.earliestDateMs : (getSiteDateMetrics(b).earliestMs || 0);
         if (da && db && da !== db) return da - db;
         if (da && !db) return -1;
         if (!da && db) return 1;
@@ -2321,17 +2328,27 @@
         site.delayedTasksCount = delayed;
         site.progressRate = validTasks.length ? Math.round((doneValid / validTasks.length) * 1000) / 10 : (tasks.length ? 100 : (Number(site.progressRate) || 0));
         if (site.scope !== "newSite" && tasks.length > 0) {
-          const allDone = (done === tasks.length);
-          site.isAllCompleted = allDone;
-          if (!allDone && site.isArchived) {
-            site.isArchived = false;
-            const restoreSheet = site.scope === "single" ? "단건" : site.scope === "as" ? "AS" : "현장데이터";
-            tasks.forEach((t) => {
-              if (t) {
-                t.isArchived = false;
-                if (t.sheetName === "완료현장") t.sheetName = restoreSheet;
-              }
-            });
+          const allDone = (validTasks.length > 0 && doneValid === validTasks.length);
+          if (allDone) {
+            site.progressRate = 100;
+          }
+          const isServerArchived = Boolean(site.originArchived || site.isArchived || tasks.some((t) => t && (t.sheetName === "완료현장" || t.sheetName === "99_완료현장")));
+          if (isServerArchived) {
+            site.originArchived = true;
+            site.isArchived = true;
+            site.isAllCompleted = true;
+          } else {
+            site.isAllCompleted = allDone;
+            if (!allDone && site.isArchived && !site.originArchived) {
+              site.isArchived = false;
+              const restoreSheet = site.scope === "single" ? "단건" : site.scope === "as" ? "AS" : "현장데이터";
+              tasks.forEach((t) => {
+                if (t) {
+                  t.isArchived = false;
+                  if (t.sheetName === "완료현장" || t.sheetName === "99_완료현장") t.sheetName = restoreSheet;
+                }
+              });
+            }
           }
         }
         site.assignees = getUniqueSiteManagers(tasks);
@@ -3536,9 +3553,14 @@
               <span style="font-size:12px;font-weight:700;color:var(--text-muted);">표시 ${visibleSites.length}개</span>
             </div>
             <div style="display:flex;gap:5px;">
-              <button type="button" class="st-pill ${state.siteSortBy === "progress" ? "active" : ""}" onclick="setSiteSort('progress')">진행률순</button>
-              <button type="button" class="st-pill ${state.siteSortBy === "date" ? "active" : ""}" onclick="setSiteSort('date')">일정순</button>
-              <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
+              ${state.showArchivedSites ? `
+                <button type="button" class="st-pill ${state.siteSortBy !== "name" ? "active" : ""}" onclick="setSiteSort('recent')">최근완료순</button>
+                <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
+              ` : `
+                <button type="button" class="st-pill ${state.siteSortBy === "progress" ? "active" : ""}" onclick="setSiteSort('progress')">진행률순</button>
+                <button type="button" class="st-pill ${state.siteSortBy === "date" ? "active" : ""}" onclick="setSiteSort('date')">일정순</button>
+                <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
+              `}
             </div>
           </div>
           ${visibleSites.length ? `
@@ -4794,9 +4816,19 @@
         });
 
         const toggleBarHtml = `
-          <div style="display:flex;gap:6px;margin-bottom:10px;">
+          <div style="display:flex;gap:6px;margin-bottom:8px;">
             <button type="button" class="m-sites-archived-btn" data-archived="false" onclick="setMobileSitesArchived(false)" style="flex:1;padding:8px 8px;border-radius:8px;border:1px solid ${!state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${!state.showArchivedSites ? "#0f766e" : "#fff"};color:${!state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">🏗️ 진행 현장 ${activeCountAll}</button>
             <button type="button" class="m-sites-archived-btn" data-archived="true" onclick="setMobileSitesArchived(true)" style="flex:1;padding:8px 8px;border-radius:8px;border:1px solid ${state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${state.showArchivedSites ? "#0f766e" : "#fff"};color:${state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">✅ 완료 현장 ${doneCountAll}</button>
+          </div>
+          <div style="display:flex;gap:5px;margin-bottom:10px;justify-content:flex-end;">
+            ${state.showArchivedSites ? `
+              <button type="button" class="st-pill ${state.siteSortBy !== "name" ? "active" : ""}" onclick="setSiteSort('recent')" style="font-size:11px;padding:3px 9px;">최근완료순</button>
+              <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')" style="font-size:11px;padding:3px 9px;">가나다순</button>
+            ` : `
+              <button type="button" class="st-pill ${state.siteSortBy === "progress" ? "active" : ""}" onclick="setSiteSort('progress')" style="font-size:11px;padding:3px 9px;">진행률순</button>
+              <button type="button" class="st-pill ${state.siteSortBy === "date" ? "active" : ""}" onclick="setSiteSort('date')" style="font-size:11px;padding:3px 9px;">일정순</button>
+              <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')" style="font-size:11px;padding:3px 9px;">가나다순</button>
+            `}
           </div>`;
 
         document.getElementById("m-page-sites").innerHTML = toggleBarHtml + (visible.map((s) => {
@@ -4952,7 +4984,7 @@
                     </span>
                     <span style="font-size:11px;font-weight:800;color:${(s.progressRate || 0) >= 80 ? "#059669" : "#0f766e"};flex-shrink:0;">${s.progressRate || 0}%</span>
                   </div>
-                  <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">
+                  <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
                     담당: ${escHtml(mgrs)} · 남은 ${remainingCnt}건 (${s.completedTasksCount || 0}/${s.totalTasksCount || 0})
                     ${s.delayedTasksCount ? ` · <span style="color:#dc2626;font-weight:800;">지연 ${s.delayedTasksCount}</span>` : ""}
                   </div>
@@ -5370,6 +5402,9 @@
               window.history.pushState({ wsModal: id }, "");
             }
           } catch (ePush) {}
+          if (window.parent && window.parent !== window) {
+            try { window.parent.postMessage({ type: "ORCA_SHEET_MODAL_OPEN" }, "*"); } catch (ePm) {}
+          }
         }
       }
       window.closeModal = function (id, fromPopstate) {
@@ -5386,7 +5421,34 @@
             }
           } catch (eBack) {}
         }
+        if (wasOpen && !fromPopstate && window.parent && window.parent !== window) {
+          try { window.parent.postMessage({ type: "ORCA_SHEET_MODAL_CLOSED_BY_UI" }, "*"); } catch (ePm) {}
+        }
       };
+
+      // 부모 창(GitHub Pages 등)과의 postMessage 브릿지 통신
+      window.addEventListener("message", (ev) => {
+        const data = ev && ev.data;
+        if (!data || typeof data !== "object") return;
+        if (data.type === "ORCA_BACK_BUTTON" || data.type === "ORCA_ESCAPE_KEY") {
+          const openModals = Array.from(document.querySelectorAll(".ws-modal-backdrop.open"));
+          if (openModals.length > 0) {
+            const last = openModals[openModals.length - 1];
+            window.closeModal(last.id, true);
+            if (ev.source) {
+              try { ev.source.postMessage({ type: "ORCA_MODAL_CLOSED", id: last.id }, "*"); } catch (eRes) {}
+            }
+          }
+        } else if (data.type === "WS_RESTORE_AUTH") {
+          if (data.user && state.currentUser !== data.user) {
+            state.currentUser = data.user;
+            const sel = document.getElementById("headerUserSelect") || document.getElementById("userSelector") || document.getElementById("mUserSelector");
+            if (sel) sel.value = data.user;
+            markAllDirty();
+            renderActiveViews();
+          }
+        }
+      });
       window.addEventListener("popstate", () => {
         if (_ignoreNextModalPopstate) {
           _ignoreNextModalPopstate = false;
@@ -5756,12 +5818,13 @@
           activeNonNewSites.push(s);
         });
         const curScope = ctx.scope || "site";
+        const siteSortFn = (a, b) => isSiteCompleted(a) ? (isSiteCompleted(b) ? compareDoneSites(a, b) : 1) : (isSiteCompleted(b) ? -1 : compareActiveSites(a, b));
         const matchingSites = activeNonNewSites
           .filter((s) => (s.scope || "site") === curScope)
-          .sort((a, b) => String(a.siteName).localeCompare(String(b.siteName), "ko"));
+          .sort(siteSortFn);
         const otherActiveSites = activeNonNewSites
           .filter((s) => (s.scope || "site") !== curScope)
-          .sort((a, b) => String(a.siteName).localeCompare(String(b.siteName), "ko"));
+          .sort(siteSortFn);
         const scopeTagMap = { site: "[현장] ", single: "[단독] ", as: "[A/S] " };
 
         document.getElementById("taskSheetBody").innerHTML = `
@@ -5801,7 +5864,13 @@
               </div>
             </div>
             ${ctx.siteName === "__NEW__" ? `
-              <div class="fg"><label>새 현장명 입력</label><input class="ws-input" value="${escHtml(ctx.newSiteName || "")}" placeholder="예: 보라매우성 101동 502호" oninput="state_sheetUpdate('newSiteName', this.value)"></div>` : ""}
+              <div class="fg"><label>새 현장명 입력</label><input class="ws-input" value="${escHtml(ctx.newSiteName || "")}" placeholder="예: 보라매우성 101동 502호" oninput="state_sheetUpdate('newSiteName', this.value)"></div>
+              <div class="fg" style="margin-top:4px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#1e3a8a;cursor:pointer;">
+                  <input type="checkbox" id="tsCreateDefaultTasks" ${ctx.createDefaultTasks !== false ? "checked" : ""} onchange="state_sheetUpdate('createDefaultTasks', this.checked)">
+                  기본 공정(상담·철거·목공·마감) 함께 생성
+                </label>
+              </div>` : ""}
           ` : `
             <div class="fg" style="position:relative;">
               <label>공종명 (검색/선택)</label>
@@ -6584,15 +6653,56 @@
             }, state.dashData);
             if (req && typeof req.then === "function") {
               req.then((res) => {
-                if (res && (res.row || res.eventId)) {
-                  if (res.row) newTask.row = res.row;
-                  if (res.eventId) { newTask.id = res.eventId; newTask.taskId = res.eventId; }
+                if (res) {
+                  const serverTaskId = res.taskId || res.id || res.eventId;
+                  if (serverTaskId) { newTask.id = serverTaskId; newTask.taskId = serverTaskId; }
+                  if (res.row) { newTask.row = Number(res.row); }
                   window.WSDataService.saveDashboardCache(state.dashData);
                   markAllDirty();
                   renderActiveViews();
                 }
               });
             }
+          }
+
+          const isBrandNewSite = (ctx.siteName === "__NEW__") || !getAllSites().some((s) => s !== site && s.siteName === finalSiteName);
+          if (isBrandNewSite && ctx.createDefaultTasks !== false) {
+            const defaultTaskNames = ["상담", "철거", "목공", "마감"];
+            defaultTaskNames.forEach((defName) => {
+              if (defName === ctx.taskName.trim()) return;
+              const defId = "task_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+              const defTask = {
+                id: defId, taskId: defId, row: "", taskName: defName,
+                dateDisplay: dateDisp, dateMs: new Date(ctx.startYmd + "T00:00:00").getTime(),
+                timeStr: "", time: "", hasTime: false,
+                startTime: "", endTime: "",
+                startDateStr: ctx.startYmd, endDateStr: ctx.isRange ? ctx.endYmd : ctx.startYmd,
+                partner: "", manager: managerCombined, manager1: ctx.manager1, manager2: ctx.manager2,
+                status: "예정", isShared: ctx.isShared, memo: "",
+                updatedAtMs: nowMs, memoUpdatedAtMs: 0,
+                isToday: ctx.startYmd === todayYmd, isDelayed: false,
+                hasCal: true, scope: ctx.scope, sheetName: targetSheetName, isArchived: false
+              };
+              site.tasks.push(defTask);
+              if (window.WSDataService) {
+                const defReq = window.WSDataService.saveTask(false, {
+                  site: finalSiteName, task: defName, date: dateParam, manager: managerCombined,
+                  status: "예정", shared: ctx.isShared, memo: "", partner: "",
+                  category: ctx.scope, partnerPhone: ""
+                }, state.dashData);
+                if (defReq && typeof defReq.then === "function") {
+                  defReq.then((res) => {
+                    if (res) {
+                      const sId = res.taskId || res.id || res.eventId;
+                      if (sId) { defTask.id = sId; defTask.taskId = sId; }
+                      if (res.row) { defTask.row = Number(res.row); }
+                      window.WSDataService.saveDashboardCache(state.dashData);
+                    }
+                  });
+                }
+              }
+            });
+            recalcSiteStats(site);
           }
           showToast("✅ 새 일정이 등록되었습니다.");
         }
@@ -7730,24 +7840,39 @@
 
       function renderSettingsModal() {
         const s = state.settingsData || { partners: [], tasks: [], members: [] };
-        const tab = state.settingsTab;
+        const tab = state.settingsTab || "partners";
         let contentHtml = "";
 
         if (tab === "partners") {
           contentHtml = `
-            <div class="form-grid-3" style="background:#f8fafc;padding:10px;border-radius:8px;border:1px solid var(--border);">
-              <input class="ws-input" id="stPName" placeholder="업체명 (예: 타일_큐브타일)">
-              <input class="ws-input" id="stPPhone" placeholder="연락처 (010-...)">
-              <button type="button" class="btn-act-blue" onclick="addSettingItem('partners')">+ 거래처 추가</button>
+            <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr 110px;gap:8px;">
+                <input class="ws-input" id="stPName" placeholder="업체명 (예: 큐브타일)">
+                <input class="ws-input" id="stPCat" placeholder="대표공종 (예: 타일, 도배)">
+                <select class="ws-select" id="stPPrio">
+                  <option value="1팀">1팀</option>
+                  <option value="2팀">2팀</option>
+                  <option value="일반" selected>일반</option>
+                  <option value="미지정">미지정</option>
+                </select>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;">
+                <input class="ws-input" id="stPPhone" placeholder="연락처 (010-0000-0000)">
+                <input class="ws-input" id="stPMemo" placeholder="비고 / 특이사항">
+                <button type="button" class="btn-act-blue" onclick="addSettingItem('partners')">+ 거래처 추가</button>
+              </div>
             </div>
             <div class="table-container" style="max-height:340px;overflow-y:auto;">
               <table class="clean-table">
-                <thead><tr><th>거래처명</th><th>연락처</th><th style="width:120px;">순서/삭제</th></tr></thead>
+                <thead><tr><th style="width:70px;">공종</th><th>거래처명</th><th style="width:65px;">팀</th><th>연락처</th><th>비고</th><th style="width:110px;">순서/삭제</th></tr></thead>
                 <tbody>
                   ${(s.partners || []).map((p, idx) => `
                     <tr>
-                      <td><strong>${escHtml(p.fullName || (p.category ? p.category + "_" + p.name : p.name))}</strong></td>
+                      <td><span style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px;font-weight:700;font-size:11px;">${escHtml(p.category || p.biz || "시공")}</span></td>
+                      <td><strong>${escHtml(p.name || p.fullName)}</strong></td>
+                      <td><span style="font-weight:700;color:${p.priority === "1팀" ? "#2563eb" : p.priority === "2팀" ? "#0f766e" : "var(--text-sub)"};font-size:11.5px;">${escHtml(p.priority || "일반")}</span></td>
                       <td>${escHtml(p.phone || "-")}</td>
+                      <td style="font-size:11.5px;color:var(--text-sub);max-width:140px;">${escHtml(p.note || p.memo || "-")}</td>
                       <td style="white-space:nowrap;">
                         <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${idx},-1)">▲</button>
                         <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${idx},1)">▼</button>
@@ -7779,31 +7904,74 @@
                 </tbody>
               </table>
             </div>`;
-        } else {
+        } else if (tab === "members") {
           contentHtml = `
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;background:#f8fafc;padding:10px;border-radius:8px;border:1px solid var(--border);">
-              <input class="ws-input" id="stMName" placeholder="이름">
-              <input class="ws-input" id="stMRole" placeholder="직책 (소장)">
-              <input class="ws-input" id="stMPhone" placeholder="연락처">
-              <button type="button" class="btn-act-blue" onclick="addSettingItem('members')">+ 추가</button>
+            <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:center;">
+                <input class="ws-input" id="stMName" placeholder="이름 (예: 홍길동)">
+                <input class="ws-input" id="stMRole" placeholder="직급 (소장/대표/과장)">
+                <input class="ws-input" id="stMPhone" placeholder="연락처 (010-0000-0000)">
+                <button type="button" class="btn-act-blue" onclick="addSettingItem('members')">+ 추가</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#1e3a8a;cursor:pointer;">
+                  <input type="checkbox" id="stMRecv" checked>
+                  알림톡 / 모닝 브리핑 수신
+                </label>
+                <input class="ws-input" id="stMNote" placeholder="비고 / 메모" style="flex:1;">
+              </div>
             </div>
             <div class="table-container" style="max-height:340px;overflow-y:auto;">
               <table class="clean-table">
-                <thead><tr><th>이름</th><th>직책</th><th>연락처</th><th style="width:120px;">순서/삭제</th></tr></thead>
+                <thead><tr><th>이름</th><th>직급</th><th>연락처</th><th style="width:90px;text-align:center;">알림 수신</th><th>비고</th><th style="width:110px;">순서/삭제</th></tr></thead>
                 <tbody>
-                  ${(s.members || []).map((m, idx) => `
+                  ${(s.members || []).map((m, idx) => {
+                    const isRecv = m.receive !== false && m.notifyEnabled !== false;
+                    return `
                     <tr>
                       <td><strong>${escHtml(m.name)}</strong></td>
                       <td>${escHtml(m.role || "-")}</td>
                       <td>${escHtml(m.phone || "-")}</td>
+                      <td style="text-align:center;">
+                        <input type="checkbox" ${isRecv ? "checked" : ""} onchange="toggleMemberNotify(${idx}, this.checked)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
+                      </td>
+                      <td style="font-size:11.5px;color:var(--text-sub);">${escHtml(m.note || "-")}</td>
                       <td style="white-space:nowrap;">
                         <button type="button" class="btn-tool-tag" onclick="moveSettingItem('members',${idx},-1)">▲</button>
                         <button type="button" class="btn-tool-tag" onclick="moveSettingItem('members',${idx},1)">▼</button>
                         <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="delSettingItem('members',${idx})">삭제</button>
                       </td>
-                    </tr>`).join("")}
+                    </tr>`;
+                  }).join("")}
                 </tbody>
               </table>
+            </div>`;
+        } else {
+          contentHtml = `
+            <div style="display:flex;flex-direction:column;gap:12px;padding:8px 0;">
+              <div style="background:#f8fafc;padding:14px;border-radius:10px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                <div>
+                  <div style="font-weight:800;font-size:13.5px;color:#0f172a;">📅 시트 날짜순 전체 정렬</div>
+                  <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">현장데이터, 단건, AS, 완료현장 시트의 모든 공정을 날짜순으로 재정렬하고 아코디언 그룹을 복구합니다.</div>
+                </div>
+                <button type="button" class="btn-act-blue" onclick="executeSystemAction('sortScheduleSheet')">정렬 실행</button>
+              </div>
+
+              <div style="background:#f8fafc;padding:14px;border-radius:10px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                <div>
+                  <div style="font-weight:800;font-size:13.5px;color:#0f172a;">📦 완료 현장 시트 아카이빙</div>
+                  <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">모든 공정이 완료된 현장 블록을 '완료현장' 시트로 이동하여 현장데이터 시트를 가볍고 빠르게 유지합니다.</div>
+                </div>
+                <button type="button" class="btn-act-blue" onclick="executeSystemAction('archiveCompletedSites')">아카이브 실행</button>
+              </div>
+
+              <div style="background:#f8fafc;padding:14px;border-radius:10px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                <div>
+                  <div style="font-weight:800;font-size:13.5px;color:#0f172a;">🗓️ 구글 캘린더 동기화</div>
+                  <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">구글 캘린더와의 최신 일정 상태를 점검하고 동기화를 수행합니다.</div>
+                </div>
+                <button type="button" class="btn-act-blue" onclick="executeSystemAction('syncGoogleCalendar')">동기화 실행</button>
+              </div>
             </div>`;
         }
 
@@ -7812,6 +7980,7 @@
             <button type="button" class="seg-btn ${tab === "partners" ? "active" : ""}" onclick="state.settingsTab='partners'; renderSettingsModal_safe()">🤝 거래처 (${(s.partners || []).length})</button>
             <button type="button" class="seg-btn ${tab === "tasks" ? "active" : ""}" onclick="state.settingsTab='tasks'; renderSettingsModal_safe()">🏷️ 공종 (${(s.tasks || []).length})</button>
             <button type="button" class="seg-btn ${tab === "members" ? "active" : ""}" onclick="state.settingsTab='members'; renderSettingsModal_safe()">👥 구성원 (${(s.members || []).length})</button>
+            <button type="button" class="seg-btn ${tab === "tools" ? "active" : ""}" onclick="state.settingsTab='tools'; renderSettingsModal_safe()">🛠️ 데이터 관리</button>
           </div>
           ${contentHtml}
         `;
@@ -7821,13 +7990,42 @@
         `;
       }
       window.renderSettingsModal_safe = renderSettingsModal;
+      window.toggleMemberNotify = function (idx, checked) {
+        if (state.settingsData && state.settingsData.members && state.settingsData.members[idx]) {
+          state.settingsData.members[idx].receive = checked;
+          state.settingsData.members[idx].notifyEnabled = checked;
+        }
+      };
+      window.executeSystemAction = function (act) {
+        if (!window.WSDataService) return;
+        showToast("⚙️ 작업을 실행하고 있습니다...");
+        let p = null;
+        if (act === "sortScheduleSheet") p = window.WSDataService.sortScheduleSheet();
+        else if (act === "archiveCompletedSites") p = window.WSDataService.archiveCompletedSites();
+        else if (act === "syncGoogleCalendar") p = window.WSDataService.syncGoogleCalendar();
+        if (p && typeof p.then === "function") {
+          p.then((res) => {
+            const msg = (res && res.message) || "작업이 성공적으로 완료되었습니다.";
+            showToast("✅ " + msg);
+            if (act === "sortScheduleSheet" || act === "archiveCompletedSites") {
+              window.triggerLiveSync(false);
+            }
+          }).catch((err) => {
+            showToast("⚠️ 오류: " + (err.message || String(err)));
+          });
+        }
+      };
       window.addSettingItem = function (kind) {
         const s = state.settingsData;
         if (kind === "partners") {
-          const full = document.getElementById("stPName").value.trim();
+          const name = document.getElementById("stPName").value.trim();
+          const category = document.getElementById("stPCat").value.trim();
+          const priority = document.getElementById("stPPrio").value;
           const phone = document.getElementById("stPPhone").value.trim();
-          if (!full) return showToast("⚠️ 거래처명을 입력하세요.");
-          s.partners.unshift({ category: "", name: full, phone, fullName: full });
+          const note = document.getElementById("stPMemo").value.trim();
+          if (!name) return showToast("⚠️ 거래처명을 입력하세요.");
+          const fullName = category ? `${category}_${name}` : name;
+          s.partners.unshift({ name, category, priority, phone, note, memo: note, fullName });
         } else if (kind === "tasks") {
           const name = document.getElementById("stTName").value.trim();
           if (!name) return showToast("⚠️ 공종명을 입력하세요.");
@@ -7835,7 +8033,11 @@
         } else {
           const name = document.getElementById("stMName").value.trim();
           if (!name) return showToast("⚠️ 이름을 입력하세요.");
-          s.members.push({ name, role: document.getElementById("stMRole").value.trim() || "소장", phone: document.getElementById("stMPhone").value.trim() });
+          const role = document.getElementById("stMRole").value.trim() || "소장";
+          const phone = document.getElementById("stMPhone").value.trim();
+          const recv = document.getElementById("stMRecv") ? document.getElementById("stMRecv").checked : true;
+          const note = document.getElementById("stMNote") ? document.getElementById("stMNote").value.trim() : "";
+          s.members.push({ name, role, phone, receive: recv, notifyEnabled: recv, note });
         }
         renderSettingsModal();
       };
@@ -7878,18 +8080,25 @@
         const newEnd = addDaysYmd(targetYmd, Math.max(0, dur));
         const todayYmd = getTodayYmd();
 
+        const existingTime = task.timeStr || task.time || "";
         task.startDateStr = targetYmd;
         task.endDateStr = newEnd;
-        task.dateDisplay = newEnd > targetYmd ? `${formatKoreanDateLabel(targetYmd)} ~ ${formatKoreanDateLabel(newEnd)}` : formatKoreanDateLabel(targetYmd);
+        const baseDateDisp = newEnd > targetYmd ? `${formatKoreanDateLabel(targetYmd)} ~ ${formatKoreanDateLabel(newEnd)}` : formatKoreanDateLabel(targetYmd);
+        task.dateDisplay = existingTime ? `${baseDateDisp} ${existingTime}` : baseDateDisp;
         task.dateMs = new Date(targetYmd + "T00:00:00").getTime();
         task.isToday = targetYmd === todayYmd;
         task.isDelayed = targetYmd < todayYmd && task.status !== "완료";
         recalcSiteStats(site);
 
+        let dateParam = newEnd > targetYmd ? `${targetYmd} ~ ${newEnd}` : targetYmd;
+        if (existingTime) {
+          dateParam += ` ${existingTime}`;
+        }
+
         if (window.WSDataService) {
           window.WSDataService.moveTaskDate({
             row: task.row || "", site: site.siteName, task: task.taskName,
-            date: newEnd > targetYmd ? `${targetYmd} ~ ${newEnd}` : targetYmd,
+            date: dateParam,
             sheetName: task.sheetName || "현장데이터",
             isArchived: wasArchived, origDate: origDateStr, origMgr: task.manager || "",
             id: task.taskId || task.id, taskId: task.taskId || task.id
@@ -8351,7 +8560,13 @@
           if (updated) {
             sanitizeUnregisteredMembers();
             syncUserSelectorOptions();
-            state.checkedSiteKeys = null;
+            if (state.checkedSiteKeys instanceof Set) {
+              const allKeys = new Set(getAllSites().map((s) => s.siteKey));
+              const retained = new Set([...state.checkedSiteKeys].filter((k) => allKeys.has(k)));
+              state.checkedSiteKeys = retained.size > 0 ? retained : null;
+            } else {
+              state.checkedSiteKeys = null;
+            }
             markAllDirty();
             renderActiveViews();
           }
@@ -8528,6 +8743,9 @@
           try { localStorage.removeItem(AUTH_COOKIE_NAME); localStorage.removeItem(AUTH_USER_COOKIE); } catch (e) {}
           setTopSavedCookie(AUTH_COOKIE_NAME, "", -1);
           setTopSavedCookie(AUTH_USER_COOKIE, "", -1);
+        }
+        if (window.parent && window.parent !== window) {
+          try { window.parent.postMessage({ type: "WS_SAVE_AUTH", token, user, keep: keepPersistent }, "*"); } catch (eAuthPm) {}
         }
       }
       function clearTopAuthData() {
@@ -8717,6 +8935,10 @@
         window.__initialRenderMs = performance.now() - T0;
         const badge = document.getElementById("perfBadge");
         if (badge) badge.textContent = `⚡ 분리 데이터(${state.syncSource === "snapshot" ? "스냅샷" : "캐시"}) · 초기 렌더 ${window.__initialRenderMs.toFixed(1)}ms`;
+
+        if (window.parent && window.parent !== window) {
+          try { window.parent.postMessage({ type: "DASHBOARD_READY" }, "*"); } catch (eRdy) {}
+        }
 
         if (location.protocol.startsWith("http")) {
           setTimeout(() => window.triggerLiveSync(false), 120);

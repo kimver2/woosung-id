@@ -274,6 +274,18 @@
       return this.callGasApi("toggleSitePreChecklist", payload);
     },
 
+    sortScheduleSheet: function () {
+      return this.callGasApi("sortScheduleSheet", {});
+    },
+
+    archiveCompletedSites: function () {
+      return this.callGasApi("archiveCompletedSites", {});
+    },
+
+    syncGoogleCalendar: function () {
+      return this.callGasApi("syncGoogleCalendar", {});
+    },
+
     saveTodo: function (isEdit, payload, todoData) {
       if (todoData) this.saveTodoCache(todoData);
       if (isEdit) {

@@ -10044,6 +10044,110 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  // 0-0-0-SiteInfo) 현장 상세 정보(주소, 도어락, 연락처, 메모, 드라이브 링크 등) 일괄 저장 (action=saveSiteInfo)
+  if (action === "saveSiteInfo") {
+    var sInfoSite = p.siteName || p.site || p.siteId || targetSite || "";
+    var sInfoPayload = {};
+    if (p.data) {
+      try { sInfoPayload = typeof p.data === "string" ? JSON.parse(p.data) : p.data; } catch (eP) { sInfoPayload = {}; }
+    } else {
+      sInfoPayload = p;
+    }
+    var sAddr = sInfoPayload.address !== undefined ? sInfoPayload.address : p.address;
+    var sPwd = sInfoPayload.doorPassword !== undefined ? sInfoPayload.doorPassword : (sInfoPayload.doorlock !== undefined ? sInfoPayload.doorlock : (p.doorPassword || p.doorlock || p.password));
+    var sPhone = sInfoPayload.officePhone !== undefined ? sInfoPayload.officePhone : (sInfoPayload.mgmtPhone !== undefined ? sInfoPayload.mgmtPhone : (sInfoPayload.managerPhone !== undefined ? sInfoPayload.managerPhone : (p.officePhone || p.mgmtPhone || p.managerPhone || p.clientPhone)));
+    var sDrive = sInfoPayload.driveUrl !== undefined ? sInfoPayload.driveUrl : (sInfoPayload.driveLink !== undefined ? sInfoPayload.driveLink : (p.driveUrl || p.driveLink));
+    var sMemo = sInfoPayload.memo !== undefined ? sInfoPayload.memo : p.memo;
+
+    var sConsent = sInfoPayload.consentDone !== undefined ? sInfoPayload.consentDone : (sInfoPayload.preChecklist ? sInfoPayload.preChecklist.consent : (p.consentDone !== undefined ? p.consentDone : undefined));
+    var sElevator = sInfoPayload.elevatorCoverDone !== undefined ? sInfoPayload.elevatorCoverDone : (sInfoPayload.preChecklist ? sInfoPayload.preChecklist.protection : (p.elevatorCoverDone !== undefined ? p.elevatorCoverDone : undefined));
+    var sNotice = sInfoPayload.officeNoticeDone !== undefined ? sInfoPayload.officeNoticeDone : (sInfoPayload.preChecklist ? sInfoPayload.preChecklist.report : (p.officeNoticeDone !== undefined ? p.officeNoticeDone : undefined));
+
+    var saveObj = {};
+    if (sAddr !== undefined) saveObj.address = sAddr;
+    if (sPwd !== undefined) saveObj.doorPassword = sPwd;
+    if (sPhone !== undefined) saveObj.officePhone = sPhone;
+    if (sDrive !== undefined) saveObj.driveUrl = sDrive;
+    if (sMemo !== undefined) saveObj.memo = sMemo;
+    if (sConsent !== undefined) saveObj.consentDone = (sConsent === true || String(sConsent).toUpperCase() === "TRUE");
+    if (sElevator !== undefined) saveObj.elevatorCoverDone = (sElevator === true || String(sElevator).toUpperCase() === "TRUE");
+    if (sNotice !== undefined) saveObj.officeNoticeDone = (sNotice === true || String(sNotice).toUpperCase() === "TRUE");
+
+    var saveRes = saveFullSiteInfoFromWeb(sInfoSite, saveObj);
+    return ContentService.createTextOutput(JSON.stringify(saveRes)).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 0-0-0-Checklist) 착공 필수 체크리스트 항목 토글 (action=toggleSitePreChecklist)
+  if (action === "toggleSitePreChecklist") {
+    var tSite = p.siteName || p.site || targetSite || "";
+    var fKey = p.key || p.field || "";
+    if (fKey === "consent" || fKey === "consentDone") fKey = "consentDone";
+    else if (fKey === "protection" || fKey === "elevatorCover" || fKey === "elevatorCoverDone") fKey = "elevatorCoverDone";
+    else if (fKey === "report" || fKey === "officeNotice" || fKey === "officeNoticeDone") fKey = "officeNoticeDone";
+
+    var fVal = false;
+    if (p.value !== undefined) {
+      fVal = (p.value === true || String(p.value).toUpperCase() === "TRUE");
+    } else if (p.checked !== undefined) {
+      fVal = (p.checked === true || String(p.checked).toUpperCase() === "TRUE");
+    } else {
+      var curMap = getSiteInfoMap(ss || getAppSpreadsheet(), true);
+      var curInfo = curMap[tSite] || curMap[tSite.replace(/\s+/g, "")] || {};
+      fVal = !curInfo[fKey];
+    }
+
+    var toggleRes = saveSiteInfoFieldFromWeb(tSite, fKey, fVal);
+    return ContentService.createTextOutput(JSON.stringify(toggleRes)).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 0-0-0-SortSheet) 시트 날짜순 정렬 (action=sortScheduleSheet)
+  if (action === "sortScheduleSheet") {
+    var ssSort = ss || getAppSpreadsheet();
+    var sortRes = ssSort ? sortAllScheduleSheetsByDate(ssSort, true) : { totalCount: 0 };
+    var sortedCnt = (sortRes && typeof sortRes.totalCount === "number") ? sortRes.totalCount : (Number(sortRes) || 0);
+    var mainSh = ssSort ? findSiteScheduleSheet(ssSort) : null;
+    if (mainSh) {
+      try { groupSheetRowsBySite(mainSh, false); } catch (eGrp) {}
+    }
+    invalidateDashboardServerCache();
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      message: "시트 날짜순 정렬이 완료되었습니다. (총 " + sortedCnt + "개 현장 정렬)",
+      sortedCount: sortedCnt,
+      sheetCounts: sortRes
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 0-0-0-ArchiveSites) 완료 현장 시트 아카이빙 (action=archiveCompletedSites)
+  if (action === "archiveCompletedSites") {
+    var archRes = { movedSitesCount: 0, movedRowsCount: 0, siteNames: [] };
+    try {
+      archRes = archiveCompletedSiteBlocks(false);
+    } catch (eArch) {
+      Logger.log("archiveCompletedSites error: " + eArch.toString());
+      archRes = { movedSitesCount: 0, movedRowsCount: 0, siteNames: [], error: eArch.message || String(eArch) };
+    }
+    invalidateDashboardServerCache();
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      message: "완료 현장 아카이빙이 완료되었습니다. (총 " + (archRes.movedSitesCount || 0) + "개 현장, " + (archRes.movedRowsCount || 0) + "개 공정 이동)",
+      result: archRes
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 0-0-0-SyncCal) 구글 캘린더 동기화 실행 (action=syncGoogleCalendar)
+  if (action === "syncGoogleCalendar") {
+    try {
+      syncRecentSiteSchedulesToGoogleCalendar();
+    } catch (eSyncCal) {
+      Logger.log("syncGoogleCalendar error: " + eSyncCal.toString());
+    }
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      message: "구글 캘린더 동기화가 성공적으로 실행되었습니다."
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
   // 0-0-0-Upload) 현장 파일 구글 드라이브 업로드 (GET 폴백)
   if (action === "uploadSiteFiles" || action === "uploadSiteFilesToDriveFromWeb") {
     var uSite = p.siteName || p.site || targetSite || "";
@@ -10589,6 +10693,11 @@ function doPost(e) {
       var uploadRes = uploadSiteFilesToDriveFromWeb(siteName, filesPayload, clientDriveUrl);
       return ContentService.createTextOutput(JSON.stringify(uploadRes))
         .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 기타 모든 데이터 수정/저장/조회 액션은 doGet 라우터와 100% 호환 연동
+    if (action) {
+      return doGet({ parameter: p });
     }
 
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: "알 수 없는 action: " + action }))
@@ -13512,6 +13621,22 @@ function getSidebarDashboardData(forceRefresh) {
       }
     } catch(ePOnce) {}
 
+    var siteInfoMap = getSiteInfoMap(ss, true);
+    for (var sli = 0; sli < sitesList.length; sli++) {
+      var sItem = sitesList[sli];
+      var sInfo = siteInfoMap[sItem.siteName] || siteInfoMap[sItem.siteName.replace(/\s+/g, "")] || siteInfoMap[sItem.siteName.replace(/\s+/g, " ")] || null;
+      if (sInfo) {
+        sItem.siteInfo = sInfo;
+        sItem.preChecklist = {
+          consent: !!sInfo.consentDone,
+          protection: !!sInfo.elevatorCoverDone,
+          report: !!sInfo.officeNoticeDone
+        };
+      } else {
+        sItem.preChecklist = { consent: false, protection: false, report: false };
+      }
+    }
+
     var resultPayload = {
       kpi: {
         totalSites: siteOrder.length,
@@ -13539,7 +13664,7 @@ function getSidebarDashboardData(forceRefresh) {
       siteSuperintendents: getSiteSuperintendents(ss),
       holidays: getKoreanHolidaysMap(ss),
       sites: sitesList,
-      siteInfoMap: getSiteInfoMap(ss, true)
+      siteInfoMap: siteInfoMap
     };
 
     try {
@@ -13564,6 +13689,13 @@ function getSidebarDashboardData(forceRefresh) {
       siteInfoMap: {}
     };
   }
+}
+
+/**
+ * 웹 대시보드 데이터 조회 엔드포인트 호환 별칭 (getDashboardDataFromWeb)
+ */
+function getDashboardDataFromWeb(force) {
+  return getSidebarDashboardData(force);
 }
 
 /**
