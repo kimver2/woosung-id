@@ -44,6 +44,10 @@
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      max-width: 100%;
+      overflow-x: hidden;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
       background: var(--bg);
@@ -98,6 +102,7 @@
       justify-content: center;
       align-items: stretch;
       width: 100%;
+      transform: none !important;
     }
     body.preview-shell .device-viewport-wrapper {
       align-items: flex-start;
@@ -453,15 +458,15 @@
     }
     .m-cal-pill.light-bg .m-cal-pill-time { background: rgba(15,23,42,0.14); color: #0f172a; }
     @keyframes calSlideFromRight {
-      0% { opacity: 0.35; transform: translateX(36px); }
-      100% { opacity: 1; transform: translateX(0); }
+      0% { opacity: 0.35; transform: translateX(24px); }
+      100% { opacity: 1; transform: none; }
     }
     @keyframes calSlideFromLeft {
-      0% { opacity: 0.35; transform: translateX(-36px); }
-      100% { opacity: 1; transform: translateX(0); }
+      0% { opacity: 0.35; transform: translateX(-24px); }
+      100% { opacity: 1; transform: none; }
     }
-    .cal-slide-next { animation: calSlideFromRight 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-    .cal-slide-prev { animation: calSlideFromLeft 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+    .cal-slide-next { animation: calSlideFromRight 0.2s cubic-bezier(0.22, 1, 0.36, 1); }
+    .cal-slide-prev { animation: calSlideFromLeft 0.2s cubic-bezier(0.22, 1, 0.36, 1); }
     .cal-weather-badge {
       display: inline-flex; align-items: center; gap: 3px;
       font-size: 9.5px; font-weight: 700; color: #334155;
@@ -639,10 +644,12 @@
     /* 실제 모바일 브라우저 환경: 100dvh + 문서 스크롤 + 하단 고정 내비게이션으로 주소창/하단바에 가리지 않음 */
     body:not(.preview-shell) .mobile-phone-frame {
       width: 100%; max-width: 100%; min-height: 100vh; min-height: 100dvh; height: auto;
-      border: none; border-radius: 0; box-shadow: none; overflow: visible;
+      border: none; border-radius: 0; box-shadow: none; overflow-x: hidden; overflow-y: visible;
+      transform: none !important;
     }
     body:not(.preview-shell) .mobile-screen-inner {
-      min-height: 100vh; min-height: 100dvh; height: auto; overflow: visible; display: flex; flex-direction: column;
+      min-height: 100vh; min-height: 100dvh; height: auto; overflow-x: hidden; overflow-y: visible; display: flex; flex-direction: column;
+      transform: none !important;
     }
     body:not(.preview-shell) .m-header-bar { position: sticky; top: 0; z-index: 200; }
     body:not(.preview-shell) .m-search-wrap { position: sticky; top: 49px; z-index: 199; }
@@ -652,13 +659,39 @@
       padding: 12px 12px calc(88px + env(safe-area-inset-bottom, 0px)) 12px;
     }
     body:not(.preview-shell) .m-bottom-nav {
-      position: fixed; bottom: 0; left: 0; right: 0;
+      position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important;
       height: calc(64px + env(safe-area-inset-bottom, 0px));
       padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px)) 6px;
-      z-index: 950;
+      z-index: 950 !important;
       box-shadow: 0 -3px 12px rgba(15, 23, 42, 0.08);
       box-sizing: border-box;
       background: #ffffff;
+      transform: none !important;
+      contain: paint;
+    }
+    @media (max-width: 860px) {
+      body.preview-shell .preview-global-bar { display: none !important; }
+      body.preview-shell .device-viewport-wrapper { padding: 0 !important; background: transparent !important; }
+      body.preview-shell .mobile-phone-frame {
+        width: 100% !important; max-width: 100% !important; min-height: 100vh !important; min-height: 100dvh !important;
+        height: auto !important; margin: 0 !important; padding: 0 !important; border: none !important;
+        border-radius: 0 !important; box-shadow: none !important; background: var(--bg) !important;
+        transform: none !important;
+      }
+      body.preview-shell .mobile-screen-inner {
+        min-height: 100vh !important; min-height: 100dvh !important; height: auto !important;
+        overflow-x: hidden !important; overflow-y: visible !important; border-radius: 0 !important;
+        transform: none !important;
+      }
+      body.preview-shell .m-status-bar { display: none !important; }
+      body.preview-shell .m-bottom-nav {
+        position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important;
+        height: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+        padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px)) 6px !important;
+        z-index: 950 !important;
+        transform: none !important;
+        contain: paint;
+      }
     }
 
     .m-card-box {
@@ -1674,6 +1707,10 @@
     .m-cal-capture-area {
       background: var(--bg, #f8fafc);
       border-radius: 8px;
+      overflow-x: clip;
+    }
+    #m-page-calendar {
+      overflow-x: clip;
     }
     .ws-modal-card.narrow { max-width: 420px; }
     @keyframes modalPop { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
@@ -2055,7 +2092,7 @@
           </div>
 
           <div style="display:flex;align-items:center;gap:6px;">
-            <button type="button" id="mHeaderAddBtn" onclick="openNewTaskModal('', state.selectedDayStr)" style="border:none;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:800;padding:4px 8px;border-radius:12px;cursor:pointer;">+ 일정</button>
+            <button type="button" id="mHeaderAddBtn" onclick="openNewTaskFromHeader()" style="border:none;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:800;padding:4px 8px;border-radius:12px;cursor:pointer;">+ 일정</button>
             <select id="mUserSelector" style="padding:3px 7px;border:1px solid #86efac;background:#f0fdf4;color:#0f766e;font-size:11px;font-weight:700;border-radius:12px;outline:none;" onchange="onUserChanged(this.value)">
               <option value="조항만">조항만</option>
               <option value="송지은">송지은</option>
@@ -3786,6 +3823,15 @@
           }
           state._lastCalSlideDir = "";
           setupCalendarSwipe(pcCalEl);
+          setTimeout(() => {
+            if (pcCalEl) {
+              const animated = pcCalEl.querySelectorAll(".cal-slide-next, .cal-slide-prev");
+              animated.forEach((el) => {
+                el.classList.remove("cal-slide-next", "cal-slide-prev");
+                el.style.transform = "none";
+              });
+            }
+          }, 240);
           return;
         }
 
@@ -3832,6 +3878,15 @@
         `;
         state._lastCalSlideDir = "";
         setupCalendarSwipe(pcCalEl);
+        setTimeout(() => {
+          if (pcCalEl) {
+            const animated = pcCalEl.querySelectorAll(".cal-slide-next, .cal-slide-prev");
+            animated.forEach((el) => {
+              el.classList.remove("cal-slide-next", "cal-slide-prev");
+              el.style.transform = "none";
+            });
+          }
+        }, 240);
       }
 
       function renderPcSiteTaskRowsHtml(filteredRows) {
@@ -5379,6 +5434,15 @@
         `;
         state._lastCalSlideDir = "";
         setupCalendarSwipe(mCalEl);
+        setTimeout(() => {
+          if (mCalEl) {
+            const animated = mCalEl.querySelectorAll(".cal-slide-next, .cal-slide-prev");
+            animated.forEach((el) => {
+              el.classList.remove("cal-slide-next", "cal-slide-prev");
+              el.style.transform = "none";
+            });
+          }
+        }, 240);
       }
 
       function renderMobileSiteTasksListHtml(filteredTasks) {
@@ -6027,6 +6091,8 @@
           }
           const searchWrap = document.getElementById("mSearchWrap") || document.querySelector(".m-search-wrap");
           if (searchWrap) searchWrap.style.display = showSearchFilter ? "" : "none";
+          const addBtn = document.getElementById("mHeaderAddBtn");
+          if (addBtn) addBtn.textContent = (state.mobileTab === "quote" || state.mobileTab === "newSite") ? "+ 신규견적" : "+ 일정";
           renderMobileFilterBar();
           const tab = state.mobileTab;
           if (state.dirtyMobileTabs[tab]) {
@@ -6080,7 +6146,9 @@
         let tStartX = 0, tStartY = 0, tStartTime = 0, tTracking = false;
         containerEl.addEventListener("touchstart", (e) => {
           if (!e.touches || e.touches.length !== 1) { tTracking = false; return; }
-          if (e.target && e.target.closest("input, textarea, select")) { tTracking = false; return; }
+          if (e.target && e.target.closest("button, a, input, select, textarea, .m-bottom-nav, .m-bottom-btn, .cal-event-pill, .m-cal-pill, .m-cal-week-pill, .cal-day-add-btn")) {
+            tTracking = false; return;
+          }
           tStartX = e.touches[0].clientX;
           tStartY = e.touches[0].clientY;
           tStartTime = Date.now();
@@ -6382,6 +6450,14 @@
         };
         renderTaskSheetModal();
         openModal("taskSheetModal");
+      };
+
+      window.openNewTaskFromHeader = function () {
+        if (isQuoteTabContext()) {
+          openEstimateModal(null);
+        } else {
+          openNewTaskModal("", state.selectedDayStr);
+        }
       };
 
       window.openNewTaskOnCurrentDate = function () {
@@ -9348,6 +9424,8 @@
         const filterBar = document.getElementById("mFilterBar");
         if (searchWrap) searchWrap.style.display = showSearchFilter ? "" : "none";
         if (filterBar) filterBar.style.display = showSearchFilter ? "" : "none";
+        const addBtn = document.getElementById("mHeaderAddBtn");
+        if (addBtn) addBtn.textContent = (tabKey === "quote" || tabKey === "newSite") ? "+ 신규견적" : "+ 일정";
 
         resetMobileScrollTop();
         renderActiveViews();
