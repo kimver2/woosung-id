@@ -51,6 +51,10 @@
       display: block;
       background-color: #f8fafc;
     }
+    input::-webkit-calendar-picker-indicator {
+      display: none !important;
+      -webkit-appearance: none;
+    }
     /* 네이티브 앱 프리미엄 브랜드 스플래시 화면 (토스/카카오/슬랙 스타일) */
     #loadingOverlay {
       position: absolute;
@@ -171,14 +175,15 @@
         <img src="./icon-192.png" alt="우성아이디" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:16px;">
       </div>
       <h2 style="margin:0 0 18px 0;font-size:20px;font-weight:900;color:#0f172a;letter-spacing:-0.4px;">우성아이디</h2>
-      <input type="text" id="topAccessNameInput" autocomplete="username" placeholder="이름" onkeydown="if(event.key==='Enter'){var p=document.getElementById('topAccessPinInput');if(p)p.focus();}" style="width:100%;box-sizing:border-box;padding:12px 16px;margin-bottom:10px;border:2px solid #cbd5e1;border-radius:12px;font-size:16px;font-weight:800;text-align:center;outline:none;color:#0f172a;background:#f8fafc;transition:all 0.15s;" onfocus="this.style.borderColor='#2563eb';this.style.background='#ffffff';">
-      <input type="password" id="topAccessPinInput" inputmode="text" autocomplete="current-password" placeholder="비밀번호 (PIN)" onkeydown="if(event.key==='Enter')submitTopAccessPin()" style="width:100%;box-sizing:border-box;padding:12px 16px;border:2px solid #cbd5e1;border-radius:12px;font-size:18px;font-weight:800;text-align:center;letter-spacing:4px;outline:none;color:#0f172a;background:#f8fafc;transition:all 0.15s;" onfocus="this.style.borderColor='#2563eb';this.style.background='#ffffff';">
-      <div style="margin:4px 0 12px;display:flex;align-items:center;justify-content:center;">
+      <input type="text" id="topAccessNameInput" autocomplete="username" placeholder="이름" onkeydown="if(event.key==='Enter'){var p=document.getElementById('topAccessPinInput');if(p)p.focus();}" style="width:100%;box-sizing:border-box;padding:12px 16px;margin-bottom:10px;border:2px solid #cbd5e1;border-radius:12px;font-size:16px;font-weight:800;text-align:center;letter-spacing:normal;outline:none;color:#0f172a;background:#f8fafc;transition:all 0.15s;" onfocus="this.style.borderColor='#2563eb';this.style.background='#ffffff';">
+      <input type="password" id="topAccessPinInput" inputmode="text" autocomplete="current-password" placeholder="비밀번호 (PIN)" onkeydown="if(event.key==='Enter')submitTopAccessPin()" style="width:100%;box-sizing:border-box;padding:12px 16px;border:2px solid #cbd5e1;border-radius:12px;font-size:16px;font-weight:800;text-align:center;letter-spacing:normal;outline:none;color:#0f172a;background:#f8fafc;transition:all 0.15s;" onfocus="this.style.borderColor='#2563eb';this.style.background='#ffffff';">
+      <div style="margin:4px 0 6px;display:flex;align-items:center;justify-content:center;">
         <label style="display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;font-size:13px;font-weight:700;color:#475569;user-select:none;">
           <input type="checkbox" id="topAccessKeepChk" checked style="width:16px;height:16px;cursor:pointer;accent-color:#2563eb;margin:0;">
           <span>자동 로그인</span>
         </label>
       </div>
+      <div style="font-size:11px;color:#94a3b8;font-weight:500;margin:0 0 10px;line-height:1.4;text-align:center;">※ 5회 연속 실패 시 3분간 입력이 제한됩니다.</div>
       <div id="topAccessPinError" style="display:none;margin-bottom:8px;font-size:12px;font-weight:700;color:#dc2626;">❌ 등록된 이름이 아니거나 비밀번호가 일치하지 않습니다.</div>
       <button type="button" id="topAccessPinBtn" onclick="submitTopAccessPin()" style="width:100%;padding:13px;background:#2563eb;color:#ffffff;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(37,99,235,0.35);transition:background 0.15s;">로그인</button>
     </div>
@@ -188,7 +193,7 @@
   <iframe
     id="appFrame"
     credentialless
-    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=236"
+    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=237"
     allow="clipboard-write; camera; geolocation"
     onload="hideLoading()">
   </iframe>

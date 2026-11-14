@@ -1844,14 +1844,28 @@
     .ws-auth-input {
       width: 100%; box-sizing: border-box; padding: 12px 14px; margin-bottom: 10px;
       border: 1.5px solid #cbd5e1; border-radius: 11px;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
       font-size: 15px; font-weight: 700; text-align: center; outline: none; transition: border-color 0.15s;
       color: #0f172a; background: #fff;
+      letter-spacing: normal;
+    }
+    .ws-auth-input::-webkit-calendar-picker-indicator {
+      display: none !important;
+      -webkit-appearance: none;
     }
     .ws-auth-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
-    .ws-auth-input.pin-input { letter-spacing: 3px; font-size: 17px; }
+    .ws-auth-input.pin-input {
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: normal;
+    }
     .ws-auth-keep {
       display: flex; align-items: center; justify-content: center; gap: 7px;
-      margin: 4px 0 12px; font-size: 13px; color: #475569; cursor: pointer; font-weight: 600; user-select: none;
+      margin: 4px 0 6px; font-size: 13px; color: #475569; cursor: pointer; font-weight: 600; user-select: none;
+    }
+    .ws-auth-hint {
+      font-size: 11px; color: #94a3b8; font-weight: 500; margin: 0 0 10px; line-height: 1.4; text-align: center;
     }
     .ws-auth-error {
       min-height: 18px; font-size: 12px; color: #dc2626; font-weight: 700; margin-bottom: 8px;
@@ -1923,7 +1937,7 @@
         <img src="./icon-192.png" alt="우성아이디" class="ws-auth-logo">
       </div>
       <h2 id="topAccessTitle" class="ws-auth-title">우성아이디</h2>
-      <input type="text" id="topAccessNameInput" list="wsMembersAuthDl" class="ws-auth-input"
+      <input type="text" id="topAccessNameInput" class="ws-auth-input"
              placeholder="이름" autocomplete="username"
              onkeydown="if(event.key==='Enter'){ const p=document.getElementById('topAccessPinInput'); if(p) p.focus(); }">
       <datalist id="wsMembersAuthDl"></datalist>
@@ -1934,6 +1948,7 @@
         <input type="checkbox" id="topAccessKeepChk" checked style="width:16px;height:16px;cursor:pointer;accent-color:#2563eb;">
         <span>자동 로그인</span>
       </label>
+      <div class="ws-auth-hint">※ 5회 연속 실패 시 3분간 입력이 제한됩니다.</div>
       <div id="topAccessPinError" class="ws-auth-error"></div>
       <button type="button" id="topAccessPinBtn" class="ws-auth-btn" onclick="submitTopAccessPin()">로그인</button>
     </div>
