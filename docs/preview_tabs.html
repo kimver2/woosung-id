@@ -2330,6 +2330,25 @@
       const IS_PREVIEW_MODE = location.pathname.includes("preview_tabs") || location.search.includes("preview=1");
       if (IS_PREVIEW_MODE) document.body.classList.add("preview-shell");
 
+      function getTodayYmd() {
+        try {
+          const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" });
+          const ymd = formatter.format(new Date());
+          if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+        } catch (_) {}
+        const now = new Date();
+        const kst = new Date(now.getTime() + (9 * 60 + now.getTimezoneOffset()) * 60000);
+        const y = kst.getFullYear();
+        const m = String(kst.getMonth() + 1).padStart(2, "0");
+        const d = String(kst.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+      }
+      window.getTodayYmd = getTodayYmd;
+
+      const _initTodayYmd = getTodayYmd();
+      const _initCalYear = Number(_initTodayYmd.slice(0, 4));
+      const _initCalMonth = Number(_initTodayYmd.slice(5, 7));
+
       const state = window.state = {
         dashData: null,
         todoData: null,
@@ -2344,10 +2363,11 @@
         scope: "site",
         memberFilter: "",
         searchQuery: "",
-        calYear: 2026,
-        calMonth: 11,
+        calYear: _initCalYear,
+        calMonth: _initCalMonth,
         calViewMode: "month",
-        selectedDayStr: "2026-11-13",
+        selectedDayStr: _initTodayYmd,
+        userSelectedCalDay: false,
         mobileCalMode: "month",
         checkedSiteKeys: null,
         selectedSiteKey: null,
@@ -2386,7 +2406,7 @@
         syncTime: "",
         sheetCtx: null,
         guideCtx: null,
-        reportCtx: { year: 2026, month: 11, tab: "partner", scope: "all", query: "" },
+        reportCtx: { year: _initCalYear, month: _initCalMonth, tab: "partner", scope: "all", query: "" },
         settingsTab: "partners",
         uploadFiles: []
       };
@@ -2400,11 +2420,6 @@
         if (str === null || str === undefined) return "";
         return String(str).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n");
       }
-      function getTodayYmd() {
-        const s = (state.dashData && state.dashData.todayStr) || "2026.11.13";
-        return s.replace(/\./g, "-").slice(0, 10);
-      }
-      window.getTodayYmd = getTodayYmd;
       function parseYmdFromTask(task) {
         if (!task) return "";
         if (task.startDateStr && /^\d{4}-\d{2}-\d{2}/.test(task.startDateStr)) return task.startDateStr.slice(0, 10);
@@ -3452,49 +3467,6 @@
         renderActiveViews();
       };
 
-      function buildProcessReportData(user, todayYmd) {
-        const d = new Date(todayYmd + "T00:00:00");
-        const day = d.getDay();
-        const diffToMon = (day === 0 ? -6 : 1) - day;
-        const weekMon = addDaysYmd(todayYmd, diffToMon);
-        const weekSun = addDaysYmd(weekMon, 6);
-
-        const activeConstructionSites = getAllSites().filter((s) => (s.scope || "site") === "site" && !isSiteCompleted(s));
-        const userActiveSites = activeConstructionSites.filter((s) => (s.tasks || []).some((t) => !isTaskCompleted(t) && taskMatchesMember(t, user)));
-        const targetSites = userActiveSites.length ? userActiveSites : activeConstructionSites;
-        targetSites.sort(compareActiveSites);
-
-        const myTasks = [];
-        targetSites.forEach((site) => {
-          (site.tasks || []).forEach((task) => {
-            if (isTaskCompleted(task)) return;
-            if (userActiveSites.length && !taskMatchesMember(task, user)) return;
-            myTasks.push({ site, task, ymd: parseYmdFromTask(task) });
-          });
-        });
-
-        const thisWeekTasks = myTasks.filter((x) => {
-          if (!x.ymd) return false;
-          return x.ymd >= todayYmd && x.ymd <= (weekSun < todayYmd ? addDaysYmd(todayYmd, 6) : weekSun);
-        }).sort((a, b) => String(a.ymd).localeCompare(String(b.ymd)));
-
-        const delayedTasks = myTasks.filter((x) => Boolean(x.task.isDelayed || (x.ymd && x.ymd < todayYmd)))
-          .sort((a, b) => String(a.ymd || "").localeCompare(String(b.ymd || "")));
-
-        const activeAsSites = getAllSites().filter((s) => s.scope === "as" && !isSiteCompleted(s));
-        const asSites = activeAsSites.length ? activeAsSites : getAllSites().filter((s) => s.scope === "as").slice(0, 3);
-
-        return {
-          targetSites,
-          myTasks,
-          thisWeekTasks,
-          delayedTasks,
-          asSites,
-          weekRangeStr: `${weekMon.slice(5).replace("-", "/")} ~ ${weekSun.slice(5).replace("-", "/")}`
-        };
-      }
-      window.buildProcessReportData = buildProcessReportData;
-
       // ================= [PC 탭 1: 홈 — 모던 벤토 카드 (완료 항목 제외 & To-Do 최상단 배치)] =================
       function renderPcHomeTab() {
         const user = state.user;
@@ -3548,7 +3520,6 @@
         const myTodos = allTodos.filter((t) => isUserAssignedTodo(t, user));
         const myPendingTodos = myTodos.filter((t) => t.status !== "완료");
         const myPayable = (state.financeData && state.financeData.summary && state.financeData.summary.totalPayable) || 0;
-        const processReport = buildProcessReportData(user, todayYmd);
 
         // 1) 최상단 To-Do 2열 카드 그리드 (완료된 To-Do 제외)
         const todoItemsHtml = myPendingTodos.slice(0, 8).map((t) => {
@@ -3674,7 +3645,6 @@
                   <p>진행 중인 현장과 남은 업무만 간추려 한눈에 확인하세요.</p>
                   <div class="home-hero-chips">
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecTodo')">✅ 미완료 To-Do ${myPendingTodos.length}건</span>
-                    <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecProcessReport')">📊 공정 리포트</span>
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecTasks')">🔨 오늘 공정 ${todayTasks.length}건</span>
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecSites')">🏢 담당 현장 ${mySites.length}개소</span>
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecQuotes')">📋 신규 견적 ${activeNewQuotes.length}건</span>
@@ -3744,96 +3714,6 @@
                     </div>
                   </div>
                   <div class="home-todo-grid">${todoItemsHtml}</div>
-                </div>
-
-                <!-- 📊 내 공정 리포트 섹션 -->
-                <div class="home-panel-box" id="homeSecProcessReport">
-                  <div class="hp-header">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                      <span class="hp-title">📊 내 공정 리포트</span>
-                      <span style="font-size:11.5px;color:#64748b;font-weight:600;">(${escHtml(user)} 담당 진행 현장 공정률 및 주간·A/S 종합 브리핑)</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                      <a class="hp-link" onclick="switchMainTab('calendar')">캘린더 ➔</a>
-                      <a class="hp-link" onclick="switchMainTab('sites')">현장 상세 ➔</a>
-                    </div>
-                  </div>
-
-                  <!-- 1. 이번 주 예정 / 지연 / 최근 A/S 3대 핵심 요약 바 -->
-                  <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;margin-bottom:14px;">
-                    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 12px;cursor:pointer;transition:all 0.14s ease;" onclick="switchMainTab('calendar')">
-                      <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <span style="font-size:11.5px;font-weight:800;color:#166534;">📅 이번 주 예정</span>
-                        <span style="font-size:11.5px;color:#15803d;font-weight:900;background:#dcfce7;padding:2px 7px;border-radius:999px;">${processReport.thisWeekTasks.length}건</span>
-                      </div>
-                      <div style="font-size:11px;color:#475569;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                        ${processReport.thisWeekTasks[0] ? `<strong>${escHtml(processReport.thisWeekTasks[0].site.siteName)}</strong> · ${escHtml(processReport.thisWeekTasks[0].task.taskName)}` : "이번 주 예정 공정 없음"}
-                      </div>
-                    </div>
-
-                    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;cursor:pointer;transition:all 0.14s ease;" onclick="openDelayedSitesFromHome(false)">
-                      <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <span style="font-size:11.5px;font-weight:800;color:#991b1b;">⚠️ 지연 / 확인</span>
-                        <span style="font-size:11.5px;color:#dc2626;font-weight:900;background:#fee2e2;padding:2px 7px;border-radius:999px;">${processReport.delayedTasks.length}건</span>
-                      </div>
-                      <div style="font-size:11px;color:#475569;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                        ${processReport.delayedTasks[0] ? `<strong>${escHtml(processReport.delayedTasks[0].site.siteName)}</strong> · ${escHtml(processReport.delayedTasks[0].task.taskName)}` : "지연 공정 없음"}
-                      </div>
-                    </div>
-
-                    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;cursor:pointer;transition:all 0.14s ease;" onclick="onCategoryClicked('as')">
-                      <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <span style="font-size:11.5px;font-weight:800;color:#1e40af;">🔧 최근 접수 A/S</span>
-                        <span style="font-size:11.5px;color:#2563eb;font-weight:900;background:#dbeafe;padding:2px 7px;border-radius:999px;">${processReport.asSites.length}건</span>
-                      </div>
-                      <div style="font-size:11px;color:#475569;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                        ${processReport.asSites[0] ? `<strong>${escHtml(processReport.asSites[0].siteName)}</strong> · ${escHtml((processReport.asSites[0].tasks && processReport.asSites[0].tasks[0] && processReport.asSites[0].tasks[0].taskName) || "A/S 접수")}` : "진행 중인 A/S 없음"}
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 2. 담당 현장별 진행률 요약 (진행률 % 프로그레스 바 + 남은 공정 / 지연 공정 건수) -->
-                  <div style="margin-bottom:12px;">
-                    <div style="font-size:12px;font-weight:800;color:#334155;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
-                      <span>🏢 담당 현장별 진행률 요약 (${mySites.length}개소)</span>
-                      <span style="font-size:11px;color:#64748b;">클릭 시 현장 상세로 바로 이동</span>
-                    </div>
-                    <div class="home-sites-mini-grid">
-                      ${mySitesCardsHtml || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;padding:12px;text-align:center;background:#f8fafc;border-radius:8px;">진행 중인 현장이 없습니다.</div>`}
-                    </div>
-                  </div>
-
-                  <!-- 3. 이번 주 예정 & 최근 A/S 핵심 요약 목록 -->
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;background:#f8fafc;padding:10px;border-radius:9px;border:1px solid #e2e8f0;">
-                    <div>
-                      <div style="font-size:11.5px;font-weight:800;color:#0f172a;margin-bottom:6px;display:flex;justify-content:space-between;">
-                        <span>📅 이번 주 핵심 공정</span>
-                        <span style="font-size:10.5px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMainTab('calendar')">캘린더 ➔</span>
-                      </div>
-                      <div style="display:flex;flex-direction:column;gap:5px;">
-                        ${processReport.thisWeekTasks.slice(0, 3).map((x) => `
-                          <div style="display:flex;justify-content:space-between;align-items:center;background:#ffffff;padding:6px 9px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid #e2e8f0;" onclick="openTaskEditModal('${escJs(x.task.id || x.task.taskId)}')">
-                            <span style="font-weight:700;color:#1e3a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">${escHtml(x.ymd.slice(5))} [${escHtml(x.site.siteName)}]</span>
-                            <span style="color:#0f766e;font-weight:800;flex-shrink:0;">${escHtml(x.task.taskName)}</span>
-                          </div>
-                        `).join("") || `<div style="font-size:11px;color:#94a3b8;padding:4px 0;">이번 주 예정 공정이 없습니다.</div>`}
-                      </div>
-                    </div>
-                    <div>
-                      <div style="font-size:11.5px;font-weight:800;color:#0f172a;margin-bottom:6px;display:flex;justify-content:space-between;">
-                        <span>🔧 최근 접수 A/S</span>
-                        <span style="font-size:10.5px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="onCategoryClicked('as')">A/S 목록 ➔</span>
-                      </div>
-                      <div style="display:flex;flex-direction:column;gap:5px;">
-                        ${processReport.asSites.slice(0, 3).map((s) => `
-                          <div style="display:flex;justify-content:space-between;align-items:center;background:#ffffff;padding:6px 9px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid #e2e8f0;" onclick="openSiteDetail('${escJs(s.siteKey)}')">
-                            <span style="font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">${escHtml(s.siteName)}</span>
-                            <span style="color:#dc2626;font-weight:800;flex-shrink:0;">${escHtml((s.tasks && s.tasks[0] && s.tasks[0].taskName) || "A/S 접수")}</span>
-                          </div>
-                        `).join("") || `<div style="font-size:11px;color:#94a3b8;padding:4px 0;">진행 중인 A/S가 없습니다.</div>`}
-                      </div>
-                    </div>
-                  </div>
                 </div>
 
                 <!-- 2순위: 주요 현장 공정 카드 그리드 -->
@@ -5741,7 +5621,6 @@
         const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s));
         const todos = ((state.todoData && state.todoData.list) || []).filter((t) => isUserAssignedTodo(t, user));
         const pendingTodos = todos.filter((t) => t.status !== "완료");
-        const processReport = buildProcessReportData(filterMember, todayYmd);
 
         document.getElementById("m-page-home").innerHTML = `
           <div class="m-home-hero" style="background:linear-gradient(135deg,#134e4a 0%,#0f766e 60%,#0d9488 100%);border-radius:14px;padding:15px 16px;color:#fff;margin-bottom:12px;box-shadow:0 8px 18px -6px rgba(15,118,110,0.4);">
@@ -5754,7 +5633,6 @@
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecTodo" onclick="scrollAndHighlightHomeSection('mHomeSecTodo')">✅ To-Do ${pendingTodos.length}건</button>
-              <button type="button" class="m-hero-chip-btn" data-target="mHomeSecProcessReport" onclick="scrollAndHighlightHomeSection('mHomeSecProcessReport')">📊 공정 리포트</button>
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecTasks" onclick="scrollAndHighlightHomeSection('mHomeSecTasks')">🔨 오늘 공정 ${todayTasks.length}건</button>
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecSites" onclick="scrollAndHighlightHomeSection('mHomeSecSites')">🏢 담당 현장 ${mySites.length}개소</button>
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecQuotes" onclick="scrollAndHighlightHomeSection('mHomeSecQuotes')">📋 신규 견적 ${activeNewQuotes.length}건</button>
@@ -5802,68 +5680,6 @@
                 </div>`;
               }).join("") || `<div style="color:var(--text-muted);">남은 To-Do가 없습니다.</div>`}
             </div>
-          </div>
-
-          <!-- 📊 내 공정 리포트 섹션 -->
-          <div class="m-card-box" id="mHomeSecProcessReport" style="border-top:3px solid #0f766e;">
-            <div class="m-card-title-row">
-              <span class="m-card-title">📊 내 공정 리포트</span>
-              <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMobileTab('sites')">현장 ➔</span>
-            </div>
-
-            <!-- 1. 3대 핵심 요약 타일 -->
-            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;margin-bottom:10px;">
-              <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;" onclick="switchMobileTab('calendar')">
-                <div style="font-size:10px;font-weight:700;color:#166534;">이번주 예정</div>
-                <div style="font-size:15px;font-weight:800;color:#15803d;margin-top:2px;">${processReport.thisWeekTasks.length}건</div>
-              </div>
-              <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;" onclick="openDelayedSitesFromHome(true)">
-                <div style="font-size:10px;font-weight:700;color:#991b1b;">지연 공정</div>
-                <div style="font-size:15px;font-weight:800;color:#dc2626;margin-top:2px;">${processReport.delayedTasks.length}건</div>
-              </div>
-              <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;" onclick="onMScopeClick('as')">
-                <div style="font-size:10px;font-weight:700;color:#1e40af;">접수 A/S</div>
-                <div style="font-size:15px;font-weight:800;color:#2563eb;margin-top:2px;">${processReport.asSites.length}건</div>
-              </div>
-            </div>
-
-            <!-- 2. 담당 현장별 진행률 요약 (프로그레스 바 + 남은/지연 건수) -->
-            <div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:6px;">🏢 담당 현장별 진행률</div>
-            <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;">
-              ${mySites.slice(0, 8).map((s) => {
-                const pct = s.progressRate || 0;
-                const col = pct >= 80 ? "#10b981" : pct >= 40 ? "#2563eb" : "#f59e0b";
-                const remainingCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t)).length;
-                const delayCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t) && (t.isDelayed || (parseYmdFromTask(t) && parseYmdFromTask(t) < todayYmd))).length;
-                return `
-                  <div onclick="openSiteDetailMobile('${escJs(s.siteKey)}')" style="min-width:148px;background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:8px 9px;flex-shrink:0;cursor:pointer;">
-                    <div style="font-size:11.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><span style="color:${escHtml(s.colorHex || "#2563eb")};">●</span> ${escHtml(s.siteName)}</div>
-                    <div style="height:5px;border-radius:999px;background:#e2e8f0;margin:5px 0;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${col};"></div></div>
-                    <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700;">
-                      <span style="color:${col};">${pct}%</span>
-                      <span style="color:${delayCnt > 0 ? '#dc2626' : '#64748b'};">${delayCnt > 0 ? '⚠️지연 ' + delayCnt : '남은 ' + remainingCnt}</span>
-                    </div>
-                  </div>`;
-              }).join("") || `<div style="font-size:11px;color:var(--text-muted);">진행 중인 현장이 없습니다.</div>`}
-            </div>
-
-            <!-- 3. 핵심 예정 / A/S 바로가기 링크 리스트 -->
-            ${processReport.thisWeekTasks.length > 0 || processReport.asSites.length > 0 ? `
-              <div style="border-top:1px dashed #e2e8f0;padding-top:7px;display:flex;flex-direction:column;gap:5px;">
-                ${processReport.thisWeekTasks.slice(0, 2).map((x) => `
-                  <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;padding:5px 8px;border-radius:6px;font-size:10.5px;cursor:pointer;" onclick="openTaskEditModal('${escJs(x.task.id || x.task.taskId)}')">
-                    <span style="font-weight:700;color:#1e3a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;">📅 ${escHtml(x.ymd.slice(5))} [${escHtml(x.site.siteName)}] ${escHtml(x.task.taskName)}</span>
-                    <span style="color:#0f766e;font-weight:700;flex-shrink:0;">상세 ➔</span>
-                  </div>
-                `).join("")}
-                ${processReport.asSites.slice(0, 2).map((s) => `
-                  <div style="display:flex;justify-content:space-between;align-items:center;background:#fff5f5;border:1px solid #fed7d7;padding:5px 8px;border-radius:6px;font-size:10.5px;cursor:pointer;" onclick="openSiteDetailMobile('${escJs(s.siteKey)}')">
-                    <span style="font-weight:700;color:#991b1b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;">🔧 [A/S] ${escHtml(s.siteName)}</span>
-                    <span style="color:#dc2626;font-weight:700;flex-shrink:0;">확인 ➔</span>
-                  </div>
-                `).join("")}
-              </div>
-            ` : ""}
           </div>
 
           <div class="m-card-box" id="mHomeSecTasks">
@@ -7023,25 +6839,33 @@
           return;
         }
 
-        const isMobileDevice = state.device === "mobile" || window.innerWidth <= 768 || (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0 && window.innerWidth <= 1024);
-        if (isMobileDevice && !window._suppressExitConfirm) {
-          try {
-            const doExit = confirm("우성아이디 대시보드를 종료하시겠습니까?");
-            if (doExit) {
-              window.close();
-              setTimeout(() => {
-                document.body.innerHTML = `
-                  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;text-align:center;">
-                    <div style="font-size:48px;margin-bottom:16px;">👋</div>
-                    <h2 style="color:#1e293b;margin-bottom:8px;font-size:18px;font-weight:800;">우성아이디 대시보드가 종료되었습니다</h2>
-                    <p style="color:#64748b;font-size:14px;line-height:1.6;">브라우저 창(탭)을 닫아주세요.</p>
-                    <button onclick="location.reload()" style="margin-top:20px;padding:10px 22px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">다시 시작하기</button>
-                  </div>`;
-              }, 150);
-            } else {
-              window.history.pushState({ page: "home" }, "");
-            }
-          } catch (eConfirm) {}
+        const isMobileDevice = state.device === "mobile" || window.innerWidth <= 860 || (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0 && window.innerWidth <= 1024);
+        if (isMobileDevice) {
+          // 모바일에서 홈이 아닌 다른 탭에 있을 때 뒤로가기 누르면 홈으로 먼저 이동
+          if (state.mobileTab !== "home") {
+            window.switchMobileTab("home", { skipHistory: true });
+            return;
+          }
+
+          if (!window._suppressExitConfirm) {
+            try {
+              const doExit = confirm("우성아이디 대시보드를 종료하시겠습니까?");
+              if (doExit) {
+                window.close();
+                setTimeout(() => {
+                  document.body.innerHTML = `
+                    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;text-align:center;">
+                      <div style="font-size:48px;margin-bottom:16px;">👋</div>
+                      <h2 style="color:#1e293b;margin-bottom:8px;font-size:18px;font-weight:800;">우성아이디 대시보드가 종료되었습니다</h2>
+                      <p style="color:#64748b;font-size:14px;line-height:1.6;">브라우저 창(탭)을 닫아주세요.</p>
+                      <button onclick="location.reload()" style="margin-top:20px;padding:10px 22px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">다시 시작하기</button>
+                    </div>`;
+                }, 150);
+              } else {
+                window.history.pushState({ wsMobileTab: "home" }, "");
+              }
+            } catch (eConfirm) {}
+          }
         }
       });
 
@@ -10494,6 +10318,16 @@
         if (state.device === "mobile" && IS_PREVIEW_MODE) window.switchDeviceMode("pc");
         state.pcTab = tabKey;
         state.dirtyPcTabs[tabKey] = true;
+        if (tabKey === "home") {
+          state.userSelectedCalDay = false;
+        } else if (tabKey === "calendar" || tabKey === "cal") {
+          if (!state.userSelectedCalDay) {
+            const todayYmd = getTodayYmd();
+            state.selectedDayStr = todayYmd;
+            state.calYear = Number(todayYmd.slice(0, 4));
+            state.calMonth = Number(todayYmd.slice(5, 7));
+          }
+        }
         if (tabKey === "quote") {
           if (state.scope !== "newSite") {
             state.scope = "newSite";
@@ -10539,15 +10373,40 @@
       }
       window.resetMobileScrollTop = resetMobileScrollTop;
 
-      window.switchMobileTab = function (tabKey) {
+      window.switchMobileTab = function (tabKey, opts) {
+        opts = opts || {};
         if (tabKey === "finance" && !canViewFinance()) {
           tabKey = "partners";
         }
+        const prevTab = state.mobileTab;
         state.mobileTab = tabKey;
         state.mobileExpandedSiteKeys.clear();
         state.dirtyMobileTabs[tabKey] = true;
+
         if (tabKey === "home") {
           state.mobileHomeTasksExpanded = false;
+          state.userSelectedCalDay = false;
+        } else if (tabKey === "calendar" || tabKey === "cal") {
+          if (!state.userSelectedCalDay) {
+            const todayYmd = getTodayYmd();
+            state.selectedDayStr = todayYmd;
+            state.calYear = Number(todayYmd.slice(0, 4));
+            state.calMonth = Number(todayYmd.slice(5, 7));
+          }
+        }
+
+        if (!opts.skipHistory && typeof history !== "undefined" && history.pushState) {
+          try {
+            if (tabKey !== "home") {
+              if (prevTab === "home") {
+                history.pushState({ wsMobileTab: tabKey }, "");
+              } else {
+                history.replaceState({ wsMobileTab: tabKey }, "");
+              }
+            } else if (prevTab !== "home") {
+              history.replaceState({ wsMobileTab: "home" }, "");
+            }
+          } catch (_) {}
         }
         if (tabKey === "quote") {
           if (state.scope !== "newSite") {
@@ -10737,10 +10596,17 @@
         state.calYear = Number(ymd.slice(0, 4));
         state.calMonth = Number(ymd.slice(5, 7));
         state.selectedDayStr = ymd;
+        state.userSelectedCalDay = false;
         markAllDirty(); renderActiveViews();
       };
       window.setCalViewMode = function (mode) { state.calViewMode = mode; state.dirtyPcTabs.calendar = true; renderActiveViews(); };
-      window.selectCalDay = function (ymd) { state.selectedDayStr = ymd; state.dirtyMobileTabs.calendar = true; renderActiveViews(); };
+      window.selectCalDay = function (ymd) {
+        state.selectedDayStr = ymd;
+        state.userSelectedCalDay = true;
+        state.dirtyMobileTabs.calendar = true;
+        state.dirtyPcTabs.calendar = true;
+        renderActiveViews();
+      };
       window.setMobileCalMode = function (mode) { state.mobileCalMode = mode; state.dirtyMobileTabs.calendar = true; renderActiveViews(); };
       window.toggleSiteCheck = function (siteKey, checked, ev) {
         if (ev) ev.stopPropagation();
@@ -11391,6 +11257,12 @@
 
         initDashboardAuthLock();
 
+        const todayYmd = getTodayYmd();
+        state.selectedDayStr = todayYmd;
+        state.calYear = Number(todayYmd.slice(0, 4));
+        state.calMonth = Number(todayYmd.slice(5, 7));
+        state.userSelectedCalDay = false;
+
         // 기본 첫 진입 화면은 웹/모바일 모두 "홈"
         const isSmallViewport = !IS_PREVIEW_MODE && window.innerWidth <= 860;
         if (hash.includes("mode=mobile") || isSmallViewport) {
@@ -11402,7 +11274,10 @@
           else if (hash.includes("mtab=partners")) state.mobileTab = "partners";
           else state.mobileTab = "home";
           window.switchDeviceMode("mobile");
-          window.switchMobileTab(state.mobileTab);
+          window.switchMobileTab(state.mobileTab, { skipHistory: true });
+          if (typeof history !== "undefined" && history.replaceState) {
+            try { history.replaceState({ wsMobileTab: state.mobileTab }, ""); } catch (_) {}
+          }
         } else {
           if (hash.includes("tab=calendar")) state.pcTab = "calendar";
           else if (hash.includes("tab=sites")) state.pcTab = "sites";
