@@ -1988,7 +1988,7 @@
         </div>
 
         <div class="header-right">
-          <div class="user-select-pill">
+          <div class="user-select-pill" id="pcUserSelectWrap">
             <span>👤</span>
             <select id="userSelector" onchange="onUserChanged(this.value)">
               <option value="조항만">조항만</option>
@@ -1997,6 +1997,7 @@
               <option value="한송이">한송이</option>
               <option value="차정률">차정률</option>
             </select>
+            <span id="pcUserBadge" style="display:none;font-weight:800;font-size:12px;color:#0f766e;user-select:none;cursor:default;"></span>
           </div>
 
           <button type="button" class="btn-header-tool" onclick="state.settingsTab='partners'; openSettingsModal();">⚙️ 설정</button>
@@ -2049,6 +2050,7 @@
               <option value="한송이">한송이</option>
               <option value="차정률">차정률</option>
             </select>
+            <span id="mUserBadge" style="display:none;padding:3px 8px;border:1px solid #86efac;background:#f0fdf4;color:#0f766e;font-size:11px;font-weight:800;border-radius:12px;user-select:none;cursor:default;"></span>
             <button type="button" onclick="triggerLiveSync(true)" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="새로고침">🔄</button>
             <button type="button" onclick="logoutDashboardAuth()" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="잠금 / 로그아웃">🔒</button>
           </div>
@@ -2262,6 +2264,8 @@
         device: "pc",
         pcTab: "home",
         mobileTab: "home",
+        authUser: "",
+        currentUser: "",
         user: "조항만",
         scope: "site",
         memberFilter: "",
@@ -2436,9 +2440,24 @@
       function isUserAssignedTodo(t, user) {
         if (!t) return false;
         const mgr = String(t.manager || "").trim();
-        if (!mgr || mgr === "미지정" || mgr === "담당 미지정" || mgr === "담당자 미지정") return false;
-        if (!user) return false;
+        // 미지정(담당자 비어있음 / "미지정" / "담당 미지정" / "담당자 미지정")인 경우 모든 사용자 홈 브리핑 및 뱃지에 다시 노출
+        if (!mgr || mgr === "미지정" || mgr === "담당 미지정" || mgr === "담당자 미지정") return true;
+        if (!user) return true;
         return mgr.includes(user);
+      }
+      function getActualAuthUser() {
+        if (state.authUser && typeof state.authUser === "string") return state.authUser.trim();
+        if (state.currentUser && typeof state.currentUser === "string") return state.currentUser.trim();
+        try {
+          const saved = getTopSavedAuth();
+          if (saved && saved.user) return String(saved.user).trim();
+        } catch (e) {}
+        return "";
+      }
+      function canSwitchUser() {
+        const authU = String(getActualAuthUser() || "").trim().toLowerCase();
+        if (!authU) return true; // 미인증 상태 또는 noauth/로컬 환경 기본 관리자 권한 허용
+        return authU === "조항만" || authU === "admin" || authU === "chohangman";
       }
       function getMemberRoleTitle(name) {
         const cleanName = String(name || "").trim();
@@ -2459,17 +2478,55 @@
         const members = getMembersList();
         const pcSel = document.getElementById("userSelector");
         const mobSel = document.getElementById("mUserSelector");
-        if (!members.includes(state.user) && members.length) {
+        const pcBadge = document.getElementById("pcUserBadge");
+        const mobBadge = document.getElementById("mUserBadge");
+
+        const allowSwitch = canSwitchUser();
+        if (!allowSwitch) {
+          const authU = getActualAuthUser();
+          if (authU && authU.toLowerCase() !== "admin") {
+            const matched = members.find((m) => m.toLowerCase() === authU.toLowerCase());
+            state.user = matched || authU;
+          }
+        } else if (!members.includes(state.user) && members.length) {
           state.user = members.includes("조항만") ? "조항만" : members[0];
         }
+
         if (pcSel) {
           pcSel.innerHTML = members.map((m) => `<option value="${escHtml(m)}" ${m === state.user ? "selected" : ""}>${escHtml(m)}</option>`).join("");
+          if (pcBadge) {
+            if (allowSwitch) {
+              pcSel.style.display = "";
+              pcBadge.style.display = "none";
+              pcSel.value = state.user;
+            } else {
+              pcSel.style.display = "none";
+              pcBadge.style.display = "";
+              pcBadge.textContent = state.user;
+            }
+          }
         }
         if (mobSel) {
           mobSel.innerHTML = members.map((m) => `<option value="${escHtml(m)}" ${m === state.user ? "selected" : ""}>${escHtml(m)}</option>`).join("");
+          if (mobBadge) {
+            if (allowSwitch) {
+              mobSel.style.display = "";
+              mobBadge.style.display = "none";
+              mobSel.value = state.user;
+            } else {
+              mobSel.style.display = "none";
+              mobBadge.style.display = "inline-block";
+              mobBadge.textContent = "👤 " + state.user;
+            }
+          }
         }
         populateAuthMembersDatalist();
       }
+      window.isUserAssignedTodo = isUserAssignedTodo;
+      window.getActualAuthUser = getActualAuthUser;
+      window.canSwitchUser = canSwitchUser;
+      window.syncUserSelectorOptions = syncUserSelectorOptions;
+      window.applyAuthenticatedUser = applyAuthenticatedUser;
       function filterRegisteredManagers(rawStr) {
         const members = getMembersList();
         if (!members.length) return [];
@@ -6094,10 +6151,10 @@
             }
           }
         } else if (data.type === "WS_RESTORE_AUTH") {
-          if (data.user && state.currentUser !== data.user) {
+          if (data.user) {
+            state.authUser = data.user;
             state.currentUser = data.user;
-            const sel = document.getElementById("headerUserSelect") || document.getElementById("userSelector") || document.getElementById("mUserSelector");
-            if (sel) sel.value = data.user;
+            applyAuthenticatedUser(data.user);
             markAllDirty();
             renderActiveViews();
           }
@@ -9289,12 +9346,22 @@
       window.onMemberFilterChange = function (member) { state.memberFilter = member; state.mobileHomeTasksExpanded = false; markAllDirty(); renderActiveViews(); };
 
       window.onUserChanged = function (userName) {
+        if (!canSwitchUser()) {
+          const authUser = getActualAuthUser();
+          if (authUser && authUser.toLowerCase() !== "admin") {
+            userName = authUser;
+          }
+        }
         state.user = userName;
         state.mobileHomeTasksExpanded = false;
         const pcSel = document.getElementById("userSelector");
         const mSel = document.getElementById("mUserSelector");
+        const pcBadge = document.getElementById("pcUserBadge");
+        const mBadge = document.getElementById("mUserBadge");
         if (pcSel) pcSel.value = userName;
         if (mSel) mSel.value = userName;
+        if (pcBadge) pcBadge.textContent = userName;
+        if (mBadge) mBadge.textContent = "👤 " + userName;
         state.dirtyPcTabs.home = true;
         state.dirtyMobileTabs.home = true;
         renderActiveViews();
@@ -9905,13 +9972,17 @@
       function applyAuthenticatedUser(user) {
         const clean = String(user || "").trim();
         if (!clean) return;
+        state.authUser = clean;
+        state.currentUser = clean;
         if (clean.toLowerCase() === ADMIN_USER_FALLBACK) {
           window.onUserChanged("조항만");
+          syncUserSelectorOptions();
           return;
         }
         const members = getMembersList();
         const exact = members.find((m) => m.toLowerCase() === clean.toLowerCase());
-        if (exact) window.onUserChanged(exact);
+        window.onUserChanged(exact || clean);
+        syncUserSelectorOptions();
       }
       window.submitTopAccessPin = async function () {
         const lockState = checkTopPinLockout();
@@ -9962,6 +10033,8 @@
           try { localStorage.removeItem(AUTH_LOCKOUT_UNTIL_KEY); localStorage.removeItem(AUTH_LOCKOUT_FAIL_KEY); } catch (e) {}
           const keep = keepEl ? !!keepEl.checked : true;
           const verifiedUser = data.user || valName;
+          state.authUser = verifiedUser;
+          state.currentUser = verifiedUser;
           saveTopAuthData(data.token, verifiedUser, keep);
           const ov = document.getElementById("topAccessLockOverlay");
           if (ov) ov.classList.remove("open");
@@ -9982,6 +10055,8 @@
         if (btnEl) { btnEl.disabled = false; btnEl.textContent = "인증하고 시작하기"; }
       };
       window.logoutDashboardAuth = function () {
+        state.authUser = "";
+        state.currentUser = "";
         clearTopAuthData();
         const ov = document.getElementById("topAccessLockOverlay");
         const pinEl = document.getElementById("topAccessPinInput");
@@ -9989,6 +10064,7 @@
         if (pinEl) pinEl.value = "";
         if (errEl) errEl.textContent = "";
         populateAuthMembersDatalist();
+        syncUserSelectorOptions();
         if (ov) ov.classList.add("open");
         const nameEl = document.getElementById("topAccessNameInput");
         if (nameEl) setTimeout(() => nameEl.focus(), 60);
@@ -9996,7 +10072,10 @@
       function initDashboardAuthLock() {
         populateAuthMembersDatalist();
         const searchParams = new URLSearchParams(location.search || "");
-        if (searchParams.get("noauth") === "1") return;
+        if (searchParams.get("noauth") === "1") {
+          syncUserSelectorOptions();
+          return;
+        }
         const auth = getTopSavedAuth();
         if (auth && auth.token && auth.user) {
           applyAuthenticatedUser(auth.user);
@@ -10007,6 +10086,7 @@
         const lockState = checkTopPinLockout();
         const errEl = document.getElementById("topAccessPinError");
         if (lockState.locked && errEl) errEl.textContent = lockState.msg;
+        syncUserSelectorOptions();
       }
 
       function bootstrap() {
@@ -10015,16 +10095,28 @@
         state.todoData = ds ? ds.getInitialTodoData() : { list: [] };
         state.financeData = ds ? ds.getInitialFinanceData() : { summary: {}, ledger: [] };
         state.settingsData = ds ? ds.getInitialSettingsData() : { partners: [], tasks: [], members: [] };
+        try {
+          const initSavedAuth = getTopSavedAuth();
+          if (initSavedAuth && initSavedAuth.user) {
+            state.authUser = initSavedAuth.user;
+            state.currentUser = initSavedAuth.user;
+          }
+        } catch (eInitAuth) {}
         sanitizeUnregisteredMembers();
         syncUserSelectorOptions();
         const meta = ds ? ds.getLastSyncMeta() : { source: "snapshot", updatedAt: "" };
         state.syncSource = meta.source; state.syncTime = meta.updatedAt;
 
         const hash = window.location.hash || "";
-        if (hash.includes("user=song")) window.onUserChanged("송지은");
-        else if (hash.includes("user=han")) window.onUserChanged("한송이");
-        else if (hash.includes("user=jeon")) window.onUserChanged("전예린");
-        else window.onUserChanged("조항만");
+        if (canSwitchUser()) {
+          if (hash.includes("user=song")) window.onUserChanged("송지은");
+          else if (hash.includes("user=han")) window.onUserChanged("한송이");
+          else if (hash.includes("user=jeon")) window.onUserChanged("전예린");
+          else window.onUserChanged(state.user || "조항만");
+        } else {
+          const actualU = getActualAuthUser();
+          window.onUserChanged(actualU || state.user);
+        }
 
         initDashboardAuthLock();
 
