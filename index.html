@@ -6,12 +6,16 @@
   <title>우성아이디 현장 대시보드</title>
   
   <!-- 모바일 웹앱 / PWA 최적화 메타 태그 -->
+  <link rel="manifest" href="./manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="현장대시보드">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#2563eb">
   <meta name="application-name" content="우성아이디 현장 대시보드">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
   <!-- 구글 서버 사전 연결 가속 (Preconnect & DNS-Prefetch) -->
   <link rel="preconnect" href="https://script.google.com" crossorigin>
   <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
@@ -184,7 +188,7 @@
   <iframe
     id="appFrame"
     credentialless
-    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=231"
+    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=232"
     allow="clipboard-write; camera; geolocation"
     onload="hideLoading()">
   </iframe>
@@ -494,13 +498,13 @@
       }
     });
 
-    // 잔존 서비스워커 자동 해제 (웹 푸시 알림 기능 원복 대응)
-    if ('serviceWorker' in navigator && typeof navigator.serviceWorker.getRegistrations === 'function') {
-      navigator.serviceWorker.getRegistrations().then(function(regs) {
-        for (var i = 0; i < regs.length; i++) {
-          regs[i].unregister();
-        }
-      }).catch(function() {});
+    // PWA 서비스 워커 등록 (HTTPS 및 localhost 환경)
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./sw.js').catch(function(err) {
+          console.warn('[PWA] ServiceWorker 등록 실패:', err);
+        });
+      });
     }
   </script>
 </body>

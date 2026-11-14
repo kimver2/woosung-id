@@ -2,8 +2,21 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>우성아이디 통합 현장 대시보드 v2</title>
+
+  <!-- PWA & 모바일 웹앱 최적화 메타 태그 -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#1e40af">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="현장대시보드">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="우성아이디 통합 현장 대시보드">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
     :root {
@@ -9913,6 +9926,26 @@
           else if (!wantMob && state.device !== "pc") { window.switchDeviceMode("pc"); window.switchMainTab(state.pcTab); }
         }
       });
+
+      // PWA 서비스 워커 등록 (HTTPS 및 localhost 환경)
+      if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').then((reg) => {
+            reg.onupdatefound = () => {
+              const installingWorker = reg.installing;
+              if (installingWorker) {
+                installingWorker.onstatechange = () => {
+                  if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    console.log('[PWA] 새 버전이 준비되었습니다.');
+                  }
+                };
+              }
+            };
+          }).catch((err) => {
+            console.warn('[PWA] ServiceWorker 등록 실패:', err);
+          });
+        });
+      }
 
       window.addEventListener("DOMContentLoaded", bootstrap);
     })();
