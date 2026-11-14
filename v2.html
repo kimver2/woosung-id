@@ -2131,6 +2131,58 @@
         });
         return seen;
       }
+      function getSiteDateMetrics(site) {
+        if (!site) return { earliest: "", latest: "", earliestMs: 0, latestMs: 0 };
+        const ymds = [];
+        (site.tasks || []).forEach((t) => {
+          if (!t) return;
+          const s = parseYmdFromTask(t);
+          if (s) ymds.push(s);
+          const e = parseEndYmdFromTask(t, s);
+          if (e && e !== s) ymds.push(e);
+        });
+        if (site.estimateData && site.estimateData.inquiryDate) {
+          const m = String(site.estimateData.inquiryDate).match(/(\d{4})[.\-](\d{2})[.\-](\d{2})/);
+          if (m) ymds.push(`${m[1]}-${m[2]}-${m[3]}`);
+        }
+        if (ymds.length === 0) {
+          return { earliest: "", latest: "", earliestMs: 0, latestMs: 0 };
+        }
+        ymds.sort();
+        const earliest = ymds[0];
+        const latest = ymds[ymds.length - 1];
+        const earliestMs = new Date(earliest + "T00:00:00").getTime() || 0;
+        const latestMs = new Date(latest + "T00:00:00").getTime() || 0;
+        return { earliest, latest, earliestMs, latestMs };
+      }
+
+      function compareDoneSites(a, b) {
+        const ma = getSiteDateMetrics(a);
+        const mb = getSiteDateMetrics(b);
+        const da = a.latestDateMs || ma.latestMs;
+        const db = b.latestDateMs || mb.latestMs;
+        if (db !== da) return db - da;
+        if (mb.latest && ma.latest && mb.latest !== ma.latest) return mb.latest.localeCompare(ma.latest);
+        const startDiff = (b.earliestDateMs || mb.earliestMs) - (a.earliestDateMs || ma.earliestMs);
+        if (startDiff !== 0) return startDiff;
+        return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
+      }
+
+      function compareActiveSites(a, b) {
+        const prA = (typeof a.progressRate === "number") ? a.progressRate : 0;
+        const prB = (typeof b.progressRate === "number") ? b.progressRate : 0;
+        if (prB !== prA) return prB - prA;
+        const da = a.earliestDateMs || (getSiteDateMetrics(a).earliestMs);
+        const db = b.earliestDateMs || (getSiteDateMetrics(b).earliestMs);
+        if (da && db && da !== db) return da - db;
+        if (da && !db) return -1;
+        if (!da && db) return 1;
+        return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
+      }
+      window.getSiteDateMetrics = getSiteDateMetrics;
+      window.compareDoneSites = compareDoneSites;
+      window.compareActiveSites = compareActiveSites;
+
       function getScopeSites(includeArchived) {
         return getAllSites().filter((s) => {
           if (s.scope !== state.scope) return false;
@@ -2138,8 +2190,14 @@
           return true;
         });
       }
-      function getActiveScopeSites() { return getScopeSites(false); }
-      function getDoneScopeSites() { return getAllSites().filter((s) => s.scope === state.scope && isSiteCompleted(s)); }
+      function getActiveScopeSites() {
+        return getScopeSites(false).sort(compareActiveSites);
+      }
+      function getDoneScopeSites() {
+        return getAllSites()
+          .filter((s) => s.scope === state.scope && isSiteCompleted(s))
+          .sort(compareDoneSites);
+      }
       function ensureCheckedSitesInitialized() {
         const active = getActiveScopeSites();
         if (!state.checkedSiteKeys) {
@@ -2277,6 +2335,14 @@
           }
         }
         site.assignees = getUniqueSiteManagers(tasks);
+        const dm = getSiteDateMetrics(site);
+        site.earliestDateYmd = dm.earliest;
+        site.latestDateYmd = dm.latest;
+        site.earliestDateMs = dm.earliestMs;
+        site.latestDateMs = dm.latestMs;
+        if (dm.earliest && !site.earliestDateDisplay) {
+          site.earliestDateDisplay = dm.earliest;
+        }
         if (!skipDashMeta) recalcDashMeta();
       }
 
@@ -2685,6 +2751,7 @@
         if (q) {
           mySites = mySites.filter((s) => matchesQuery([s.siteName, ...(s.tasks || []).map((t) => t.taskName + " " + t.partner + " " + t.memo)].join(" "), q));
         }
+        mySites.sort(compareActiveSites);
 
         const taskSourceSites = q
           ? getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s))
@@ -3241,6 +3308,7 @@
         let visibleSites = sitesPool.filter((s) => {
           const sDone = isSiteCompleted(s);
           if (!state.showArchivedSites && sDone) return false;
+          if (state.showArchivedSites && !sDone) return false;
           if (m) {
             const hasTask = state.showArchivedSites
               ? (s.tasks || []).some((t) => taskMatchesMember(t, m))
@@ -3255,9 +3323,20 @@
         });
 
         visibleSites.sort((a, b) => {
-          if (state.siteSortBy === "progress") return (b.progressRate || 0) - (a.progressRate || 0);
-          if (state.siteSortBy === "name") return String(a.siteName).localeCompare(String(b.siteName), "ko");
-          return (b.earliestDateMs || 0) - (a.earliestDateMs || 0);
+          if (state.showArchivedSites) {
+            if (state.siteSortBy === "name") return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
+            return compareDoneSites(a, b);
+          }
+          if (state.siteSortBy === "name") return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
+          if (state.siteSortBy === "date") {
+            const da = a.earliestDateMs || (getSiteDateMetrics(a).earliestMs);
+            const db = b.earliestDateMs || (getSiteDateMetrics(b).earliestMs);
+            if (da && db && da !== db) return da - db;
+            if (da && !db) return -1;
+            if (!da && db) return 1;
+            return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
+          }
+          return compareActiveSites(a, b);
         });
 
         let selectedSite = visibleSites.find((s) => s.siteKey === state.selectedSiteKey) || visibleSites[0] || sitesPool[0];
@@ -4184,6 +4263,7 @@
         if (q) {
           mySites = mySites.filter((s) => matchesQuery([s.siteName, ...(s.tasks || []).map((t) => t.taskName + " " + t.partner + " " + t.memo)].join(" "), q));
         }
+        mySites.sort(compareActiveSites);
 
         const taskSourceSites = q
           ? getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s))
@@ -4679,6 +4759,23 @@
           }
           if (q && !matchesQuery([s.siteName, ...(s.tasks || []).map((t) => t.taskName + " " + t.partner + " " + t.memo)].join(" "), q)) return false;
           return true;
+        });
+
+        visible.sort((a, b) => {
+          if (state.showArchivedSites) {
+            if (state.siteSortBy === "name") return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
+            return compareDoneSites(a, b);
+          }
+          if (state.siteSortBy === "name") return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
+          if (state.siteSortBy === "date") {
+            const da = a.earliestDateMs || (getSiteDateMetrics(a).earliestMs);
+            const db = b.earliestDateMs || (getSiteDateMetrics(b).earliestMs);
+            if (da && db && da !== db) return da - db;
+            if (da && !db) return -1;
+            if (!da && db) return 1;
+            return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
+          }
+          return compareActiveSites(a, b);
         });
 
         const toggleBarHtml = `
