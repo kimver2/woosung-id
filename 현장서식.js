@@ -9983,6 +9983,361 @@ function updateEstimateRowFromWeb(data) {
 }
 
 /**
+ * [신규현장 -> 진행현장 승격] 공사범위별 표준 공종 목록 및 시작일자 자동 산출
+ * @param {string} scope 공사범위 ("전체공사", "욕실", "주방", "도배·마루", "붙박이·가구", "샷시·단열", "기타")
+ * @param {string} startDateStr 착공(기준) 일자 (YYYY-MM-DD 또는 YYYY.MM.DD)
+ * @param {string} manager 기본 담당자명
+ * @return {Array<Object>} 표준 공종 및 일자 목록
+ */
+function getDefaultProcessSchedule(scope, startDateStr, manager) {
+  var baseDate = null;
+  try {
+    if (startDateStr) {
+      var dParts = String(startDateStr).split(/[-.]/);
+      if (dParts.length >= 3) {
+        var y = parseInt(dParts[0], 10);
+        if (y < 100) y += 2000;
+        baseDate = new Date(y, parseInt(dParts[1], 10) - 1, parseInt(dParts[2], 10));
+      }
+    }
+  } catch(eDate) {}
+  if (!baseDate || isNaN(baseDate.getTime())) {
+    baseDate = new Date();
+  }
+
+  function addDays(d, days) {
+    var next = new Date(d.getTime());
+    next.setDate(next.getDate() + days);
+    var y = next.getFullYear();
+    var m = next.getMonth() + 1;
+    var day = next.getDate();
+    return y + "." + (m < 10 ? "0" + m : m) + "." + (day < 10 ? "0" + day : day);
+  }
+
+  var s = String(scope || "전체공사").trim();
+  var plan = [];
+
+  if (s === "전체공사") {
+    plan = [
+      { taskName: "보양", offset: 0, memo: "승강기 및 바닥 보양" },
+      { taskName: "철거", offset: 1, memo: "철거 및 폐기물 반출" },
+      { taskName: "설비", offset: 3, memo: "배관 및 방수" },
+      { taskName: "전기", offset: 5, memo: "전기 배선 및 입선" },
+      { taskName: "창호", offset: 7, memo: "창호 및 샷시 시공" },
+      { taskName: "목공", offset: 9, memo: "가벽, 천장, 도어틀 목공" },
+      { taskName: "타일", offset: 13, memo: "욕실/주방 타일 시공" },
+      { taskName: "필름", offset: 16, memo: "인테리어 필름 시공" },
+      { taskName: "도배", offset: 18, memo: "전체 도배 시공" },
+      { taskName: "마루", offset: 20, memo: "바닥 마루 시공" },
+      { taskName: "가구", offset: 22, memo: "맞춤가구 및 싱크대" },
+      { taskName: "조명", offset: 24, memo: "조명 기구 및 기구 마감" },
+      { taskName: "청소", offset: 26, memo: "준공 입주 청소" },
+      { taskName: "마감", offset: 27, memo: "잔손보기 및 최종 점검" }
+    ];
+  } else if (s === "욕실") {
+    plan = [
+      { taskName: "보양", offset: 0, memo: "동선 보양" },
+      { taskName: "철거", offset: 1, memo: "욕실 철거" },
+      { taskName: "설비", offset: 2, memo: "배관 및 방수" },
+      { taskName: "타일", offset: 4, memo: "벽 및 바닥 타일 시공" },
+      { taskName: "SMC", offset: 5, memo: "욕실 돔천장 시공" },
+      { taskName: "도기", offset: 6, memo: "도기 및 수전 설치" },
+      { taskName: "마감", offset: 7, memo: "실리콘 및 최종 점검" }
+    ];
+  } else if (s === "주방") {
+    plan = [
+      { taskName: "보양", offset: 0, memo: "주방 동선 보양" },
+      { taskName: "철거", offset: 1, memo: "싱크대 및 주방 철거" },
+      { taskName: "설비", offset: 2, memo: "수도 배관 및 전기 입선" },
+      { taskName: "타일", offset: 3, memo: "주방 벽 타일 시공" },
+      { taskName: "가구", offset: 5, memo: "싱크대 및 아일랜드 설치" },
+      { taskName: "조명", offset: 6, memo: "주방 조명 및 후드 연결" },
+      { taskName: "마감", offset: 7, memo: "실리콘 및 마감 점검" }
+    ];
+  } else if (s === "도배·마루") {
+    plan = [
+      { taskName: "보양", offset: 0, memo: "보양 작업" },
+      { taskName: "필름", offset: 1, memo: "문틀 및 샷시 필름" },
+      { taskName: "도배", offset: 3, memo: "전체 도배 시공" },
+      { taskName: "마루", offset: 5, memo: "바닥 마루 시공" },
+      { taskName: "마감", offset: 6, memo: "걸레받이 및 실리콘 마감" }
+    ];
+  } else if (s === "붙박이·가구") {
+    plan = [
+      { taskName: "현장실측", offset: 0, memo: "정밀 실측 및 도면 확인" },
+      { taskName: "보양", offset: 5, memo: "바닥 보양" },
+      { taskName: "가구", offset: 6, memo: "붙박이장 및 맞춤가구 설치" },
+      { taskName: "마감", offset: 7, memo: "가구 마감 및 점검" }
+    ];
+  } else if (s === "샷시·단열") {
+    plan = [
+      { taskName: "창호실측", offset: 0, memo: "창호 제작 정밀 실측" },
+      { taskName: "보양", offset: 7, memo: "창호 작업 동선 보양" },
+      { taskName: "철거", offset: 8, memo: "기존 창호 철거" },
+      { taskName: "창호", offset: 8, memo: "샷시 창호 시공 및 단열" },
+      { taskName: "마감", offset: 9, memo: "실리콘 및 유리 마감" }
+    ];
+  } else {
+    plan = [
+      { taskName: "현장실측", offset: 0, memo: "착공 전 실측" },
+      { taskName: "보양", offset: 1, memo: "현장 보양" },
+      { taskName: "철거", offset: 2, memo: "공사 부위 철거" },
+      { taskName: "목공", offset: 3, memo: "목공 및 보수" },
+      { taskName: "마감", offset: 5, memo: "최종 마감 및 점검" }
+    ];
+  }
+
+  return plan.map(function(p) {
+    return {
+      taskName: p.taskName,
+      date: addDays(baseDate, p.offset),
+      manager: manager || "조항만",
+      partner: "",
+      status: "예정",
+      isShared: true,
+      memo: p.memo || ""
+    };
+  });
+}
+
+/**
+ * [헬퍼] 현장데이터 또는 완료현장에 이미 등록된 현장인지 전수 검증
+ * @param {Spreadsheet} ss 스프레드시트 인스턴스
+ * @param {string} siteName 검증할 현장명
+ * @return {boolean} 중복 존재 여부
+ */
+function isSitePromotedAlready(ss, siteName) {
+  if (!siteName) return false;
+  var cleanSite = String(siteName).trim();
+  var cleanSiteNoSpace = cleanSite.replace(/\s+/g, "").toLowerCase();
+  if (!cleanSiteNoSpace) return false;
+
+  if (!ss) ss = getAppSpreadsheet();
+  if (!ss) return false;
+
+  var mainSheet = findSiteScheduleSheet(ss);
+  if (mainSheet && mainSheet.getLastRow() >= 2) {
+    var vals = mainSheet.getRange(2, 1, mainSheet.getLastRow() - 1, 1).getValues();
+    for (var i = 0; i < vals.length; i++) {
+      var s = String(vals[i][0] || "").trim().replace(/\s+/g, "").toLowerCase();
+      if (s && s === cleanSiteNoSpace) return true;
+    }
+  }
+
+  var compSheet = findCompletedSitesSheet(ss, false);
+  if (compSheet && compSheet.getLastRow() >= 2) {
+    var cVals = compSheet.getRange(2, 1, compSheet.getLastRow() - 1, 1).getValues();
+    for (var j = 0; j < cVals.length; j++) {
+      var cs = String(cVals[j][0] || "").trim().replace(/\s+/g, "").toLowerCase();
+      if (cs && cs === cleanSiteNoSpace) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * [신규 기능] 계약 완료 신규현장 -> 진행 현장(Convert Lead to Project) 승격 실행
+ * 1) 중복 등록 방어 (현장데이터 및 완료현장 시트 검사)
+ * 2) 신규견적 시트 상태를 \x27계약 완료\x27로 확정
+ * 3) 현장정보 시트에 주소, 고객명/연락처, 계약금액, 메모, 드라이브 링크 안전 저장
+ * 4) 현장데이터 시트에 표준 공정 행 세트 자동 생성 및 서식/유효성/아코디언 보장
+ * @param {Object} data 승격 요청 페이로드
+ * @return {Object} { success, siteName, tasksCount, message }
+ */
+function promoteEstimateToSite(data) {
+  if (!__woosungWriteLockHeld_) return runWithWriteLock_(promoteEstimateToSite, this, arguments);
+  try {
+    if (!data) return { success: false, error: "승격할 데이터가 없습니다." };
+    var siteName = String(data.siteName || data.site || "").trim();
+    if (!siteName) return { success: false, error: "현장명을 입력해주세요." };
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) ss = getAppSpreadsheet();
+    if (!ss) return { success: false, error: "스프레드시트에 연결할 수 없습니다." };
+
+    var mainSheet = findSiteScheduleSheet(ss);
+    if (!mainSheet) return { success: false, error: "현장데이터 시트를 찾을 수 없습니다." };
+
+    // 1) 중복 승격 방지 (Deduplication Check)
+    if (isSitePromotedAlready(ss, siteName)) {
+      return {
+        success: false,
+        alreadyExists: true,
+        error: "이미 진행 현장(또는 완료현장)에 등록된 현장명입니다: " + siteName,
+        siteName: siteName
+      };
+    }
+
+    // 2) 신규견적 데이터 로드/정리
+    var clientName = String(data.clientName || "").trim();
+    var clientPhone = String(data.clientPhone || "").trim();
+    var manager = String(data.manager || "조항만").trim();
+    var address = String(data.address || "").trim();
+    var scope = String(data.scope || "전체공사").trim();
+    var contractAmount = data.contractAmount || "";
+    var expectedAmount = data.expectedAmount || "";
+    var memo = String(data.memo || "").trim();
+    var estimateFile = String(data.estimateFile || "").trim();
+    var startDate = String(data.startDate || data.expectedDate || "").trim();
+    if (!startDate) {
+      try { startDate = formatDateYYMMDD(new Date()); } catch (eD) { startDate = "2026.11.14"; }
+    }
+
+    // 신규견적 시트에서 해당 현장 행이 있다면 상태를 \x27계약 완료\x27로 갱신
+    try {
+      var estSheet = findEstimateSheet(ss, false);
+      if (estSheet && estSheet.getLastRow() >= 2) {
+        var estLastRow = estSheet.getLastRow();
+        var estSiteVals = estSheet.getRange(2, 1, estLastRow - 1, 1).getValues();
+        var cleanSiteNoSpace = siteName.replace(/\s+/g, "").toLowerCase();
+        for (var ei = 0; ei < estSiteVals.length; ei++) {
+          var eName = String(estSiteVals[ei][0] || "").trim().replace(/\s+/g, "").toLowerCase();
+          if (eName === cleanSiteNoSpace) {
+            var targetEstRow = ei + 2;
+            estSheet.getRange(targetEstRow, 2).setValue("계약 완료");
+            applyEstimateSheetColors(ss, estSheet);
+            break;
+          }
+        }
+      }
+    } catch (eEst) {
+      Logger.log("신규견적 시트 상태 갱신 중 경미한 에러: " + eEst.toString());
+    }
+
+    // 3) 현장정보 시트에 고객 정보/메모/드라이브 링크 정리 저장
+    var memoParts = [];
+    if (clientName || clientPhone) {
+      memoParts.push("고객: " + [clientName, clientPhone].filter(Boolean).join(" / "));
+    }
+    if (contractAmount) {
+      var cAmtStr = typeof contractAmount === "number" ? contractAmount.toLocaleString() + "원" : String(contractAmount);
+      memoParts.push("계약금액: " + cAmtStr);
+    } else if (expectedAmount) {
+      var eAmtStr = typeof expectedAmount === "number" ? expectedAmount.toLocaleString() + "원" : String(expectedAmount);
+      memoParts.push("예상금액: " + eAmtStr);
+    }
+    if (manager) memoParts.push("담당: " + manager);
+    if (scope) memoParts.push("공사범위: " + scope);
+    if (memo) memoParts.push("메모: " + memo);
+
+    var siteInfoObj = {
+      address: address,
+      officePhone: clientPhone,
+      memo: memoParts.join(" | "),
+      driveUrl: estimateFile
+    };
+    try {
+      saveFullSiteInfoFromWeb(siteName, siteInfoObj);
+    } catch (eSiteInfo) {
+      Logger.log("saveFullSiteInfoFromWeb in promote error: " + eSiteInfo.toString());
+    }
+
+    // 4) 현장데이터 시트에 공정 행 추가
+    ensureCalendarSyncColumns(mainSheet);
+    var is11Col = (typeof mainSheet.getLastColumn === "function" && mainSheet.getLastColumn() >= 11);
+    var colCount = is11Col ? 11 : 10;
+    var generateTasks = (data.generateTasks === true || String(data.generateTasks) === "true" || data.generateTasks === undefined);
+
+    var taskList = [];
+    if (Array.isArray(data.tasks) && data.tasks.length > 0) {
+      taskList = data.tasks;
+    } else if (generateTasks) {
+      taskList = getDefaultProcessSchedule(scope, startDate, manager);
+    } else {
+      taskList = [{
+        taskName: "상담",
+        date: startDate,
+        manager: manager,
+        partner: "",
+        status: "예정",
+        isShared: true,
+        memo: memo ? "견적 메모: " + memo : ""
+      }];
+    }
+
+    var lastRow = mainSheet.getLastRow();
+    var startRow = Math.max(2, lastRow + 1);
+    var nowMs = Date.now();
+    var newRows = [];
+
+    var mgrParts = parseManagerNamesList(manager);
+    var m1 = mgrParts[0] || "";
+    var m2 = mgrParts[1] || "";
+
+    for (var ti = 0; ti < taskList.length; ti++) {
+      var item = taskList[ti];
+      var tName = String(item.taskName || item.task || "공정").trim();
+      var tDateRaw = String(item.date || item.dateStr || startDate).trim();
+      var tDate = "";
+      try { tDate = normalizeDateStringToYYYYMMDD(tDateRaw); } catch(eN) {}
+      if (!tDate) tDate = tDateRaw;
+      var tPartner = String(item.partner || "").trim();
+      var tIsShared = (item.isShared !== undefined && item.isShared !== null)
+        ? (item.isShared === true || String(item.isShared).toLowerCase() === "true" || String(item.isShared) === "1")
+        : true;
+      var tMemo = String(item.memo || "").trim();
+      var tStatus = String(item.status || "예정").trim() || "예정";
+      var tMgr = String(item.manager || manager).trim();
+      var tMgrParts = parseManagerNamesList(tMgr);
+      var tm1 = tMgrParts[0] || m1;
+      var tm2 = tMgrParts[1] || m2;
+      var taskId = "task_" + (nowMs + ti) + "_" + Math.random().toString(36).substring(2, 7);
+
+      if (is11Col) {
+        newRows.push([siteName, tDate, tName, tPartner, tIsShared, tMemo, tm1, tm2, tStatus, taskId, nowMs + ti]);
+      } else {
+        newRows.push([siteName, tDate, tName, tPartner, tIsShared, tMemo, tm1, tStatus, taskId, nowMs + ti]);
+      }
+    }
+
+    if (newRows.length > 0) {
+      mainSheet.getRange(startRow, 1, newRows.length, colCount).setValues(newRows);
+      for (var ri = 0; ri < newRows.length; ri++) {
+        var rNum = startRow + ri;
+        var rShared = newRows[ri][4];
+        formatInsertedScheduleRow(mainSheet, rNum, rShared);
+      }
+      try {
+        applySiteScheduleValidations(mainSheet, startRow, newRows.length);
+      } catch(eVal) {}
+      try {
+        setupSiteSheetConditionalFormatting(mainSheet);
+      } catch(eCf) {}
+
+      // 2개 행 이상이면 2번째 행부터 그룹화(아코디언)
+      if (newRows.length > 1) {
+        try {
+          mainSheet.getRange((startRow + 1) + ":" + (startRow + newRows.length - 1)).shiftRowGroupDepth(1);
+        } catch(eGrp) {}
+      }
+
+      // 공종 유효성 검사 자동 등록
+      try {
+        var addedTaskNames = newRows.map(function(r) { return r[2]; });
+        ensureTasksInValidation(mainSheet, addedTaskNames);
+      } catch(eEtv) {}
+    }
+
+    // 서버 캐시 갱신
+    try {
+      invalidateDashboardServerCache();
+    } catch(eInv) {}
+
+    return {
+      success: true,
+      siteName: siteName,
+      siteKey: siteName,
+      tasksCount: newRows.length,
+      message: "\x27" + siteName + "\x27 현장이 진행 현장으로 성공적으로 승격되었습니다."
+    };
+  } catch (err) {
+    Logger.log("promoteEstimateToSite error: " + err.toString());
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
  * 모바일 웹 드롭다운 상태 변경 화면 (doGet)
  */
 function doGet(e) {
@@ -10004,6 +10359,22 @@ function doGet(e) {
   var needSheet = (row >= 2 || !!action || !!targetId || !!targetSite || !!targetTask) && (view !== "dashboard" || !!action);
   var ss = needSheet ? getAppSpreadsheet() : null;
   var sheet = ss ? findSiteScheduleSheet(ss) : null;
+
+  // 0-0-0-Promote) 신규견적 -> 진행 현장 승격 요청 (action=promoteEstimateToSite)
+  if (action === "promoteEstimateToSite") {
+    var pPromote = {};
+    if (p.data) {
+      try { pPromote = typeof p.data === "string" ? JSON.parse(p.data) : p.data; } catch (ePr) { pPromote = {}; }
+    } else {
+      pPromote = p;
+    }
+    if (typeof pPromote.tasks === "string") {
+      try { pPromote.tasks = JSON.parse(pPromote.tasks); } catch (ePt) { pPromote.tasks = null; }
+    }
+    var promoteRes = promoteEstimateToSite(pPromote);
+    return ContentService.createTextOutput(JSON.stringify(promoteRes))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 
   // 0-0-0) 신규현장(신규견적) 등록 요청 (action=addEstimateRow || action=addNewSite)
   if (action === "addEstimateRow" || action === "addNewSite") {
@@ -15820,6 +16191,18 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      <button type="button" onclick="closeMemberFormModal()" style="padding:7px 14px;border:1.5px solid #cbd5e1;background:#ffffff;color:#475569;border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer;">취소</button>';
   html += '      <button type="button" onclick="saveMemberForm()" style="padding:7px 18px;border:none;background:#2563eb;color:#ffffff;border-radius:7px;font-size:12.5px;font-weight:800;cursor:pointer;box-shadow:0 1px 2px rgba(37,99,235,0.3);">저장하기</button>';
   html += '    </div>';
+  html += '  </div>';
+  html += '</div>';
+
+  html += '<!-- 신규현장 -> 진행현장 승격 확인 모달 -->';
+  html += '<div id="promoteEstimateModalOverlay" class="site-info-modal-overlay" onclick="closePromoteEstimateModal(event)">';
+  html += '  <div class="site-info-modal-box" onclick="event.stopPropagation()" style="max-width:620px;max-height:90vh;display:flex;flex-direction:column;">';
+  html += '    <div class="site-info-modal-header" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:13px 16px;">';
+  html += '      <div class="site-info-modal-title" style="color:#0f172a;font-size:15px;font-weight:800;"><span id="promoteModalTitleText">🚀 진행 현장으로 승격 등록</span></div>';
+  html += '      <button type="button" class="sheet-close" onclick="closePromoteEstimateModal()">✕</button>';
+  html += '    </div>';
+  html += '    <div class="site-info-modal-body" id="promoteEstimateModalBody" style="padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;"></div>';
+  html += '    <div class="site-info-modal-footer" id="promoteEstimateModalFooter" style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:12px 16px;display:flex;justify-content:flex-end;gap:8px;"></div>';
   html += '  </div>';
   html += '</div>';
 
@@ -21943,13 +22326,16 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  const cleanPhone = rawPhone.replace(/[^0-9+]/g, "");';
   html += '  const hasPhone = Boolean(cleanPhone && cleanPhone.length >= 7 && rawPhone !== "-" && rawPhone !== "미등록");';
   html += '  const phoneLink = hasPhone ? (\'<a href="tel:\' + escapeHtml(cleanPhone) + \'" class="pc-est-call-btn" title="고객 전화 걸기 (\' + escapeHtml(rawPhone) + \')">📞 \' + escapeHtml(rawPhone) + \'</a>\') : \'<span style="color:#94a3b8;font-size:12px;">연락처 미등록</span>\';';
+  html += '  const isContractDone = (est.status === "계약 완료");';
+  html += '  const isPromoted = isContractDone && isEstimatePromotedToSite(siteName);';
+  html += '  const promotedBadge = isPromoted ? (\'<span class="pc-badge-promoted" style="background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px;cursor:pointer;display:inline-flex;align-items:center;gap:3px;" onclick="selectPcSite(decodeURIComponent(\\\'\' + encodeURIComponent(siteName) + \'\\\'))" title="진행 현장 바로가기">✅ 현장 승격됨</span>\') : "";';
   html += '  let html = "";';
   html += '  html += \'<div class="pc-estimate-detail-container">\';';
   html += '  html += \'  <div class="pc-est-hero-card">\';';
   html += '  html += \'    <div class="pc-est-hero-top">\';';
   html += '  html += \'      <div class="pc-est-title-wrap">\';';
   html += '  html += \'        <div class="pc-est-badge-row">\';';
-  html += '  html += \'          \' + statusBadge + \' \' + priorityBadge + \' \' + scopeBadge + \' \' + sourceBadge;';
+  html += '  html += \'          \' + statusBadge + \' \' + priorityBadge + \' \' + scopeBadge + \' \' + sourceBadge + (promotedBadge ? (\' \' + promotedBadge) : "");';
   html += '  html += \'        </div>\';';
   html += '  html += \'        <h2 class="pc-est-site-name">📋 \' + escapeHtml(siteName) + \'</h2>\';';
   html += '  html += \'        <div class="pc-est-meta-line">\';';
@@ -21965,7 +22351,8 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  html += \'        </div>\';';
   html += '  html += \'      </div>\';';
   html += '  html += \'      <div class="pc-est-hero-actions">\';';
-  html += '  html += \'        <button type="button" class="pc-btn-primary" onclick="openSpreadsheetEstimateSheet()" title="스프레드시트 신규견적 탭 열기"><span>📊</span> 시트에서 보기</button>\';';
+
+  html += '  html += \'        \' + (isContractDone ? (isPromoted ? \'<button type="button" class="pc-btn-primary" style="background:#16a34a;border:none;color:#ffffff;font-weight:800;" onclick="selectPcSite(decodeURIComponent(\\\'\' + encodeURIComponent(siteName) + \'\\\'))" title="진행 현장 바로가기"><span>✅</span> 현장 등록됨 → 보기</button>\' : \'<button type="button" class="pc-btn-primary" style="background:linear-gradient(135deg, #2563eb, #1d4ed8);border:none;color:#ffffff;font-weight:800;box-shadow:0 2px 6px rgba(37,99,235,0.3);" onclick="openPromoteEstimateModal(decodeURIComponent(\\\'\' + encodeURIComponent(siteName) + \'\\\'))" title="진행 현장으로 승격"><span>🚀</span> 현장으로 승격</button>\') : "") + \'\';';  html += '  html += \'        <button type="button" class="pc-btn-primary" onclick="openSpreadsheetEstimateSheet()" title="스프레드시트 신규견적 탭 열기"><span>📊</span> 시트에서 보기</button>\';';
   html += '  html += \'        <button type="button" class="pc-btn-primary" onclick="openEditEstimateModal(\\\'\' + encodeURIComponent(siteName) + \'\\\')" style="background:#3b82f6;" title="신규현장 정보 수정"><span>✏️</span> 정보 수정</button>\';';
   html += '  html += \'        <button type="button" class="pc-btn-danger" style="background:#ef4444;color:#ffffff;border:none;border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;box-shadow:0 1px 2px rgba(239,68,68,0.25);" onclick="confirmDeleteSite(decodeURIComponent(this.dataset.sitename), decodeURIComponent(this.dataset.scope))" data-sitename="\' + encodeURIComponent(siteName) + \'" data-scope="newSite" title="이 신규현장 영구 삭제"><span>🗑️</span> 현장 삭제</button>\';';
   html += '  html += \'      </div>\';';
@@ -22073,7 +22460,11 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    html += \'            <td style="text-align:center;"><span class="pc-manager-pill"><span>\' + escapeHtml(e.manager || "조항만") + \'</span></span></td>\';';
   html += '    html += \'            <td style="text-align:right;font-weight:700;color:#2563eb;">\' + rowAmtStr + \'</td>\';';
   html += '    html += \'            <td style="text-align:center;font-size:12px;color:#475569;">\' + escapeHtml(formatEstimateDateYMD(e.expectedDate)) + \'</td>\';';
-  html += '    html += \'            <td style="text-align:center;white-space:nowrap;"><button type="button" class="pc-task-btn-edit" onclick="event.stopPropagation();openEditEstimateModal(decodeURIComponent(this.dataset.sitename))" data-sitename="\' + encodeURIComponent(s.siteName) + \'">수정</button><button type="button" class="pc-task-btn-del" style="margin-left:4px;padding:3px 7px;font-size:11.5px;font-weight:700;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;border-radius:5px;cursor:pointer;" onclick="event.stopPropagation();confirmDeleteSite(decodeURIComponent(this.dataset.sitename), decodeURIComponent(this.dataset.scope))" data-sitename="\' + encodeURIComponent(s.siteName) + \'" data-scope="newSite" title="신규현장 삭제">삭제</button></td>\';';
+  html += '    const rIsDone = (e.status === "계약 완료");';
+  html += '    const rIsPromoted = rIsDone && isEstimatePromotedToSite(s.siteName);';
+  html += '    html += \'            <td style="text-align:center;white-space:nowrap;">\';';
+  html += '    html += \'              \' + (rIsDone ? (rIsPromoted ? \'<button type="button" class="pc-task-btn-edit" style="background:#dcfce7;color:#15803d;border:1px solid #86efac;font-weight:800;margin-right:4px;" onclick="event.stopPropagation();selectPcSite(decodeURIComponent(this.dataset.sitename))" data-sitename="\' + encodeURIComponent(s.siteName) + \'" title="진행 현장 바로가기">보기</button>\' : \'<button type="button" class="pc-task-btn-edit" style="background:#eff6ff;color:#2563eb;border:1px solid #93c5fd;font-weight:800;margin-right:4px;" onclick="event.stopPropagation();openPromoteEstimateModal(decodeURIComponent(this.dataset.sitename))" data-sitename="\' + encodeURIComponent(s.siteName) + \'" title="진행 현장으로 승격">승격</button>\') : "") + \'\';';
+  html += '    html += \'              <button type="button" class="pc-task-btn-edit"  onclick="event.stopPropagation();openEditEstimateModal(decodeURIComponent(this.dataset.sitename))" data-sitename="\' + encodeURIComponent(s.siteName) + \'">수정</button><button type="button" class="pc-task-btn-del" style="margin-left:4px;padding:3px 7px;font-size:11.5px;font-weight:700;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;border-radius:5px;cursor:pointer;" onclick="event.stopPropagation();confirmDeleteSite(decodeURIComponent(this.dataset.sitename), decodeURIComponent(this.dataset.scope))" data-sitename="\' + encodeURIComponent(s.siteName) + \'" data-scope="newSite" title="신규현장 삭제">삭제</button></td>\';';
   html += '    html += \'          </tr>\';';
   html += '  });';
   html += '  html += \'        </tbody>\';';
@@ -22653,6 +23044,9 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    mHtml += \'    <div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1;">\';';
   html += '    mHtml += \'      <span style="width:8px;height:8px;border-radius:50%;background:\' + stStyle.fg + \';flex-shrink:0;"></span>\';';
   html += '    mHtml += \'      <span style="font-size:14px;font-weight:800;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="\' + escapeHtml(s.siteName) + \'">\' + escapeHtml(s.siteName) + \'</span>\';';
+  html += '    const mIsDone = (eData.status === "계약 완료");';
+  html += '    const mIsPromoted = mIsDone && isEstimatePromotedToSite(s.siteName);';
+  html += '    mHtml += \'      \' + (mIsPromoted ? \'<span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:8px;background:#dcfce7;color:#15803d;border:1px solid #86efac;cursor:pointer;white-space:nowrap;" onclick="event.stopPropagation(); selectMobileSite(\\\'\' + sNameEnc + \'\\\');">✅ 승격됨</span>\' : "") + \'\';';
   html += '    mHtml += \'    </div>\';';
   html += '    mHtml += \'    <span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;background:\' + stStyle.bg + \';color:\' + stStyle.fg + \';border:1px solid \' + stStyle.border + \';white-space:nowrap;flex-shrink:0;">\' + escapeHtml(eSt) + \'</span>\';';
   html += '    mHtml += \'  </div>\';';
@@ -22711,6 +23105,13 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      }';
   html += '      if (eData.memo) {';
   html += '        mHtml += \'<div style="background:#f8fafc;padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;color:#334155;"><strong>상담 메모:</strong> \' + escapeHtml(eData.memo) + \'</div>\';';
+  html += '      }';
+  html += '      if (mIsDone) {';
+  html += '        if (mIsPromoted) {';
+  html += '          mHtml += \'    <div style="margin-bottom:6px;"><button type="button" onclick="selectMobileSite(\\\'\' + sNameEnc + \'\\\')" style="width:100%;padding:8px;background:#16a34a;color:#ffffff;border:none;border-radius:6px;font-weight:800;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">✅ 현장 등록됨 → 해당 현장 보기</button></div>\';';
+  html += '        } else {';
+  html += '          mHtml += \'    <div style="margin-bottom:6px;"><button type="button" onclick="openPromoteEstimateModal(\\\'\' + sNameEnc + \'\\\')" style="width:100%;padding:8px;background:linear-gradient(135deg, #2563eb, #1d4ed8);color:#ffffff;border:none;border-radius:6px;font-weight:800;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;box-shadow:0 2px 6px rgba(37,99,235,0.3);">🚀 진행 현장으로 승격</button></div>\';';
+  html += '        }';
   html += '      }';
   html += '      mHtml += \'    <div style="display:flex;gap:6px;margin-top:4px;">\';';
   html += '      mHtml += \'      <button type="button" onclick="openEditEstimateModal(\\\'\' + sNameEnc + \'\\\')" style="flex:1;padding:7px;background:#3b82f6;color:#ffffff;border:none;border-radius:6px;font-weight:700;font-size:11.5px;cursor:pointer;">✏️ 정보 수정</button>\';';
@@ -25453,7 +25854,204 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  if (name === "AS") selectSheetStatus("AS");';
   html += '}';
   html += '';
-  html += 'function openEditEstimateModal(siteNameOrEnc) {';
+    html += 'let curPromoteSiteName = "";';
+  html += 'let curPromoteEstimateData = null;';
+  html += '';
+  html += 'function isEstimatePromotedToSite(siteName) {';
+  html += '  if (!siteName) return false;';
+  html += '  const clean = String(siteName).trim().replace(/\\s+/g, "").toLowerCase();';
+  html += '  if (!rawData || !Array.isArray(rawData.sites)) return false;';
+  html += '  return rawData.sites.some(s => {';
+  html += '    if (!s || (s.scope || "site") === "newSite") return false;';
+  html += '    const sName = String(s.siteName || "").trim().replace(/\\s+/g, "").toLowerCase();';
+  html += '    return sName === clean;';
+  html += '  });';
+  html += '}';
+  html += '';
+  html += 'function openPromoteEstimateModal(siteNameOrEnc, optEd) {';
+  html += '  if (!siteNameOrEnc) return;';
+  html += '  const siteName = (siteNameOrEnc.indexOf("%") !== -1) ? decodeURIComponent(siteNameOrEnc) : siteNameOrEnc;';
+  html += '  if (!rawData || !Array.isArray(rawData.sites)) return;';
+  html += '  const siteObj = rawData.sites.find(s => s.siteName === siteName);';
+  html += '  const ed = optEd || (siteObj ? siteObj.estimateData : null);';
+  html += '  if (!ed) { showToast("⚠️ 견적 정보를 찾을 수 없습니다: " + siteName); return; }';
+  html += '  if (isEstimatePromotedToSite(siteName)) {';
+  html += '    showToast("ℹ️ 이미 진행 현장으로 등록된 현장입니다: " + siteName);';
+  html += '    if (isMobile) selectMobileSite(siteName); else selectPcSite(siteName);';
+  html += '    return;';
+  html += '  }';
+  html += '  curPromoteSiteName = siteName;';
+  html += '  curPromoteEstimateData = ed;';
+  html += '  const scope = ed.scope || "전체공사";';
+  html += '  const startDate = ed.expectedDate || (new Date().toISOString().slice(0, 10));';
+  html += '  const manager = ed.manager || "조항만";';
+  html += '  const clientName = ed.clientName || "";';
+  html += '  const clientPhone = ed.clientPhone || "";';
+  html += '  const address = ed.address || "";';
+  html += '  const contractAmount = ed.contractAmount || ed.expectedAmount || "";';
+  html += '  const contractAmtStr = contractAmount ? (typeof contractAmount === "number" ? contractAmount.toLocaleString() + "원" : formatEstimateAmtStr(contractAmount)) : "미기재";';
+  html += '  const scopes = ["전체공사", "욕실", "주방", "도배·마루", "붙박이·가구", "샷시·단열", "기타"];';
+  html += '  const scopeOpts = scopes.map(sc => `<option value="${escapeHtml(sc)}" ${sc === scope ? "selected" : ""}>${escapeHtml(sc)}</option>`).join("");';
+  html += '  const titleEl = document.getElementById("promoteModalTitleText");';
+  html += '  if (titleEl) titleEl.innerText = "🚀 [" + siteName + "] 진행 현장 승격";';
+  html += '  const bodyEl = document.getElementById("promoteEstimateModalBody");';
+  html += '  if (bodyEl) {';
+  html += '    bodyEl.innerHTML = `';
+  html += '      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 14px;color:#1e40af;font-size:12.5px;line-height:1.5;">';
+  html += '        <strong>계약 완료된 신규견적을 진행 현장(공사 일정)으로 즉시 승격 등록합니다.</strong><br>';
+  html += '        현장 정보 시트에 주소·고객 정보가 자동 정리되며, 착공예정일에 맞춘 표준 공정이 현장데이터 시트에 안전하게 등록됩니다.';
+  html += '      </div>';
+  html += '      <div style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:10px;padding:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;font-size:12.5px;">';
+  html += '        <div><span style="color:#64748b;font-size:11px;">현장명:</span> <strong style="color:#0f172a;font-size:13px;display:block;">${escapeHtml(siteName)}</strong></div>';
+  html += '        <div><span style="color:#64748b;font-size:11px;">고객명 / 연락처:</span> <strong style="color:#0f172a;display:block;">${escapeHtml(clientName || "미등록")} ${clientPhone ? `(${escapeHtml(clientPhone)})` : ""}</strong></div>';
+  html += '        <div style="grid-column:1 / -1;"><span style="color:#64748b;font-size:11px;">현장 주소:</span> <strong style="color:#0f172a;display:block;">${escapeHtml(address || "주소 미등록")}</strong></div>';
+  html += '        <div><span style="color:#64748b;font-size:11px;">담당자:</span> <strong style="color:#0f172a;display:block;">${escapeHtml(manager)}</strong></div>';
+  html += '        <div><span style="color:#64748b;font-size:11px;">최종 계약금액:</span> <strong style="color:#15803d;font-size:13px;display:block;">${escapeHtml(contractAmtStr)}</strong></div>';
+  html += '      </div>';
+  html += '      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px;">';
+  html += '        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">';
+  html += '          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#0f172a;font-size:13px;">';
+  html += '            <input type="checkbox" id="pmModalAutoTasks" checked onchange="updatePromoteSchedulePreview()" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">';
+  html += '            착공예정일 기준 표준 공정 자동 생성';
+  html += '          </label>';
+  html += '          <span style="font-size:11px;color:#64748b;">(04_공종 마스터 기준)</span>';
+  html += '        </div>';
+  html += '        <div id="pmModalConfigRow" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+  html += '          <div>';
+  html += '            <label style="display:block;font-size:11.5px;color:#475569;font-weight:700;margin-bottom:4px;">공사 범위</label>';
+  html += '            <select id="pmModalScope" class="sheet-filter-select" style="width:100%;padding:6px 10px;font-size:12.5px;" onchange="updatePromoteSchedulePreview()">';
+  html += '              ${scopeOpts}';
+  html += '            </select>';
+  html += '          </div>';
+  html += '          <div>';
+  html += '            <label style="display:block;font-size:11.5px;color:#475569;font-weight:700;margin-bottom:4px;">착공(기준) 일자</label>';
+  html += '            <input type="date" id="pmModalStartDate" class="sheet-filter-select" style="width:100%;padding:6px 10px;font-size:12.5px;" value="${escapeHtml(startDate)}" onchange="updatePromoteSchedulePreview()">';
+  html += '          </div>';
+  html += '        </div>';
+  html += '        <div>';
+  html += '          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+  html += '            <span style="font-size:12px;font-weight:800;color:#334155;">📋 초기 생성 공정 세트 미리보기</span>';
+  html += '            <span id="pmModalTaskCountBadge" style="font-size:11px;color:#2563eb;font-weight:700;"></span>';
+  html += '          </div>';
+  html += '          <div id="pmModalSchedulePreviewBox" style="background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;padding:10px;max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;"></div>';
+  html += '        </div>';
+  html += '      </div>';
+  html += '    `;';
+  html += '  }';
+  html += '  const footEl = document.getElementById("promoteEstimateModalFooter");';
+  html += '  if (footEl) {';
+  html += '    footEl.innerHTML = `';
+  html += '      <button type="button" class="btn-delete-cancel" onclick="closePromoteEstimateModal()" style="padding:8px 16px;border:1.5px solid #cbd5e1;background:#ffffff;color:#475569;border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer;">취소</button>';
+  html += '      <button type="button" id="btnPromoteSubmitInner" style="padding:8px 18px;border:none;background:linear-gradient(135deg, #2563eb, #1d4ed8);color:#ffffff;border-radius:7px;font-size:12.5px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.3);" onclick="submitPromoteEstimateModal()">🚀 진행 현장으로 승격 등록</button>';
+  html += '    `;';
+  html += '  }';
+  html += '  updatePromoteSchedulePreview();';
+  html += '  const modal = document.getElementById("promoteEstimateModalOverlay");';
+  html += '  if (modal) modal.classList.add("active");';
+  html += '}';
+  html += '';
+  html += 'function closePromoteEstimateModal(e) {';
+  html += '  if (e && e.target && e.target !== document.getElementById("promoteEstimateModalOverlay") && !e.target.classList.contains("sheet-close") && !e.target.classList.contains("btn-delete-cancel")) return;';
+  html += '  const modal = document.getElementById("promoteEstimateModalOverlay");';
+  html += '  if (modal) modal.classList.remove("active");';
+  html += '}';
+  html += '';
+  html += 'function updatePromoteSchedulePreview() {';
+  html += '  const autoCb = document.getElementById("pmModalAutoTasks");';
+  html += '  const isAuto = autoCb ? autoCb.checked : true;';
+  html += '  const configRow = document.getElementById("pmModalConfigRow");';
+  html += '  const previewBox = document.getElementById("pmModalSchedulePreviewBox");';
+  html += '  const countBadge = document.getElementById("pmModalTaskCountBadge");';
+  html += '  if (!previewBox) return;';
+  html += '  if (!isAuto) {';
+  html += '    if (configRow) configRow.style.opacity = "0.5";';
+  html += '    if (countBadge) countBadge.innerText = "1개 기본 행";';
+  html += '    previewBox.innerHTML = \'<div style="font-size:12px;color:#64748b;padding:8px 6px;text-align:center;">※ 공정 일정 없이 현장 기본 정보(상담 1행)만 진행 현장에 등록됩니다.</div>\';';
+  html += '    return;';
+  html += '  }';
+  html += '  if (configRow) configRow.style.opacity = "1";';
+  html += '  const scopeEl = document.getElementById("pmModalScope");';
+  html += '  const scope = scopeEl ? scopeEl.value : "전체공사";';
+  html += '  const dateEl = document.getElementById("pmModalStartDate");';
+  html += '  const startDate = dateEl ? dateEl.value : (new Date().toISOString().slice(0, 10));';
+  html += '  const tasks = getDefaultProcessSchedule(scope, startDate, curPromoteEstimateData ? curPromoteEstimateData.manager : "조항만");';
+  html += '  if (countBadge) countBadge.innerText = tasks.length + "개 공종 자동 생성";';
+  html += '  previewBox.innerHTML = tasks.map((t, idx) => `';
+  html += '    <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:#f8fafc;border-radius:6px;font-size:12px;border:1px solid #f1f5f9;">';
+  html += '      <div style="display:flex;align-items:center;gap:6px;">';
+  html += '        <span style="font-weight:800;color:#94a3b8;width:18px;text-align:right;">${idx + 1}.</span>';
+  html += '        <strong style="color:#0f172a;min-width:55px;">${escapeHtml(t.taskName)}</strong>';
+  html += '        <span style="color:#64748b;font-size:11px;">(${escapeHtml(t.memo || "")})</span>';
+  html += '      </div>';
+  html += '      <span style="color:#2563eb;font-weight:700;font-size:11.5px;">📅 ${escapeHtml(t.date)}</span>';
+  html += '    </div>';
+  html += '  `).join("");';
+  html += '}';
+  html += '';
+  html += 'function submitPromoteEstimateModal() {';
+  html += '  if (!curPromoteSiteName) return;';
+  html += '  const siteName = curPromoteSiteName;';
+  html += '  const ed = curPromoteEstimateData || {};';
+  html += '  const scopeEl = document.getElementById("pmModalScope");';
+  html += '  const scope = scopeEl ? scopeEl.value : (ed.scope || "전체공사");';
+  html += '  const dateEl = document.getElementById("pmModalStartDate");';
+  html += '  const startDate = dateEl ? dateEl.value : (ed.expectedDate || (new Date().toISOString().slice(0, 10)));';
+  html += '  const autoCb = document.getElementById("pmModalAutoTasks");';
+  html += '  const generateTasks = autoCb ? autoCb.checked : true;';
+  html += '  const manager = ed.manager || "조항만";';
+  html += '  const computedTasks = generateTasks ? getDefaultProcessSchedule(scope, startDate, manager) : [{';
+  html += '    taskName: "상담", date: startDate, manager: manager, partner: "", status: "예정", isShared: true, memo: ed.memo ? "견적 메모: " + ed.memo : ""';
+  html += '  }];';
+  html += '  const payload = {';
+  html += '    siteName: siteName, scope: scope, startDate: startDate, generateTasks: generateTasks, manager: manager,';
+  html += '    clientName: ed.clientName || "", clientPhone: ed.clientPhone || "", address: ed.address || "",';
+  html += '    contractAmount: ed.contractAmount || "", expectedAmount: ed.expectedAmount || "", memo: ed.memo || "",';
+  html += '    estimateFile: ed.estimateFile || "", tasks: computedTasks';
+  html += '  };';
+  html += '  const btn = document.getElementById("btnPromoteSubmitInner");';
+  html += '  if (btn) { btn.disabled = true; btn.innerText = "⏳ 승격 처리 중..."; }';
+  html += '  if (typeof google !== "undefined" && google.script && google.script.run) {';
+  html += '    google.script.run';
+  html += '      .withSuccessHandler(function(res) {';
+  html += '        closePromoteEstimateModal();';
+  html += '        if (res && res.success) {';
+  html += '          showToast("🎉 [" + siteName + "] 현장이 진행 현장으로 승격되었습니다!");';
+  html += '          loadDataSilently();';
+  html += '          setTimeout(function() { if (isMobile) selectMobileSite(siteName); else selectPcSite(siteName); }, 600);';
+  html += '        } else {';
+  html += '          showToast("⚠️ 승격 실패: " + ((res && res.error) || "알 수 없는 오류"));';
+  html += '        }';
+  html += '      })';
+  html += '      .withFailureHandler(function(err) {';
+  html += '        closePromoteEstimateModal();';
+  html += '        showToast("❌ 서버 오류: " + ((err && err.message) || err));';
+  html += '      })';
+  html += '      .promoteEstimateToSite(payload);';
+  html += '  } else {';
+  html += '    const apiUrl = (typeof SCRIPT_URL !== "undefined" ? SCRIPT_URL : (window.location.href.split("?")[0]));';
+  html += '    fetch(apiUrl + "?action=promoteEstimateToSite", {';
+  html += '      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },';
+  html += '      body: "data=" + encodeURIComponent(JSON.stringify(payload))';
+  html += '    })';
+  html += '      .then(r => r.json())';
+  html += '      .then(res => {';
+  html += '        closePromoteEstimateModal();';
+  html += '        if (res && res.success) {';
+  html += '          showToast("🎉 [" + siteName + "] 현장이 진행 현장으로 승격되었습니다!");';
+  html += '          loadDataSilently();';
+  html += '          setTimeout(function() { if (isMobile) selectMobileSite(siteName); else selectPcSite(siteName); }, 600);';
+  html += '        } else {';
+  html += '          showToast("⚠️ 승격 실패: " + ((res && res.error) || "알 수 없는 오류"));';
+  html += '        }';
+  html += '      })';
+  html += '      .catch(err => {';
+  html += '        closePromoteEstimateModal();';
+  html += '        showToast("❌ 서버 오류: " + ((err && err.message) || err));';
+  html += '      });';
+  html += '  }';
+  html += '}';
+  html += '';
+html += 'function openEditEstimateModal(siteNameOrEnc) {';
   html += '  if (!siteNameOrEnc) return;';
   html += '  const siteName = (siteNameOrEnc.indexOf("%") !== -1) ? decodeURIComponent(siteNameOrEnc) : siteNameOrEnc;';
   html += '  if (!rawData || !Array.isArray(rawData.sites)) return;';
@@ -26203,7 +26801,10 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    curEstimateEditSite = null;';
   html += '    if (rawData) renderDashboardPayload(rawData);';
   html += '    showToast("💾 [" + siteVal + "] 신규현장 정보가 수정되었습니다.");';
-  html += '    if (typeof google !== "undefined" && google.script && google.script.run) {';
+
+  html += '    if (estPayload.status === "계약 완료" && !isEstimatePromotedToSite(siteVal)) {';
+  html += '      setTimeout(function() { openPromoteEstimateModal(siteVal, estPayload); }, 350);';
+  html += '    }';  html += '    if (typeof google !== "undefined" && google.script && google.script.run) {';
   html += '      google.script.run';
   html += '        .withSuccessHandler(res => {';
   html += '          if (res && res.success) { loadDataSilently(); }';

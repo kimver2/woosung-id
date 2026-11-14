@@ -2012,6 +2012,100 @@ assertTest('Step 194-6: 모바일/PC 중첩 iframe 간 window.top.postMessage �
 
 
 // ========================================================
+// 🚀 Step 195: 신규 현장(계약 완료) -> 진행 현장 승격(Convert Lead to Project) QA
+// ========================================================
+console.log('\n🚀 [Step 195]: 신규 현장(계약 완료) -> 진행 현장 승격(Convert Lead to Project) QA ---');
+
+// 195-1: 서버 승격 함수 및 라우팅 정의 검증
+const code195 = fs.readFileSync(path.join(__dirname, '..', '현장서식.js'), 'utf-8');
+assertTest('Step 195-1: getDefaultProcessSchedule, isSitePromotedAlready, promoteEstimateToSite 함수 및 doGet 라우팅 정의 검증',
+  typeof sandbox.getDefaultProcessSchedule === 'function' &&
+  typeof sandbox.isSitePromotedAlready === 'function' &&
+  typeof sandbox.promoteEstimateToSite === 'function' &&
+  code195.includes('action === "promoteEstimateToSite"')
+);
+
+// 195-2: 공사범위 7종별 표준 공종 목록 및 일자 자동 산출 검증 (04_공종 마스터 기준)
+{
+  const testDate = '2026-12-01';
+  const pAll = sandbox.getDefaultProcessSchedule('전체공사', testDate, '조항만');
+  const pBath = sandbox.getDefaultProcessSchedule('욕실', testDate, '조항만');
+  const pKitchen = sandbox.getDefaultProcessSchedule('주방', testDate, '조항만');
+  const pPaperFloor = sandbox.getDefaultProcessSchedule('도배·마루', testDate, '조항만');
+  const pCloset = sandbox.getDefaultProcessSchedule('붙박이·가구', testDate, '조항만');
+  const pSash = sandbox.getDefaultProcessSchedule('샷시·단열', testDate, '조항만');
+  const pEtc = sandbox.getDefaultProcessSchedule('기타', testDate, '조항만');
+
+  const dateRegex = /^\d{4}\.\d{2}\.\d{2}$/;
+  const allDatesValid = [pAll, pBath, pKitchen, pPaperFloor, pCloset, pSash, pEtc].every(plan =>
+    Array.isArray(plan) && plan.length > 0 && plan.every(t => dateRegex.test(t.date) && t.manager === '조항만')
+  );
+
+  assertTest('Step 195-2: 공사범위 7종별 표준 공종 수 및 YYYY.MM.DD 일자 포맷 검증',
+    allDatesValid &&
+    pAll.length === 14 && pAll[0].taskName === '보양' && pAll[13].taskName === '마감' &&
+    pBath.length === 7 && pBath.some(t => t.taskName === 'SMC') &&
+    pKitchen.length === 7 && pKitchen.some(t => t.taskName === '가구') &&
+    pPaperFloor.length === 5 && pPaperFloor.some(t => t.taskName === '도배') &&
+    pCloset.length === 4 && pCloset[0].taskName === '현장실측' &&
+    pSash.length === 5 && pSash.some(t => t.taskName === '창호') &&
+    pEtc.length === 5 && pEtc[0].taskName === '현장실측'
+  );
+}
+
+// 195-3: 중복 승격 방지(isSitePromotedAlready) 대소문자/공백 무시 전수 검증
+{
+  const origFindSite = sandbox.findSiteScheduleSheet; const origFindComp = sandbox.findCompletedSitesSheet; sandbox.findSiteScheduleSheet = (ss) => ss.getSheetByName("현장데이터"); sandbox.findCompletedSitesSheet = (ss) => ss.getSheetByName("완료현장"); const mockSs195 = {
+    getSheetByName: (name) => {
+      if (name === '현장데이터') {
+        return {
+          getLastRow: () => 3,
+          getRange: (r, c, nr, nc) => ({
+            getValues: () => [['현장명'], ['강남자이아파트'], ['서초래미안']]
+          })
+        };
+      }
+      if (name === '완료현장') {
+        return {
+          getLastRow: () => 2,
+          getRange: (r, c, nr, nc) => ({
+            getValues: () => [['현장명'], ['송파힐스테이트']]
+          })
+        };
+      }
+      return null;
+    }
+  };
+
+  assertTest('Step 195-3: isSitePromotedAlready 진행현장 및 완료현장 중복 탐지 (공백/대소문자 무시)',
+    sandbox.isSitePromotedAlready(mockSs195, '강남자이아파트') === true &&
+    sandbox.isSitePromotedAlready(mockSs195, ' 강남자이 아파트 ') === true &&
+    sandbox.isSitePromotedAlready(mockSs195, '송파힐스테이트') === true &&
+    sandbox.isSitePromotedAlready(mockSs195, '미등록신규현장') === false &&
+    sandbox.isSitePromotedAlready(mockSs195, '') === false
+  );
+}
+
+// 195-4: promoteEstimateToSite 유효성 검사 및 중복 방어
+{
+  const noSiteRes = sandbox.promoteEstimateToSite({});
+  assertTest('Step 195-4: promoteEstimateToSite 현장명 미입력 시 에러 반환 방어',
+    noSiteRes && noSiteRes.success === false && noSiteRes.error.includes('현장명')
+  );
+}
+
+// 195-5: data/dashboard_data.js API 연동 및 docs 동기화 검증
+{
+  const rootDataJs = fs.readFileSync(path.join(__dirname, '..', 'data', 'dashboard_data.js'), 'utf-8');
+  const docsDataJs = fs.readFileSync(path.join(__dirname, '..', 'docs', 'data', 'dashboard_data.js'), 'utf-8');
+  assertTest('Step 195-5: WSDataService.promoteEstimateToSite API 탑재 및 docs 동기화 100% 검증',
+    rootDataJs.includes('promoteEstimateToSite: function') &&
+    rootDataJs === docsDataJs
+  );
+}
+
+
+// ========================================================
 // [핵심] PC/모바일 대시보드 및 index.html 클라이언트 <script> AST 구문 무결성 전수 검증
 // ========================================================
 console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script> AST 문법 파싱 검증]');
@@ -2020,6 +2114,10 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   const mobHtmlAst = sandbox.buildSidebarDashboardHtml('mobile');
   const idxRootHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const idxDocsHtml = fs.readFileSync(path.join(__dirname, '..', 'docs', 'index.html'), 'utf8');
+  const v2RootHtml = fs.readFileSync(path.join(__dirname, '..', 'v2.html'), 'utf8');
+  const previewHtml = fs.readFileSync(path.join(__dirname, '..', 'preview_tabs.html'), 'utf8');
+  const v2DocsHtml = fs.readFileSync(path.join(__dirname, '..', 'docs', 'v2.html'), 'utf8');
+  const previewDocsHtml = fs.readFileSync(path.join(__dirname, '..', 'docs', 'preview_tabs.html'), 'utf8');
 
   function verifyAllScriptBlocks(htmlStr, label) {
     const regex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
@@ -2044,7 +2142,23 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(pcHtmlAst, 'PC 대시보드 HTML');
   verifyAllScriptBlocks(mobHtmlAst, '모바일 대시보드 HTML');
   verifyAllScriptBlocks(idxRootHtml, '루트 index.html');
+  verifyAllScriptBlocks(idxDocsHtml, 'docs/index.html');
+  verifyAllScriptBlocks(v2RootHtml, '루트 v2.html');
+  verifyAllScriptBlocks(previewHtml, '루트 preview_tabs.html');
+  verifyAllScriptBlocks(v2DocsHtml, 'docs/v2.html');
+  verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
+
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
+  assertTest('index.html 내 exec?v=240 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=240'));
+  assertTest('v2.html, preview_tabs.html, docs/v2.html, docs/preview_tabs.html 4개 파일 100% 동일 동기화 검증',
+    v2RootHtml === previewHtml && v2RootHtml === v2DocsHtml && v2RootHtml === previewDocsHtml
+  );
+  assertTest('v2.html 내 승격 모달(promoteEstimateModal) 및 함수 탑재 검증',
+    v2RootHtml.includes('id="promoteEstimateModal"') &&
+    v2RootHtml.includes('openPromoteEstimateModal') &&
+    v2RootHtml.includes('isEstimatePromotedToSite') &&
+    v2RootHtml.includes('getDefaultProcessSchedule')
+  );
 }
 console.log('\n========================================================');
 console.log(`📊 [QA 검증 최종 결과]: 총 ${passCount + failCount}개 항목 중 ${passCount}개 통과, ${failCount}개 실패`);

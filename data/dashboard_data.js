@@ -355,6 +355,19 @@
       return this.callGasApi("addEstimateRow", payload);
     },
 
+    promoteEstimateToSite: function (payload, dashData) {
+      if (dashData) this.saveDashboardCache(dashData);
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (res) { resolve(res || { success: true }); })
+            .withFailureHandler(function (err) { reject(err); })
+            .promoteEstimateToSite(payload);
+        });
+      }
+      return this.callGasApi("promoteEstimateToSite", payload);
+    },
+
     saveSettings: function (settingsData) {
       this.saveSettingsCache(settingsData);
       if (typeof google !== "undefined" && google.script && google.script.run) {
