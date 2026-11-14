@@ -5204,6 +5204,14 @@
         return null;
       }
 
+      function extractFirstManager(mgr, fallback) {
+        if (!mgr) return fallback !== undefined ? fallback : "-";
+        const str = String(mgr).trim();
+        if (!str) return fallback !== undefined ? fallback : "-";
+        const parts = str.split(/[,/&+\n]/).map(s => s.trim()).filter(Boolean);
+        return parts.length > 0 ? parts[0] : (fallback !== undefined ? fallback : "-");
+      }
+
       function formatShortAmount(num) {
         const n = Number(num) || 0;
         if (n === 0) return "0";
@@ -5469,7 +5477,7 @@
         const monthFilter = Number(state.financeMonthFilter) || 0;
 
         return list.filter((r) => {
-          if (mgrFilter !== "all" && r.manager !== mgrFilter) return false;
+          if (mgrFilter !== "all" && r.manager !== mgrFilter && extractFirstManager(r.manager, "") !== mgrFilter) return false;
 
           const matchedSite = findMatchedSiteInfo(r.siteName);
           const progress = (matchedSite && matchedSite.progressRate !== undefined && matchedSite.progressRate !== null)
@@ -6079,7 +6087,7 @@
         const unissuedTaxCount = filtered.filter((r) => !r.taxInvoice || r.taxInvoice === "미발행").length;
         const collectionRate = totalContract > 0 ? Math.round((totalCollected / totalContract) * 100) : 0;
 
-        const managers = Array.from(new Set(allCollection.map(r => r.manager).filter(Boolean)));
+        const managers = Array.from(new Set(allCollection.map(r => extractFirstManager(r.manager, "")).filter(Boolean)));
         const stFilter = state.financeStatusFilter || "all";
         const mgrFilter = state.financeManagerFilter || "all";
 
@@ -6264,12 +6272,20 @@
               <td>
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                   <span style="font-weight:800;color:#1e293b;font-size:13px;">${escHtml(r.siteName)}</span>
+                  ${(progress !== null && !isNaN(progress)) ? `
+                    <span style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;white-space:nowrap;" title="공사진행률: ${progress}%">
+                      <span style="display:inline-block;width:24px;height:4px;background:#cbd5e1;border-radius:2px;overflow:hidden;vertical-align:middle;">
+                        <span style="display:block;width:${Math.min(Math.max(progress, 0), 100)}%;height:100%;background:#2563eb;"></span>
+                      </span>
+                      ${progress}%
+                    </span>
+                  ` : ""}
                   ${isDoneUncollected ? `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:800;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;white-space:nowrap;">⚠️ 공사완료 미수</span>` : ""}
                 </div>
                 ${pInfo.periodDisplay ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;font-weight:600;">📅 ${escHtml(pInfo.periodDisplay)}</div>` : ""}
               </td>
               <td>
-                <span style="font-weight:700;">${escHtml(r.manager || "-")}</span>
+                <span style="font-weight:700;">${escHtml(extractFirstManager(r.manager, "-"))}</span>
                 <div style="font-size:11px;color:var(--text-muted);">${escHtml(r.category || "전체공사")}</div>
               </td>
               <td>
@@ -6292,16 +6308,6 @@
                     ? `<span style="color:#15803d;font-weight:700;font-size:12px;">완납 (0원)</span>`
                     : `<span style="color:#2563eb;font-weight:700;font-size:12px;">+${Number(-uncollected).toLocaleString("ko-KR")}원</span>`)}
               </td>
-              <td style="text-align:center;">
-                ${progress !== null ? `
-                  <div style="display:flex;align-items:center;gap:5px;justify-content:center;">
-                    <div style="width:36px;height:5px;background:#e2e8f0;border-radius:3px;overflow:hidden;">
-                      <div style="width:${Math.min(progress, 100)}%;height:100%;background:#2563eb;"></div>
-                    </div>
-                    <span style="font-size:11px;font-weight:700;color:#2563eb;">${progress}%</span>
-                  </div>
-                ` : `<span style="color:var(--text-muted);font-size:11px;">-</span>`}
-              </td>
               <td style="text-align:center;">${stBadge}</td>
               <td style="text-align:center;">${taxBadge}</td>
               <td style="text-align:center;">
@@ -6311,7 +6317,7 @@
           `;
         }).join("") || `
           <tr>
-            <td colspan="10" style="text-align:center;color:var(--text-muted);padding:36px 16px;">
+            <td colspan="9" style="text-align:center;color:var(--text-muted);padding:36px 16px;">
               <div style="font-size:24px;margin-bottom:6px;">💰</div>
               <div>조건에 해당하는 수금 현장 내역이 없습니다.</div>
             </td>
@@ -6323,13 +6329,12 @@
             <table class="clean-table" style="min-width:1050px;font-size:12.5px;">
               <thead>
                 <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;text-align:left;">
-                  <th style="padding:10px 12px;width:190px;">현장명 / 공사기간</th>
+                  <th style="padding:10px 12px;width:220px;">현장명 / 공사기간</th>
                   <th style="padding:10px 10px;width:110px;">담당자/구분</th>
                   <th style="padding:10px 10px;width:100px;">계약자</th>
                   <th style="padding:10px 12px;text-align:right;width:110px;">최종금액</th>
                   <th style="padding:10px 12px;text-align:right;width:140px;">수금액 (단계)</th>
                   <th style="padding:10px 12px;text-align:right;width:120px;">미수금</th>
-                  <th style="padding:10px 10px;text-align:center;width:90px;">공사진행율</th>
                   <th style="padding:10px 8px;text-align:center;width:80px;">수금상태</th>
                   <th style="padding:10px 8px;text-align:center;width:90px;">계산서</th>
                   <th style="padding:10px 8px;text-align:center;width:60px;">관리</th>
@@ -8004,10 +8009,18 @@
                 <div>
                   <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
                     <span style="font-size:14.5px;font-weight:800;color:#1e293b;">${escHtml(r.siteName)}</span>
+                    ${(progress !== null && !isNaN(progress)) ? `
+                      <span style="display:inline-flex;align-items:center;gap:3px;padding:1px 5px;border-radius:4px;font-size:10.5px;font-weight:700;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;white-space:nowrap;" title="공사진행률: ${progress}%">
+                        <span style="display:inline-block;width:20px;height:3.5px;background:#cbd5e1;border-radius:2px;overflow:hidden;vertical-align:middle;">
+                          <span style="display:block;width:${Math.min(Math.max(progress, 0), 100)}%;height:100%;background:#2563eb;"></span>
+                        </span>
+                        ${progress}%
+                      </span>
+                    ` : ""}
                     ${isDoneUncollected ? `<span style="padding:1px 5px;border-radius:3px;font-size:10px;font-weight:800;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;">⚠️ 공사완료 미수</span>` : ""}
                   </div>
                   <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">
-                    ${escHtml(r.clientName || "계약자미지정")} · ${escHtml(r.manager || "담당미지정")} (${escHtml(r.category || "전체공사")})
+                    ${escHtml(r.clientName || "계약자미지정")} · ${escHtml(extractFirstManager(r.manager, "담당미지정"))} (${escHtml(r.category || "전체공사")})
                   </div>
                 </div>
                 <div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">
@@ -8043,18 +8056,6 @@
                 <span style="font-size:11px;font-weight:700;color:#475569;">단계별 수금</span>
                 <div>${renderCollectionStepsHtml(r)}</div>
               </div>
-
-              ${progress !== null ? `
-                <div style="margin-top:6px;">
-                  <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--text-muted);margin-bottom:2px;">
-                    <span>공사진행율</span>
-                    <span style="font-weight:700;color:#2563eb;">${progress}%</span>
-                  </div>
-                  <div style="height:4px;background:#e2e8f0;border-radius:2px;overflow:hidden;">
-                    <div style="width:${Math.min(progress, 100)}%;height:100%;background:#2563eb;"></div>
-                  </div>
-                </div>
-              ` : ""}
 
               ${r.note ? `
                 <div style="font-size:11px;color:var(--text-sub);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">

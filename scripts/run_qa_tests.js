@@ -2149,7 +2149,11 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
 
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
-  assertTest('index.html 내 exec?v=245 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=245'));
+  assertTest('index.html 내 exec?v=246 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=246'));
+  assertTest('v2.html 내 담당자1 단일 추출 및 공사진행률 현장명 인라인 뱃지 표시 검증',
+    v2RootHtml.includes('extractFirstManager') &&
+    v2RootHtml.includes('extractFirstManager(r.manager')
+  );
   assertTest('v2.html 내 공사기간 전면 표시 및 현장데이터 자동 매칭 함수 검증',
     v2RootHtml.includes('getCollectionPeriodInfo') &&
     v2RootHtml.includes('colStartDate') &&
