@@ -3350,6 +3350,18 @@
           const mgrs = uniqueMgrs.slice(0, 3).join(", ") || "미정";
           const pct = s.progressRate || 0;
           const pctColor = pct >= 80 ? "#10b981" : pct >= 40 ? "#2563eb" : "#f59e0b";
+          const isDoneSite = Boolean(state.showArchivedSites || isSiteCompleted(s));
+          const dm = getSiteDateMetrics(s);
+          const earliest = s.earliestDateYmd || dm.earliest;
+          const latest = s.latestDateYmd || dm.latest;
+          const startDot = earliest ? earliest.replace(/-/g, ".") : "";
+          const endDot = latest ? latest.replace(/-/g, ".") : "";
+          let periodText = "";
+          if (startDot && endDot && startDot !== endDot) {
+            periodText = `기간 : ${startDot} ~ ${endDot}`;
+          } else if (startDot || endDot) {
+            periodText = `기간 : ${startDot || endDot}`;
+          }
           return `
             <div class="site-carousel-card ${selectedSite && s.siteKey === selectedSite.siteKey ? "active" : ""}" onclick="selectSiteCard('${escJs(s.siteKey)}')">
               <div class="scc-top">
@@ -3362,6 +3374,7 @@
                   <span class="scc-count-txt">${s.completedTasksCount || 0}/${s.totalTasksCount || 0} 완료</span>
                   ${s.delayedTasksCount > 0 ? `<span class="scc-delay-tag">⚠️ 지연 ${s.delayedTasksCount}</span>` : `<span class="scc-ok-tag">정상</span>`}
                 </div>
+                ${isDoneSite && periodText ? `<div style="font-size:10.5px;color:#0f766e;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(periodText)}</div>` : ""}
               </div>
             </div>`;
         }).join("");
@@ -3371,7 +3384,9 @@
           const tasks = selectedSite.tasks || [];
           const mgrs = getUniqueSiteManagers(tasks).join(", ") || "미지정";
           const ymds = tasks.map(parseYmdFromTask).filter(Boolean).sort();
-          const periodStr = ymds.length ? `${ymds[0]} ~ ${ymds[ymds.length - 1]}` : (selectedSite.earliestDateDisplay || "-");
+          const periodStr = ymds.length
+            ? (ymds[0] !== ymds[ymds.length - 1] ? `${ymds[0].replace(/-/g, ".")} ~ ${ymds[ymds.length - 1].replace(/-/g, ".")}` : ymds[0].replace(/-/g, "."))
+            : (selectedSite.earliestDateDisplay ? selectedSite.earliestDateDisplay.replace(/-/g, ".") : "-");
           const info = getSiteInfo(selectedSite.siteName) || {};
 
           const total = tasks.length || 1;
@@ -4795,6 +4810,21 @@
           const allChecked = tasks.length > 0 && tasks.every((t) => state.checkedMobileTaskIds.has(t.id || t.taskId));
           const mapSearchQuery = (info.address || s.siteName || "").trim();
           const mapUrl = mapSearchQuery ? `https://map.kakao.com/link/search/${encodeURIComponent(mapSearchQuery)}` : "";
+          const isDoneSite = Boolean(state.showArchivedSites || isSiteCompleted(s));
+          const dm = getSiteDateMetrics(s);
+          const earliest = s.earliestDateYmd || dm.earliest;
+          const latest = s.latestDateYmd || dm.latest;
+          const startDot = earliest ? earliest.replace(/-/g, ".") : "";
+          const endDot = latest ? latest.replace(/-/g, ".") : "";
+          let periodText = "";
+          if (startDot && endDot && startDot !== endDot) {
+            periodText = `기간 : ${startDot} ~ ${endDot}`;
+          } else if (startDot || endDot) {
+            periodText = `기간 : ${startDot || endDot}`;
+          }
+          const subDateHtml = isDoneSite
+            ? (periodText && !isExpanded ? `<div style="font-size:11px;color:#0f766e;font-weight:700;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(periodText)}</div>` : "")
+            : (!isExpanded && nextTask ? `<div style="font-size:11px;color:#0f766e;font-weight:700;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">다음: ${escHtml(parseYmdFromTask(nextTask))} · ${escHtml(nextTask.taskName)}</div>` : "");
 
           let bodyHtml = "";
           if (isExpanded) {
@@ -4926,7 +4956,7 @@
                     담당: ${escHtml(mgrs)} · 남은 ${remainingCnt}건 (${s.completedTasksCount || 0}/${s.totalTasksCount || 0})
                     ${s.delayedTasksCount ? ` · <span style="color:#dc2626;font-weight:800;">지연 ${s.delayedTasksCount}</span>` : ""}
                   </div>
-                  ${!isExpanded && nextTask ? `<div style="font-size:11px;color:#0f766e;font-weight:700;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">다음: ${escHtml(parseYmdFromTask(nextTask))} · ${escHtml(nextTask.taskName)}</div>` : ""}
+                  ${subDateHtml}
                 </div>
                 <span style="font-size:13px;color:var(--text-muted);font-weight:800;flex-shrink:0;">${isExpanded ? "▾" : "▸"}</span>
               </div>
