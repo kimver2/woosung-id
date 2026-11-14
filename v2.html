@@ -10,9 +10,9 @@
   <meta name="theme-color" content="#1e40af">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="현장대시보드">
+  <meta name="apple-mobile-web-app-title" content="우성아이디">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="application-name" content="우성아이디 통합 현장 대시보드">
+  <meta name="application-name" content="우성아이디">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
@@ -1825,43 +1825,44 @@
     }
     .ws-auth-overlay.open { display: flex; }
     .ws-auth-card {
-      width: 100%; max-width: 390px; background: #ffffff;
-      border-radius: 18px; padding: 30px 26px 26px;
+      width: 100%; max-width: 360px; background: #ffffff;
+      border-radius: 20px; padding: 32px 26px 28px;
       box-shadow: 0 25px 50px -12px rgba(0,0,0,0.45);
       text-align: center;
     }
-    .ws-auth-icon {
-      width: 52px; height: 52px; margin: 0 auto 14px;
-      border-radius: 14px; background: #eff6ff; color: #2563eb;
-      display: flex; align-items: center; justify-content: center; font-size: 24px;
+    .ws-auth-logo-wrap {
+      width: 60px; height: 60px; margin: 0 auto 14px;
+      border-radius: 16px; overflow: hidden;
+      box-shadow: 0 4px 14px rgba(37,99,235,0.18);
+      display: flex; align-items: center; justify-content: center;
+      background: #ffffff;
     }
-    .ws-auth-title { margin: 0 0 6px; font-size: 19px; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
-    .ws-auth-desc { margin: 0 0 18px; font-size: 13px; color: #64748b; line-height: 1.5; }
+    .ws-auth-logo {
+      width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 16px;
+    }
+    .ws-auth-title { margin: 0 0 18px; font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
     .ws-auth-input {
-      width: 100%; box-sizing: border-box; padding: 11px 14px; margin-bottom: 10px;
-      border: 1.5px solid #cbd5e1; border-radius: 10px;
+      width: 100%; box-sizing: border-box; padding: 12px 14px; margin-bottom: 10px;
+      border: 1.5px solid #cbd5e1; border-radius: 11px;
       font-size: 15px; font-weight: 700; text-align: center; outline: none; transition: border-color 0.15s;
       color: #0f172a; background: #fff;
     }
     .ws-auth-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
     .ws-auth-input.pin-input { letter-spacing: 3px; font-size: 17px; }
     .ws-auth-keep {
-      display: flex; align-items: center; justify-content: center; gap: 6px;
-      margin: 4px 0 14px; font-size: 12.5px; color: #475569; cursor: pointer; font-weight: 600;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      margin: 4px 0 12px; font-size: 13px; color: #475569; cursor: pointer; font-weight: 600; user-select: none;
     }
     .ws-auth-error {
-      min-height: 18px; font-size: 12px; color: #dc2626; font-weight: 700; margin-bottom: 10px;
+      min-height: 18px; font-size: 12px; color: #dc2626; font-weight: 700; margin-bottom: 8px;
     }
     .ws-auth-btn {
-      width: 100%; padding: 12px; border: none; border-radius: 10px;
-      background: #2563eb; color: #ffffff; font-size: 14.5px; font-weight: 800;
+      width: 100%; padding: 12px; border: none; border-radius: 11px;
+      background: #2563eb; color: #ffffff; font-size: 15px; font-weight: 800;
       cursor: pointer; transition: background 0.15s;
     }
     .ws-auth-btn:hover { background: #1d4ed8; }
     .ws-auth-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    .ws-auth-hint {
-      margin-top: 12px; font-size: 11.5px; color: #94a3b8; line-height: 1.45;
-    }
 
     /* ================= 8. 신규견적 전용 상세 대시보드 스타일 ================= */
     .pc-estimate-detail-container { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
@@ -1918,26 +1919,23 @@
   <!-- ================= 멤버 인증 로그인 오버레이 ================= -->
   <div id="topAccessLockOverlay" class="ws-auth-overlay" role="dialog" aria-modal="true" aria-labelledby="topAccessTitle">
     <div class="ws-auth-card">
-      <div class="ws-auth-icon">🔒</div>
-      <h2 id="topAccessTitle" class="ws-auth-title">우성아이디 멤버 인증</h2>
-      <p class="ws-auth-desc">
-        등록된 <strong>멤버 성함</strong>과 <strong>공용 비밀번호</strong>를 입력해 주세요.<br>
-        로그인 후 내 맞춤 홈 화면과 캘린더로 바로 연결됩니다.
-      </p>
+      <div class="ws-auth-logo-wrap">
+        <img src="./icon-192.png" alt="우성아이디" class="ws-auth-logo">
+      </div>
+      <h2 id="topAccessTitle" class="ws-auth-title">우성아이디</h2>
       <input type="text" id="topAccessNameInput" list="wsMembersAuthDl" class="ws-auth-input"
-             placeholder="성함 (예: 조항만, 송지은)" autocomplete="username"
+             placeholder="이름" autocomplete="username"
              onkeydown="if(event.key==='Enter'){ const p=document.getElementById('topAccessPinInput'); if(p) p.focus(); }">
       <datalist id="wsMembersAuthDl"></datalist>
       <input type="password" id="topAccessPinInput" class="ws-auth-input pin-input"
              placeholder="비밀번호 (PIN)" autocomplete="current-password"
              onkeydown="if(event.key==='Enter') submitTopAccessPin()">
       <label class="ws-auth-keep">
-        <input type="checkbox" id="topAccessKeepChk" checked style="width:15px;height:15px;cursor:pointer;">
-        <span>이 기기에서 자동 로그인 유지</span>
+        <input type="checkbox" id="topAccessKeepChk" checked style="width:16px;height:16px;cursor:pointer;accent-color:#2563eb;">
+        <span>자동 로그인</span>
       </label>
       <div id="topAccessPinError" class="ws-auth-error"></div>
-      <button type="button" id="topAccessPinBtn" class="ws-auth-btn" onclick="submitTopAccessPin()">인증하고 시작하기</button>
-      <div class="ws-auth-hint">5회 연속 실패 시 3분간 입력이 제한됩니다.</div>
+      <button type="button" id="topAccessPinBtn" class="ws-auth-btn" onclick="submitTopAccessPin()">로그인</button>
     </div>
   </div>
 
@@ -9997,10 +9995,10 @@
         }
         const valName = String((nameEl && nameEl.value) || "").trim();
         const valPin = String((pinEl && pinEl.value) || "").trim();
-        if (!valName) { if (errEl) errEl.textContent = "등록된 성함을 입력해 주세요."; if (nameEl) nameEl.focus(); return; }
+        if (!valName) { if (errEl) errEl.textContent = "등록된 이름을 입력해 주세요."; if (nameEl) nameEl.focus(); return; }
         if (!valPin) { if (errEl) errEl.textContent = "비밀번호(PIN)를 입력해 주세요."; if (pinEl) pinEl.focus(); return; }
 
-        if (btnEl) { btnEl.disabled = true; btnEl.textContent = "인증 확인 중..."; }
+        if (btnEl) { btnEl.disabled = true; btnEl.textContent = "로그인 중..."; }
         if (errEl) errEl.textContent = "";
 
         let data = null;
@@ -10052,7 +10050,7 @@
           }
           if (pinEl) { pinEl.value = ""; pinEl.focus(); }
         }
-        if (btnEl) { btnEl.disabled = false; btnEl.textContent = "인증하고 시작하기"; }
+        if (btnEl) { btnEl.disabled = false; btnEl.textContent = "로그인"; }
       };
       window.logoutDashboardAuth = function () {
         state.authUser = "";

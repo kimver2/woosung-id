@@ -1,6 +1,6 @@
 {
-  "name": "우성아이디 통합 현장 대시보드",
-  "short_name": "현장대시보드",
+  "name": "우성아이디",
+  "short_name": "우성아이디",
   "description": "우성아이디 통합 현장 대시보드 v2",
   "start_url": "./v2.html",
   "scope": "./",
