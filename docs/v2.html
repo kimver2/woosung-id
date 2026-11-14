@@ -5296,14 +5296,66 @@
 
       function findMatchedSiteInfo(siteName) {
         if (!siteName || !state.dashData || !Array.isArray(state.dashData.sites)) return null;
-        const clean = String(siteName).replace(/[\s\(\)\[\]\-_]/g, "").toLowerCase();
+
+        function stripPrefix(str) {
+          if (!str) return "";
+          return String(str)
+            .replace(/^\[(단건|AS|as|신규|현장|단품)\]\s*/i, "")
+            .replace(/^\((단건|AS|as|신규|현장|단품)\)\s*/i, "")
+            .trim();
+        }
+
+        function cleanStr(str) {
+          if (!str) return "";
+          return String(str).replace(/[\s\(\)\[\]\-_]/g, "").toLowerCase();
+        }
+
+        function stripNonNumParen(str) {
+          if (!str) return "";
+          return String(str).replace(/\([^\d)]*\)/g, "").trim();
+        }
+
+        function extractNumTokens(str) {
+          if (!str) return [];
+          const m = String(str).match(/\d+/g);
+          return m || [];
+        }
+
+        const targetRaw = String(siteName).trim();
+        const targetClean = cleanStr(targetRaw);
+        if (!targetClean) return null;
+        const targetBaseClean = cleanStr(stripPrefix(targetRaw));
+        const targetNoMemoClean = cleanStr(stripPrefix(stripNonNumParen(targetRaw)));
+        const targetNums = extractNumTokens(targetRaw);
+
+        // 1순위: 정규화 문자열 완전 일치 (접두사 [단건]/[AS], 괄호 메모 정규화 비교)
         for (let i = 0; i < state.dashData.sites.length; i++) {
           const s = state.dashData.sites[i];
-          const sClean = String(s.siteName || "").replace(/[\s\(\)\[\]\-_]/g, "").toLowerCase();
-          if (sClean === clean || sClean.includes(clean) || clean.includes(sClean)) {
-            return s;
+          const sRaw = String(s && s.siteName ? s.siteName : "").trim();
+          const sClean = cleanStr(sRaw);
+          if (sClean && sClean === targetClean) return s;
+          const sBaseClean = cleanStr(stripPrefix(sRaw));
+          if (sBaseClean && sBaseClean === targetBaseClean) return s;
+          const sNoMemoClean = cleanStr(stripPrefix(stripNonNumParen(sRaw)));
+          if (sNoMemoClean && sNoMemoClean === targetNoMemoClean) return s;
+        }
+
+        // 2순위: 부분 일치 (오매칭 방지: 양쪽 모두 숫자/동호수 토큰이 존재하고 100% 일치할 때만 허용)
+        if (targetNums.length > 0) {
+          for (let i = 0; i < state.dashData.sites.length; i++) {
+            const s = state.dashData.sites[i];
+            const sRaw = String(s && s.siteName ? s.siteName : "").trim();
+            const sNums = extractNumTokens(sRaw);
+            if (sNums.length === 0 || sNums.length !== targetNums.length) continue;
+            const numsMatch = targetNums.every((n, idx) => n === sNums[idx]);
+            if (!numsMatch) continue;
+            const sBaseClean = cleanStr(stripPrefix(sRaw));
+            if (sBaseClean.includes(targetBaseClean) || targetBaseClean.includes(sBaseClean)) {
+              return s;
+            }
           }
         }
+
         return null;
       }
 
@@ -5339,6 +5391,42 @@
         let periodDisplay = String(row && row.period ? row.period : "").trim();
         let startYmd = "";
         let endYmd = "";
+        let year = "";
+        let month = 0;
+
+        function getSiteStartYear(s) {
+          if (!s) return "";
+          let ymd = "";
+          if (typeof getSiteDateMetrics === "function") {
+            const dm = getSiteDateMetrics(s);
+            if (dm && dm.earliest) ymd = dm.earliest;
+          }
+          if (!ymd && s.earliestDateDisplay) {
+            ymd = normalizeDateYmd(s.earliestDateDisplay);
+          }
+          if (!ymd && Array.isArray(s.tasks) && s.tasks.length > 0) {
+            const ymds = [];
+            s.tasks.forEach(t => {
+              const str = (t && (t.startDateStr || t.startDate || t.dateDisplay || t.date)) || "";
+              const m = normalizeDateYmd(str);
+              if (m) ymds.push(m);
+              const endStr = (t && (t.endDateStr || t.endDate)) || "";
+              const em = normalizeDateYmd(endStr);
+              if (em) ymds.push(em);
+            });
+            if (ymds.length > 0) {
+              ymds.sort();
+              ymd = ymds[0];
+            }
+          }
+          if (ymd && /^\d{4}/.test(ymd)) {
+            return ymd.slice(0, 4);
+          }
+          if (s.year && /^\d{4}$/.test(String(s.year))) {
+            return String(s.year);
+          }
+          return "";
+        }
 
         if (periodDisplay) {
           const m = periodDisplay.match(/(\d{2,4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/g);
@@ -5355,10 +5443,53 @@
                 endYmd = startYmd;
               }
             }
+            if (startYmd) {
+              year = startYmd.slice(0, 4);
+              month = parseInt(startYmd.slice(5, 7), 10) || 0;
+            } else if (endYmd) {
+              year = endYmd.slice(0, 4);
+              month = parseInt(endYmd.slice(5, 7), 10) || 0;
+            }
+          } else {
+            // 연도 생략 MM.DD 형식 (예: 06.05 ~07.11)
+            const mmDdMatches = periodDisplay.match(/(\d{1,2})[.\-\/](\d{1,2})/g);
+            if (mmDdMatches && mmDdMatches.length > 0) {
+              const startParts = mmDdMatches[0].match(/(\d{1,2})[.\-\/](\d{1,2})/);
+              if (startParts) {
+                const sm = parseInt(startParts[1], 10);
+                const sd = parseInt(startParts[2], 10);
+                if (sm >= 1 && sm <= 12) {
+                  month = sm;
+                  const siteYear = getSiteStartYear(site);
+                  if (siteYear) {
+                    year = siteYear;
+                    startYmd = `${year}-${String(sm).padStart(2, "0")}-${String(sd).padStart(2, "0")}`;
+                    if (mmDdMatches.length > 1) {
+                      const endParts = mmDdMatches[1].match(/(\d{1,2})[.\-\/](\d{1,2})/);
+                      if (endParts) {
+                        const em = parseInt(endParts[1], 10);
+                        const ed = parseInt(endParts[2], 10);
+                        endYmd = `${year}-${String(em).padStart(2, "0")}-${String(ed).padStart(2, "0")}`;
+                      } else {
+                        endYmd = startYmd;
+                      }
+                    } else {
+                      endYmd = startYmd;
+                    }
+                  } else {
+                    // 매칭된 site가 없거나 시작 연도 미정이면 year = "" (미정 상태 유지)
+                    year = "";
+                    startYmd = "";
+                    endYmd = "";
+                  }
+                }
+              }
+            }
           }
         }
 
-        if ((!periodDisplay || !startYmd) && site) {
+        // site 날짜 fallback은 periodDisplay가 완전히 비어 있을 때만 수행
+        if (!periodDisplay && site) {
           const dm = (typeof getSiteDateMetrics === "function") ? getSiteDateMetrics(site) : null;
           if (dm && dm.earliest) {
             startYmd = dm.earliest;
@@ -5390,14 +5521,14 @@
           }
         }
 
-        let year = "";
-        let month = 0;
-        if (startYmd) {
-          year = startYmd.slice(0, 4);
-          month = parseInt(startYmd.slice(5, 7), 10) || 0;
-        } else if (endYmd) {
-          year = endYmd.slice(0, 4);
-          month = parseInt(endYmd.slice(5, 7), 10) || 0;
+        if (!year && !month) {
+          if (startYmd) {
+            year = startYmd.slice(0, 4);
+            month = parseInt(startYmd.slice(5, 7), 10) || 0;
+          } else if (endYmd) {
+            year = endYmd.slice(0, 4);
+            month = parseInt(endYmd.slice(5, 7), 10) || 0;
+          }
         }
 
         return {
@@ -5635,6 +5766,7 @@
       }
 
       window.state = state;
+      window.findMatchedSiteInfo = findMatchedSiteInfo;
       window.getCollectionPeriodInfo = getCollectionPeriodInfo;
       window.getFilteredCollectionList = getFilteredCollectionList;
       window.renderCollectionStepsHtml = renderCollectionStepsHtml;
