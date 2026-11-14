@@ -195,17 +195,45 @@
       }
       var pMap = snap.partnerPhoneMap || {};
       var mMap = snap.memberPhoneMap || {};
-      var partners = (snap.partners || []).map(function (full) {
+      var partners = (snap.partners || []).map(function (full, i) {
         var idx = full.indexOf("_");
         var cat = idx > -1 ? full.slice(0, idx) : "";
         var name = idx > -1 ? full.slice(idx + 1) : full;
-        return { category: cat, name: name, phone: pMap[full] || pMap[name] || "", fullName: full };
+        return {
+          row: i + 2,
+          category: cat,
+          biz: cat,
+          name: name,
+          phone: pMap[full] || pMap[name] || "",
+          fullName: full,
+          priority: "일반",
+          manager: "",
+          status: "운영 중",
+          feature: "",
+          orderMethod: "",
+          note: ""
+        };
       });
-      var members = (snap.members || []).map(function (m) {
-        return { name: m, role: defaultRoleMap[m] || "소장", phone: mMap[m] || "" };
+      var members = (snap.members || []).map(function (m, mi) {
+        return {
+          row: mi + 2,
+          name: m,
+          role: defaultRoleMap[m] || "소장",
+          phone: mMap[m] || "",
+          email: "",
+          receive: true,
+          notifyEnabled: true,
+          note: ""
+        };
       });
-      var tasks = (snap.tasks || []).map(function (t) {
-        return { name: t };
+      var tasks = (snap.tasks || []).map(function (t, ti) {
+        return {
+          row: ti + 2,
+          name: t,
+          taskName: t,
+          category: "기타",
+          note: ""
+        };
       });
       return { partners: partners, tasks: tasks, members: members };
     },
@@ -282,8 +310,23 @@
       return this.callGasApi("archiveCompletedSites", {});
     },
 
-    syncGoogleCalendar: function () {
-      return this.callGasApi("syncGoogleCalendar", {});
+    callGasPost: function (action, payload) {
+      if (typeof fetch !== "function" || typeof location === "undefined" || !String(location.protocol || "").startsWith("http")) {
+        return Promise.resolve({ success: true, offline: true });
+      }
+      var body = Object.assign({ action: action }, payload || {});
+      return fetch(GAS_API_URL, {
+        method: "POST",
+        mode: "cors",
+        redirect: "follow",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(body)
+      }).then(function (r) {
+        return r.json();
+      }).catch(function (err) {
+        console.warn("GAS POST error for " + action + ":", err);
+        return { success: false, error: String(err && err.message || err) };
+      });
     },
 
     saveTodo: function (isEdit, payload, todoData) {
@@ -314,7 +357,15 @@
 
     saveSettings: function (settingsData) {
       this.saveSettingsCache(settingsData);
-      return this.callGasApi("saveAllSettingsBatch", { data: settingsData });
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (res) { resolve(res || { success: true }); })
+            .withFailureHandler(function (err) { reject(err); })
+            .saveAllSettingsBatchFromWeb(settingsData);
+        });
+      }
+      return this.callGasPost("saveAllSettingsBatch", { data: settingsData });
     },
 
     uploadSiteFiles: function (siteName, filesPayload, clientDriveUrl) {

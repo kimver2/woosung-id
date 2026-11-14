@@ -8869,6 +8869,9 @@ function saveAllSettingsBatchFromWeb(batchPayload) {
   if (!__woosungWriteLockHeld_) return runWithWriteLock_(saveAllSettingsBatchFromWeb, this, arguments);
   try {
     var data = (typeof batchPayload === "string") ? JSON.parse(batchPayload) : (batchPayload || {});
+    if (data && data.data && (data.data.partners || data.data.tasks || data.data.members)) {
+      data = (typeof data.data === "string") ? JSON.parse(data.data) : data.data;
+    }
     var partnersList = data.partners || [];
     var tasksList = data.tasks || [];
     var membersList = data.members || [];
@@ -8884,23 +8887,27 @@ function saveAllSettingsBatchFromWeb(batchPayload) {
       var pRows = [];
       for (var pi = 0; pi < partnersList.length; pi++) {
         var pItem = partnersList[pi] || {};
-        var pName = String(pItem.name || "").trim();
+        var pName = String(pItem.name || pItem.fullName || "").trim();
         if (!pName) continue;
         pRows.push([
           pName,
-          String(pItem.biz || "").trim(),
-          String(pItem.category || "시공").trim(),
+          String(pItem.biz || pItem.category || "").trim(),
+          String(pItem.category || pItem.biz || "시공").trim(),
           String(pItem.priority || "미지정").trim(),
           String(pItem.manager || "").trim(),
           String(pItem.phone || "").trim(),
           String(pItem.status || "운영 중").trim(),
           String(pItem.feature || "").trim(),
           String(pItem.orderMethod || "").trim(),
-          String(pItem.note || "").trim()
+          String(pItem.note || pItem.memo || "").trim()
         ]);
       }
 
       if (pRows.length > 0) {
+        var pMaxR = (typeof pSheet.getMaxRows === "function") ? pSheet.getMaxRows() : 100;
+        if (pMaxR < pRows.length + 1) {
+          pSheet.insertRowsAfter(pMaxR, (pRows.length + 1) - pMaxR);
+        }
         pSheet.getRange(2, 1, pRows.length, 10).setValues(pRows);
         if (oldPCount > pRows.length) {
           pSheet.getRange(2 + pRows.length, 1, oldPCount - pRows.length, 10).clearContent();
@@ -8919,16 +8926,20 @@ function saveAllSettingsBatchFromWeb(batchPayload) {
       var tRows = [];
       for (var ti = 0; ti < tasksList.length; ti++) {
         var tItem = tasksList[ti] || {};
-        var tName = String(tItem.taskName || "").trim();
+        var tName = String(tItem.taskName || tItem.name || "").trim();
         if (!tName) continue;
         tRows.push([
           tName,
           String(tItem.category || "기타").trim(),
-          String(tItem.note || "").trim()
+          String(tItem.note || tItem.memo || "").trim()
         ]);
       }
 
       if (tRows.length > 0) {
+        var tMaxR = (typeof tSheet.getMaxRows === "function") ? tSheet.getMaxRows() : 100;
+        if (tMaxR < tRows.length + 1) {
+          tSheet.insertRowsAfter(tMaxR, (tRows.length + 1) - tMaxR);
+        }
         tSheet.getRange(2, 1, tRows.length, 3).setValues(tRows);
         if (oldTCount > tRows.length) {
           tSheet.getRange(2 + tRows.length, 1, oldTCount - tRows.length, 3).clearContent();
@@ -8963,18 +8974,22 @@ function saveAllSettingsBatchFromWeb(batchPayload) {
         var rowArr = new Array(numCols);
         for (var k = 0; k < numCols; k++) rowArr[k] = "";
         rowArr[colIdxs.nameCol] = mName;
-        rowArr[colIdxs.roleCol] = String(mItem.role || "").trim();
+        rowArr[colIdxs.roleCol] = String(mItem.role || "소장").trim();
         var cleanMPhone = String(mItem.phone || "").trim().replace(/\s+/g, "");
         if (/^010\d{8}$/.test(cleanMPhone)) cleanMPhone = cleanMPhone.replace(/^(010)(\d{4})(\d{4})$/, "$1-$2-$3");
         else if (/^02\d{7,8}$/.test(cleanMPhone)) cleanMPhone = cleanMPhone.replace(/^(02)(\d{3,4})(\d{4})$/, "$1-$2-$3");
         rowArr[colIdxs.phoneCol] = cleanMPhone;
         rowArr[colIdxs.emailCol] = String(mItem.email || "").trim();
         rowArr[colIdxs.recvCol] = (mItem.receive !== false && String(mItem.receive) !== "false");
-        if (colIdxs.noteCol < numCols) rowArr[colIdxs.noteCol] = String(mItem.note || "").trim();
+        if (colIdxs.noteCol >= 0 && colIdxs.noteCol < numCols) rowArr[colIdxs.noteCol] = String(mItem.note || mItem.memo || "").trim();
         mRows.push(rowArr);
       }
 
       if (mRows.length > 0) {
+        var mMaxR = (typeof mSheet.getMaxRows === "function") ? mSheet.getMaxRows() : 100;
+        if (mMaxR < mRows.length + 1) {
+          mSheet.insertRowsAfter(mMaxR, (mRows.length + 1) - mMaxR);
+        }
         mSheet.getRange(2, 1, mRows.length, numCols).setValues(mRows);
         if (oldMCount > mRows.length) {
           mSheet.getRange(2 + mRows.length, 1, oldMCount - mRows.length, numCols).clearContent();
@@ -8993,6 +9008,7 @@ function saveAllSettingsBatchFromWeb(batchPayload) {
     invalidateDashboardServerCache();
 
     var freshData = getSettingsManagementData();
+    freshData.success = true;
     freshData.message = "거래처, 공종 및 구성원 변경사항이 구글 시트에 성공적으로 일괄 저장되었습니다.";
     return freshData;
   } catch(err) {
@@ -9956,13 +9972,13 @@ function doGet(e) {
     return ContentService.createTextOutput(JSON.stringify(sData)).setMimeType(ContentService.MimeType.JSON);
   }
   if (action === "addPartner") {
-    var pAddData = p.data ? JSON.parse(p.data) : p;
+    var pAddData = typeof p.data === "string" ? JSON.parse(p.data) : (p.data || p);
     var addPRes = addPartnerItemFromWeb(pAddData);
     return ContentService.createTextOutput(JSON.stringify(addPRes)).setMimeType(ContentService.MimeType.JSON);
   }
   if (action === "updatePartner") {
     var pUpdateRow = parseInt(p.row, 10);
-    var pUpdateData = p.data ? JSON.parse(p.data) : p;
+    var pUpdateData = typeof p.data === "string" ? JSON.parse(p.data) : (p.data || p);
     var updatePRes = updatePartnerItemFromWeb(pUpdateRow, pUpdateData);
     return ContentService.createTextOutput(JSON.stringify(updatePRes)).setMimeType(ContentService.MimeType.JSON);
   }
@@ -9979,13 +9995,13 @@ function doGet(e) {
     return ContentService.createTextOutput(JSON.stringify(reorderPRes)).setMimeType(ContentService.MimeType.JSON);
   }
   if (action === "addTask") {
-    var tAddData = p.data ? JSON.parse(p.data) : p;
+    var tAddData = typeof p.data === "string" ? JSON.parse(p.data) : (p.data || p);
     var addTRes = addTaskItemFromWeb(tAddData);
     return ContentService.createTextOutput(JSON.stringify(addTRes)).setMimeType(ContentService.MimeType.JSON);
   }
   if (action === "updateTask") {
     var tUpdateRow = parseInt(p.row, 10);
-    var tUpdateData = p.data ? JSON.parse(p.data) : p;
+    var tUpdateData = typeof p.data === "string" ? JSON.parse(p.data) : (p.data || p);
     var updateTRes = updateTaskItemFromWeb(tUpdateRow, tUpdateData);
     return ContentService.createTextOutput(JSON.stringify(updateTRes)).setMimeType(ContentService.MimeType.JSON);
   }
@@ -10002,13 +10018,13 @@ function doGet(e) {
     return ContentService.createTextOutput(JSON.stringify(reorderTRes)).setMimeType(ContentService.MimeType.JSON);
   }
   if (action === "addMember") {
-    var mAddData = p.data ? JSON.parse(p.data) : p;
+    var mAddData = typeof p.data === "string" ? JSON.parse(p.data) : (p.data || p);
     var addMRes = addMemberItemFromWeb(mAddData);
     return ContentService.createTextOutput(JSON.stringify(addMRes)).setMimeType(ContentService.MimeType.JSON);
   }
   if (action === "updateMember") {
     var mUpdateRow = parseInt(p.row, 10);
-    var mUpdateData = p.data ? JSON.parse(p.data) : p;
+    var mUpdateData = typeof p.data === "string" ? JSON.parse(p.data) : (p.data || p);
     var updateMRes = updateMemberItemFromWeb(mUpdateRow, mUpdateData);
     return ContentService.createTextOutput(JSON.stringify(updateMRes)).setMimeType(ContentService.MimeType.JSON);
   }
@@ -10025,7 +10041,7 @@ function doGet(e) {
     return ContentService.createTextOutput(JSON.stringify(reorderMRes)).setMimeType(ContentService.MimeType.JSON);
   }
   if (action === "saveAllSettingsBatch") {
-    var batchPayload = p.data ? JSON.parse(p.data) : p;
+    var batchPayload = typeof p.data === "string" ? JSON.parse(p.data) : (p.data || p);
     var batchRes = saveAllSettingsBatchFromWeb(batchPayload);
     return ContentService.createTextOutput(JSON.stringify(batchRes)).setMimeType(ContentService.MimeType.JSON);
   }
@@ -10132,19 +10148,6 @@ function doGet(e) {
       success: true,
       message: "완료 현장 아카이빙이 완료되었습니다. (총 " + (archRes.movedSitesCount || 0) + "개 현장, " + (archRes.movedRowsCount || 0) + "개 공정 이동)",
       result: archRes
-    })).setMimeType(ContentService.MimeType.JSON);
-  }
-
-  // 0-0-0-SyncCal) 구글 캘린더 동기화 실행 (action=syncGoogleCalendar)
-  if (action === "syncGoogleCalendar") {
-    try {
-      syncRecentSiteSchedulesToGoogleCalendar();
-    } catch (eSyncCal) {
-      Logger.log("syncGoogleCalendar error: " + eSyncCal.toString());
-    }
-    return ContentService.createTextOutput(JSON.stringify({
-      success: true,
-      message: "구글 캘린더 동기화가 성공적으로 실행되었습니다."
     })).setMimeType(ContentService.MimeType.JSON);
   }
 

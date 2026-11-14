@@ -434,11 +434,19 @@
       transform: translateY(-0.5px) scale(1.08);
     }
 
-    /* 모바일 재무 탭 선택 시 상단 검색창 및 분류/담당자 필터 영역 숨김 처리 */
+    /* 모바일 재무·신규 탭 선택 시 상단 검색창 및 분류/담당자 필터 영역 숨김 처리 */
     .mobile-screen-inner.mtab-finance .m-search-wrap,
     .mobile-screen-inner.mtab-finance .m-filter-bar,
     .mobile-screen-inner[data-active-mtab="finance"] .m-search-wrap,
-    .mobile-screen-inner[data-active-mtab="finance"] .m-filter-bar {
+    .mobile-screen-inner[data-active-mtab="finance"] .m-filter-bar,
+    .mobile-screen-inner.mtab-quote .m-search-wrap,
+    .mobile-screen-inner.mtab-quote .m-filter-bar,
+    .mobile-screen-inner[data-active-mtab="quote"] .m-search-wrap,
+    .mobile-screen-inner[data-active-mtab="quote"] .m-filter-bar,
+    .mobile-screen-inner.mtab-newSite .m-search-wrap,
+    .mobile-screen-inner.mtab-newSite .m-filter-bar,
+    .mobile-screen-inner[data-active-mtab="newSite"] .m-search-wrap,
+    .mobile-screen-inner[data-active-mtab="newSite"] .m-filter-bar {
       display: none !important;
     }
 
@@ -1287,6 +1295,7 @@
       animation: modalPop 0.16s ease-out;
     }
     .ws-modal-card.wide { max-width: 820px; }
+    #settingsModal .ws-modal-card.wide { max-width: min(1180px, 96vw); }
     .ws-modal-card.narrow { max-width: 420px; }
     @keyframes modalPop { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
@@ -1618,8 +1627,6 @@
             </select>
           </div>
 
-          <button type="button" class="btn-header-tool" onclick="openMonthlyReportModal()">📊 월간집계</button>
-          <button type="button" class="btn-header-tool" onclick="state.settingsTab='tools'; openSettingsModal();" title="시트 정렬 / 아카이브 / 캘린더 동기화 도구">🛠️ 데이터 관리</button>
           <button type="button" class="btn-header-tool" onclick="state.settingsTab='partners'; openSettingsModal();">⚙️ 설정</button>
           <button type="button" class="sync-btn" onclick="triggerLiveSync(true)">🔄 동기화</button>
           <button type="button" class="btn-header-tool" onclick="logoutDashboardAuth()" title="잠금 / 로그아웃">🔒 로그아웃</button>
@@ -1670,7 +1677,6 @@
               <option value="한송이">한송이</option>
               <option value="차정률">차정률</option>
             </select>
-            <button type="button" class="btn-m-header-capture" onclick="captureCurrentScreen()" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="화면 캡쳐">📸</button>
             <button type="button" onclick="openSettingsModal()" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="설정 및 도구">⚙️</button>
             <button type="button" onclick="triggerLiveSync(true)" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="새로고침">🔄</button>
             <button type="button" onclick="logoutDashboardAuth()" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="잠금 / 로그아웃">🔒</button>
@@ -2580,13 +2586,16 @@
               <span>✅ 완료·보관 현장 (${doneSites.length})</span>
               <span>${state.showArchivedSites ? "▲" : "▼"}</span>
             </button>
-            ${state.showArchivedSites ? `<div class="site-checklist">${doneSites.slice(0, 12).map((s) => `
-              <div class="site-check-row" style="opacity:0.72;" onclick="openSiteDetail('${escJs(s.siteKey)}')">
-                <span class="site-color-dot" style="background:#94a3b8;"></span>
-                <span class="site-lbl-name">${escHtml(s.siteName)}</span>
-                <span class="site-lbl-count">${s.progressRate || 100}%</span>
-              </div>
-            `).join("")}</div>` : ""}
+            ${state.showArchivedSites ? `<div class="site-checklist">${doneSites.slice(0, 12).map((s) => {
+              const isSelected = (mode === "sites" && state.selectedSiteKey === s.siteKey) || (mode === "quote" && state.selectedQuoteKey === s.siteKey);
+              const countLbl = s.scope === "newSite" ? escHtml((s.estimateData && s.estimateData.status) || "완료") : `${s.progressRate || 100}%`;
+              return `
+                <div class="site-check-row ${isSelected ? "selected-site" : ""}" style="opacity:0.85;" onclick="openSiteDetail('${escJs(s.siteKey)}')">
+                  <span class="site-color-dot" style="background:#94a3b8;"></span>
+                  <span class="site-lbl-name" title="${escHtml(s.siteName)}">${escHtml(s.siteName)}</span>
+                  <span class="site-lbl-count">${countLbl}</span>
+                </div>`;
+            }).join("")}</div>` : ""}
           ` : ""}
         `;
       }
@@ -3990,6 +3999,7 @@
       window.setQuoteStatusFilter = function (st) {
         state.quoteStatusFilter = st === "done" ? "done" : "active";
         state.quoteShowArchived = state.quoteStatusFilter === "done";
+        state.showArchivedSites = state.quoteShowArchived;
         state.selectedQuoteKey = null;
         markAllDirty();
         renderActiveViews();
@@ -4269,9 +4279,12 @@
           </tr>`).join("") || `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:24px;">거래 내역이 없습니다.</td></tr>`;
 
         document.getElementById("pcFinanceMain").innerHTML = `
-          <div style="margin-bottom:16px;">
-            <h2 style="font-size:20px;font-weight:800;margin-bottom:4px;">💰 현장 수금·지출 및 협력업체 거래원장</h2>
-            <p style="font-size:13px;color:var(--text-muted);">계약 총액 ${formatKrw(fin.summary.totalContract)} · 수금 완료 ${formatKrw(fin.summary.totalCollected)} · 미지급 외상 ${formatKrw(fin.summary.totalPayable)}</p>
+          <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+            <div>
+              <h2 style="font-size:20px;font-weight:800;margin-bottom:4px;">💰 현장 수금·지출 및 협력업체 거래원장</h2>
+              <p style="font-size:13px;color:var(--text-muted);">계약 총액 ${formatKrw(fin.summary.totalContract)} · 수금 완료 ${formatKrw(fin.summary.totalCollected)} · 미지급 외상 ${formatKrw(fin.summary.totalPayable)}</p>
+            </div>
+            <button type="button" class="btn-act-blue" style="height:34px;padding:0 14px;font-size:13px;display:inline-flex;align-items:center;gap:6px;" onclick="openMonthlyReportModal()">📊 월간집계 리포트</button>
           </div>
           <div class="standard-card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
             <div>
@@ -4300,7 +4313,7 @@
       function renderMobileFilterBar() {
         const bar = document.getElementById("mFilterBar");
         if (!bar) return;
-        if (state.mobileTab === "finance") {
+        if (state.mobileTab === "finance" || state.mobileTab === "quote" || state.mobileTab === "newSite") {
           bar.style.display = "none";
           return;
         } else {
@@ -5302,7 +5315,10 @@
       function renderMobileFinanceTab() {
         const fin = state.financeData || { summary: {}, ledger: [] };
         document.getElementById("m-page-finance").innerHTML = `
-          <div style="font-size:16px;font-weight:800;margin-bottom:10px;">거래처 거래원장</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-size:16px;font-weight:800;">거래처 거래원장</div>
+            <button type="button" onclick="openMonthlyReportModal()" style="border:none;background:#eff6ff;color:#1d4ed8;font-size:11.5px;font-weight:800;padding:5px 9px;border-radius:8px;cursor:pointer;">📊 월간집계</button>
+          </div>
           <div class="m-card-box" style="background:#1e293b;color:#fff;">
             <div style="font-size:11.5px;color:#94a3b8;">총 외상(미지급) 잔액</div>
             <div style="font-size:22px;font-weight:800;color:#f87171;margin-top:2px;">${formatKrw(fin.summary.totalPayable)}</div>
@@ -5334,14 +5350,16 @@
             state.dirtyPcTabs[tab] = false;
           }
         } else {
-          const isFinance = (state.mobileTab === "finance");
+          const hideTopBars = (state.mobileTab === "finance" || state.mobileTab === "quote" || state.mobileTab === "newSite");
           const mInner = document.getElementById("mobileScreenInner");
           if (mInner) {
-            mInner.classList.toggle("mtab-finance", isFinance);
+            mInner.classList.toggle("mtab-finance", state.mobileTab === "finance");
+            mInner.classList.toggle("mtab-quote", state.mobileTab === "quote" || state.mobileTab === "newSite");
+            mInner.classList.toggle("mtab-newSite", state.mobileTab === "quote" || state.mobileTab === "newSite");
             mInner.setAttribute("data-active-mtab", state.mobileTab);
           }
           const searchWrap = document.getElementById("mSearchWrap") || document.querySelector(".m-search-wrap");
-          if (searchWrap) searchWrap.style.display = isFinance ? "none" : "";
+          if (searchWrap) searchWrap.style.display = hideTopBars ? "none" : "";
           renderMobileFilterBar();
           const tab = state.mobileTab;
           if (state.dirtyMobileTabs[tab]) {
@@ -7879,8 +7897,79 @@
       // ================= 모달 9: 마스터 설정 관리 모달 =================
       window.openSettingsModal = function () {
         if (!state.settingsData && window.WSDataService) state.settingsData = window.WSDataService.getInitialSettingsData();
+        state.partnerSearchQuery = "";
+        state.partnerBizFilter = "";
+        state.partnerCatFilter = "";
+        state.partnerPrioFilter = "";
+        state.partnerStatusFilter = "";
+        state.showPartnerForm = false;
+        state.editingPartnerIndex = null;
         renderSettingsModal();
         openModal("settingsModal");
+      };
+
+      window.openPartnerForm = function (idx) {
+        state.editingPartnerIndex = (typeof idx === "number" && idx >= 0) ? idx : null;
+        state.showPartnerForm = true;
+        renderSettingsModal();
+        setTimeout(function () {
+          const el = document.getElementById("stPName");
+          if (el) el.focus();
+        }, 50);
+      };
+
+      window.closePartnerForm = function () {
+        state.showPartnerForm = false;
+        state.editingPartnerIndex = null;
+        renderSettingsModal();
+      };
+
+      window.submitPartnerForm = function () {
+        const nameEl = document.getElementById("stPName");
+        const name = (nameEl ? nameEl.value : "").trim();
+        if (!name) return showToast("⚠️ 업체/반장명을 입력해주세요.");
+
+        const biz = ((document.getElementById("stPBiz") || {}).value || "").trim();
+        const category = ((document.getElementById("stPCat") || {}).value || "시공").trim();
+        const priority = ((document.getElementById("stPPrio") || {}).value || "미지정").trim();
+        const manager = ((document.getElementById("stPMgr") || {}).value || "").trim();
+        let phone = ((document.getElementById("stPPhone") || {}).value || "").trim().replace(/\s+/g, "");
+        if (/^010\d{8}$/.test(phone)) phone = phone.replace(/^(010)(\d{4})(\d{4})$/, "$1-$2-$3");
+        else if (/^02\d{7,8}$/.test(phone)) phone = phone.replace(/^(02)(\d{3,4})(\d{4})$/, "$1-$2-$3");
+
+        const status = ((document.getElementById("stPStatus") || {}).value || "운영 중").trim();
+        const orderMethod = ((document.getElementById("stPOrder") || {}).value || "").trim();
+        const feature = ((document.getElementById("stPFeature") || {}).value || "").trim();
+        const note = ((document.getElementById("stPNote") || {}).value || "").trim();
+        const fullName = biz ? `${biz}_${name}` : (category ? `${category}_${name}` : name);
+
+        const payload = {
+          name,
+          biz: biz || category,
+          category,
+          priority,
+          manager,
+          phone,
+          status,
+          feature,
+          orderMethod,
+          note,
+          memo: note,
+          fullName,
+          dropdownVal: fullName
+        };
+
+        const s = state.settingsData;
+        if (typeof state.editingPartnerIndex === "number" && state.editingPartnerIndex >= 0 && s.partners[state.editingPartnerIndex]) {
+          Object.assign(s.partners[state.editingPartnerIndex], payload);
+          showToast(`✏️ [${name}] 거래처 정보가 수정되었습니다.`);
+        } else {
+          s.partners.unshift(payload);
+          showToast(`➕ [${name}] 신규 거래처가 추가되었습니다.`);
+        }
+        state.showPartnerForm = false;
+        state.editingPartnerIndex = null;
+        renderSettingsModal();
       };
 
       function renderSettingsModal() {
@@ -7889,58 +7978,211 @@
         let contentHtml = "";
 
         if (tab === "partners") {
-          contentHtml = `
-            <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
-              <div style="display:grid;grid-template-columns:1fr 1fr 110px;gap:8px;">
-                <input class="ws-input" id="stPName" placeholder="업체명 (예: 큐브타일)">
-                <input class="ws-input" id="stPCat" placeholder="대표공종 (예: 타일, 도배)">
-                <select class="ws-select" id="stPPrio">
-                  <option value="1팀">1팀</option>
-                  <option value="2팀">2팀</option>
-                  <option value="일반" selected>일반</option>
-                  <option value="미지정">미지정</option>
-                </select>
+          const rawList = s.partners || [];
+          const bizCounts = {}, catCounts = {}, prioCounts = {}, statCounts = {};
+          rawList.forEach((p) => {
+            const b = p.biz || p.category || "기타";
+            bizCounts[b] = (bizCounts[b] || 0) + 1;
+            const c = p.category || "시공";
+            catCounts[c] = (catCounts[c] || 0) + 1;
+            const pr = p.priority || "일반";
+            prioCounts[pr] = (prioCounts[pr] || 0) + 1;
+            const st = p.status || "운영 중";
+            statCounts[st] = (statCounts[st] || 0) + 1;
+          });
+
+          const q = (state.partnerSearchQuery || "").toLowerCase().trim();
+          const filteredPartners = rawList.map((p, originalIdx) => ({ p, originalIdx })).filter(({ p }) => {
+            if (q) {
+              const hay = [p.name, p.fullName, p.biz, p.category, p.priority, p.manager, p.phone, p.status, p.feature, p.orderMethod, p.note, p.memo].join(" ").toLowerCase();
+              if (!hay.includes(q)) return false;
+            }
+            if (state.partnerBizFilter && (p.biz || p.category || "기타") !== state.partnerBizFilter) return false;
+            if (state.partnerCatFilter && (p.category || "시공") !== state.partnerCatFilter) return false;
+            if (state.partnerPrioFilter && (p.priority || "일반") !== state.partnerPrioFilter) return false;
+            if (state.partnerStatusFilter && (p.status || "운영 중") !== state.partnerStatusFilter) return false;
+            return true;
+          });
+
+          const editIdx = state.editingPartnerIndex;
+          const editItem = (typeof editIdx === "number" && editIdx >= 0) ? rawList[editIdx] : null;
+
+          const formHtml = state.showPartnerForm ? `
+            <div style="background:#f8fafc;padding:14px;border-radius:10px;border:1.5px solid #93c5fd;box-shadow:0 2px 6px rgba(37,99,235,0.06);margin-bottom:12px;display:flex;flex-direction:column;gap:10px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e2e8f0;padding-bottom:6px;">
+                <span style="font-weight:800;font-size:13.5px;color:#1e3a8a;">${editItem ? `✏️ [${escHtml(editItem.name)}] 거래처 정보 수정` : "➕ 신규 거래처 등록"}</span>
+                <button type="button" onclick="closePartnerForm()" style="border:none;background:transparent;color:#64748b;font-weight:700;font-size:13px;cursor:pointer;">✕ 닫기</button>
               </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;">
-                <input class="ws-input" id="stPPhone" placeholder="연락처 (010-0000-0000)">
-                <input class="ws-input" id="stPMemo" placeholder="비고 / 특이사항">
-                <button type="button" class="btn-act-blue" onclick="addSettingItem('partners')">+ 거래처 추가</button>
+              <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:8px;">
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">상호 / 업체 / 반장명 <span style="color:#ef4444;">*</span></label>
+                  <input class="ws-input" id="stPName" value="${escHtml((editItem && editItem.name) || "")}" placeholder="예: 큐브타일 (보경팀)">
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">대표 공종</label>
+                  <input class="ws-input" id="stPBiz" value="${escHtml((editItem && (editItem.biz || editItem.category)) || "")}" placeholder="예: 타일, 도배, 목공">
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">대구분</label>
+                  <select class="ws-select" id="stPCat">
+                    ${["시공", "자재", "가구", "설비", "철거", "단품", "기타"].map((c) => `<option value="${c}" ${(editItem && editItem.category === c) ? "selected" : (c === "시공" ? "selected" : "")}>${c}</option>`).join("")}
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">우선순위 (팀)</label>
+                  <select class="ws-select" id="stPPrio">
+                    ${["1팀", "2팀", "3팀", "일반", "미지정"].map((pr) => `<option value="${pr}" ${(editItem && editItem.priority === pr) ? "selected" : (pr === "일반" ? "selected" : "")}>${pr}</option>`).join("")}
+                  </select>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1.2fr 1fr 1fr;gap:8px;">
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">담당자 / 직책</label>
+                  <input class="ws-input" id="stPMgr" value="${escHtml((editItem && editItem.manager) || "")}" placeholder="예: 김소장, 박대표">
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">연락처 (전화번호)</label>
+                  <input class="ws-input" id="stPPhone" value="${escHtml((editItem && editItem.phone) || "")}" placeholder="010-0000-0000">
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">관리상태</label>
+                  <select class="ws-select" id="stPStatus">
+                    ${["운영 중", "확인 필요", "신규 발굴", "보류"].map((st) => `<option value="${st}" ${(editItem && editItem.status === st) ? "selected" : (st === "운영 중" ? "selected" : "")}>${st}</option>`).join("")}
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">발주 / 접수방식</label>
+                  <input class="ws-input" id="stPOrder" value="${escHtml((editItem && editItem.orderMethod) || "")}" placeholder="예: 카톡, 문자, 전화">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1.5fr 1.5fr auto;gap:8px;align-items:end;">
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">주력분야 / 특징 / 계좌번호</label>
+                  <input class="ws-input" id="stPFeature" value="${escHtml((editItem && editItem.feature) || "")}" placeholder="예: 국민 123-456-7890 홍길동 / 30평형 전문">
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">비고 / 메모</label>
+                  <input class="ws-input" id="stPNote" value="${escHtml((editItem && (editItem.note || editItem.memo)) || "")}" placeholder="특이사항 및 메모">
+                </div>
+                <div style="display:flex;gap:6px;">
+                  <button type="button" class="btn-act-white" onclick="closePartnerForm()" style="height:32px;padding:0 12px;font-size:12px;">취소</button>
+                  <button type="button" class="btn-act-blue" onclick="submitPartnerForm()" style="height:32px;padding:0 14px;font-size:12px;">${editItem ? "✓ 수정 완료" : "✓ 거래처 등록"}</button>
+                </div>
+              </div>
+            </div>` : "";
+
+          contentHtml = `
+            ${formHtml}
+            <div style="background:#f8fafc;padding:10px 12px;border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+              <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:240px;">
+                <span style="font-size:13px;color:#64748b;">🔍</span>
+                <input class="ws-input" style="height:30px;font-size:12px;padding:4px 8px;" placeholder="업체명, 대표공종, 담당자, 연락처, 메모 검색..." value="${escHtml(state.partnerSearchQuery || "")}" oninput="state.partnerSearchQuery=this.value; renderSettingsModal();">
+                ${state.partnerSearchQuery ? `<button type="button" onclick="state.partnerSearchQuery=''; renderSettingsModal();" style="border:none;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;">✕</button>` : ""}
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <select class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="state.partnerBizFilter=this.value; renderSettingsModal();">
+                  <option value="">대표공종 전체 (${rawList.length})</option>
+                  ${Object.keys(bizCounts).sort().map((b) => `<option value="${escHtml(b)}" ${state.partnerBizFilter === b ? "selected" : ""}>${escHtml(b)} (${bizCounts[b]})</option>`).join("")}
+                </select>
+                <select class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="state.partnerCatFilter=this.value; renderSettingsModal();">
+                  <option value="">대구분 전체</option>
+                  ${Object.keys(catCounts).sort().map((c) => `<option value="${escHtml(c)}" ${state.partnerCatFilter === c ? "selected" : ""}>${escHtml(c)} (${catCounts[c]})</option>`).join("")}
+                </select>
+                <select class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="state.partnerPrioFilter=this.value; renderSettingsModal();">
+                  <option value="">우선순위 전체</option>
+                  ${Object.keys(prioCounts).sort().map((pr) => `<option value="${escHtml(pr)}" ${state.partnerPrioFilter === pr ? "selected" : ""}>${escHtml(pr)} (${prioCounts[pr]})</option>`).join("")}
+                </select>
+                <select class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="state.partnerStatusFilter=this.value; renderSettingsModal();">
+                  <option value="">상태 전체</option>
+                  ${Object.keys(statCounts).sort().map((st) => `<option value="${escHtml(st)}" ${state.partnerStatusFilter === st ? "selected" : ""}>${escHtml(st)} (${statCounts[st]})</option>`).join("")}
+                </select>
+                ${(state.partnerSearchQuery || state.partnerBizFilter || state.partnerCatFilter || state.partnerPrioFilter || state.partnerStatusFilter) ? `
+                  <button type="button" class="btn-act-white" style="height:30px;padding:0 8px;font-size:11.5px;" onclick="state.partnerSearchQuery='';state.partnerBizFilter='';state.partnerCatFilter='';state.partnerPrioFilter='';state.partnerStatusFilter=''; renderSettingsModal();">초기화</button>` : ""}
+                ${!state.showPartnerForm ? `
+                  <button type="button" class="btn-act-blue" style="height:30px;padding:0 12px;font-size:12px;display:inline-flex;align-items:center;gap:4px;" onclick="openPartnerForm(-1)">➕ 거래처 추가</button>` : ""}
               </div>
             </div>
-            <div class="table-container" style="max-height:340px;overflow-y:auto;">
-              <table class="clean-table">
-                <thead><tr><th style="width:70px;">공종</th><th>거래처명</th><th style="width:65px;">팀</th><th>연락처</th><th>비고</th><th style="width:110px;">순서/삭제</th></tr></thead>
+
+            <div class="table-container" style="max-height:380px;overflow-y:auto;overflow-x:auto;">
+              <table class="clean-table" style="min-width:1100px;">
+                <thead>
+                  <tr style="position:sticky;top:0;background:#ffffff;z-index:2;">
+                    <th style="width:45px;text-align:center;">순서</th>
+                    <th style="width:60px;text-align:center;">이동</th>
+                    <th style="width:140px;">상호/업체명</th>
+                    <th style="width:90px;">대표공종</th>
+                    <th style="width:65px;text-align:center;">대구분</th>
+                    <th style="width:70px;text-align:center;">우선순위</th>
+                    <th style="width:85px;">담당/직책</th>
+                    <th style="width:115px;">연락처</th>
+                    <th style="width:75px;text-align:center;">관리상태</th>
+                    <th style="min-width:140px;">주력분야 및 특징 (계좌)</th>
+                    <th style="width:85px;">발주방식</th>
+                    <th style="min-width:110px;">비고</th>
+                    <th style="width:75px;text-align:center;">관리</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  ${(s.partners || []).map((p, idx) => `
-                    <tr>
-                      <td><span style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px;font-weight:700;font-size:11px;">${escHtml(p.category || p.biz || "시공")}</span></td>
-                      <td><strong>${escHtml(p.name || p.fullName)}</strong></td>
-                      <td><span style="font-weight:700;color:${p.priority === "1팀" ? "#2563eb" : p.priority === "2팀" ? "#0f766e" : "var(--text-sub)"};font-size:11.5px;">${escHtml(p.priority || "일반")}</span></td>
-                      <td>${escHtml(p.phone || "-")}</td>
-                      <td style="font-size:11.5px;color:var(--text-sub);max-width:140px;">${escHtml(p.note || p.memo || "-")}</td>
-                      <td style="white-space:nowrap;">
-                        <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${idx},-1)">▲</button>
-                        <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${idx},1)">▼</button>
-                        <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="delSettingItem('partners',${idx})">삭제</button>
-                      </td>
-                    </tr>`).join("")}
+                  ${filteredPartners.length ? filteredPartners.map(({ p, originalIdx }, idx) => {
+                    const prioColor = p.priority === "1팀" ? "#2563eb" : (p.priority === "2팀" ? "#0f766e" : (p.priority === "3팀" ? "#d97706" : "#64748b"));
+                    const statusBg = p.status === "운영 중" ? "#dcfce7" : (p.status === "확인 필요" ? "#fef3c7" : (p.status === "보류" ? "#fee2e2" : "#eff6ff"));
+                    const statusFg = p.status === "운영 중" ? "#166534" : (p.status === "확인 필요" ? "#92400e" : (p.status === "보류" ? "#991b1b" : "#1d4ed8"));
+                    return `
+                      <tr>
+                        <td style="text-align:center;font-size:11.5px;color:#94a3b8;font-weight:700;">${idx + 1}</td>
+                        <td style="text-align:center;white-space:nowrap;">
+                          <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${originalIdx},-1)" title="위로">▲</button>
+                          <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${originalIdx},1)" title="아래로">▼</button>
+                        </td>
+                        <td><strong style="color:#0f172a;font-size:12.5px;">${escHtml(p.name || p.fullName)}</strong></td>
+                        <td><span style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px;font-weight:700;font-size:11px;">${escHtml(p.biz || p.category || "시공")}</span></td>
+                        <td style="text-align:center;font-size:11.5px;color:#475569;">${escHtml(p.category || "시공")}</td>
+                        <td style="text-align:center;"><span style="font-weight:800;color:${prioColor};font-size:11.5px;">${escHtml(p.priority || "일반")}</span></td>
+                        <td style="font-size:12px;color:#334155;white-space:nowrap;">${escHtml(p.manager || "-")}</td>
+                        <td style="white-space:nowrap;">
+                          ${p.phone ? `<a href="tel:${escHtml(p.phone)}" style="color:#2563eb;text-decoration:none;font-weight:600;font-size:11.5px;">📞 ${escHtml(p.phone)}</a>` : `<span style="color:#94a3b8;">-</span>`}
+                        </td>
+                        <td style="text-align:center;"><span style="padding:2px 6px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};">${escHtml(p.status || "운영 중")}</span></td>
+                        <td style="font-size:11.5px;color:#475569;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.feature || "")}">${escHtml(p.feature || "-")}</td>
+                        <td style="font-size:11.5px;color:#64748b;white-space:nowrap;">${escHtml(p.orderMethod || "-")}</td>
+                        <td style="font-size:11.5px;color:#64748b;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.note || p.memo || "")}">${escHtml(p.note || p.memo || "-")}</td>
+                        <td style="text-align:center;white-space:nowrap;">
+                          <button type="button" class="btn-tool-tag" onclick="openPartnerForm(${originalIdx})" title="수정">✏️</button>
+                          <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="delSettingItem('partners',${originalIdx})" title="삭제">🗑️</button>
+                        </td>
+                      </tr>`;
+                  }).join("") : `<tr><td colspan="13" style="text-align:center;padding:36px;color:#94a3b8;font-weight:600;">조건에 일치하는 거래처가 없습니다.</td></tr>`}
                 </tbody>
               </table>
             </div>`;
         } else if (tab === "tasks") {
           contentHtml = `
-            <div class="form-grid-2" style="background:#f8fafc;padding:10px;border-radius:8px;border:1px solid var(--border);">
-              <input class="ws-input" id="stTName" placeholder="새 공종명 (예: 탄성코트)">
-              <button type="button" class="btn-act-blue" onclick="addSettingItem('tasks')">+ 공종 추가</button>
+            <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid var(--border);display:grid;grid-template-columns:1.5fr 1fr 1.5fr auto;gap:8px;align-items:end;margin-bottom:8px;">
+              <div>
+                <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">공종명 <span style="color:#ef4444;">*</span></label>
+                <input class="ws-input" id="stTName" placeholder="예: 탄성코트">
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">구분</label>
+                <input class="ws-input" id="stTCat" placeholder="예: 도장, 마감, 기타">
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">비고 / 설명</label>
+                <input class="ws-input" id="stTNote" placeholder="작업 설명 및 특이사항">
+              </div>
+              <button type="button" class="btn-act-blue" style="height:32px;padding:0 14px;" onclick="addSettingItem('tasks')">+ 공종 추가</button>
             </div>
-            <div class="table-container" style="max-height:340px;overflow-y:auto;">
+            <div class="table-container" style="max-height:360px;overflow-y:auto;">
               <table class="clean-table">
-                <thead><tr><th>공종명</th><th style="width:120px;">순서/삭제</th></tr></thead>
+                <thead><tr><th style="width:50px;text-align:center;">순서</th><th>공종명</th><th style="width:120px;">구분</th><th>비고 / 설명</th><th style="width:110px;text-align:center;">순서/삭제</th></tr></thead>
                 <tbody>
                   ${(s.tasks || []).map((t, idx) => `
                     <tr>
-                      <td><strong>${escHtml(t.name)}</strong></td>
-                      <td style="white-space:nowrap;">
+                      <td style="text-align:center;font-size:11.5px;color:#94a3b8;font-weight:700;">${idx + 1}</td>
+                      <td><strong style="color:#0f172a;font-size:13px;">${escHtml(t.name || t.taskName)}</strong></td>
+                      <td><span style="background:#f1f5f9;color:#475569;padding:2px 7px;border-radius:5px;font-weight:700;font-size:11.5px;">${escHtml(t.category || "기타")}</span></td>
+                      <td style="font-size:12px;color:#64748b;">${escHtml(t.note || "-")}</td>
+                      <td style="text-align:center;white-space:nowrap;">
                         <button type="button" class="btn-tool-tag" onclick="moveSettingItem('tasks',${idx},-1)">▲</button>
                         <button type="button" class="btn-tool-tag" onclick="moveSettingItem('tasks',${idx},1)">▼</button>
                         <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="delSettingItem('tasks',${idx})">삭제</button>
@@ -7951,7 +8193,7 @@
             </div>`;
         } else if (tab === "members") {
           contentHtml = `
-            <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
+            <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid var(--border);display:flex;flex-direction:column;gap:8px;margin-bottom:8px;">
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:center;">
                 <input class="ws-input" id="stMName" placeholder="이름 (예: 홍길동)">
                 <input class="ws-input" id="stMRole" placeholder="직급 (소장/대표/과장)">
@@ -7966,9 +8208,9 @@
                 <input class="ws-input" id="stMNote" placeholder="비고 / 메모" style="flex:1;">
               </div>
             </div>
-            <div class="table-container" style="max-height:340px;overflow-y:auto;">
+            <div class="table-container" style="max-height:360px;overflow-y:auto;">
               <table class="clean-table">
-                <thead><tr><th>이름</th><th>직급</th><th>연락처</th><th style="width:90px;text-align:center;">알림 수신</th><th>비고</th><th style="width:110px;">순서/삭제</th></tr></thead>
+                <thead><tr><th>이름</th><th>직급</th><th>연락처</th><th style="width:90px;text-align:center;">알림 수신</th><th>비고</th><th style="width:110px;text-align:center;">순서/삭제</th></tr></thead>
                 <tbody>
                   ${(s.members || []).map((m, idx) => {
                     const isRecv = m.receive !== false && m.notifyEnabled !== false;
@@ -7981,7 +8223,7 @@
                         <input type="checkbox" ${isRecv ? "checked" : ""} onchange="toggleMemberNotify(${idx}, this.checked)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
                       </td>
                       <td style="font-size:11.5px;color:var(--text-sub);">${escHtml(m.note || "-")}</td>
-                      <td style="white-space:nowrap;">
+                      <td style="text-align:center;white-space:nowrap;">
                         <button type="button" class="btn-tool-tag" onclick="moveSettingItem('members',${idx},-1)">▲</button>
                         <button type="button" class="btn-tool-tag" onclick="moveSettingItem('members',${idx},1)">▼</button>
                         <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="delSettingItem('members',${idx})">삭제</button>
@@ -8008,14 +8250,6 @@
                   <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">모든 공정이 완료된 현장 블록을 '완료현장' 시트로 이동하여 현장데이터 시트를 가볍고 빠르게 유지합니다.</div>
                 </div>
                 <button type="button" class="btn-act-blue" onclick="executeSystemAction('archiveCompletedSites')">아카이브 실행</button>
-              </div>
-
-              <div style="background:#f8fafc;padding:14px;border-radius:10px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
-                <div>
-                  <div style="font-weight:800;font-size:13.5px;color:#0f172a;">🗓️ 구글 캘린더 동기화</div>
-                  <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">구글 캘린더와의 최신 일정 상태를 점검하고 동기화를 수행합니다.</div>
-                </div>
-                <button type="button" class="btn-act-blue" onclick="executeSystemAction('syncGoogleCalendar')">동기화 실행</button>
               </div>
             </div>`;
         }
@@ -8047,7 +8281,6 @@
         let p = null;
         if (act === "sortScheduleSheet") p = window.WSDataService.sortScheduleSheet();
         else if (act === "archiveCompletedSites") p = window.WSDataService.archiveCompletedSites();
-        else if (act === "syncGoogleCalendar") p = window.WSDataService.syncGoogleCalendar();
         if (p && typeof p.then === "function") {
           p.then((res) => {
             const msg = (res && res.message) || "작업이 성공적으로 완료되었습니다.";
@@ -8062,27 +8295,29 @@
       };
       window.addSettingItem = function (kind) {
         const s = state.settingsData;
+        if (!s) return;
         if (kind === "partners") {
-          const name = document.getElementById("stPName").value.trim();
-          const category = document.getElementById("stPCat").value.trim();
-          const priority = document.getElementById("stPPrio").value;
-          const phone = document.getElementById("stPPhone").value.trim();
-          const note = document.getElementById("stPMemo").value.trim();
-          if (!name) return showToast("⚠️ 거래처명을 입력하세요.");
-          const fullName = category ? `${category}_${name}` : name;
-          s.partners.unshift({ name, category, priority, phone, note, memo: note, fullName });
+          window.openPartnerForm(-1);
         } else if (kind === "tasks") {
-          const name = document.getElementById("stTName").value.trim();
+          const nameEl = document.getElementById("stTName");
+          const name = nameEl ? nameEl.value.trim() : "";
           if (!name) return showToast("⚠️ 공종명을 입력하세요.");
-          s.tasks.unshift({ name });
+          const category = ((document.getElementById("stTCat") || {}).value || "기타").trim();
+          const note = ((document.getElementById("stTNote") || {}).value || "").trim();
+          s.tasks.unshift({ name, taskName: name, category, note });
+          showToast(`➕ [${name}] 공종이 추가되었습니다.`);
         } else {
-          const name = document.getElementById("stMName").value.trim();
+          const nameEl = document.getElementById("stMName");
+          const name = nameEl ? nameEl.value.trim() : "";
           if (!name) return showToast("⚠️ 이름을 입력하세요.");
-          const role = document.getElementById("stMRole").value.trim() || "소장";
-          const phone = document.getElementById("stMPhone").value.trim();
+          const role = ((document.getElementById("stMRole") || {}).value || "소장").trim();
+          let phone = ((document.getElementById("stMPhone") || {}).value || "").trim().replace(/\s+/g, "");
+          if (/^010\d{8}$/.test(phone)) phone = phone.replace(/^(010)(\d{4})(\d{4})$/, "$1-$2-$3");
+          else if (/^02\d{7,8}$/.test(phone)) phone = phone.replace(/^(02)(\d{3,4})(\d{4})$/, "$1-$2-$3");
           const recv = document.getElementById("stMRecv") ? document.getElementById("stMRecv").checked : true;
-          const note = document.getElementById("stMNote") ? document.getElementById("stMNote").value.trim() : "";
+          const note = ((document.getElementById("stMNote") || {}).value || "").trim();
           s.members.push({ name, role, phone, receive: recv, notifyEnabled: recv, note });
+          showToast(`➕ [${name}] 구성원이 추가되었습니다.`);
         }
         renderSettingsModal();
       };
@@ -8098,13 +8333,23 @@
         renderSettingsModal();
       };
       window.saveSettingsModalAll = function () {
-        if (window.WSDataService) window.WSDataService.saveSettings(state.settingsData);
+        showToast("💾 기준정보 설정을 구글 시트에 일괄 저장 중입니다...");
+        if (window.WSDataService) {
+          const res = window.WSDataService.saveSettings(state.settingsData);
+          if (res && typeof res.then === "function") {
+            res.then((r) => {
+              if (r && r.message) showToast("✅ " + r.message);
+              else showToast("✅ 기준정보 설정이 구글 시트에 안전하게 일괄 저장되었습니다.");
+            }).catch((err) => {
+              showToast("⚠️ 저장 중 오류: " + (err.message || String(err)));
+            });
+          }
+        }
         sanitizeUnregisteredMembers();
         syncUserSelectorOptions();
         window.closeModal("settingsModal");
         markAllDirty();
         renderActiveViews();
-        showToast("✅ 기준정보 설정이 저장되었습니다.");
       };
 
       // ================= 드래그 앤 드롭 날짜 이동 =================
@@ -8381,32 +8626,58 @@
       };
       window.onSidebarSiteClick = function (siteKey, ev) {
         if (ev && ev.target && ev.target.tagName === "INPUT") return;
-        const site = getAllSites().find((s) => s.siteKey === siteKey);
-        if (state.pcTab === "quote" || (site && site.scope === "newSite")) {
-          state.selectedQuoteKey = siteKey;
-          state.dirtyPcTabs.quote = true;
-          if (state.pcTab === "quote") renderActiveViews(); else window.switchMainTab("quote");
-          return;
-        }
-        state.selectedSiteKey = siteKey; state.siteTaskStatusFilter = "all"; state.checkedTableTaskIds.clear();
-        state.dirtyPcTabs.sites = true;
-        if (state.pcTab === "sites") renderActiveViews(); else window.switchMainTab("sites");
+        window.openSiteDetail(siteKey);
       };
       window.openSiteDetail = function (siteKey) {
         const site = getAllSites().find((s) => s.siteKey === siteKey);
+        const isDone = Boolean(site && ((typeof isSiteCompleted === "function" && isSiteCompleted(site)) || site.isArchived || site.status === "계약 완료" || site.status === "완료" || site.status === "보관"));
         if (site && site.scope) state.scope = site.scope;
+        if (isDone) {
+          state.showArchivedSites = true;
+        }
         if (site && site.scope === "newSite") {
           state.selectedQuoteKey = siteKey;
+          if (isDone) {
+            state.quoteStatusFilter = "done";
+            state.quoteShowArchived = true;
+          } else {
+            state.quoteStatusFilter = "active";
+            state.quoteShowArchived = false;
+          }
           markAllDirty();
           window.switchMainTab("quote");
+          renderActiveViews();
           return;
         }
-        state.selectedSiteKey = siteKey; state.siteTaskStatusFilter = "all"; state.checkedTableTaskIds.clear();
-        markAllDirty(); window.switchMainTab("sites");
+        state.selectedSiteKey = siteKey;
+        state.siteTaskStatusFilter = "all";
+        state.checkedTableTaskIds.clear();
+        markAllDirty();
+        window.switchMainTab("sites");
+        renderActiveViews();
       };
       window.openSiteDetailMobile = function (siteKey) {
         const site = getAllSites().find((s) => s.siteKey === siteKey);
+        const isDone = Boolean(site && ((typeof isSiteCompleted === "function" && isSiteCompleted(site)) || site.isArchived || site.status === "계약 완료" || site.status === "완료" || site.status === "보관"));
         if (site && site.scope) state.scope = site.scope;
+        if (isDone) {
+          state.showArchivedSites = true;
+        }
+        if (site && site.scope === "newSite") {
+          state.selectedQuoteKey = siteKey;
+          if (isDone) {
+            state.quoteStatusFilter = "done";
+            state.quoteShowArchived = true;
+          } else {
+            state.quoteStatusFilter = "active";
+            state.quoteShowArchived = false;
+          }
+          markAllDirty();
+          window.switchMobileTab("quote");
+          if (siteKey) state.mobileExpandedSiteKeys.add(siteKey);
+          renderActiveViews();
+          return;
+        }
         state.selectedSiteKey = siteKey;
         markAllDirty();
         window.switchMobileTab("sites");
