@@ -630,8 +630,12 @@
     .mobile-screen-inner[data-active-mtab="quote"] .m-filter-bar,
     .mobile-screen-inner[data-active-mtab="finance"] .m-search-wrap,
     .mobile-screen-inner[data-active-mtab="finance"] .m-filter-bar,
+    .mobile-screen-inner[data-active-mtab="partners"] .m-search-wrap,
+    .mobile-screen-inner[data-active-mtab="partners"] .m-filter-bar,
     .mobile-screen-inner.mtab-finance .m-search-wrap,
     .mobile-screen-inner.mtab-finance .m-filter-bar,
+    .mobile-screen-inner.mtab-partners .m-search-wrap,
+    .mobile-screen-inner.mtab-partners .m-filter-bar,
     .mobile-screen-inner.mtab-quote .m-search-wrap,
     .mobile-screen-inner.mtab-quote .m-filter-bar,
     .mobile-screen-inner.mtab-newSite .m-search-wrap,
@@ -2010,6 +2014,7 @@
       <button type="button" class="pg-jump-btn" onclick="switchMainTab('todo')">To-Do</button>
       <button type="button" class="pg-jump-btn" onclick="switchMainTab('quote')">신규</button>
       <button type="button" class="pg-jump-btn" onclick="switchMainTab('finance')">재무</button>
+      <button type="button" class="pg-jump-btn" onclick="switchMainTab('partners')" style="display:none;">거래처</button>
     </div>
   </div>
 
@@ -2035,6 +2040,7 @@
               📋 신규 현장 <span class="badge-count badge-green" id="pcQuoteBadge">0</span>
             </button>
             <button type="button" class="nav-tab-item" data-tab="finance" onclick="switchMainTab('finance')">💰 재무·원장</button>
+            <button type="button" class="nav-tab-item" data-tab="partners" onclick="switchMainTab('partners')" style="display:none;">🤝 거래처</button>
           </nav>
         </div>
 
@@ -2073,6 +2079,7 @@
           <main class="site-list-workspace-view" id="pcQuoteMain"></main>
         </div>
         <div class="page-container" id="page-finance"><div class="standard-page-view" id="pcFinanceMain"></div></div>
+        <div class="page-container" id="page-partners"><div class="standard-page-view" id="pcPartnersMain"></div></div>
       </div>
     </div>
 
@@ -2124,6 +2131,7 @@
           <div class="m-page-pane" id="m-page-sites"></div>
           <div class="m-page-pane" id="m-page-quote"></div>
           <div class="m-page-pane" id="m-page-finance"></div>
+          <div class="m-page-pane" id="m-page-partners"></div>
         </main>
 
         <nav class="m-bottom-nav">
@@ -2148,6 +2156,9 @@
           </button>
           <button type="button" class="m-bottom-btn" data-mtab="finance" onclick="switchMobileTab('finance')">
             <span class="icon">💰</span><span>재무</span>
+          </button>
+          <button type="button" class="m-bottom-btn" data-mtab="partners" onclick="switchMobileTab('partners')" style="display:none;">
+            <span class="icon">🤝</span><span>거래처</span>
           </button>
         </nav>
       </div>
@@ -2357,6 +2368,11 @@
         weatherData: {},
         _lastCalSlideDir: "",
         financePartnerFilter: "all",
+        partnerTabSearchQuery: "",
+        partnerTabBizFilter: "",
+        partnerTabCatFilter: "",
+        partnerTabPrioFilter: "",
+        partnerTabStatusFilter: "",
         homeTaskFilter: "all",
         homeMemoExpanded: false,
         mobileHomeTasksExpanded: false,
@@ -2364,8 +2380,8 @@
         todoGroupBy: "due",
         todoCompletedExpanded: false,
         quickAddDueMode: "today",
-        dirtyPcTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true },
-        dirtyMobileTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true },
+        dirtyPcTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true, partners: true },
+        dirtyMobileTabs: { home: true, todo: true, calendar: true, sites: true, quote: true, finance: true, partners: true },
         syncSource: "snapshot",
         syncTime: "",
         sheetCtx: null,
@@ -2530,17 +2546,25 @@
         const canView = canViewFinance();
         const pcNavBtn = document.querySelector('.header-nav-tabs .nav-tab-item[data-tab="finance"]');
         if (pcNavBtn) pcNavBtn.style.display = canView ? "" : "none";
+        const pcPartnerBtn = document.querySelector('.header-nav-tabs .nav-tab-item[data-tab="partners"]');
+        if (pcPartnerBtn) pcPartnerBtn.style.display = canView ? "none" : "";
+
         const mobNavBtn = document.querySelector('.m-bottom-nav .m-bottom-btn[data-mtab="finance"]');
         if (mobNavBtn) mobNavBtn.style.display = canView ? "" : "none";
+        const mobPartnerBtn = document.querySelector('.m-bottom-nav .m-bottom-btn[data-mtab="partners"]');
+        if (mobPartnerBtn) mobPartnerBtn.style.display = canView ? "none" : "";
+
         const jumpBtn = document.querySelector('.preview-global-bar .pg-jump-btn[onclick*="finance"]');
         if (jumpBtn) jumpBtn.style.display = canView ? "" : "none";
+        const jumpPartnerBtn = document.querySelector('.preview-global-bar .pg-jump-btn[onclick*="partners"]');
+        if (jumpPartnerBtn) jumpPartnerBtn.style.display = canView ? "none" : "";
 
         if (!canView) {
           if (state.pcTab === "finance") {
-            window.switchMainTab("home");
+            window.switchMainTab("partners");
           }
           if (state.mobileTab === "finance") {
-            window.switchMobileTab("home");
+            window.switchMobileTab("partners");
           }
         }
       }
@@ -3428,6 +3452,49 @@
         renderActiveViews();
       };
 
+      function buildProcessReportData(user, todayYmd) {
+        const d = new Date(todayYmd + "T00:00:00");
+        const day = d.getDay();
+        const diffToMon = (day === 0 ? -6 : 1) - day;
+        const weekMon = addDaysYmd(todayYmd, diffToMon);
+        const weekSun = addDaysYmd(weekMon, 6);
+
+        const activeConstructionSites = getAllSites().filter((s) => (s.scope || "site") === "site" && !isSiteCompleted(s));
+        const userActiveSites = activeConstructionSites.filter((s) => (s.tasks || []).some((t) => !isTaskCompleted(t) && taskMatchesMember(t, user)));
+        const targetSites = userActiveSites.length ? userActiveSites : activeConstructionSites;
+        targetSites.sort(compareActiveSites);
+
+        const myTasks = [];
+        targetSites.forEach((site) => {
+          (site.tasks || []).forEach((task) => {
+            if (isTaskCompleted(task)) return;
+            if (userActiveSites.length && !taskMatchesMember(task, user)) return;
+            myTasks.push({ site, task, ymd: parseYmdFromTask(task) });
+          });
+        });
+
+        const thisWeekTasks = myTasks.filter((x) => {
+          if (!x.ymd) return false;
+          return x.ymd >= todayYmd && x.ymd <= (weekSun < todayYmd ? addDaysYmd(todayYmd, 6) : weekSun);
+        }).sort((a, b) => String(a.ymd).localeCompare(String(b.ymd)));
+
+        const delayedTasks = myTasks.filter((x) => Boolean(x.task.isDelayed || (x.ymd && x.ymd < todayYmd)))
+          .sort((a, b) => String(a.ymd || "").localeCompare(String(b.ymd || "")));
+
+        const activeAsSites = getAllSites().filter((s) => s.scope === "as" && !isSiteCompleted(s));
+        const asSites = activeAsSites.length ? activeAsSites : getAllSites().filter((s) => s.scope === "as").slice(0, 3);
+
+        return {
+          targetSites,
+          myTasks,
+          thisWeekTasks,
+          delayedTasks,
+          asSites,
+          weekRangeStr: `${weekMon.slice(5).replace("-", "/")} ~ ${weekSun.slice(5).replace("-", "/")}`
+        };
+      }
+      window.buildProcessReportData = buildProcessReportData;
+
       // ================= [PC 탭 1: 홈 — 모던 벤토 카드 (완료 항목 제외 & To-Do 최상단 배치)] =================
       function renderPcHomeTab() {
         const user = state.user;
@@ -3481,6 +3548,7 @@
         const myTodos = allTodos.filter((t) => isUserAssignedTodo(t, user));
         const myPendingTodos = myTodos.filter((t) => t.status !== "완료");
         const myPayable = (state.financeData && state.financeData.summary && state.financeData.summary.totalPayable) || 0;
+        const processReport = buildProcessReportData(user, todayYmd);
 
         // 1) 최상단 To-Do 2열 카드 그리드 (완료된 To-Do 제외)
         const todoItemsHtml = myPendingTodos.slice(0, 8).map((t) => {
@@ -3606,6 +3674,7 @@
                   <p>진행 중인 현장과 남은 업무만 간추려 한눈에 확인하세요.</p>
                   <div class="home-hero-chips">
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecTodo')">✅ 미완료 To-Do ${myPendingTodos.length}건</span>
+                    <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecProcessReport')">📊 공정 리포트</span>
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecTasks')">🔨 오늘 공정 ${todayTasks.length}건</span>
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecSites')">🏢 담당 현장 ${mySites.length}개소</span>
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecQuotes')">📋 신규 견적 ${activeNewQuotes.length}건</span>
@@ -3675,6 +3744,96 @@
                     </div>
                   </div>
                   <div class="home-todo-grid">${todoItemsHtml}</div>
+                </div>
+
+                <!-- 📊 내 공정 리포트 섹션 -->
+                <div class="home-panel-box" id="homeSecProcessReport">
+                  <div class="hp-header">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <span class="hp-title">📊 내 공정 리포트</span>
+                      <span style="font-size:11.5px;color:#64748b;font-weight:600;">(${escHtml(user)} 담당 진행 현장 공정률 및 주간·A/S 종합 브리핑)</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <a class="hp-link" onclick="switchMainTab('calendar')">캘린더 ➔</a>
+                      <a class="hp-link" onclick="switchMainTab('sites')">현장 상세 ➔</a>
+                    </div>
+                  </div>
+
+                  <!-- 1. 이번 주 예정 / 지연 / 최근 A/S 3대 핵심 요약 바 -->
+                  <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;margin-bottom:14px;">
+                    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 12px;cursor:pointer;transition:all 0.14s ease;" onclick="switchMainTab('calendar')">
+                      <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:11.5px;font-weight:800;color:#166534;">📅 이번 주 예정</span>
+                        <span style="font-size:11.5px;color:#15803d;font-weight:900;background:#dcfce7;padding:2px 7px;border-radius:999px;">${processReport.thisWeekTasks.length}건</span>
+                      </div>
+                      <div style="font-size:11px;color:#475569;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                        ${processReport.thisWeekTasks[0] ? `<strong>${escHtml(processReport.thisWeekTasks[0].site.siteName)}</strong> · ${escHtml(processReport.thisWeekTasks[0].task.taskName)}` : "이번 주 예정 공정 없음"}
+                      </div>
+                    </div>
+
+                    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;cursor:pointer;transition:all 0.14s ease;" onclick="openDelayedSitesFromHome(false)">
+                      <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:11.5px;font-weight:800;color:#991b1b;">⚠️ 지연 / 확인</span>
+                        <span style="font-size:11.5px;color:#dc2626;font-weight:900;background:#fee2e2;padding:2px 7px;border-radius:999px;">${processReport.delayedTasks.length}건</span>
+                      </div>
+                      <div style="font-size:11px;color:#475569;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                        ${processReport.delayedTasks[0] ? `<strong>${escHtml(processReport.delayedTasks[0].site.siteName)}</strong> · ${escHtml(processReport.delayedTasks[0].task.taskName)}` : "지연 공정 없음"}
+                      </div>
+                    </div>
+
+                    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;cursor:pointer;transition:all 0.14s ease;" onclick="onCategoryClicked('as')">
+                      <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:11.5px;font-weight:800;color:#1e40af;">🔧 최근 접수 A/S</span>
+                        <span style="font-size:11.5px;color:#2563eb;font-weight:900;background:#dbeafe;padding:2px 7px;border-radius:999px;">${processReport.asSites.length}건</span>
+                      </div>
+                      <div style="font-size:11px;color:#475569;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                        ${processReport.asSites[0] ? `<strong>${escHtml(processReport.asSites[0].siteName)}</strong> · ${escHtml((processReport.asSites[0].tasks && processReport.asSites[0].tasks[0] && processReport.asSites[0].tasks[0].taskName) || "A/S 접수")}` : "진행 중인 A/S 없음"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 2. 담당 현장별 진행률 요약 (진행률 % 프로그레스 바 + 남은 공정 / 지연 공정 건수) -->
+                  <div style="margin-bottom:12px;">
+                    <div style="font-size:12px;font-weight:800;color:#334155;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+                      <span>🏢 담당 현장별 진행률 요약 (${mySites.length}개소)</span>
+                      <span style="font-size:11px;color:#64748b;">클릭 시 현장 상세로 바로 이동</span>
+                    </div>
+                    <div class="home-sites-mini-grid">
+                      ${mySitesCardsHtml || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;padding:12px;text-align:center;background:#f8fafc;border-radius:8px;">진행 중인 현장이 없습니다.</div>`}
+                    </div>
+                  </div>
+
+                  <!-- 3. 이번 주 예정 & 최근 A/S 핵심 요약 목록 -->
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;background:#f8fafc;padding:10px;border-radius:9px;border:1px solid #e2e8f0;">
+                    <div>
+                      <div style="font-size:11.5px;font-weight:800;color:#0f172a;margin-bottom:6px;display:flex;justify-content:space-between;">
+                        <span>📅 이번 주 핵심 공정</span>
+                        <span style="font-size:10.5px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMainTab('calendar')">캘린더 ➔</span>
+                      </div>
+                      <div style="display:flex;flex-direction:column;gap:5px;">
+                        ${processReport.thisWeekTasks.slice(0, 3).map((x) => `
+                          <div style="display:flex;justify-content:space-between;align-items:center;background:#ffffff;padding:6px 9px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid #e2e8f0;" onclick="openTaskEditModal('${escJs(x.task.id || x.task.taskId)}')">
+                            <span style="font-weight:700;color:#1e3a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">${escHtml(x.ymd.slice(5))} [${escHtml(x.site.siteName)}]</span>
+                            <span style="color:#0f766e;font-weight:800;flex-shrink:0;">${escHtml(x.task.taskName)}</span>
+                          </div>
+                        `).join("") || `<div style="font-size:11px;color:#94a3b8;padding:4px 0;">이번 주 예정 공정이 없습니다.</div>`}
+                      </div>
+                    </div>
+                    <div>
+                      <div style="font-size:11.5px;font-weight:800;color:#0f172a;margin-bottom:6px;display:flex;justify-content:space-between;">
+                        <span>🔧 최근 접수 A/S</span>
+                        <span style="font-size:10.5px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="onCategoryClicked('as')">A/S 목록 ➔</span>
+                      </div>
+                      <div style="display:flex;flex-direction:column;gap:5px;">
+                        ${processReport.asSites.slice(0, 3).map((s) => `
+                          <div style="display:flex;justify-content:space-between;align-items:center;background:#ffffff;padding:6px 9px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid #e2e8f0;" onclick="openSiteDetail('${escJs(s.siteKey)}')">
+                            <span style="font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">${escHtml(s.siteName)}</span>
+                            <span style="color:#dc2626;font-weight:800;flex-shrink:0;">${escHtml((s.tasks && s.tasks[0] && s.tasks[0].taskName) || "A/S 접수")}</span>
+                          </div>
+                        `).join("") || `<div style="font-size:11px;color:#94a3b8;padding:4px 0;">진행 중인 A/S가 없습니다.</div>`}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- 2순위: 주요 현장 공정 카드 그리드 -->
@@ -5077,6 +5236,433 @@
         `;
       }
 
+      // ================= [거래처 마스터 조회 & 필터 헬퍼 (PC & 모바일 공용)] =================
+      function getPartnersListForTab() {
+        if (state.settingsData && Array.isArray(state.settingsData.partners) && state.settingsData.partners.length > 0) {
+          return state.settingsData.partners;
+        }
+        if (window.WSDataService && typeof window.WSDataService.getInitialSettingsData === "function") {
+          state.settingsData = window.WSDataService.getInitialSettingsData();
+          if (state.settingsData && Array.isArray(state.settingsData.partners) && state.settingsData.partners.length > 0) {
+            return state.settingsData.partners;
+          }
+        }
+        // Fallback from snapshot
+        const snapList = (state.dashData && state.dashData.partners) || [];
+        const pMap = (state.dashData && state.dashData.partnerPhoneMap) || {};
+        const fallback = snapList.map((full, i) => {
+          const idx = full.indexOf("_");
+          const cat = idx > -1 ? full.slice(0, idx) : "미지정";
+          const name = idx > -1 ? full.slice(idx + 1) : full;
+          return {
+            row: i + 2,
+            category: "시공",
+            biz: cat,
+            name: name,
+            fullName: full,
+            phone: pMap[full] || pMap[name] || "",
+            priority: "일반",
+            manager: "",
+            status: "운영 중",
+            feature: "",
+            orderMethod: "",
+            note: ""
+          };
+        });
+        if (!state.settingsData) state.settingsData = { partners: fallback, tasks: [], members: [] };
+        else if (!Array.isArray(state.settingsData.partners) || state.settingsData.partners.length === 0) state.settingsData.partners = fallback;
+        return fallback;
+      }
+      window.getPartnersListForTab = getPartnersListForTab;
+
+      function getFilteredPartnersForTab() {
+        const rawList = getPartnersListForTab();
+        const q = (state.partnerTabSearchQuery || "").toLowerCase().trim();
+        const qWords = q ? q.split(/\s+/).filter(Boolean) : [];
+
+        const filtered = rawList.filter((p) => {
+          if (!p) return false;
+          if (qWords.length > 0) {
+            const hayParts = [
+              p.name, p.fullName, p.partnerName, p.company, p.companyName, p.partner, p.dropdownVal,
+              p.biz, p.trade, p.task, p.category, p.cat,
+              p.manager, p.mgr, p.owner, p.leader,
+              p.phone, p.tel, p.contact,
+              p.priority, p.team,
+              p.status, p.stat,
+              p.feature, p.account, p.bank,
+              p.orderMethod, p.order,
+              p.note, p.memo
+            ];
+            try {
+              Object.keys(p).forEach((k) => {
+                const v = p[k];
+                if (typeof v === "string" || typeof v === "number") hayParts.push(String(v));
+              });
+            } catch (e) {}
+            const hay = hayParts.filter(Boolean).join(" ").toLowerCase();
+            const allMatch = qWords.every((w) => hay.includes(w));
+            if (!allMatch) return false;
+          }
+          if (state.partnerTabBizFilter) {
+            const pB = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
+            if (pB !== state.partnerTabBizFilter) return false;
+          }
+          if (state.partnerTabCatFilter) {
+            const pC = String(p.category || "시공").trim();
+            if (pC !== state.partnerTabCatFilter) return false;
+          }
+          if (state.partnerTabPrioFilter) {
+            const pPr = String(p.priority || "일반").trim();
+            if (pPr !== state.partnerTabPrioFilter) return false;
+          }
+          if (state.partnerTabStatusFilter) {
+            const pSt = String(p.status || "운영 중").trim();
+            if (pSt !== state.partnerTabStatusFilter) return false;
+          }
+          return true;
+        });
+
+        // "기본으로 운영 중 우선 또는 전체 표시"
+        return filtered.slice().sort((a, b) => {
+          const aSt = String(a.status || "운영 중").trim();
+          const bSt = String(b.status || "운영 중").trim();
+          const aIsOp = aSt === "운영 중";
+          const bIsOp = bSt === "운영 중";
+          if (aIsOp !== bIsOp) return aIsOp ? -1 : 1;
+          const prioScore = (p) => {
+            const pr = String(p.priority || "");
+            if (pr.includes("1") || pr.includes("A")) return 1;
+            if (pr.includes("2") || pr.includes("B")) return 2;
+            if (pr.includes("3") || pr.includes("C")) return 3;
+            return 9;
+          };
+          const psDiff = prioScore(a) - prioScore(b);
+          if (psDiff !== 0) return psDiff;
+          return String(a.name || a.fullName || "").localeCompare(String(b.name || b.fullName || ""), "ko");
+        });
+      }
+      window.getFilteredPartnersForTab = getFilteredPartnersForTab;
+
+      function renderPcPartnerRowHtml(p, idx) {
+        const prioColor = (p.priority === "1팀" || p.priority === "A팀") ? "#2563eb" : ((p.priority === "2팀" || p.priority === "B팀") ? "#0f766e" : ((p.priority === "3팀" || p.priority === "C팀") ? "#d97706" : "#64748b"));
+        const statusBg = p.status === "운영 중" ? "#dcfce7" : (p.status === "확인 필요" ? "#fef3c7" : (p.status === "보류" ? "#fee2e2" : "#eff6ff"));
+        const statusFg = p.status === "운영 중" ? "#166534" : (p.status === "확인 필요" ? "#92400e" : (p.status === "보류" ? "#991b1b" : "#1d4ed8"));
+        const dispBiz = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
+        const rawPhone = String(p.phone || "").trim();
+        const cleanPhone = rawPhone.replace(/[^0-9]/g, "");
+
+        return `
+          <tr style="${p.status === '보류' ? 'opacity:0.65;background:#fff5f5;' : ''}">
+            <td style="text-align:center;font-size:11.5px;color:#94a3b8;font-weight:700;white-space:nowrap;">${idx + 1}</td>
+            <td style="white-space:nowrap;">
+              <strong style="color:#0f172a;font-size:13px;">${escHtml(p.name || p.fullName)}</strong>
+            </td>
+            <td style="white-space:nowrap;">
+              <span style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:2px 8px;border-radius:5px;font-weight:800;font-size:11.5px;">${escHtml(dispBiz)}</span>
+            </td>
+            <td style="text-align:center;font-size:11.5px;color:#475569;white-space:nowrap;">${escHtml(p.category || "시공")}</td>
+            <td style="text-align:center;white-space:nowrap;">
+              <span style="font-weight:800;color:${prioColor};font-size:11.5px;background:#f1f5f9;padding:2px 7px;border-radius:4px;">${escHtml(p.priority || "일반")}</span>
+            </td>
+            <td style="font-size:12px;color:#334155;white-space:nowrap;font-weight:600;">👤 ${escHtml(p.manager || "-")}</td>
+            <td style="white-space:nowrap;">
+              ${rawPhone ? `
+                <div style="display:inline-flex;align-items:center;gap:6px;">
+                  <a href="tel:${escHtml(cleanPhone)}" style="color:#2563eb;text-decoration:none;font-weight:700;font-size:12px;display:inline-flex;align-items:center;gap:3px;" title="원터치 전화 걸기">
+                    📞 ${escHtml(rawPhone)}
+                  </a>
+                  <button type="button" onclick="copyText('${escJs(rawPhone)}')" style="border:1px solid #cbd5e1;background:#f8fafc;color:#475569;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;cursor:pointer;" title="전화번호 복사">복사</button>
+                </div>
+              ` : `<span style="color:#94a3b8;">-</span>`}
+            </td>
+            <td style="text-align:center;white-space:nowrap;">
+              <span style="padding:2px 7px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};white-space:nowrap;">${escHtml(p.status || "운영 중")}</span>
+            </td>
+            <td style="font-size:11.5px;color:#475569;white-space:nowrap;">${escHtml(p.orderMethod || "-")}</td>
+            <td style="font-size:11.5px;color:#334155;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.feature || '')}">
+              ${escHtml(p.feature || "-")}
+            </td>
+            <td style="font-size:11.5px;color:#64748b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.note || p.memo || '')}">
+              ${escHtml(p.note || p.memo || "-")}
+            </td>
+          </tr>
+        `;
+      }
+
+      function renderMobilePartnerCardHtml(p) {
+        const prioColor = (p.priority === "1팀" || p.priority === "A팀") ? "#2563eb" : ((p.priority === "2팀" || p.priority === "B팀") ? "#0f766e" : ((p.priority === "3팀" || p.priority === "C팀") ? "#d97706" : "#64748b"));
+        const statusBg = p.status === "운영 중" ? "#dcfce7" : (p.status === "확인 필요" ? "#fef3c7" : (p.status === "보류" ? "#fee2e2" : "#eff6ff"));
+        const statusFg = p.status === "운영 중" ? "#166534" : (p.status === "확인 필요" ? "#92400e" : (p.status === "보류" ? "#991b1b" : "#1d4ed8"));
+        const dispBiz = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
+        const rawPhone = String(p.phone || "").trim();
+        const cleanPhone = rawPhone.replace(/[^0-9]/g, "");
+
+        return `
+          <div class="m-card-box" style="padding:12px;margin-bottom:8px;border-left:4px solid ${prioColor};">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+              <div style="min-width:0;">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                  <strong style="font-size:14px;color:#0f172a;">${escHtml(p.name || p.fullName)}</strong>
+                  <span style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px;font-weight:800;font-size:11px;">${escHtml(dispBiz)}</span>
+                  <span style="font-weight:800;color:${prioColor};font-size:10.5px;background:#f1f5f9;padding:1px 5px;border-radius:3px;">${escHtml(p.priority || "일반")}</span>
+                </div>
+                <div style="font-size:11.5px;color:#475569;margin-top:4px;">
+                  <span>👤 ${escHtml(p.manager || "담당 미지정")}</span>
+                  ${p.category ? ` · <span style="color:#64748b;">${escHtml(p.category)}</span>` : ""}
+                  ${p.orderMethod ? ` · <span style="color:#64748b;">발주: ${escHtml(p.orderMethod)}</span>` : ""}
+                </div>
+              </div>
+              <span style="padding:2px 7px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};flex-shrink:0;">${escHtml(p.status || "운영 중")}</span>
+            </div>
+            ${p.feature ? `<div style="font-size:11px;color:#1e3a8a;background:#f0fdf4;padding:4px 8px;border-radius:6px;margin-top:6px;border:1px solid #bbf7d0;">🎯 <strong>주력:</strong> ${escHtml(p.feature)}</div>` : ""}
+            ${(p.note || p.memo) ? `<div style="font-size:11px;color:#64748b;margin-top:5px;">📝 ${escHtml(p.note || p.memo)}</div>` : ""}
+            <div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed #e2e8f0;">
+              ${rawPhone ? `
+                <a href="tel:${escHtml(cleanPhone)}" style="flex:1;text-align:center;background:#15803d;color:#ffffff;text-decoration:none;font-weight:700;font-size:11.5px;padding:7px 10px;border-radius:7px;display:flex;align-items:center;justify-content:center;gap:4px;">
+                  📞 전화 걸기 (${escHtml(rawPhone)})
+                </a>
+                <button type="button" onclick="copyText('${escJs(rawPhone)}')" style="border:1px solid #cbd5e1;background:#f8fafc;color:#334155;font-weight:700;font-size:11.5px;padding:7px 12px;border-radius:7px;cursor:pointer;">
+                  📋 복사
+                </button>
+              ` : `<div style="font-size:11px;color:#94a3b8;padding:4px 0;">등록된 연락처가 없습니다.</div>`}
+            </div>
+          </div>
+        `;
+      }
+
+      window.onPartnerTabSearchInput = function (val) {
+        state.partnerTabSearchQuery = String(val || "");
+        updatePartnerTabResultsPartial();
+      };
+
+      window.clearPartnerTabSearch = function (mode) {
+        state.partnerTabSearchQuery = "";
+        const pcIn = document.getElementById("pcPartnerTabSearchInput");
+        const mIn = document.getElementById("mPartnerTabSearchInput");
+        if (mode === "pc" && pcIn) { pcIn.value = ""; pcIn.focus(); }
+        else if (mode === "mobile" && mIn) { mIn.value = ""; mIn.focus(); }
+        else {
+          if (pcIn) pcIn.value = "";
+          if (mIn) mIn.value = "";
+        }
+        updatePartnerTabResultsPartial();
+      };
+
+      window.setPartnerTabFilter = function (filterKey, value) {
+        state[filterKey] = String(value || "");
+        const pcEl = document.getElementById("pc" + filterKey);
+        const mEl = document.getElementById("m" + filterKey);
+        if (pcEl && pcEl.value !== state[filterKey]) pcEl.value = state[filterKey];
+        if (mEl && mEl.value !== state[filterKey]) mEl.value = state[filterKey];
+        updatePartnerTabResultsPartial();
+      };
+
+      window.resetAllPartnerTabFilters = function () {
+        state.partnerTabSearchQuery = "";
+        state.partnerTabBizFilter = "";
+        state.partnerTabCatFilter = "";
+        state.partnerTabPrioFilter = "";
+        state.partnerTabStatusFilter = "";
+        const pcIn = document.getElementById("pcPartnerTabSearchInput");
+        const mIn = document.getElementById("mPartnerTabSearchInput");
+        if (pcIn) pcIn.value = "";
+        if (mIn) mIn.value = "";
+        ["partnerTabBizFilter", "partnerTabCatFilter", "partnerTabPrioFilter", "partnerTabStatusFilter"].forEach((k) => {
+          const pcEl = document.getElementById("pc" + k);
+          const mEl = document.getElementById("m" + k);
+          if (pcEl) pcEl.value = "";
+          if (mEl) mEl.value = "";
+        });
+        updatePartnerTabResultsPartial();
+      };
+
+      function updatePartnerTabResultsPartial() {
+        const filtered = getFilteredPartnersForTab();
+        const pcTbody = document.getElementById("pcPartnersTbody");
+        const pcCount = document.getElementById("pcPartnersCountBadge");
+        const pcClearBtn = document.getElementById("pcPartnerTabSearchClearBtn");
+        if (pcClearBtn) pcClearBtn.style.display = state.partnerTabSearchQuery ? "inline-block" : "none";
+        if (pcCount) pcCount.textContent = filtered.length + "건";
+        if (pcTbody) {
+          if (filtered.length) {
+            pcTbody.innerHTML = filtered.map((p, idx) => renderPcPartnerRowHtml(p, idx)).join("");
+          } else {
+            pcTbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:48px 16px;color:#94a3b8;font-weight:700;">일치하는 거래처 정보가 없습니다.</td></tr>`;
+          }
+        }
+        const mList = document.getElementById("mPartnersListWrap");
+        const mCount = document.getElementById("mPartnersCountBadge");
+        const mClearBtn = document.getElementById("mPartnerTabSearchClearBtn");
+        if (mClearBtn) mClearBtn.style.display = state.partnerTabSearchQuery ? "inline-block" : "none";
+        if (mCount) mCount.textContent = filtered.length + "건";
+        if (mList) {
+          if (filtered.length) {
+            mList.innerHTML = filtered.map((p) => renderMobilePartnerCardHtml(p)).join("");
+          } else {
+            mList.innerHTML = `<div style="text-align:center;padding:36px 16px;color:#94a3b8;font-size:13px;background:#ffffff;border-radius:10px;border:1px dashed #cbd5e1;">조건에 일치하는 거래처가 없습니다.</div>`;
+          }
+        }
+      }
+      window.updatePartnerTabResultsPartial = updatePartnerTabResultsPartial;
+
+      // ================= [PC 탭 6: 협력업체 및 거래처 (일반 직원 전용 6번째 탭)] =================
+      function renderPcPartnersTab() {
+        const rawList = getPartnersListForTab();
+        const filtered = getFilteredPartnersForTab();
+
+        const uniqueBiz = Array.from(new Set(rawList.map((p) => String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim()).filter(Boolean))).sort();
+        const uniqueCat = ["시공", "자재", "가구", "AS", "기타"];
+        const uniquePrio = ["1팀", "2팀", "3팀", "일반"];
+        const uniqueStatus = ["운영 중", "확인 필요", "보류"];
+
+        const q = state.partnerTabSearchQuery || "";
+
+        document.getElementById("pcPartnersMain").innerHTML = `
+          <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <h2 style="font-size:20px;font-weight:800;margin:0;color:#0f172a;">🤝 협력업체 및 반장님 연락망</h2>
+                <span class="badge-count badge-blue" id="pcPartnersCountBadge" style="font-size:12px;padding:3px 9px;">${filtered.length}건</span>
+              </div>
+              <p style="font-size:13px;color:var(--text-muted);margin:4px 0 0 0;">
+                현장 실무에서 즉시 활용할 수 있는 협력업체/시공팀 정보 및 원터치 전화 연결·번호 복사 (총 ${rawList.length}개사 등록)
+              </p>
+            </div>
+          </div>
+
+          <div class="standard-card" style="margin-bottom:14px;padding:14px 16px;">
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <!-- 실시간 검색창 (한글 IME 조합 유지: 결과 테이블만 갱신) -->
+              <div style="position:relative;display:flex;align-items:center;width:100%;">
+                <span style="position:absolute;left:12px;color:#94a3b8;font-size:14px;pointer-events:none;">🔍</span>
+                <input type="text" id="pcPartnerTabSearchInput" placeholder="업체명, 대표공종, 담당자, 연락처, 주력분야, 비고 검색..." value="${escHtml(q)}" oninput="onPartnerTabSearchInput(this.value)" style="width:100%;height:38px;padding:0 34px 0 34px;border-radius:8px;border:1px solid var(--border-dark);font-size:13px;outline:none;background:#ffffff;box-sizing:border-box;">
+                <button type="button" id="pcPartnerTabSearchClearBtn" onclick="clearPartnerTabSearch('pc')" style="position:absolute;right:10px;border:none;background:transparent;color:#94a3b8;font-size:14px;cursor:pointer;display:${q ? 'inline-block' : 'none'};line-height:1;padding:4px;" title="검색어 지우기">✕</button>
+              </div>
+
+              <!-- 4대 필터 드롭다운 바 -->
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <span style="font-size:12px;font-weight:700;color:#475569;">대표공종:</span>
+                  <select id="pcpartnerTabBizFilter" onchange="setPartnerTabFilter('partnerTabBizFilter', this.value)" style="padding:5px 8px;border-radius:6px;border:1px solid var(--border-dark);font-size:12px;font-weight:600;">
+                    <option value="">전체 공종</option>
+                    ${uniqueBiz.map((b) => `<option value="${escHtml(b)}" ${state.partnerTabBizFilter === b ? 'selected' : ''}>${escHtml(b)}</option>`).join("")}
+                  </select>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <span style="font-size:12px;font-weight:700;color:#475569;">대구분:</span>
+                  <select id="pcpartnerTabCatFilter" onchange="setPartnerTabFilter('partnerTabCatFilter', this.value)" style="padding:5px 8px;border-radius:6px;border:1px solid var(--border-dark);font-size:12px;font-weight:600;">
+                    <option value="">전체 구분</option>
+                    ${uniqueCat.map((c) => `<option value="${escHtml(c)}" ${state.partnerTabCatFilter === c ? 'selected' : ''}>${escHtml(c)}</option>`).join("")}
+                  </select>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <span style="font-size:12px;font-weight:700;color:#475569;">우선순위:</span>
+                  <select id="pcpartnerTabPrioFilter" onchange="setPartnerTabFilter('partnerTabPrioFilter', this.value)" style="padding:5px 8px;border-radius:6px;border:1px solid var(--border-dark);font-size:12px;font-weight:600;">
+                    <option value="">전체 순위</option>
+                    ${uniquePrio.map((p) => `<option value="${escHtml(p)}" ${state.partnerTabPrioFilter === p ? 'selected' : ''}>${escHtml(p)}</option>`).join("")}
+                  </select>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <span style="font-size:12px;font-weight:700;color:#475569;">관리상태:</span>
+                  <select id="pcpartnerTabStatusFilter" onchange="setPartnerTabFilter('partnerTabStatusFilter', this.value)" style="padding:5px 8px;border-radius:6px;border:1px solid var(--border-dark);font-size:12px;font-weight:600;">
+                    <option value="">전체 상태 (운영중 우선)</option>
+                    ${uniqueStatus.map((s) => `<option value="${escHtml(s)}" ${state.partnerTabStatusFilter === s ? 'selected' : ''}>${escHtml(s)}</option>`).join("")}
+                  </select>
+                </div>
+
+                <button type="button" onclick="resetAllPartnerTabFilters()" style="margin-left:auto;border:1px solid #cbd5e1;background:#f8fafc;color:#475569;font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:6px;cursor:pointer;">
+                  🔄 필터 초기화
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="clean-table">
+              <thead>
+                <tr>
+                  <th style="width:40px;text-align:center;">No.</th>
+                  <th>업체/반장명</th>
+                  <th>대표공종</th>
+                  <th style="text-align:center;">대구분</th>
+                  <th style="text-align:center;">우선순위</th>
+                  <th>담당자/직책</th>
+                  <th>연락처 (원터치/복사)</th>
+                  <th style="text-align:center;">관리상태</th>
+                  <th>발주방식</th>
+                  <th>주력분야 및 특징</th>
+                  <th>비고</th>
+                </tr>
+              </thead>
+              <tbody id="pcPartnersTbody">
+                ${filtered.length ? filtered.map((p, idx) => renderPcPartnerRowHtml(p, idx)).join("") : `<tr><td colspan="11" style="text-align:center;padding:48px 16px;color:#94a3b8;font-weight:700;">일치하는 거래처 정보가 없습니다.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+      window.renderPcPartnersTab = renderPcPartnersTab;
+
+      // ================= [모바일 탭 6: 협력업체 및 거래처 (일반 직원 전용 6번째 탭)] =================
+      function renderMobilePartnersTab() {
+        const rawList = getPartnersListForTab();
+        const filtered = getFilteredPartnersForTab();
+
+        const uniqueBiz = Array.from(new Set(rawList.map((p) => String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim()).filter(Boolean))).sort();
+        const uniqueCat = ["시공", "자재", "가구", "AS", "기타"];
+        const uniquePrio = ["1팀", "2팀", "3팀", "일반"];
+        const uniqueStatus = ["운영 중", "확인 필요", "보류"];
+
+        const q = state.partnerTabSearchQuery || "";
+
+        document.getElementById("m-page-partners").innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:16px;font-weight:800;color:#0f172a;">🤝 거래처 연락망</span>
+              <span class="badge-count badge-blue" id="mPartnersCountBadge" style="font-size:11px;padding:2px 7px;">${filtered.length}건</span>
+            </div>
+            <button type="button" onclick="resetAllPartnerTabFilters()" style="border:none;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:800;padding:4px 8px;border-radius:6px;cursor:pointer;">🔄 초기화</button>
+          </div>
+
+          <!-- 실시간 검색창 (한글 IME 조합 깨짐 방지: input 재생성 없이 mPartnersListWrap만 갱신) -->
+          <div style="position:relative;display:flex;align-items:center;margin-bottom:10px;">
+            <span style="position:absolute;left:10px;color:#94a3b8;font-size:13px;pointer-events:none;">🔍</span>
+            <input type="text" id="mPartnerTabSearchInput" placeholder="업체명, 대표공종, 담당자, 연락처 검색..." value="${escHtml(q)}" oninput="onPartnerTabSearchInput(this.value)" style="width:100%;height:36px;padding:0 30px 0 30px;border-radius:8px;border:1px solid #cbd5e1;font-size:12.5px;outline:none;background:#ffffff;box-sizing:border-box;">
+            <button type="button" id="mPartnerTabSearchClearBtn" onclick="clearPartnerTabSearch('mobile')" style="position:absolute;right:8px;border:none;background:transparent;color:#94a3b8;font-size:13px;cursor:pointer;display:${q ? 'inline-block' : 'none'};line-height:1;padding:4px;" title="지우기">✕</button>
+          </div>
+
+          <!-- 모바일 필터 선택 바 (가로 스크롤 가능 셀렉트) -->
+          <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;">
+            <select id="mpartnerTabBizFilter" onchange="setPartnerTabFilter('partnerTabBizFilter', this.value)" style="padding:5px 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;font-weight:700;background:#fff;flex-shrink:0;">
+              <option value="">공종: 전체</option>
+              ${uniqueBiz.map((b) => `<option value="${escHtml(b)}" ${state.partnerTabBizFilter === b ? 'selected' : ''}>${escHtml(b)}</option>`).join("")}
+            </select>
+            <select id="mpartnerTabCatFilter" onchange="setPartnerTabFilter('partnerTabCatFilter', this.value)" style="padding:5px 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;font-weight:700;background:#fff;flex-shrink:0;">
+              <option value="">구분: 전체</option>
+              ${uniqueCat.map((c) => `<option value="${escHtml(c)}" ${state.partnerTabCatFilter === c ? 'selected' : ''}>${escHtml(c)}</option>`).join("")}
+            </select>
+            <select id="mpartnerTabPrioFilter" onchange="setPartnerTabFilter('partnerTabPrioFilter', this.value)" style="padding:5px 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;font-weight:700;background:#fff;flex-shrink:0;">
+              <option value="">순위: 전체</option>
+              ${uniquePrio.map((p) => `<option value="${escHtml(p)}" ${state.partnerTabPrioFilter === p ? 'selected' : ''}>${escHtml(p)}</option>`).join("")}
+            </select>
+            <select id="mpartnerTabStatusFilter" onchange="setPartnerTabFilter('partnerTabStatusFilter', this.value)" style="padding:5px 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;font-weight:700;background:#fff;flex-shrink:0;">
+              <option value="">상태: 전체</option>
+              ${uniqueStatus.map((s) => `<option value="${escHtml(s)}" ${state.partnerTabStatusFilter === s ? 'selected' : ''}>${escHtml(s)}</option>`).join("")}
+            </select>
+          </div>
+
+          <!-- 거래처 카드 목록 컨테이너 -->
+          <div id="mPartnersListWrap">
+            ${filtered.length ? filtered.map((p) => renderMobilePartnerCardHtml(p)).join("") : `<div style="text-align:center;padding:36px 16px;color:#94a3b8;font-size:13px;background:#ffffff;border-radius:10px;border:1px dashed #cbd5e1;">조건에 일치하는 거래처가 없습니다.</div>`}
+          </div>
+        `;
+      }
+      window.renderMobilePartnersTab = renderMobilePartnersTab;
+
       // ================= 모바일 뷰 렌더러 =================
       function renderMobileFilterBar() {
         const bar = document.getElementById("mFilterBar");
@@ -5155,6 +5741,7 @@
         const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s));
         const todos = ((state.todoData && state.todoData.list) || []).filter((t) => isUserAssignedTodo(t, user));
         const pendingTodos = todos.filter((t) => t.status !== "완료");
+        const processReport = buildProcessReportData(filterMember, todayYmd);
 
         document.getElementById("m-page-home").innerHTML = `
           <div class="m-home-hero" style="background:linear-gradient(135deg,#134e4a 0%,#0f766e 60%,#0d9488 100%);border-radius:14px;padding:15px 16px;color:#fff;margin-bottom:12px;box-shadow:0 8px 18px -6px rgba(15,118,110,0.4);">
@@ -5167,6 +5754,7 @@
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecTodo" onclick="scrollAndHighlightHomeSection('mHomeSecTodo')">✅ To-Do ${pendingTodos.length}건</button>
+              <button type="button" class="m-hero-chip-btn" data-target="mHomeSecProcessReport" onclick="scrollAndHighlightHomeSection('mHomeSecProcessReport')">📊 공정 리포트</button>
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecTasks" onclick="scrollAndHighlightHomeSection('mHomeSecTasks')">🔨 오늘 공정 ${todayTasks.length}건</button>
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecSites" onclick="scrollAndHighlightHomeSection('mHomeSecSites')">🏢 담당 현장 ${mySites.length}개소</button>
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecQuotes" onclick="scrollAndHighlightHomeSection('mHomeSecQuotes')">📋 신규 견적 ${activeNewQuotes.length}건</button>
@@ -5214,6 +5802,68 @@
                 </div>`;
               }).join("") || `<div style="color:var(--text-muted);">남은 To-Do가 없습니다.</div>`}
             </div>
+          </div>
+
+          <!-- 📊 내 공정 리포트 섹션 -->
+          <div class="m-card-box" id="mHomeSecProcessReport" style="border-top:3px solid #0f766e;">
+            <div class="m-card-title-row">
+              <span class="m-card-title">📊 내 공정 리포트</span>
+              <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMobileTab('sites')">현장 ➔</span>
+            </div>
+
+            <!-- 1. 3대 핵심 요약 타일 -->
+            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;margin-bottom:10px;">
+              <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;" onclick="switchMobileTab('calendar')">
+                <div style="font-size:10px;font-weight:700;color:#166534;">이번주 예정</div>
+                <div style="font-size:15px;font-weight:800;color:#15803d;margin-top:2px;">${processReport.thisWeekTasks.length}건</div>
+              </div>
+              <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;" onclick="openDelayedSitesFromHome(true)">
+                <div style="font-size:10px;font-weight:700;color:#991b1b;">지연 공정</div>
+                <div style="font-size:15px;font-weight:800;color:#dc2626;margin-top:2px;">${processReport.delayedTasks.length}건</div>
+              </div>
+              <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;" onclick="onMScopeClick('as')">
+                <div style="font-size:10px;font-weight:700;color:#1e40af;">접수 A/S</div>
+                <div style="font-size:15px;font-weight:800;color:#2563eb;margin-top:2px;">${processReport.asSites.length}건</div>
+              </div>
+            </div>
+
+            <!-- 2. 담당 현장별 진행률 요약 (프로그레스 바 + 남은/지연 건수) -->
+            <div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:6px;">🏢 담당 현장별 진행률</div>
+            <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;">
+              ${mySites.slice(0, 8).map((s) => {
+                const pct = s.progressRate || 0;
+                const col = pct >= 80 ? "#10b981" : pct >= 40 ? "#2563eb" : "#f59e0b";
+                const remainingCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t)).length;
+                const delayCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t) && (t.isDelayed || (parseYmdFromTask(t) && parseYmdFromTask(t) < todayYmd))).length;
+                return `
+                  <div onclick="openSiteDetailMobile('${escJs(s.siteKey)}')" style="min-width:148px;background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:8px 9px;flex-shrink:0;cursor:pointer;">
+                    <div style="font-size:11.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><span style="color:${escHtml(s.colorHex || "#2563eb")};">●</span> ${escHtml(s.siteName)}</div>
+                    <div style="height:5px;border-radius:999px;background:#e2e8f0;margin:5px 0;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${col};"></div></div>
+                    <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700;">
+                      <span style="color:${col};">${pct}%</span>
+                      <span style="color:${delayCnt > 0 ? '#dc2626' : '#64748b'};">${delayCnt > 0 ? '⚠️지연 ' + delayCnt : '남은 ' + remainingCnt}</span>
+                    </div>
+                  </div>`;
+              }).join("") || `<div style="font-size:11px;color:var(--text-muted);">진행 중인 현장이 없습니다.</div>`}
+            </div>
+
+            <!-- 3. 핵심 예정 / A/S 바로가기 링크 리스트 -->
+            ${processReport.thisWeekTasks.length > 0 || processReport.asSites.length > 0 ? `
+              <div style="border-top:1px dashed #e2e8f0;padding-top:7px;display:flex;flex-direction:column;gap:5px;">
+                ${processReport.thisWeekTasks.slice(0, 2).map((x) => `
+                  <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;padding:5px 8px;border-radius:6px;font-size:10.5px;cursor:pointer;" onclick="openTaskEditModal('${escJs(x.task.id || x.task.taskId)}')">
+                    <span style="font-weight:700;color:#1e3a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;">📅 ${escHtml(x.ymd.slice(5))} [${escHtml(x.site.siteName)}] ${escHtml(x.task.taskName)}</span>
+                    <span style="color:#0f766e;font-weight:700;flex-shrink:0;">상세 ➔</span>
+                  </div>
+                `).join("")}
+                ${processReport.asSites.slice(0, 2).map((s) => `
+                  <div style="display:flex;justify-content:space-between;align-items:center;background:#fff5f5;border:1px solid #fed7d7;padding:5px 8px;border-radius:6px;font-size:10.5px;cursor:pointer;" onclick="openSiteDetailMobile('${escJs(s.siteKey)}')">
+                    <span style="font-weight:700;color:#991b1b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;">🔧 [A/S] ${escHtml(s.siteName)}</span>
+                    <span style="color:#dc2626;font-weight:700;flex-shrink:0;">확인 ➔</span>
+                  </div>
+                `).join("")}
+              </div>
+            ` : ""}
           </div>
 
           <div class="m-card-box" id="mHomeSecTasks">
@@ -6187,6 +6837,7 @@
             else if (tab === "sites") renderPcSitesTab();
             else if (tab === "quote") renderPcQuoteTab();
             else if (tab === "finance") renderPcFinanceTab();
+            else if (tab === "partners") renderPcPartnersTab();
             state.dirtyPcTabs[tab] = false;
           }
         } else {
@@ -6195,6 +6846,7 @@
           if (mInner) {
             mInner.classList.toggle("hide-search-filter", !showSearchFilter);
             mInner.classList.toggle("mtab-finance", state.mobileTab === "finance");
+            mInner.classList.toggle("mtab-partners", state.mobileTab === "partners");
             mInner.classList.toggle("mtab-quote", state.mobileTab === "quote" || state.mobileTab === "newSite");
             mInner.classList.toggle("mtab-newSite", state.mobileTab === "quote" || state.mobileTab === "newSite");
             mInner.setAttribute("data-active-mtab", state.mobileTab);
@@ -6212,6 +6864,7 @@
             else if (tab === "sites") renderMobileSitesTab();
             else if (tab === "quote") renderMobileQuoteTab();
             else if (tab === "finance") renderMobileFinanceTab();
+            else if (tab === "partners") renderMobilePartnersTab();
             state.dirtyMobileTabs[tab] = false;
           }
         }
@@ -9836,7 +10489,7 @@
 
       window.switchMainTab = function (tabKey) {
         if (tabKey === "finance" && !canViewFinance()) {
-          tabKey = "home";
+          tabKey = "partners";
         }
         if (state.device === "mobile" && IS_PREVIEW_MODE) window.switchDeviceMode("pc");
         state.pcTab = tabKey;
@@ -9888,7 +10541,7 @@
 
       window.switchMobileTab = function (tabKey) {
         if (tabKey === "finance" && !canViewFinance()) {
-          tabKey = "home";
+          tabKey = "partners";
         }
         state.mobileTab = tabKey;
         state.mobileExpandedSiteKeys.clear();
@@ -9912,12 +10565,13 @@
         const target = document.getElementById("m-page-" + tabKey);
         if (target) target.classList.add("active");
 
-        // 모바일 상단 검색창 및 분류/담당자 필터바는 캘린더와 현장 탭에서만 노출 (홈, To-Do, 신규, 재무 등 숨김)
+        // 모바일 상단 검색창 및 분류/담당자 필터바는 캘린더와 현장 탭에서만 노출 (홈, To-Do, 신규, 재무, 거래처 등 숨김)
         const showSearchFilter = (tabKey === "calendar" || tabKey === "cal" || tabKey === "sites");
         const mInner = document.getElementById("mobileScreenInner") || document.querySelector(".mobile-screen-inner");
         if (mInner) {
           mInner.classList.toggle("hide-search-filter", !showSearchFilter);
           mInner.classList.toggle("mtab-finance", tabKey === "finance");
+          mInner.classList.toggle("mtab-partners", tabKey === "partners");
           mInner.setAttribute("data-active-mtab", tabKey);
         }
         const searchWrap = document.getElementById("mSearchWrap") || document.querySelector(".m-search-wrap");
@@ -10744,7 +11398,8 @@
           else if (hash.includes("mtab=sites")) state.mobileTab = "sites";
           else if (hash.includes("mtab=todo")) state.mobileTab = "todo";
           else if (hash.includes("mtab=quote")) state.mobileTab = "quote";
-          else if (hash.includes("mtab=finance")) state.mobileTab = canViewFinance() ? "finance" : "home";
+          else if (hash.includes("mtab=finance")) state.mobileTab = canViewFinance() ? "finance" : "partners";
+          else if (hash.includes("mtab=partners")) state.mobileTab = "partners";
           else state.mobileTab = "home";
           window.switchDeviceMode("mobile");
           window.switchMobileTab(state.mobileTab);
@@ -10753,7 +11408,8 @@
           else if (hash.includes("tab=sites")) state.pcTab = "sites";
           else if (hash.includes("tab=todo")) state.pcTab = "todo";
           else if (hash.includes("tab=quote")) state.pcTab = "quote";
-          else if (hash.includes("tab=finance")) state.pcTab = canViewFinance() ? "finance" : "home";
+          else if (hash.includes("tab=finance")) state.pcTab = canViewFinance() ? "finance" : "partners";
+          else if (hash.includes("tab=partners")) state.pcTab = "partners";
           else state.pcTab = "home";
           window.switchMainTab(state.pcTab);
         }

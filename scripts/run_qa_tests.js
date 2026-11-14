@@ -2149,7 +2149,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
 
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
-  assertTest('index.html 내 exec?v=241 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=241'));
+  assertTest('index.html 내 exec?v=242 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=242'));
   assertTest('v2.html, preview_tabs.html, docs/v2.html, docs/preview_tabs.html 4개 파일 100% 동일 동기화 검증',
     v2RootHtml === previewHtml && v2RootHtml === v2DocsHtml && v2RootHtml === previewDocsHtml
   );
@@ -2163,6 +2163,22 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     v2RootHtml.includes('function canViewFinance()') &&
     v2RootHtml.includes('function syncFinanceNavVisibility()') &&
     v2RootHtml.includes('grid-auto-flow: column; grid-auto-columns: 114px;')
+  );
+  assertTest('v2.html 내 직원용 6번째 탭 🤝 거래처(partners) 신설 및 canViewFinance 분기 연동 검증',
+    v2RootHtml.includes('data-tab="partners"') &&
+    v2RootHtml.includes('data-mtab="partners"') &&
+    v2RootHtml.includes('id="page-partners"') &&
+    v2RootHtml.includes('id="m-page-partners"') &&
+    v2RootHtml.includes('renderPcPartnersTab') &&
+    v2RootHtml.includes('renderMobilePartnersTab') &&
+    v2RootHtml.includes('onPartnerTabSearchInput') &&
+    v2RootHtml.includes('clearPartnerTabSearch')
+  );
+  assertTest('v2.html 내 PC 및 모바일 홈 브리핑 📊 내 공정 리포트(homeSecProcessReport) 탑재 검증',
+    v2RootHtml.includes('id="homeSecProcessReport"') &&
+    v2RootHtml.includes('id="mHomeSecProcessReport"') &&
+    v2RootHtml.includes('buildProcessReportData') &&
+    v2RootHtml.includes('📊 내 공정 리포트')
   );
   assertTest('현장서식.js 내 FINANCE_DB_SPREADSHEET_ID 상수 및 setupFinanceDbAndMigrate 검증',
     code.includes('FINANCE_DB_SPREADSHEET_ID = "1rmH7176tFYRk97qGjdI-ztn6UMnWwyNBNl06wexFOYc"') &&
