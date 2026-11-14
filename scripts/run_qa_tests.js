@@ -271,18 +271,11 @@ assertTest('활성 공정 감지 - 당일 단일 일정(26.10.15): true', isToda
 assertTest('활성 공정 감지 - 오늘 포함 기간 일정(10/11~10/16): true', isTodayActiveFn(parsedFutureRange, mockRefToday) === true);
 assertTest('활성 공정 감지 - 과거 완료된 일정(10/10): false', isTodayActiveFn(parsedPast, mockRefToday) === false);
 
-const buildBriefingFn = sandbox.buildMorningBriefingEmailContent;
-const mockTodayTasks = [{ siteName: '역삼동 현장', taskName: '도배', status: '진행 중', dateStr: '26.10.15', manager: '이과장', memo: '오후 시공' }];
-const mockDelayedTasks = [{ siteName: '한남동 빌라', taskName: '설비', status: '진행 중', dateStr: '26.10.12', manager: '박팀장', memo: '자재 대기' }];
-
-const briefingOutput = buildBriefingFn('26.10.15', '목요일', mockTodayTasks, mockDelayedTasks, 'https://docs.google.com/test', 'https://script.google.com/test');
-assertTest('모닝 브리핑 이메일 생성: HTML 및 Plain-text 생성 성공', briefingOutput && typeof briefingOutput.htmlBody === 'string' && typeof briefingOutput.plainText === 'string');
-assertTest('모닝 브리핑 HTML 내 오늘 공정 섹션 정상 렌더링', briefingOutput.htmlBody.indexOf('오늘 착공 및 진행 공정') !== -1 && briefingOutput.htmlBody.indexOf('역삼동 현장') !== -1);
-assertTest('모닝 브리핑 HTML 내 지연 공정 경고 박스 렌더링', briefingOutput.htmlBody.indexOf('공정 지연 현장') !== -1 && briefingOutput.htmlBody.indexOf('한남동 빌라') !== -1);
-assertTest('모닝 브리핑 Plain-text 내 바로가기 링크 포함', briefingOutput.plainText.indexOf('스프레드시트 바로가기') !== -1);
-assertTest('모닝 브리핑 HTML 가로폭 확장 (880px) 적용 여부', briefingOutput.htmlBody.indexOf('max-width: 880px') !== -1 || briefingOutput.htmlBody.indexOf('max-width:880px') !== -1);
-assertTest('모닝 브리핑 버튼 글자색 인라인 흰색(#ffffff !important) 방어 탑재 여부', briefingOutput.htmlBody.indexOf('color:#ffffff !important') !== -1);
-assertTest('모닝 브리핑 비고 열 확장(width:34%) 및 줄바꿈(word-break) 탑재 여부', briefingOutput.htmlBody.indexOf('width:34%') !== -1 && briefingOutput.htmlBody.indexOf('word-break:break-word') !== -1);
+assertTest('기존 이메일 모닝 브리핑 발송 로직(MailApp/buildMorningBriefingEmailContent) 완전 제거 검증',
+  !code.includes('buildMorningBriefingEmailContent') &&
+  !code.includes('sendDailySiteMorningBriefing(isManualTest)') &&
+  !code.includes('MailApp.sendEmail')
+);
 
 // Feature: [사용가이드] 시트 자동 생성 및 매뉴얼 구축 엔진 검증
 function createMockSheet(name) {
@@ -385,27 +378,9 @@ const mockSsNoMembers = {
 };
 assertTest('findMembersSheet 탐색: 구성원 시트 부재 시 null 반환', sandbox.findMembersSheet(mockSsNoMembers) === null);
 
-// getDailyBriefingRecipientEmail 우선순위 3단계 검증
-// 1순위: [구성원] 시트
-const multiEmailResult = sandbox.getDailyBriefingRecipientEmail(mockSsWithMembers);
-assertTest('모닝 브리핑 수신처 1순위: [구성원] 시트 자동 연동 (쉼표 구분)', multiEmailResult === 'hong@woosung.com, lee@woosung.com');
-
-// 2순위: 문서 속성(DAILY_BRIEFING_EMAIL)
-let testDocProp = 'custom-briefing@woosung.com';
-sandbox.PropertiesService = {
-  getDocumentProperties: () => ({
-    getProperty: (k) => (k === 'DAILY_BRIEFING_EMAIL' ? testDocProp : ''),
-    setProperty: (k, v) => { testDocProp = v; },
-    deleteProperty: () => { testDocProp = ''; }
-  })
-};
-const propEmailResult = sandbox.getDailyBriefingRecipientEmail(mockSsNoMembers);
-assertTest('모닝 브리핑 수신처 2순위: 문서 속성(DAILY_BRIEFING_EMAIL) 설정값 연동', propEmailResult === 'custom-briefing@woosung.com');
-
-// 3순위: 로그인된 기본 사용자
-testDocProp = '';
-const defaultEmailResult = sandbox.getDailyBriefingRecipientEmail(mockSsNoMembers);
-assertTest('모닝 브리핑 수신처 3순위: 로그인 계정(qa-tester@woosung.com) 안전 폴백', defaultEmailResult === 'qa-tester@woosung.com');
+// [구성원] 시트 알림 수신 체크박스 데이터 추출 확인
+const memberBriefingRecv = sandbox.extractMemberBriefingEmails(mockMemberSheet);
+assertTest('구성원 시트 알림 수신 대상 추출 함수 extractMemberBriefingEmails 정상 작동', Array.isArray(memberBriefingRecv) && memberBriefingRecv.length === 2);
 
 // [구성원] 시트 캘린더 동기화 오작동 방지 가드 검증
 assertTest('isSiteScheduleSheet 판별: "구성원" 시트는 현장데이터에서 완전 배제', isSiteSheetFn(mockMemberSheet) === false);
@@ -426,45 +401,11 @@ sandbox.PropertiesService = {
   })
 };
 
-const defaultTime = sandbox.getDailyBriefingConfiguredTime();
-assertTest('모닝 브리핑 시간 설정: 미지정 시 기본 "08:00" 반환', defaultTime === '08:00');
-
-// 2. 사용자 시간 설정
-propMap['DAILY_BRIEFING_TIME'] = '07:30';
-const customTime = sandbox.getDailyBriefingConfiguredTime();
-assertTest('모닝 브리핑 시간 설정: 사용자 지정 "07:30" 정상 반환', customTime === '07:30');
-
-// 3. 비정상 포맷 필터링
-propMap['DAILY_BRIEFING_TIME'] = 'invalid-time';
-const fallbackTime = sandbox.getDailyBriefingConfiguredTime();
-assertTest('모닝 브리핑 시간 설정: 비정상 포맷 입력 시 "08:00" 안전 폴백', fallbackTime === '08:00');
-
-// 4. scheduleNextDailyBriefingTrigger 정밀 계산 검증
-let createdTriggerInfo = null;
-let deletedCount = 0;
-sandbox.ScriptApp = {
-  getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/test/exec' }),
-  getProjectTriggers: () => ([{ getHandlerFunction: () => 'sendDailySiteMorningBriefing' }]),
-  deleteTrigger: () => { deletedCount++; },
-  newTrigger: (fn) => ({
-    timeBased: () => ({
-      at: (d) => ({
-        create: () => {
-          createdTriggerInfo = { fn: fn, date: d };
-          return {};
-        }
-      })
-    })
-  })
-};
-
-propMap['DAILY_BRIEFING_TIME'] = '08:00';
-const scheduledTarget = sandbox.scheduleNextDailyBriefingTrigger();
-assertTest('정각 스케줄러: 기존 단발성 트리거 정리(deleteTrigger) 여부', deletedCount > 0);
-assertTest('정각 스케줄러: targetDate 생성 성공 및 Date 객체 반환', scheduledTarget && Object.prototype.toString.call(scheduledTarget) === '[object Date]');
-assertTest('정각 스케줄러: 목표 시간 8시 0분 정각(08:00:00) 설정 여부', scheduledTarget.getHours() === 8 && scheduledTarget.getMinutes() === 0 && scheduledTarget.getSeconds() === 0);
-assertTest('정각 스케줄러: 미래 시점 예약 보장 (target > Date.now())', scheduledTarget.getTime() > Date.now());
-assertTest('정각 스케줄러: ScriptApp.at(target) 정확한 함수 및 일시로 트리거 생성', createdTriggerInfo && createdTriggerInfo.fn === 'sendDailySiteMorningBriefing' && createdTriggerInfo.date.getTime() === scheduledTarget.getTime());
+// Feature: 카카오 알림톡 설정 조회 및 이메일 모닝브리핑 트리거 청소 가드 검증
+const aligoConfig = sandbox.getAlimtalkConfig();
+assertTest('카카오 알림톡(Aligo) 환경설정 함수 getAlimtalkConfig 정상 호출', aligoConfig && typeof aligoConfig === 'object');
+assertTest('카카오 알림톡 기본 템플릿 코드 검증', aligoConfig && aligoConfig.tplCode === '우성아이디_일일현장브리핑');
+assertTest('기존 모닝브리핑 트리거 자동 정리 안전장치 탑재 검증', code.includes('fn === "sendDailySiteMorningBriefing"'));
 
 console.log('\n🔍 [Step 4: 코드리뷰 정적 보안/안전성 감사]');
 // Rate limit 방어 패턴 검사
@@ -2149,7 +2090,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
 
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
-  assertTest('index.html 내 exec?v=249 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=249'));
+  assertTest('index.html 내 exec?v=250 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=250'));
   assertTest('v2.html 내 담당자1 단일 추출 및 공사진행률 현장명 인라인 뱃지 표시 검증',
     v2RootHtml.includes('extractFirstManager') &&
     v2RootHtml.includes('extractFirstManager(r.manager')
@@ -2277,6 +2218,18 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     code.includes('[단건] " + cleanBaseSite') &&
     code.includes('finalDestSiteName = matchingBlockSiteName;') &&
     code.includes('bestAsMatch')
+  );
+  assertTest('현장서식.js 내 normalizeExistingCompletedSheetPrefixes 함수 및 doGet/doPost 라우팅 탑재 검증',
+    code.includes('function normalizeExistingCompletedSheetPrefixes') &&
+    code.includes('action === "normalizeCompletedPrefixes"') &&
+    code.includes('normalizeExistingCompletedSheetPrefixesMenu')
+  );
+  assertTest('v2.html 내 신규 모달 버튼 스타일 통일(ws-btn), 취소/저장 문구 및 홈 메모 브리핑 전체 노출 검증',
+    v2RootHtml.includes('.ws-btn-primary, .btn-primary') &&
+    v2RootHtml.includes('.ws-btn-secondary, .btn-secondary') &&
+    v2RootHtml.includes('getAllActiveTasksForMemoBriefing()') &&
+    v2RootHtml.includes('renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), false)') &&
+    v2RootHtml.includes('renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), true)')
   );
 }
 console.log('\n========================================================');

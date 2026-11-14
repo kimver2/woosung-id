@@ -1264,12 +1264,29 @@
     .dcp-meta-text { font-size: 12.5px; color: var(--text-sub); margin-top: 5px; }
     .dcp-actions { display: flex; gap: 7px; flex-wrap: wrap; }
 
-    .btn-act-blue { background: #2563eb; color: #ffffff; border: none; border-radius: 6px; padding: 8px 13px; font-size: 12px; font-weight: 700; cursor: pointer; }
-    .btn-act-blue:hover { background: #1d4ed8; }
-    .btn-act-white { background: #ffffff; color: var(--text-sub); border: 1px solid var(--border-dark); border-radius: 6px; padding: 8px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
-    .btn-act-white:hover { background: #f8fafc; color: var(--text); }
-    .btn-act-danger { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 6px; padding: 8px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
-    .btn-act-danger:hover { background: #fee2e2; }
+    .ws-btn, .btn-act-blue, .btn-act-white, .btn-act-danger, .ws-btn-primary, .ws-btn-secondary, .ws-btn-danger, .btn-primary, .btn-secondary, .btn-danger {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      font-size: 12.5px; font-weight: 700; border-radius: 6px; cursor: pointer;
+      transition: all 0.15s ease; text-decoration: none; line-height: 1.3;
+    }
+    .btn-act-blue, .ws-btn-primary, .btn-primary {
+      background: #2563eb; color: #ffffff; border: 1px solid #2563eb; padding: 8px 14px;
+    }
+    .btn-act-blue:hover, .ws-btn-primary:hover, .btn-primary:hover {
+      background: #1d4ed8; border-color: #1d4ed8;
+    }
+    .btn-act-white, .ws-btn-secondary, .btn-secondary {
+      background: #ffffff; color: var(--text-sub); border: 1px solid var(--border-dark); padding: 8px 13px;
+    }
+    .btn-act-white:hover, .ws-btn-secondary:hover, .btn-secondary:hover {
+      background: #f8fafc; color: var(--text); border-color: #94a3b8;
+    }
+    .btn-act-danger, .ws-btn-danger, .btn-danger {
+      background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 8px 13px;
+    }
+    .btn-act-danger:hover, .ws-btn-danger:hover, .btn-danger:hover {
+      background: #fee2e2; border-color: #fca5a5;
+    }
 
     .alert-banner {
       background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 9px 13px;
@@ -2408,8 +2425,8 @@
         </div>
       </div>
       <div class="ws-modal-body" id="siteFinanceDetailModalBody" style="display:flex;flex-direction:column;gap:16px;max-height:calc(85vh - 120px);overflow-y:auto;padding:18px;"></div>
-      <div class="ws-modal-footer" id="siteFinanceDetailModalFooter">
-        <button type="button" class="btn-secondary" onclick="closeSiteFinanceDetailModal()">닫기</button>
+      <div class="ws-modal-footer" id="siteFinanceDetailModalFooter" style="display:flex;justify-content:flex-end;">
+        <button type="button" class="ws-btn ws-btn-secondary" onclick="closeSiteFinanceDetailModal()">닫기</button>
       </div>
     </div>
   </div>
@@ -3568,10 +3585,25 @@
         return "";
       }
 
+      function getAllActiveTasksForMemoBriefing() {
+        const q = (state.searchQuery || "").trim();
+        const activeSites = getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
+        const list = [];
+        activeSites.forEach((site) => {
+          (site.tasks || []).forEach((task) => {
+            if (isTaskCompleted(task)) return;
+            if (q && !matchesQuery([site.siteName, task.taskName, task.partner, task.manager, task.memo].join(" "), q)) return;
+            list.push({ site, task, ymd: parseYmdFromTask(task) });
+          });
+        });
+        return list;
+      }
+
       function renderHomeMemoBriefingHtml(tasksList, isMobile) {
+        const sourceTasks = tasksList || getAllActiveTasksForMemoBriefing();
         const todayYmd = getTodayYmd();
         const minMemoYmd = addDaysYmd(todayYmd, -2);
-        const memoTasks = (tasksList || [])
+        const memoTasks = (sourceTasks || [])
           .filter((x) => {
             if (!x || !x.task || !String(x.task.memo || "").trim()) return false;
             const memoYmd = getTaskMemoYmd(x.task);
@@ -3914,7 +3946,7 @@
                 <div class="home-panel-box home-memo-panel">
                   <div class="hp-header"><span class="hp-title">📌 최근 현장 메모 브리핑</span></div>
                   <div class="home-memo-list" style="display:flex;flex-direction:column;gap:8px;">
-                    ${renderHomeMemoBriefingHtml(myTasks, false)}
+                    ${renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), false)}
                   </div>
                 </div>
               </div>
@@ -5960,14 +5992,16 @@
         if (footEl) {
           footEl.innerHTML = `
             ${isEdit ? `
-              <button type="button" class="btn-sub-xs" style="color:#ef4444;border-color:#fca5a5;padding:6px 12px;margin-right:auto;" onclick="window.onDeleteCollectionRow('${escJs(row.id)}')">
+              <button type="button" class="ws-btn ws-btn-danger" style="margin-right:auto;" onclick="window.onDeleteCollectionRow('${escJs(row.id)}')">
                 🗑️ 삭제
               </button>
             ` : ""}
-            <button type="button" class="btn-secondary" onclick="window.closeCollectionModal()">취소</button>
-            <button type="button" class="btn-primary" id="btnSaveCollectionRow" onclick="window.onSaveCollectionRow('${escJs(rData.id)}')">
-              ${isEdit ? "수정 저장하기" : "신규 등록하기"}
-            </button>
+            <div style="display:flex;gap:8px;align-items:center;${isEdit ? '' : 'margin-left:auto;'}">
+              <button type="button" class="ws-btn ws-btn-secondary" onclick="window.closeCollectionModal()">취소</button>
+              <button type="button" class="ws-btn ws-btn-primary" id="btnSaveCollectionRow" onclick="window.onSaveCollectionRow('${escJs(rData.id)}')">
+                저장
+              </button>
+            </div>
           `;
         }
 
@@ -6346,14 +6380,16 @@
         if (footEl) {
           footEl.innerHTML = `
             ${isEdit ? `
-              <button type="button" class="btn-sub-xs" style="color:#ef4444;border-color:#fca5a5;padding:6px 12px;margin-right:auto;" onclick="window.onDeleteExpenseRow('${escJs(row.id)}')">
+              <button type="button" class="ws-btn ws-btn-danger" style="margin-right:auto;" onclick="window.onDeleteExpenseRow('${escJs(row.id)}')">
                 🗑️ 삭제
               </button>
             ` : ""}
-            <button type="button" class="btn-secondary" onclick="window.closeExpenseModal()">취소</button>
-            <button type="button" class="btn-primary" id="btnSaveExpenseRow" onclick="window.onSaveExpenseRow('${escJs(rData.id)}')">
-              ${isEdit ? "수정 저장하기" : "신규 등록하기"}
-            </button>
+            <div style="display:flex;gap:8px;align-items:center;${isEdit ? '' : 'margin-left:auto;'}">
+              <button type="button" class="ws-btn ws-btn-secondary" onclick="window.closeExpenseModal()">취소</button>
+              <button type="button" class="ws-btn ws-btn-primary" id="btnSaveExpenseRow" onclick="window.onSaveExpenseRow('${escJs(rData.id)}')">
+                저장
+              </button>
+            </div>
           `;
         }
 
@@ -6669,7 +6705,7 @@
           `;
           const footEl = document.getElementById("partnerImportModalFooter");
           if (footEl) {
-            footEl.innerHTML = `<button type="button" class="btn-secondary" onclick="window.closePartnerImportModal()">닫기</button>`;
+            footEl.innerHTML = `<div style="display:flex;justify-content:flex-end;width:100%;"><button type="button" class="ws-btn ws-btn-secondary" onclick="window.closePartnerImportModal()">닫기</button></div>`;
           }
           openModal("partnerImportModal");
           return;
@@ -6747,10 +6783,12 @@
         const footEl = document.getElementById("partnerImportModalFooter");
         if (footEl) {
           footEl.innerHTML = `
-            <button type="button" class="btn-secondary" onclick="window.closePartnerImportModal()">취소</button>
-            <button type="button" class="btn-primary" id="btnSubmitPartnerImport" onclick="window.onSubmitPartnerImport()">
-              선택 항목 비용마감에 일괄 등록
-            </button>
+            <div style="display:flex;gap:8px;align-items:center;margin-left:auto;">
+              <button type="button" class="ws-btn ws-btn-secondary" onclick="window.closePartnerImportModal()">취소</button>
+              <button type="button" class="ws-btn ws-btn-primary" id="btnSubmitPartnerImport" onclick="window.onSubmitPartnerImport()">
+                선택 항목 비용마감에 일괄 등록
+              </button>
+            </div>
           `;
         }
 
@@ -8106,7 +8144,7 @@
               <span class="m-card-title">📌 최근 현장 메모 브리핑</span>
             </div>
             <div class="home-memo-list" style="display:flex;flex-direction:column;gap:8px;">
-              ${renderHomeMemoBriefingHtml(tasks, true)}
+              ${renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), true)}
             </div>
           </div>
 
@@ -12009,8 +12047,10 @@
         const footEl = document.getElementById("promoteEstimateModalFooter");
         if (footEl) {
           footEl.innerHTML = `
-            <button type="button" class="btn-delete-cancel" onclick="closePromoteEstimateModal()" style="padding:8px 16px;border:1.5px solid #cbd5e1;background:#ffffff;color:#475569;border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer;">취소</button>
-            <button type="button" id="btnPromoteSubmitInner" style="padding:8px 18px;border:none;background:linear-gradient(135deg, #2563eb, #1d4ed8);color:#ffffff;border-radius:7px;font-size:12.5px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.3);" onclick="submitPromoteEstimateModal()">🚀 진행 현장으로 승격 등록</button>
+            <div style="display:flex;gap:8px;align-items:center;margin-left:auto;">
+              <button type="button" class="ws-btn ws-btn-secondary" onclick="closePromoteEstimateModal()">취소</button>
+              <button type="button" class="ws-btn ws-btn-primary" id="btnPromoteSubmitInner" onclick="submitPromoteEstimateModal()">🚀 진행 현장으로 승격 등록</button>
+            </div>
           `;
         }
 

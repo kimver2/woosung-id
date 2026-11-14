@@ -1645,16 +1645,12 @@ function onOpen() {
     .addItem("📁 현장데이터 아코디언 묶기", "groupSiteScheduleMenu")
     .addItem("📖 모든 현장 펼치기", "expandAllSites")
     .addItem("📦 완료 현장 시트로 이동", "archiveCompletedSitesMenu")
+    .addItem("🏷️ 완료현장 단건/AS 접두사 자동 정리", "normalizeExistingCompletedSheetPrefixesMenu")
     .addSeparator()
 
-    // [서브메뉴 1: 모닝 브리핑 관리]
-    .addSubMenu(ui.createMenu("☀️ 모닝 브리핑 관리")
-      .addItem("☀️ 지금 즉시 이메일 발송", "sendDailyBriefingTestNow")
+    // [서브메뉴 1: 카카오톡 알림톡 브리핑 관리]
+    .addSubMenu(ui.createMenu("💬 카카오톡(알림톡) 브리핑 관리")
       .addItem("💬 카카오톡(알림톡) 브리핑 즉시 전송", "sendDailyKakaoBriefingMenu")
-      .addItem("⏰ 매일 아침 8시 자동 발송 켜기", "enableDailyMorningBriefing")
-      .addItem("🔕 자동 발송 끄기", "disableDailyMorningBriefing")
-      .addItem("🕒 발송 시간 변경", "configureBriefingTime")
-      .addItem("📧 수신 이메일 확인/설정", "configureBriefingEmail")
       .addItem("⚙️ 카카오 알림톡(알리고) API 설정", "configureAlimtalkSettingsMenu")
     )
 
@@ -2954,7 +2950,10 @@ function ensureRealtimeTriggerInstalledSilent() {
 
     for (var i = 0; i < triggers.length; i++) {
       var fn = triggers[i].getHandlerFunction();
-      if (fn === "sendDailySiteMorningBriefing") hasBriefingTrigger = true;
+      // 기존 모닝 브리핑 이메일 트리거 완전 정리
+      if (fn === "sendDailySiteMorningBriefing") {
+        try { ScriptApp.deleteTrigger(triggers[i]); } catch(eOldB) {}
+      }
       if (fn === "runDailyAutoSortTrigger") hasDailySortTrigger = true;
       if (fn === "runHourlyAutoSortTrigger") {
         try { ScriptApp.deleteTrigger(triggers[i]); } catch(eOld) {}
@@ -2962,24 +2961,7 @@ function ensureRealtimeTriggerInstalledSilent() {
       if (fn === "runDailyCompletedSitesArchiveTrigger") hasDailyArchiveTrigger = true;
     }
 
-    // 2. 모닝 브리핑 단일 대표 계정 트리거 관리
-    var docProps = PropertiesService.getDocumentProperties();
-    var isBriefingEnabled = (docProps.getProperty("DAILY_BRIEFING_ENABLED") === "true");
-    var isAuthSender = isBriefingAuthorizedSender(ss);
-
-    if (isBriefingEnabled) {
-      if (isAuthSender && !hasBriefingTrigger) {
-        scheduleNextDailyBriefingTrigger();
-      } else if (!isAuthSender && hasBriefingTrigger) {
-        for (var k = 0; k < triggers.length; k++) {
-          if (triggers[k].getHandlerFunction() === "sendDailySiteMorningBriefing") {
-            ScriptApp.deleteTrigger(triggers[k]);
-          }
-        }
-      }
-    }
-
-    // 3. 매일 새벽 4시 현장별 날짜 오름차순 자동 정렬 트리거 유지
+    // 2. 매일 새벽 4시 현장별 날짜 오름차순 자동 정렬 트리거 유지
     if (!hasDailySortTrigger) {
       ScriptApp.newTrigger("runDailyAutoSortTrigger")
         .timeBased()
@@ -4634,6 +4616,343 @@ function moveCompletedCategorySiteToCompletedSheet(ss, srcSheet, siteName) {
       Logger.log("moveCompletedCategorySiteToCompletedSheet 오류: " + err.toString());
     }
     return { success: false, moved: false, error: err.toString() };
+  }
+}
+
+/**
+ * [신규] '완료현장' 시트에 이미 존재하는 기존 '단건' 및 'AS' 건 자동 정리 및 정규화
+ * - 비고(F열)가 [단건]으로 시작하는 행의 현장명(A열)에 '[단건] ' 접두사가 없으면 '[단건] '을 붙여서 업데이트
+ * - 비고(F열)가 [AS]로 시작하거나 공종(C열)이 'AS'인 행에 대해:
+ *   - 동일 원현장명 블록이 별도로 존재하면 그 블록 맨 뒤로 해당 행을 병합(이동)
+ *   - 단독 AS 현장인데 [AS] 접두사가 없으면 현장명 앞에 '[AS] '를 붙여서 업데이트 (중복 접두사 방지)
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss]
+ * @return {{success: boolean, singleCount: number, asPrefixedCount: number, asMergedCount: number, totalProcessed: number, details: Array<string>}}
+ */
+function normalizeExistingCompletedSheetPrefixes(ss) {
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) ss = getAppSpreadsheet();
+  if (!ss) return { success: false, error: "스프레드시트를 열 수 없습니다." };
+
+  var compSheet = findCompletedSitesSheet(ss, false);
+  if (!compSheet) return { success: false, error: "완료현장 시트를 찾을 수 없습니다." };
+
+  var lock = LockService.getScriptLock();
+  var hasLock = false;
+  try {
+    hasLock = lock.tryLock(30000);
+  } catch (eLock) {}
+
+  var details = [];
+  var singleCount = 0;
+  var asPrefixedCount = 0;
+  var asMergedCount = 0;
+
+  try {
+    var lastRow = compSheet.getLastRow();
+    if (lastRow < 2) {
+      return {
+        success: true,
+        singleCount: 0,
+        asPrefixedCount: 0,
+        asMergedCount: 0,
+        totalProcessed: 0,
+        details: ["완료현장 시트에 데이터 행이 없습니다."]
+      };
+    }
+
+    var lastCol = Math.max((typeof compSheet.getLastColumn === "function" ? compSheet.getLastColumn() : 11), 11);
+    var range = compSheet.getRange(2, 1, lastRow - 1, lastCol);
+    var values = range.getValues();
+
+    var cleanBase = function(name) {
+      if (!name) return "";
+      return String(name)
+        .replace(/^\[(단건|AS|as|신규|현장)\]\s*/i, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    };
+    var normKey = function(name) {
+      return cleanBase(name).replace(/\s+/g, "").toLowerCase();
+    };
+
+    // 1단계: 블록 파싱
+    var blocks = [];
+    var curBlk = null;
+
+    for (var i = 0; i < values.length; i++) {
+      var rowNum = i + 2;
+      var rawA = String(values[i][0] || "").trim();
+      var rawTask = String(values[i][2] || "").trim();
+      var rawDate = values[i][1];
+      var rawMemo = String(values[i][5] || "").trim();
+      var hasData = Boolean(rawA || rawTask || String(rawDate || "").trim() || rawMemo);
+
+      if (!hasData) {
+        if (curBlk) {
+          blocks.push(curBlk);
+          curBlk = null;
+        }
+        continue;
+      }
+
+      if (rawA) {
+        if (curBlk) {
+          blocks.push(curBlk);
+        }
+        curBlk = {
+          siteName: rawA,
+          startRow: rowNum,
+          endRow: rowNum,
+          rows: [{ rowNum: rowNum, vals: values[i] }]
+        };
+      } else if (curBlk) {
+        curBlk.endRow = rowNum;
+        curBlk.rows.push({ rowNum: rowNum, vals: values[i] });
+      } else {
+        curBlk = {
+          siteName: "",
+          startRow: rowNum,
+          endRow: rowNum,
+          rows: [{ rowNum: rowNum, vals: values[i] }]
+        };
+      }
+    }
+    if (curBlk) {
+      blocks.push(curBlk);
+    }
+
+    // 각 블록의 특성 파악
+    for (var b = 0; b < blocks.length; b++) {
+      var blk = blocks[b];
+      blk.base = cleanBase(blk.siteName);
+      blk.key = normKey(blk.siteName);
+
+      var hasSingleMemo = false;
+      var hasAsTaskOrMemo = false;
+      var hasGeneralTask = false;
+
+      for (var r = 0; r < blk.rows.length; r++) {
+        var rVals = blk.rows[r].vals;
+        var tTask = String(rVals[2] || "").trim();
+        var tMemo = String(rVals[5] || "").trim();
+
+        if (/^\[단건\]/i.test(tMemo) || /^\[단건\]/i.test(blk.siteName)) {
+          hasSingleMemo = true;
+        }
+        if (/^\[AS\]/i.test(tMemo) || tTask === "AS" || /^\[AS\]/i.test(blk.siteName)) {
+          hasAsTaskOrMemo = true;
+        }
+        if (tTask && tTask !== "AS" && !/^\[단건\]/i.test(tMemo) && !/^\[AS\]/i.test(tMemo)) {
+          hasGeneralTask = true;
+        }
+      }
+
+      blk.isSingle = hasSingleMemo;
+      blk.isAsOnly = (hasAsTaskOrMemo && !hasGeneralTask && !hasSingleMemo);
+      blk.isGeneral = hasGeneralTask;
+    }
+
+    // 2단계: AS 단독 블록 중, 동일 원현장명의 일반 블록이 별도로 존재하는 경우 병합(이동)
+    var rowsToMerge = [];
+    for (var ab = 0; ab < blocks.length; ab++) {
+      var asBlk = blocks[ab];
+      if (!asBlk.isAsOnly || !asBlk.key) continue;
+
+      var matchGen = null;
+      for (var gb = 0; gb < blocks.length; gb++) {
+        if (gb === ab) continue;
+        var gBlk = blocks[gb];
+        if (gBlk.key === asBlk.key && (gBlk.isGeneral || !gBlk.isAsOnly)) {
+          matchGen = gBlk;
+          break;
+        }
+      }
+
+      if (matchGen) {
+        rowsToMerge.push({ asBlock: asBlk, targetBlock: matchGen });
+      }
+    }
+
+    if (rowsToMerge.length > 0) {
+      rowsToMerge.sort(function(a, b) {
+        return b.asBlock.startRow - a.asBlock.startRow;
+      });
+
+      for (var mi = 0; mi < rowsToMerge.length; mi++) {
+        var mItem = rowsToMerge[mi];
+        var srcStart = mItem.asBlock.startRow;
+        var numRows = mItem.asBlock.rows.length;
+        var destTargetRow = mItem.targetBlock.endRow;
+
+        var srcVals = compSheet.getRange(srcStart, 1, numRows, lastCol).getValues();
+
+        compSheet.insertRowsAfter(destTargetRow, numRows);
+        for (var sr = 0; sr < srcVals.length; sr++) {
+          srcVals[sr][0] = mItem.targetBlock.siteName;
+        }
+        compSheet.getRange(destTargetRow + 1, 1, numRows, lastCol).setValues(srcVals);
+
+        var actualSrcStart = (srcStart > destTargetRow) ? (srcStart + numRows) : srcStart;
+        compSheet.deleteRows(actualSrcStart, numRows);
+
+        asMergedCount += numRows;
+        details.push("AS 병합: [" + mItem.asBlock.siteName + "] (" + numRows + "건) -> [" + mItem.targetBlock.siteName + "] 블록 편입");
+      }
+
+      // 병합 후 데이터 재로딩
+      lastRow = compSheet.getLastRow();
+      range = compSheet.getRange(2, 1, lastRow - 1, lastCol);
+      values = range.getValues();
+
+      blocks = [];
+      curBlk = null;
+      for (var ri = 0; ri < values.length; ri++) {
+        var rNum = ri + 2;
+        var rA = String(values[ri][0] || "").trim();
+        var rTask2 = String(values[ri][2] || "").trim();
+        var rDate2 = values[ri][1];
+        var rMemo2 = String(values[ri][5] || "").trim();
+        var hasD2 = Boolean(rA || rTask2 || String(rDate2 || "").trim() || rMemo2);
+
+        if (!hasD2) {
+          if (curBlk) { blocks.push(curBlk); curBlk = null; }
+          continue;
+        }
+        if (rA) {
+          if (curBlk) blocks.push(curBlk);
+          curBlk = { siteName: rA, startRow: rNum, endRow: rNum, rows: [{ rowNum: rNum, vals: values[ri] }] };
+        } else if (curBlk) {
+          curBlk.endRow = rNum;
+          curBlk.rows.push({ rowNum: rNum, vals: values[ri] });
+        } else {
+          curBlk = { siteName: "", startRow: rNum, endRow: rNum, rows: [{ rowNum: rNum, vals: values[ri] }] };
+        }
+      }
+      if (curBlk) blocks.push(curBlk);
+    }
+
+    // 3단계: 단건 및 단독 AS 현장명 접두사 정규화 (A열 업데이트)
+    var updates = [];
+
+    for (var bi = 0; bi < blocks.length; bi++) {
+      var bItem = blocks[bi];
+      var bBase = cleanBase(bItem.siteName);
+      if (!bBase) continue;
+
+      var isSingleBlock = false;
+      var isAsBlock = false;
+      var isGeneralBlock = false;
+
+      for (var bj = 0; bj < bItem.rows.length; bj++) {
+        var rowVals = bItem.rows[bj].vals;
+        var memoStr = String(rowVals[5] || "").trim();
+        var taskStr = String(rowVals[2] || "").trim();
+
+        if (/^\[단건\]/i.test(memoStr)) {
+          isSingleBlock = true;
+        }
+        if (/^\[AS\]/i.test(memoStr) || taskStr === "AS") {
+          isAsBlock = true;
+        }
+        if (taskStr && taskStr !== "AS" && !/^\[단건\]/i.test(memoStr) && !/^\[AS\]/i.test(memoStr)) {
+          isGeneralBlock = true;
+        }
+      }
+
+      if (isSingleBlock) {
+        if (!/^\[단건\]\s*/i.test(bItem.siteName)) {
+          var newSingleName = "[단건] " + bBase;
+          updates.push({
+            row: bItem.startRow,
+            oldName: bItem.siteName,
+            newName: newSingleName,
+            type: "단건",
+            allRows: bItem.rows
+          });
+        }
+      } else if (isAsBlock && !isGeneralBlock) {
+        if (!/^\[AS\]\s*/i.test(bItem.siteName)) {
+          var newAsName = "[AS] " + bBase;
+          updates.push({
+            row: bItem.startRow,
+            oldName: bItem.siteName,
+            newName: newAsName,
+            type: "AS",
+            allRows: bItem.rows
+          });
+        }
+      }
+    }
+
+    // A열 셀 업데이트
+    for (var u = 0; u < updates.length; u++) {
+      var up = updates[u];
+      compSheet.getRange(up.row, 1).setValue(up.newName);
+
+      for (var vr = 1; vr < up.allRows.length; vr++) {
+        var subRowValA = String(up.allRows[vr].vals[0] || "").trim();
+        if (subRowValA && subRowValA === up.oldName) {
+          compSheet.getRange(up.allRows[vr].rowNum, 1).setValue(up.newName);
+        }
+      }
+
+      if (up.type === "단건") {
+        singleCount++;
+        details.push("단건 접두사 반영: [" + up.oldName + "] -> [" + up.newName + "] (row " + up.row + ")");
+      } else if (up.type === "AS") {
+        asPrefixedCount++;
+        details.push("AS 접두사 반영: [" + up.oldName + "] -> [" + up.newName + "] (row " + up.row + ")");
+      }
+    }
+
+    if (updates.length > 0 || asMergedCount > 0) {
+      SpreadsheetApp.flush();
+      invalidateDashboardServerCache();
+    }
+
+    var totalProcessed = singleCount + asPrefixedCount + asMergedCount;
+    return {
+      success: true,
+      singleCount: singleCount,
+      asPrefixedCount: asPrefixedCount,
+      asMergedCount: asMergedCount,
+      totalProcessed: totalProcessed,
+      details: details,
+      message: "완료현장 시트 정규화 완료 (단건 접두사: " + singleCount + "건, AS 접두사: " + asPrefixedCount + "건, AS 병합: " + asMergedCount + "건)"
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: "완료현장 시트 정규화 중 오류: " + (err.message || String(err)),
+      details: details
+    };
+  } finally {
+    if (hasLock) {
+      try { lock.releaseLock(); } catch (eRel) {}
+    }
+  }
+}
+
+/**
+ * [상단 메뉴용] 완료현장 시트 단건/AS 기존 접두사 자동 정리 팝업 트리거
+ */
+function normalizeExistingCompletedSheetPrefixesMenu() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var res = normalizeExistingCompletedSheetPrefixes(ss);
+  if (res && res.success) {
+    SpreadsheetApp.getUi().alert(
+      "📦 완료현장 시트 정규화 완료",
+      "완료현장 시트의 기존 데이터가 성공적으로 정규화되었습니다.\n\n" +
+      "• 단건 접두사 반영: " + (res.singleCount || 0) + "건\n" +
+      "• AS 접두사 반영: " + (res.asPrefixedCount || 0) + "건\n" +
+      "• AS 동일블록 병합: " + (res.asMergedCount || 0) + "건\n" +
+      "• 총 처리 건수: " + (res.totalProcessed || 0) + "건\n\n" +
+      (res.details && res.details.length ? ("상세 내역:\n" + res.details.slice(0, 10).join("\n")) : ""),
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  } else {
+    SpreadsheetApp.getUi().alert("⚠️ 정규화 실패", (res && res.error) || "알 수 없는 오류가 발생했습니다.", SpreadsheetApp.getUi().ButtonSet.OK);
   }
 }
 
@@ -11530,6 +11849,13 @@ function doGet(e) {
   var ss = needSheet ? getAppSpreadsheet() : null;
   var sheet = ss ? findSiteScheduleSheet(ss) : null;
 
+  // 0-0-0-NormalizeCompletedPrefixes) 완료현장 시트 단건/AS 기존 접두사 자동 정리 (action=normalizeCompletedPrefixes)
+  if (action === "normalizeCompletedPrefixes") {
+    var normRes = normalizeExistingCompletedSheetPrefixes(ss);
+    return ContentService.createTextOutput(JSON.stringify(normRes))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // 0-0-0-Finance) 재무 전용 DB 스프레드시트 5개 시트 초기 구축 및 데이터 마이그레이션 (action=setupFinanceDbAndMigrate)
   if (action === "setupFinanceDbAndMigrate") {
     var pFinance = p;
@@ -12453,6 +12779,13 @@ function doPost(e) {
 
     var action = p.action;
 
+    // 0-0-0-NormalizeCompletedPrefixes) 완료현장 시트 단건/AS 기존 접두사 자동 정리 (action=normalizeCompletedPrefixes)
+    if (action === "normalizeCompletedPrefixes") {
+      var normRes = normalizeExistingCompletedSheetPrefixes();
+      return ContentService.createTextOutput(JSON.stringify(normRes))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     // 재무 전용 DB 스프레드시트 5개 시트 초기 구축 및 데이터 마이그레이션
     if (action === "setupFinanceDbAndMigrate") {
       var pFinance = p;
@@ -13186,659 +13519,6 @@ function extractMemberBriefingEmails(sheet) {
   return resultEmails;
 }
 
-/**
- * 모닝 브리핑 단일 발송 권한 검증 (조항만 대표 단독 발송 보장)
- * - 팀원 여러 명이 스프레드시트를 열람하더라도 중복으로 트리거가 설치되어 여러 통 발송되는 현상 방지
- * - '조항만 대표(joehm037@gmail.com)' 또는 스프레드시트 소유자 계정만 발송자로 동작
- */
-function isBriefingAuthorizedSender(ss) {
-  var currentUserEmail = "";
-  try {
-    currentUserEmail = Session.getEffectiveUser().getEmail().toLowerCase().trim();
-  } catch(e) {}
-  if (!currentUserEmail) {
-    try {
-      currentUserEmail = Session.getActiveUser().getEmail().toLowerCase().trim();
-    } catch(e) {}
-  }
-
-  // 지정된 대표 이메일 (조항만 대표님 계정)
-  var designatedEmails = ["joehm037@gmail.com", "qa-tester@woosung.com"];
-
-  // 스프레드시트 소유자 계정 추가
-  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (ss) {
-    try {
-      var owner = ss.getOwner();
-      if (owner && owner.getEmail()) {
-        designatedEmails.push(owner.getEmail().toLowerCase().trim());
-      }
-    } catch(e) {}
-  }
-
-  // 문서 속성에 수동 등록된 대표 발송자가 있다면 추가
-  var docProps = PropertiesService.getDocumentProperties();
-  var customSender = docProps.getProperty("BRIEFING_REPRESENTATIVE_SENDER");
-  if (customSender && customSender.trim()) {
-    designatedEmails.push(customSender.toLowerCase().trim());
-  }
-
-  // 현재 사용자 이메일을 조회할 수 없는 특수 실행 컨텍스트일 경우 안전 폴백
-  if (!currentUserEmail) return true;
-
-  for (var i = 0; i < designatedEmails.length; i++) {
-    if (currentUserEmail === designatedEmails[i] || currentUserEmail.indexOf(designatedEmails[i]) !== -1) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * 모닝 브리핑 수신 이메일 가져오기
- * 1순위: [구성원] 시트에서 수신 체크된 이메일 자동 추출
- * 2순위: 문서 속성(DAILY_BRIEFING_EMAIL)에 설정된 이메일
- * 3순위: 로그인된 사용자 계정 이메일
- */
-function getDailyBriefingRecipientEmail(ss) {
-  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  // 1순위: [구성원] 시트 자동 탐색
-  if (ss) {
-    var memberSheet = findMembersSheet(ss);
-    if (memberSheet && memberSheet.getLastRow() >= 2) {
-      var memberEmails = extractMemberBriefingEmails(memberSheet);
-      if (memberEmails && memberEmails.length > 0) {
-        return memberEmails.join(", ");
-      }
-    }
-  }
-
-  // 2순위: 문서 속성 설정값
-  var docProps = PropertiesService.getDocumentProperties();
-  var savedEmail = docProps.getProperty("DAILY_BRIEFING_EMAIL");
-  if (savedEmail && savedEmail.trim()) {
-    return savedEmail.trim();
-  }
-
-  // 3순위: 기본 사용자 계정
-  var userEmail = "";
-  try {
-    userEmail = Session.getEffectiveUser().getEmail();
-  } catch (e) {}
-  if (!userEmail) {
-    try {
-      userEmail = Session.getActiveUser().getEmail();
-    } catch (e) {}
-  }
-
-  // 4순위: 스프레드시트 소유자 계정 (백그라운드 트리거 실행 시 Session 공백 방어)
-  if (!userEmail && ss) {
-    try {
-      var owner = ss.getOwner();
-      if (owner && owner.getEmail()) {
-        userEmail = owner.getEmail();
-        docProps.setProperty("DAILY_BRIEFING_EMAIL", userEmail);
-      }
-    } catch (e) {}
-  }
-  return userEmail;
-}
-
-/**
- * [메뉴용] 모닝 브리핑 수신 이메일 설정 대화상자
- */
-function configureBriefingEmail() {
-  var ui = SpreadsheetApp.getUi();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var memberSheet = findMembersSheet(ss);
-  var memberEmails = (memberSheet ? extractMemberBriefingEmails(memberSheet) : []);
-  var currentEmail = getDailyBriefingRecipientEmail(ss);
-
-  var infoNotice = "";
-  if (memberEmails.length > 0) {
-    infoNotice = "\n\n💡 현재 ['" + memberSheet.getName() + "'] 시트에서 " + memberEmails.length + "명의 수신 이메일이 자동 연동되고 있습니다.";
-  }
-
-  var prompt = ui.prompt(
-    "📧 모닝 브리핑 수신 이메일 설정",
-    "매일 아침 8시 현장 공정 브리핑을 수신할 이메일 주소를 입력하세요.\n(여러 명인 경우 쉼표로 구분, [구성원] 시트가 있으면 해당 시트가 최우선 적용됩니다.)\n\n현재 수신처: " + (currentEmail || "(미설정)") + infoNotice,
-    ui.ButtonSet.OK_CANCEL
-  );
-
-  if (prompt.getSelectedButton() === ui.Button.OK) {
-    var newEmail = prompt.getResponseText().trim();
-    if (newEmail) {
-      PropertiesService.getDocumentProperties().setProperty("DAILY_BRIEFING_EMAIL", newEmail);
-      ui.alert("✅ 수신 이메일이 [" + newEmail + "](으)로 설정되었습니다.");
-    } else {
-      PropertiesService.getDocumentProperties().deleteProperty("DAILY_BRIEFING_EMAIL");
-      ui.alert("✅ 기본 이메일 계정으로 재설정되었습니다.");
-    }
-  }
-}
-
-/**
- * 모닝 브리핑 설정 시간 가져오기 (기본값: "08:00")
- */
-function getDailyBriefingConfiguredTime() {
-  var docProps = PropertiesService.getDocumentProperties();
-  var saved = docProps.getProperty("DAILY_BRIEFING_TIME");
-  if (saved && /^([01]?[0-9]|2[0-3]):([0-5][0-9])$/.test(saved.trim())) {
-    return saved.trim();
-  }
-  return "08:00";
-}
-
-/**
- * 다음 모닝 브리핑 실행 시각 계산 및 정각 트리거 등록 (1분 오차 정밀 실행)
- * - Google 기본 1시간 범위 지연을 방지하기 위해 단발성 정밀 시각 트리거를 자동 연속 예약합니다.
- */
-function scheduleNextDailyBriefingTrigger() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss) ss = getAppSpreadsheet();
-  var functionName = "sendDailySiteMorningBriefing";
-  var triggers = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === functionName) {
-      ScriptApp.deleteTrigger(triggers[i]);
-    }
-  }
-
-  // 조항만 대표 또는 지정된 소유자 계정이 아닌 경우 트리거 생성 차단
-  if (!isBriefingAuthorizedSender(ss)) {
-    Logger.log("🚫 [트리거 생성 차단] 조항만 대표 계정이 아니므로 모닝 브리핑 트리거를 생성하지 않습니다.");
-    return null;
-  }
-
-  var timeStr = getDailyBriefingConfiguredTime();
-  var parts = timeStr.split(":");
-  var targetHour = parseInt(parts[0], 10);
-  var targetMin = parseInt(parts[1], 10);
-
-  var now = new Date();
-  var nextRun = new Date(now.getFullYear(), now.getMonth(), now.getDate(), targetHour, targetMin, 0, 0);
-
-  // 현재 시각보다 이미 지났거나 1분 이내라면 내일 같은 시각으로 예약
-  if (nextRun.getTime() <= now.getTime() + 60000) {
-    nextRun.setDate(nextRun.getDate() + 1);
-  }
-
-  ScriptApp.newTrigger(functionName)
-    .timeBased()
-    .at(nextRun)
-    .create();
-
-  return nextRun;
-}
-
-/**
- * 모닝 브리핑 발송 시간 설정 메뉴 (원하는 시간 정각 지정)
- */
-function configureBriefingTime() {
-  var ui = SpreadsheetApp.getUi();
-  var currentTime = getDailyBriefingConfiguredTime();
-
-  var prompt = ui.prompt(
-    "⏰ 모닝 브리핑 발송 시간 설정",
-    "매일 모닝 브리핑 이메일을 발송할 시간을 입력하세요 (24시간 형식 HH:mm).\n\n" +
-    "• 예시: 08:00 (오전 8시 정각), 07:30 (오전 7시 30분), 08:15 등\n" +
-    "• 현재 설정 시간: " + currentTime + " 정각\n\n" +
-    "(참고: 정각 예약 엔진이 적용되어 입력하신 시각에 오차 없이 발송됩니다)",
-    ui.ButtonSet.OK_CANCEL
-  );
-
-  if (prompt.getSelectedButton() === ui.Button.OK) {
-    var inputVal = prompt.getResponseText().trim();
-    var match = inputVal.match(/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/);
-    if (!match) {
-      ui.alert("⚠️ 입력 형식이 올바르지 않습니다.\n\n'08:00', '07:30'과 같이 24시간 형식(HH:mm)으로 입력해주세요.");
-      return;
-    }
-
-    var hour = ("0" + parseInt(match[1], 10)).slice(-2);
-    var min = ("0" + parseInt(match[2], 10)).slice(-2);
-    var formattedTime = hour + ":" + min;
-
-    var docProps = PropertiesService.getDocumentProperties();
-    docProps.setProperty("DAILY_BRIEFING_TIME", formattedTime);
-
-    var isEnabled = docProps.getProperty("DAILY_BRIEFING_ENABLED");
-    var nextRunMsg = "";
-    if (isEnabled === "true") {
-      var nextRun = scheduleNextDailyBriefingTrigger();
-      var dateStr = Utilities.formatDate(nextRun, Session.getScriptTimeZone() || "Asia/Seoul", "yyyy-MM-dd HH:mm");
-      nextRunMsg = "\n\n🚀 다음 발송 예정 시각: " + dateStr;
-    } else {
-      nextRunMsg = "\n\n💡 현재 자동 발송이 꺼져 있습니다. [⏰ 모닝 브리핑 자동 발송 켜기] 메뉴를 누르면 활성화됩니다.";
-    }
-
-    ui.alert("✅ 모닝 브리핑 발송 시간이 [" + formattedTime + " 정각]으로 설정되었습니다." + nextRunMsg);
-  }
-}
-
-/**
- * 모닝 브리핑 시간 기반 정각 트리거 활성화
- */
-function enableDailyMorningBriefing() {
-  var docProps = PropertiesService.getDocumentProperties();
-  docProps.setProperty("DAILY_BRIEFING_ENABLED", "true");
-
-  var nextRun = scheduleNextDailyBriefingTrigger();
-  var timeStr = getDailyBriefingConfiguredTime();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var recipient = getDailyBriefingRecipientEmail(ss);
-  var dateStr = Utilities.formatDate(nextRun, Session.getScriptTimeZone() || "Asia/Seoul", "yyyy-MM-dd HH:mm");
-
-  SpreadsheetApp.getUi().alert(
-    "☀️ 모닝 브리핑 자동 발송 활성화 (정각 발송)",
-    "매일 " + timeStr + " 정각에 '오늘의 현장 공정 및 지연 현장 브리핑'이 자동으로 발송됩니다!\n\n" +
-    "• 다음 발송 예정: " + dateStr + "\n" +
-    "• 수신처: " + (recipient || "스프레드시트 소유자 계정") + "\n\n" +
-    "💡 발송 시간 변경은 [🕒 모닝 브리핑 발송 시간 변경] 메뉴에서 언제든지 가능합니다.",
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
-}
-
-/**
- * 매일 모닝 브리핑 자동 발송 끄기
- */
-function disableDailyMorningBriefing() {
-  var docProps = PropertiesService.getDocumentProperties();
-  docProps.setProperty("DAILY_BRIEFING_ENABLED", "false");
-
-  var functionName = "sendDailySiteMorningBriefing";
-  var triggers = ScriptApp.getProjectTriggers();
-  var removed = 0;
-  for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === functionName) {
-      ScriptApp.deleteTrigger(triggers[i]);
-      removed++;
-    }
-  }
-  if (removed > 0) {
-    SpreadsheetApp.getUi().alert("🔕 매일 모닝 브리핑 자동 발송이 해제되었습니다.");
-  } else {
-    SpreadsheetApp.getUi().alert("현재 활성화된 모닝 브리핑 자동 발송 트리거가 없습니다.");
-  }
-}
-
-/**
- * 모닝 브리핑 즉시 테스트 발송
- */
-function sendDailyBriefingTestNow() {
-  sendDailySiteMorningBriefing(true);
-}
-
-/**
- * 매일 아침 현장 공정 모닝 브리핑 이메일 발송 코어 엔진 (Feature 4)
- * - [조항만 대표 단독 발송 보장]: 비대표 계정 실행 차단 및 잔존 트리거 자율 청소
- * - [하루 1회 단일 발송 보장]: LockService 및 당일 날짜(LAST_BRIEFING_SENT_DATE) 멱등성 가드
- * - [발송자 명의]: '우성아이디 조항만 대표' 명의로 수신자 전체에게 1통만 발송
- * @param {boolean} [isManualTest=false] 수동 테스트 발송 여부
- */
-function sendDailySiteMorningBriefing(isManualTest) {
-  var isManual = (isManualTest === true); // 수동 테스트 버튼 클릭 시에만 true, 트리거 실행 시 false (UI 팝업 방어)
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss) ss = getAppSpreadsheet();
-  if (!ss) return;
-
-  // 1. [비대표 계정 실행 차단]: 조항만 대표 또는 지정된 소유자 계정이 아니면 발송 중단 및 트리거 청소
-  if (!isManual && !isBriefingAuthorizedSender(ss)) {
-    Logger.log("🚫 [발송 차단] 조항만 대표 계정이 아니므로 모닝 브리핑 발송을 건너뛰고 계정 내 중복 트리거를 자동 삭제합니다.");
-    var myTriggers = ScriptApp.getProjectTriggers();
-    for (var t = 0; t < myTriggers.length; t++) {
-      if (myTriggers[t].getHandlerFunction() === "sendDailySiteMorningBriefing") {
-        ScriptApp.deleteTrigger(myTriggers[t]);
-      }
-    }
-    return;
-  }
-
-  // 2. [동시성 방어 분산 락]: 동일 시각 다중 프로세스 경합 방지
-  var lock = LockService.getScriptLock();
-  var hasLock = false;
-  try {
-    hasLock = lock.tryLock(10000);
-  } catch(eLock) {}
-
-  if (!hasLock && !isManual) {
-    Logger.log("⏳ 다른 프로세스에서 이미 브리핑 발송 중이므로 중복 실행을 건너뜁니다.");
-    return;
-  }
-
-  try {
-    var today = new Date();
-    var todayStr = formatDateYYMMDD(today);
-    var docProps = PropertiesService.getDocumentProperties();
-
-    // 3. [하루 1회 단일 발송 보장 (멱등성 가드)]: 오늘 이미 성공적으로 발송되었으면 중복 발송 생략
-    var lastSentDate = docProps.getProperty("LAST_BRIEFING_SENT_DATE");
-    if (!isManual && lastSentDate === todayStr) {
-      Logger.log("✅ 오늘(" + todayStr + ") 이미 모닝 브리핑이 성공적으로 발송되었습니다. 중복 발송을 건너뜁니다.");
-      return;
-    }
-
-    var sheet = findSiteScheduleSheet(ss);
-    if (!sheet) return;
-
-    var lastRow = sheet.getLastRow();
-    if (lastRow < 2) {
-      if (isManual) {
-        SpreadsheetApp.getUi().alert("현장데이터 시트에 일정이 없습니다.");
-      }
-      return;
-    }
-
-    // 매일 아침 브리핑 발송 전, 행 삭제로 남은 캘린더 유령 일정 자동 청소
-    try {
-      var cal = getTargetCalendar();
-      if (cal) {
-        cleanupOrphanCalendarEventsSilent(sheet, cal);
-      }
-    } catch (eClean) {
-      Logger.log("모닝 브리핑 사전 유령 일정 정리 예외: " + eClean.toString());
-    }
-
-    var recipient = getDailyBriefingRecipientEmail(ss);
-    if (!recipient) {
-      if (isManual) {
-        SpreadsheetApp.getUi().alert("수신자 이메일 주소를 확인할 수 없습니다. [📧 모닝 브리핑 수신 이메일 변경] 메뉴에서 설정해주세요.");
-      }
-      return;
-    }
-
-    var dayOfWeekNames = ["일", "월", "화", "수", "목", "금", "토"];
-    var dayOfWeekStr = dayOfWeekNames[today.getDay()] + "요일";
-
-    var data = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
-    var todayTasks = [];
-    var delayedTasks = [];
-    var lastKnownSite = ""; // [핵심 보완] 아코디언 하위 행 현장명 자동 계승
-
-    for (var i = 0; i < data.length; i++) {
-      var rawSite = String(data[i][0] || "").trim();
-      if (rawSite) lastKnownSite = rawSite;
-      var dateVal = data[i][1];
-      var taskName = String(data[i][2] || "").trim();
-      var siteName = rawSite || ((dateVal || taskName) ? lastKnownSite : "");
-      var partner = String(data[i][3] || "").trim();
-      var isShared = (data[i][4] === true || String(data[i][4]).trim().toUpperCase() === "TRUE" || String(data[i][4]).trim() === "1");
-      var memo = String(data[i][5] || "").trim();
-      var manager = String(data[i][6] || "").trim();
-      var status = String(data[i][7] || "").trim();
-      var statusClean = status.replace(/\s+/g, "");
-
-      if (!siteName && !taskName) continue;
-      var parsedDate = parseScheduleDateRange(dateVal);
-      if (!parsedDate) continue;
-
-      var formattedDate = formatScheduleDateDisplay(dateVal);
-
-      var item = {
-        row: i + 2,
-        siteName: siteName,
-        dateStr: formattedDate || String(dateVal).trim(),
-        taskName: taskName,
-        partner: partner,
-        isShared: isShared,
-        memo: memo,
-        manager: manager,
-        status: status || "예정",
-        parsedDate: parsedDate
-      };
-
-      if (isScheduleDelayed(parsedDate, statusClean, today)) {
-        delayedTasks.push(item);
-      } else if (isScheduleActiveToday(parsedDate, today)) {
-        todayTasks.push(item);
-      }
-    }
-
-    var subject = "[우성아이디] ☀️ 오늘의 현장 공정 모닝 브리핑 (" + todayStr + " " + dayOfWeekStr + ") - 오늘 " + todayTasks.length + "건" + (delayedTasks.length > 0 ? " / ⚠️ 지연 " + delayedTasks.length + "건" : "");
-
-    var sheetUrl = "";
-    try { sheetUrl = ss.getUrl(); } catch(e) {}
-    var webAppUrl = "https://kimver2.github.io/woosung-id/";
-
-    var emailPayload = buildMorningBriefingEmailContent(todayStr, dayOfWeekStr, todayTasks, delayedTasks, sheetUrl, webAppUrl);
-
-    // ★ 조항만 대표 명의 단일 이메일 발송
-    MailApp.sendEmail({
-      to: recipient,
-      name: "우성아이디 조항만 대표",
-      subject: subject,
-      body: emailPayload.plainText,
-      htmlBody: emailPayload.htmlBody
-    });
-
-    // 당일 발송 완료 날짜 기록 (하루 1회 발송 락)
-    docProps.setProperty("LAST_BRIEFING_SENT_DATE", todayStr);
-
-    // 카카오 알림톡 자동 발송 연동 (설정 활성화 시 동시 자동 발송)
-    try {
-      var kakaoConf = getAlimtalkConfig();
-      if (kakaoConf && kakaoConf.enabled && kakaoConf.apiKey && kakaoConf.senderKey && kakaoConf.senderPhone) {
-        sendDailyKakaoBriefing(false);
-      }
-    } catch (eKakaoAuto) {
-      Logger.log("모닝 브리핑 연동 카카오 알림톡 자동 발송 예외: " + eKakaoAuto.toString());
-    }
-
-    if (isManual) {
-      SpreadsheetApp.getUi().alert(
-        "✉️ 모닝 브리핑 테스트 발송 완료",
-        "성공적으로 브리핑 이메일을 발송했습니다!\n\n" +
-        "• 발송자 명의: 우성아이디 조항만 대표\n" +
-        "• 수신자: " + recipient + "\n" +
-        "• 오늘 착공/진행 공정: " + todayTasks.length + "건\n" +
-        "• 공정 지연 경고: " + delayedTasks.length + "건\n\n" +
-        "이메일 수신함을 확인해보세요.",
-        SpreadsheetApp.getUi().ButtonSet.OK
-      );
-    }
-  } catch (eSend) {
-    Logger.log("모닝 브리핑 발송 실행 오류: " + eSend.toString());
-  } finally {
-    if (hasLock) {
-      try { lock.releaseLock(); } catch(e) {}
-    }
-    // 자동 일일 실행인 경우, 다음 날 설정 시각 정각 트리거 자동 재스케줄링 (대표 계정에서만 예약)
-    if (!isManual && isBriefingAuthorizedSender(ss)) {
-      try {
-        var isEnabled = PropertiesService.getDocumentProperties().getProperty("DAILY_BRIEFING_ENABLED");
-        if (isEnabled === "true") {
-          scheduleNextDailyBriefingTrigger();
-        }
-      } catch(e) {
-        Logger.log("모닝 브리핑 자동 재스케줄링 오류: " + e.message);
-      }
-    }
-  }
-}
-
-/**
- * 모닝 브리핑 HTML 및 Plain-text 이메일 본문 생성기
- */
-function buildMorningBriefingEmailContent(todayStr, dayOfWeekStr, todayTasks, delayedTasks, sheetUrl, webAppUrl) {
-  var delayedCount = delayedTasks ? delayedTasks.length : 0;
-  var todayCount = todayTasks ? todayTasks.length : 0;
-  var mobileQuickUrl = "https://kimver2.github.io/woosung-id/";
-
-  // 1. Plain text 버전
-  var plainLines = [];
-  plainLines.push("========================================================");
-  plainLines.push("  우성아이디 | ☀️ 오늘의 현장 공정 일일 브리핑");
-  plainLines.push("  일자: " + todayStr + " (" + dayOfWeekStr + ")");
-  plainLines.push("  요약: 오늘 공정 " + todayCount + "건 / ⚠️ 지연 경고 " + delayedCount + "건");
-  plainLines.push("========================================================\n");
-
-  if (delayedCount > 0) {
-    plainLines.push("⚠️ [긴급 확인: 공정 지연 현장 (" + delayedCount + "건)]");
-    for (var i = 0; i < delayedTasks.length; i++) {
-      var d = delayedTasks[i];
-      plainLines.push("• [" + d.siteName + "] " + d.taskName + " (마감예정: " + d.dateStr + " / 상태: " + d.status + (d.manager ? " / 담당: " + d.manager : "") + (d.memo ? " / 비고: " + d.memo : "") + ")");
-    }
-    plainLines.push("\n");
-  }
-
-  plainLines.push("🔨 [오늘의 현장 공정 (" + todayCount + "건)]");
-  if (todayCount === 0) {
-    plainLines.push("오늘 예정된 현장 공정이 없습니다.\n");
-  } else {
-    for (var j = 0; j < todayTasks.length; j++) {
-      var t = todayTasks[j];
-      plainLines.push("• [" + t.siteName + "] " + t.taskName + " | 상태: " + t.status + " | 일정: " + t.dateStr + (t.manager ? " | 담당: " + t.manager : "") + (t.partner ? " | 협력: " + t.partner : "") + (t.memo ? " | 비고: " + t.memo : ""));
-    }
-    plainLines.push("\n");
-  }
-
-  if (sheetUrl) {
-    plainLines.push("📊 스프레드시트 바로가기: " + sheetUrl);
-  }
-  plainLines.push("📱 모바일 상태변경 페이지: " + mobileQuickUrl);
-
-  // 2. HTML 버전 (인라인 스타일 모던 템플릿)
-  var html = "";
-  html += '<!DOCTYPE html>';
-  html += '<html><head><meta charset="utf-8">';
-  html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
-  html += '<style>';
-  html += 'body { margin: 0; padding: 24px 16px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1e293b; }';
-  html += '.container { max-width: 880px; width: 100%; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; }';
-  html += '.header { background: #1e293b; color: #ffffff; padding: 26px 32px; text-align: left; }';
-  html += '.header h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }';
-  html += '.header p { margin: 6px 0 0 0; font-size: 13px; color: #94a3b8; }';
-  html += '.section { padding: 24px 32px; }';
-  html += '.section-title { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 14px; }';
-  html += '.task-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }';
-  html += '.task-table th { background: #f8fafc; color: #475569; font-weight: 600; text-align: left; padding: 11px 12px; border-bottom: 1px solid #e2e8f0; }';
-  html += '.task-table td { padding: 12px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }';
-  html += '.badge { display: inline-block; padding: 3px 8px; border-radius: 9999px; font-size: 11px; font-weight: 700; white-space: nowrap; }';
-  html += '.badge-prog { background: #dbeafe; color: #1e40af; }';
-  html += '.badge-done { background: #dcfce7; color: #15803d; }';
-  html += '.badge-delay { background: #fee2e2; color: #b91c1c; }';
-  html += '.badge-plan { background: #fef3c7; color: #92400e; }';
-  html += '.badge-as { background: #fee2e2; color: #991b1b; }';
-  html += '.btn-container { text-align: center; padding: 24px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; }';
-  html += '.btn { display: inline-block; padding: 12px 28px; border-radius: 8px; font-size: 14px; font-weight: 700; text-decoration: none !important; margin: 6px; }';
-  html += '.btn-primary { background-color: #1d4ed8 !important; color: #ffffff !important; border: 1px solid #1e40af; }';
-  html += '.btn-secondary { background-color: #ffffff !important; color: #0f172a !important; border: 1px solid #cbd5e1; }';
-  html += '.footer { padding: 18px 32px; text-align: center; font-size: 11px; color: #94a3b8; }';
-  html += '</style></head><body>';
-  html += '<div class="container" style="max-width:880px;width:100%;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.06);border:1px solid #e2e8f0;">';
-
-  // Header
-  html += '<div class="header">';
-  html += '  <div style="font-size:12px;color:#38bdf8;font-weight:600;margin-bottom:4px;">WOOSUNG ID 현장관리 시스템</div>';
-  html += '  <h1>☀️ 오늘의 현장 공정 일일 브리핑</h1>';
-  html += '  <p>📅 ' + todayStr + ' (' + dayOfWeekStr + ') 기준 현장 현황 리포트</p>';
-  html += '</div>';
-
-  // KPI Summary
-  html += '<table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:16px 24px;">';
-  html += '<tr>';
-  html += '  <td width="50%" style="padding:6px;">';
-  html += '    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center;">';
-  html += '      <div style="font-size:11px;color:#64748b;font-weight:600;">🔨 오늘 착공/진행 공정</div>';
-  html += '      <div style="font-size:24px;font-weight:800;color:#0f172a;margin-top:4px;">' + todayCount + '<span style="font-size:14px;font-weight:600;"> 건</span></div>';
-  html += '    </div>';
-  html += '  </td>';
-  html += '  <td width="50%" style="padding:6px;">';
-  var alertCardBg = delayedCount > 0 ? '#fff1f2' : '#ffffff';
-  var alertBorder = delayedCount > 0 ? '#fda4af' : '#e2e8f0';
-  var alertTextColor = delayedCount > 0 ? '#be123c' : '#0f172a';
-  html += '    <div style="background:' + alertCardBg + ';border:1px solid ' + alertBorder + ';border-radius:8px;padding:12px;text-align:center;">';
-  html += '      <div style="font-size:11px;color:' + (delayedCount > 0 ? '#e11d48' : '#64748b') + ';font-weight:600;">⚠️ 마감 경과 지연 공정</div>';
-  html += '      <div style="font-size:24px;font-weight:800;color:' + alertTextColor + ';margin-top:4px;">' + delayedCount + '<span style="font-size:14px;font-weight:600;"> 건</span></div>';
-  html += '    </div>';
-  html += '  </td>';
-  html += '</tr>';
-  html += '</table>';
-
-  // Section 1: Delayed tasks (if any)
-  if (delayedCount > 0) {
-    html += '<div class="section" style="padding-bottom:12px;">';
-    html += '  <div style="background:#fff1f2;border:1px solid #fda4af;border-radius:8px;padding:16px;">';
-    html += '    <div style="font-size:14px;font-weight:700;color:#be123c;margin-bottom:8px;">⚠️ 긴급 확인 필요: 공정 지연 현장 (' + delayedCount + '건)</div>';
-    html += '    <div style="font-size:12px;color:#9f1239;margin-bottom:12px;">마감 예정일이 지났으나 미완료 상태인 공정입니다. 현장 확인 및 일정 조정이 필요합니다.</div>';
-    html += '    <table class="task-table" style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;">';
-    html += '      <thead><tr><th style="width:18%;">현장명</th><th style="width:20%;">공종</th><th style="width:14%;">예정 마감일</th><th style="width:14%;">담당자</th><th style="width:34%;">비고</th></tr></thead>';
-    html += '      <tbody>';
-    for (var k = 0; k < delayedTasks.length; k++) {
-      var it = delayedTasks[k];
-      html += '      <tr>';
-      html += '        <td style="font-weight:700;color:#0f172a;word-break:break-word;">[' + it.siteName + ']</td>';
-      html += '        <td style="word-break:break-word;">' + it.taskName + '</td>';
-      html += '        <td style="color:#e11d48;font-weight:600;white-space:nowrap;">' + it.dateStr + '</td>';
-      html += '        <td>' + (it.manager || '-') + '</td>';
-      html += '        <td style="color:#334155;word-break:break-word;overflow-wrap:break-word;line-height:1.45;font-size:12.5px;">' + (it.memo || '-') + '</td>';
-      html += '      </tr>';
-    }
-    html += '      </tbody>';
-    html += '    </table>';
-    html += '  </div>';
-    html += '</div>';
-  }
-
-  // Section 2: Today's tasks
-  html += '<div class="section">';
-  html += '  <div class="section-title">🔨 오늘 착공 및 진행 공정 (' + todayCount + '건)</div>';
-  if (todayCount === 0) {
-    html += '  <div style="padding:24px;text-align:center;color:#64748b;font-size:13px;background:#f8fafc;border-radius:8px;border:1px dashed #cbd5e1;">';
-    html += '    오늘 예정된 현장 공정이 없습니다. 평온하고 안전한 하루 되세요! ☕';
-    html += '  </div>';
-  } else {
-    html += '  <table class="task-table" style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;">';
-    html += '    <thead><tr><th style="width:18%;">현장명</th><th style="width:20%;">공종</th><th style="width:12%;text-align:center;">상태</th><th style="width:16%;">담당/협력</th><th style="width:34%;">비고</th></tr></thead>';
-    html += '    <tbody>';
-    for (var m = 0; m < todayTasks.length; m++) {
-      var item = todayTasks[m];
-      var badgeClass = 'badge-plan';
-      var stClean = item.status.replace(/\s+/g, '');
-      if (stClean.indexOf('완료') !== -1) badgeClass = 'badge-done';
-      else if (stClean.indexOf('진행') !== -1) badgeClass = 'badge-prog';
-      else if (stClean.indexOf('AS') !== -1) badgeClass = 'badge-as';
-
-      var managerInfo = item.manager || '';
-      if (item.partner) managerInfo += (managerInfo ? ' / ' : '') + item.partner;
-
-      html += '    <tr>';
-      html += '      <td style="font-weight:700;color:#0f172a;word-break:break-word;">[' + item.siteName + ']</td>';
-      html += '      <td style="word-break:break-word;"><b>' + item.taskName + '</b><br><span style="font-size:11px;color:#64748b;">' + item.dateStr + '</span></td>';
-      html += '      <td style="text-align:center;"><span class="badge ' + badgeClass + '">' + item.status + '</span></td>';
-      html += '      <td style="word-break:break-word;">' + (managerInfo || '-') + '</td>';
-      html += '      <td style="color:#334155;word-break:break-word;overflow-wrap:break-word;line-height:1.45;font-size:12.5px;">' + (item.memo || '-') + '</td>';
-      html += '    </tr>';
-    }
-    html += '    </tbody>';
-    html += '  </table>';
-  }
-  html += '</div>';
-
-  // Quick Action Buttons
-  html += '<div class="btn-container" style="text-align:center;padding:24px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;">';
-  if (sheetUrl) {
-    html += '  <a href="' + sheetUrl + '" class="btn btn-primary" target="_blank" style="display:inline-block;background-color:#1d4ed8;color:#ffffff !important;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none !important;margin:6px;box-shadow:0 2px 6px rgba(29,78,216,0.25);border:1px solid #1e40af;"><span style="color:#ffffff !important;text-decoration:none !important;font-weight:700;font-size:14px;">📊 스프레드시트 전체 보기</span></a>';
-  }
-  html += '  <a href="' + mobileQuickUrl + '" class="btn btn-secondary" target="_blank" style="display:inline-block;background-color:#ffffff;color:#0f172a !important;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none !important;margin:6px;border:1px solid #cbd5e1;box-shadow:0 1px 3px rgba(0,0,0,0.05);"><span style="color:#0f172a !important;text-decoration:none !important;font-weight:700;font-size:14px;">📱 모바일 빠른 관리</span></a>';
-  html += '</div>';
-
-  // Footer
-  html += '<div class="footer">';
-  html += '  본 메일은 우성아이디 스프레드시트 시스템에서 매일 아침 8시에 자동 발송되는 리포트입니다.<br>';
-  html += '  수신처 변경이나 발송 설정은 스프레드시트 메뉴 [🚀 현장 관리 -> ☀️ 모닝 브리핑 설정]에서 관리하실 수 있습니다.';
-  html += '</div>';
-
-  html += '</div>'; // end container
-  html += '</body></html>';
-
-  return {
-    plainText: plainLines.join('\n'),
-    htmlBody: html
-  };
-}
-
 // ========================================================
 // 14-2. [카카오 비즈니스 알림톡] 알리고(Aligo) 연동 일일 현장 & To-Do 브리핑 엔진
 // ========================================================
@@ -13847,10 +13527,12 @@ function buildMorningBriefingEmailContent(todayStr, dayOfWeekStr, todayTasks, de
  * 알리고(Aligo) 알림톡 환경설정 조회
  * @return {object} { apiKey, userId, senderKey, tplCode, senderPhone, enabled, dashboardUrl }
  */
+var WOOSUNG_GITHUB_PAGES_URL = "https://kimver2.github.io/woosung-id/";
+
 function getAlimtalkConfig() {
   try {
     var props = PropertiesService.getScriptProperties();
-    if (!props) return { apiKey: "", userId: "", senderKey: "", tplCode: "우성아이디_일일현장브리핑", senderPhone: "", enabled: false, dashboardUrl: "https://kimver2.github.io/" };
+    if (!props) return { apiKey: "", userId: "", senderKey: "", tplCode: "우성아이디_일일현장브리핑", senderPhone: "", enabled: false, dashboardUrl: WOOSUNG_GITHUB_PAGES_URL };
     return {
       apiKey: props.getProperty("ALIGO_API_KEY") || "",
       userId: props.getProperty("ALIGO_USER_ID") || "",
@@ -13858,10 +13540,10 @@ function getAlimtalkConfig() {
       tplCode: props.getProperty("ALIGO_TPL_CODE") || "우성아이디_일일현장브리핑",
       senderPhone: props.getProperty("ALIGO_SENDER_PHONE") || "",
       enabled: (props.getProperty("ALIGO_ENABLED") === "true"),
-      dashboardUrl: props.getProperty("ALIGO_DASHBOARD_URL") || "https://kimver2.github.io/"
+      dashboardUrl: props.getProperty("ALIGO_DASHBOARD_URL") || WOOSUNG_GITHUB_PAGES_URL
     };
   } catch (e) {
-    return { apiKey: "", userId: "", senderKey: "", tplCode: "우성아이디_일일현장브리핑", senderPhone: "", enabled: false, dashboardUrl: "https://kimver2.github.io/" };
+    return { apiKey: "", userId: "", senderKey: "", tplCode: "우성아이디_일일현장브리핑", senderPhone: "", enabled: false, dashboardUrl: WOOSUNG_GITHUB_PAGES_URL };
   }
 }
 
