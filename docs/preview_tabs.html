@@ -780,8 +780,9 @@
 
     /* ================= 3. 공유 좌측 사이드바 ================= */
     .sidebar-panel {
-      width: 270px; background: var(--surface); border-right: 1px solid var(--border);
-      padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex-shrink: 0;
+      width: 270px; min-width: 270px; max-width: 270px; background: var(--surface); border-right: 1px solid var(--border);
+      padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex-shrink: 0; box-sizing: border-box;
+      scrollbar-gutter: stable;
     }
     .btn-new-task-big {
       width: 100%; height: 38px; background: #1e40af; color: #ffffff; border: none; border-radius: 6px;
@@ -835,7 +836,13 @@
       cursor: pointer; padding: 5px 6px; border-radius: 5px;
     }
     .site-check-row:hover { background: #f1f5f9; }
-    .site-check-row.selected-site { background: #eff6ff; color: #1d4ed8; font-weight: 700; }
+    .site-check-row.selected-site {
+      background: #eff6ff !important;
+      color: #1d4ed8 !important;
+      font-weight: 800 !important;
+      border-left: 3px solid #2563eb;
+      padding-left: 5px;
+    }
     .site-check-row input[type="checkbox"] { width: 14px; height: 14px; accent-color: #1e40af; cursor: pointer; flex-shrink: 0; }
     .site-color-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .site-lbl-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
@@ -1159,7 +1166,7 @@
     .cal-week-col.today { background: #f0fdf4; }
 
     /* ================= 6. [현장 목록] ================= */
-    .site-list-workspace-view { flex: 1; overflow-y: auto; padding: 18px 22px; background: var(--bg); }
+    .site-list-workspace-view { flex: 1; overflow-y: auto; padding: 18px 22px; background: var(--bg); min-width: 0; box-sizing: border-box; scrollbar-gutter: stable; }
     .site-carousel-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; flex-wrap: wrap; }
     .carousel-wrap-box { position: relative; display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
     .carousel-arrow-btn {
@@ -1181,7 +1188,12 @@
       display: flex; flex-direction: column; gap: 6px;
     }
     .site-carousel-card:hover { border-color: #5eead4; transform: translateY(-1px); }
-    .site-carousel-card.active { background: #f0fdf4; border: 2px solid #0d9488; box-shadow: 0 4px 12px rgba(13, 148, 136, 0.14); }
+    .site-carousel-card.active {
+      background: #eff6ff !important;
+      border: 2.5px solid #2563eb !important;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.22) !important;
+      transform: translateY(-1px);
+    }
     .scc-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
     .scc-title { font-size: 13px; font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
     .scc-pct { font-size: 12px; font-weight: 800; color: #2563eb; white-space: nowrap; flex-shrink: 0; }
@@ -2597,6 +2609,58 @@
       window.compareDoneSites = compareDoneSites;
       window.compareActiveSites = compareActiveSites;
 
+      function isTaskDelayed(t, today) {
+        if (!t || isTaskCompleted(t)) return false;
+        if (t.isDelayed) return true;
+        const ymd = parseYmdFromTask(t);
+        if (!today) today = getTodayYmd();
+        return Boolean(ymd && ymd < today);
+      }
+
+      function getNextUpcomingTask(site) {
+        if (!site || !Array.isArray(site.tasks) || site.tasks.length === 0) return null;
+        const today = getTodayYmd();
+        const upcoming = [];
+        site.tasks.forEach((t) => {
+          if (!t || isTaskCompleted(t) || isTaskDelayed(t, today)) return;
+          const ymd = parseYmdFromTask(t);
+          if (ymd && ymd >= today) {
+            upcoming.push({ task: t, ymd });
+          }
+        });
+        if (upcoming.length === 0) return null;
+        upcoming.sort((a, b) => a.ymd.localeCompare(b.ymd));
+        return upcoming[0].task;
+      }
+
+      function getSiteUpcomingDateMetrics(site) {
+        if (!site) return { nextTask: null, ymd: "", ms: 0, hasUpcoming: false };
+        const nextTask = getNextUpcomingTask(site);
+        if (nextTask) {
+          const ymd = parseYmdFromTask(nextTask) || "";
+          const ms = ymd ? (new Date(ymd + "T00:00:00").getTime() || 0) : 0;
+          return { nextTask, ymd, ms, hasUpcoming: true };
+        }
+        return { nextTask: null, ymd: "", ms: 0, hasUpcoming: false };
+      }
+      window.isTaskDelayed = isTaskDelayed;
+      window.getNextUpcomingTask = getNextUpcomingTask;
+      window.getSiteUpcomingDateMetrics = getSiteUpcomingDateMetrics;
+
+      function autoScrollCarouselToActive(trackId, activeSelector) {
+        if (typeof requestAnimationFrame !== "function") return;
+        requestAnimationFrame(function () {
+          const track = document.getElementById(trackId);
+          if (track) {
+            const activeCard = track.querySelector(activeSelector);
+            if (activeCard && typeof activeCard.scrollIntoView === "function") {
+              activeCard.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+            }
+          }
+        });
+      }
+      window.autoScrollCarouselToActive = autoScrollCarouselToActive;
+
       function getScopeSites(includeArchived) {
         return getAllSites().filter((s) => {
           if (s.scope !== state.scope) return false;
@@ -3802,11 +3866,15 @@
           }
           if (state.siteSortBy === "name") return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
           if (state.siteSortBy === "date") {
-            const da = a.earliestDateMs || (getSiteDateMetrics(a).earliestMs);
-            const db = b.earliestDateMs || (getSiteDateMetrics(b).earliestMs);
-            if (da && db && da !== db) return da - db;
-            if (da && !db) return -1;
-            if (!da && db) return 1;
+            const ma = getSiteUpcomingDateMetrics(a);
+            const mb = getSiteUpcomingDateMetrics(b);
+            if (ma.hasUpcoming && mb.hasUpcoming) {
+              if (ma.ms !== mb.ms) return ma.ms - mb.ms;
+            } else if (ma.hasUpcoming && !mb.hasUpcoming) {
+              return -1;
+            } else if (!ma.hasUpcoming && mb.hasUpcoming) {
+              return 1;
+            }
             return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
           }
           return compareActiveSites(a, b);
@@ -3836,7 +3904,7 @@
             periodText = `기간 : ${startDot || endDot}`;
           }
           return `
-            <div class="site-carousel-card ${selectedSite && s.siteKey === selectedSite.siteKey ? "active" : ""}" onclick="selectSiteCard('${escJs(s.siteKey)}')">
+            <div class="site-carousel-card ${selectedSite && s.siteKey === selectedSite.siteKey ? "active" : ""}" data-site-key="${escHtml(s.siteKey)}" onclick="selectSiteCard('${escJs(s.siteKey)}')">
               <div class="scc-top">
                 <span class="scc-title"><span style="color:${escHtml(s.colorHex || "#2563eb")};">●</span> ${escHtml(s.siteName)}</span>
                 <span class="scc-pct" style="color:${pctColor};">${pct}%</span>
@@ -3847,7 +3915,14 @@
                   <span class="scc-count-txt">${s.completedTasksCount || 0}/${s.totalTasksCount || 0} 완료</span>
                   ${s.delayedTasksCount > 0 ? `<span class="scc-delay-tag">⚠️ 지연 ${s.delayedTasksCount}</span>` : `<span class="scc-ok-tag">정상</span>`}
                 </div>
-                ${isDoneSite && periodText ? `<div style="font-size:10.5px;color:#0f766e;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(periodText)}</div>` : ""}
+                ${isDoneSite && periodText ? `<div style="font-size:10.5px;color:#0f766e;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(periodText)}</div>` : (!isDoneSite ? (function() {
+                  const up = getSiteUpcomingDateMetrics(s);
+                  if (up.hasUpcoming && up.nextTask) {
+                    return `<div style="font-size:10.5px;color:#0f766e;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="다음 예정: ${escHtml(up.ymd)} · ${escHtml(up.nextTask.taskName)}">다음: ${escHtml(up.ymd.slice(5))} · ${escHtml(up.nextTask.taskName)}</div>`;
+                  }
+                  const hasDel = (s.tasks || []).some((t) => !isTaskCompleted(t) && isTaskDelayed(t));
+                  return `<div style="font-size:10.5px;color:${hasDel ? "#dc2626" : "#64748b"};font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${hasDel ? "⚠️ 지연 공정만 남음" : "예정 공정 없음"}</div>`;
+                })() : "")}
               </div>
             </div>`;
         }).join("");
@@ -3906,9 +3981,9 @@
               <div class="precheck-strip">
                 <div class="ps-chips">
                   <span style="color:#1e3a8a;">🛡️ 착공 필수 체크:</span>
-                  <span class="chip-item ${info.consentDone ? "" : "pending"}" onclick="togglePreChecklist('${escJs(selectedSite.siteName)}', 'consentDone')">${info.consentDone ? "✓" : "○"} 입주민 동의서</span>
-                  <span class="chip-item ${info.elevatorCoverDone ? "" : "pending"}" onclick="togglePreChecklist('${escJs(selectedSite.siteName)}', 'elevatorCoverDone')">${info.elevatorCoverDone ? "✓" : "○"} 승강기 보양</span>
-                  <span class="chip-item ${info.officeNoticeDone ? "" : "pending"}" onclick="togglePreChecklist('${escJs(selectedSite.siteName)}', 'officeNoticeDone')">${info.officeNoticeDone ? "✓" : "○"} 관리실 신고</span>
+                  <span class="chip-item readonly ${info.consentDone ? "" : "pending"}" style="cursor:default;" title="착공 필수 체크 (정보 수정 모달에서 변경 가능)">${info.consentDone ? "✓" : "○"} 입주민 동의서</span>
+                  <span class="chip-item readonly ${info.elevatorCoverDone ? "" : "pending"}" style="cursor:default;" title="착공 필수 체크 (정보 수정 모달에서 변경 가능)">${info.elevatorCoverDone ? "✓" : "○"} 승강기 보양</span>
+                  <span class="chip-item readonly ${info.officeNoticeDone ? "" : "pending"}" style="cursor:default;" title="착공 필수 체크 (정보 수정 모달에서 변경 가능)">${info.officeNoticeDone ? "✓" : "○"} 관리실 신고</span>
                 </div>
                 <div class="ps-tools">
                   ${info.driveUrl ? `<a class="btn-tool-tag" href="${escHtml(info.driveUrl)}" target="_blank" rel="noopener">📂 현장 자료</a>` : `<button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(selectedSite.siteName)}')">📂 드라이브 연결</button>`}
@@ -4018,6 +4093,7 @@
           if (existingInput.value !== state.searchQuery) {
             existingInput.value = state.searchQuery;
           }
+          autoScrollCarouselToActive("pcSiteCarouselTrack", ".site-carousel-card.active");
           return;
         }
 
@@ -4058,6 +4134,7 @@
             ${detailHtml}
           </div>
         `;
+        autoScrollCarouselToActive("pcSiteCarouselTrack", ".site-carousel-card.active");
       }
 
       // ================= [PC 탭 2: To-Do 리스트 (스마트 그룹핑 & 빠른 액션)] =================
@@ -4503,7 +4580,7 @@
           const eAmtStr = formatEstimateAmtStr(eData.expectedAmount);
           const sMgr = eData.manager || s.primaryManager || (s.tasks && s.tasks[0] ? s.tasks[0].manager : "") || "미지정";
           return `
-            <div class="site-carousel-card ${isSel ? "active" : ""}" style="gap:6px;" onclick="selectQuoteCard('${escJs(s.siteKey)}')">
+            <div class="site-carousel-card ${isSel ? "active" : ""}" data-site-key="${escHtml(s.siteKey)}" style="gap:6px;" onclick="selectQuoteCard('${escJs(s.siteKey)}')">
               <div class="scc-top">
                 <span class="scc-title"><span style="color:${escHtml(stStyle.fg)};">●</span> ${escHtml(s.siteName)}</span>
                 <span style="font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:10px;background:${stStyle.bg};color:${stStyle.fg};border:1px solid ${stStyle.border};white-space:nowrap;flex-shrink:0;">${escHtml(eSt)}</span>
@@ -4711,6 +4788,7 @@
           ${detailHtml}
         `;
         if (state.quoteTableSearch) window.onFilterQuoteTable(state.quoteTableSearch);
+        autoScrollCarouselToActive("pcQuoteCarouselTrack", ".site-carousel-card.active");
       }
 
       // ================= [PC 탭 6: 재무·원장] =================
@@ -5329,11 +5407,15 @@
           }
           if (state.siteSortBy === "name") return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
           if (state.siteSortBy === "date") {
-            const da = a.earliestDateMs || (getSiteDateMetrics(a).earliestMs);
-            const db = b.earliestDateMs || (getSiteDateMetrics(b).earliestMs);
-            if (da && db && da !== db) return da - db;
-            if (da && !db) return -1;
-            if (!da && db) return 1;
+            const ma = getSiteUpcomingDateMetrics(a);
+            const mb = getSiteUpcomingDateMetrics(b);
+            if (ma.hasUpcoming && mb.hasUpcoming) {
+              if (ma.ms !== mb.ms) return ma.ms - mb.ms;
+            } else if (ma.hasUpcoming && !mb.hasUpcoming) {
+              return -1;
+            } else if (!ma.hasUpcoming && mb.hasUpcoming) {
+              return 1;
+            }
             return String(a.siteName || "").localeCompare(String(b.siteName || ""), "ko");
           }
           return compareActiveSites(a, b);
@@ -5378,9 +5460,14 @@
           } else if (startDot || endDot) {
             periodText = `기간 : ${startDot || endDot}`;
           }
+          const upcomingMetrics = getSiteUpcomingDateMetrics(s);
+          const hasDelayedTasks = (s.tasks || []).some((t) => !isTaskCompleted(t) && isTaskDelayed(t));
           const subDateHtml = isDoneSite
             ? (periodText && !isExpanded ? `<div style="font-size:11px;color:#0f766e;font-weight:700;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(periodText)}</div>` : "")
-            : (!isExpanded && nextTask ? `<div style="font-size:11px;color:#0f766e;font-weight:700;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">다음: ${escHtml(parseYmdFromTask(nextTask))} · ${escHtml(nextTask.taskName)}</div>` : "");
+            : (!isExpanded ? (upcomingMetrics.hasUpcoming && upcomingMetrics.nextTask
+                ? `<div style="font-size:11px;color:#0f766e;font-weight:700;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">다음: ${escHtml(upcomingMetrics.ymd)} · ${escHtml(upcomingMetrics.nextTask.taskName)}</div>`
+                : `<div style="font-size:11px;color:${hasDelayedTasks ? "#dc2626" : "#64748b"};font-weight:700;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${hasDelayedTasks ? "⚠️ 예정 공정 없음 (지연만 남음)" : "예정 공정 없음"}</div>`
+              ) : "");
 
           let bodyHtml = "";
           if (isExpanded) {
@@ -5441,9 +5528,9 @@
 
                 <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
                   <span style="font-size:10.5px;font-weight:800;color:var(--text-muted);">착공필수:</span>
-                  <span class="chip-item ${info.consentDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;" onclick="togglePreChecklist('${escJs(s.siteName)}', 'consentDone')">${info.consentDone ? "✓" : "○"} 동의서</span>
-                  <span class="chip-item ${info.elevatorCoverDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;" onclick="togglePreChecklist('${escJs(s.siteName)}', 'elevatorCoverDone')">${info.elevatorCoverDone ? "✓" : "○"} 승강기보양</span>
-                  <span class="chip-item ${info.officeNoticeDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;" onclick="togglePreChecklist('${escJs(s.siteName)}', 'officeNoticeDone')">${info.officeNoticeDone ? "✓" : "○"} 관리실신고</span>
+                  <span class="chip-item readonly ${info.consentDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;cursor:default;" title="착공 필수 체크 (정보 수정 모달에서 변경 가능)">${info.consentDone ? "✓" : "○"} 동의서</span>
+                  <span class="chip-item readonly ${info.elevatorCoverDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;cursor:default;" title="착공 필수 체크 (정보 수정 모달에서 변경 가능)">${info.elevatorCoverDone ? "✓" : "○"} 승강기보양</span>
+                  <span class="chip-item readonly ${info.officeNoticeDone ? "" : "pending"}" style="padding:2px 7px;font-size:10.5px;cursor:default;" title="착공 필수 체크 (정보 수정 모달에서 변경 가능)">${info.officeNoticeDone ? "✓" : "○"} 관리실신고</span>
                 </div>
 
                 <!-- 모바일 현장 공정 요약 및 필터·검색 영역 -->
@@ -5796,6 +5883,11 @@
                       <div style="color:#78350f;font-weight:600;margin-top:2px;">${escHtml(eData.nextAction)}</div>
                     </div>` : ""}
                   ${eData.memo ? `<div style="background:#f8fafc;padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;color:#334155;"><strong>상담 메모:</strong> ${escHtml(eData.memo)}</div>` : ""}
+                  ${eData.failReason ? `
+                    <div style="background:#fef2f2;padding:6px 10px;border-radius:6px;border:1px solid #fecaca;color:#991b1b;">
+                      <div style="color:#b91c1c;font-size:10.5px;font-weight:800;">⚠️ 보류/실패 사유</div>
+                      <div style="font-weight:600;margin-top:2px;">${escHtml(eData.failReason)}</div>
+                    </div>` : ""}
                   <div style="display:flex;gap:6px;margin-top:4px;">
                     <button type="button" onclick="openEstimateModal('${escJs(s.siteKey)}')" style="flex:1;padding:7px;background:#3b82f6;color:#ffffff;border:none;border-radius:6px;font-weight:700;font-size:11.5px;cursor:pointer;">✏️ 정보 수정</button>
                     <button type="button" onclick="openSpreadsheetEstimateSheet()" style="flex:1;padding:7px;background:#2563eb;color:#ffffff;border:none;border-radius:6px;font-weight:700;font-size:11.5px;cursor:pointer;">📊 시트에서 보기</button>
@@ -7334,8 +7426,10 @@
             const s = state.dashData.sites[idx];
             state.dashData.sites.splice(idx, 1);
             if (state.selectedSiteKey === targetId) state.selectedSiteKey = null;
+            if (state.selectedQuoteKey === targetId) state.selectedQuoteKey = null;
             recalcDashMeta();
-            if (window.WSDataService) window.WSDataService.deleteSite({ site: s.siteName, scope: (s.isArchived ? "완료현장" : s.scope) }, state.dashData);
+            const targetScope = (s.scope === "newSite" || s.scope === "single" || s.scope === "as") ? s.scope : (s.isArchived ? "완료현장" : s.scope);
+            if (window.WSDataService) window.WSDataService.deleteSite({ site: s.siteName, scope: targetScope }, state.dashData);
           }
           showToast("🗑️ 현장이 삭제되었습니다.");
         } else if (type === "todo") {
@@ -8201,7 +8295,7 @@
         const ed = site && site.estimateData ? site.estimateData : {
           siteName: "", status: "1차상담 예정", inquiryDate: getTodayYmd(), priority: "보통", scope: "전체공사",
           memo: "", source: "온라인", consultDate: "", expectedDate: "", expectedAmount: "", estimateSendDate: "",
-          clientName: "", clientPhone: "", manager: state.user, contractAmount: "", nextAction: "", failReason: "", visitDate: "", address: "", row: ""
+          clientName: "", clientPhone: "", manager: state.user, contractAmount: "", nextAction: "", failReason: "", visitDate: "", address: "", estimateFile: "", row: ""
         };
         state._estCtx = { siteKey, isEdit: !!site, ed: Object.assign({}, ed) };
         const members = getMembersList();
@@ -8209,37 +8303,55 @@
         document.getElementById("estimateModalTitle").textContent = site ? `📋 [${ed.siteName}] 신규 견적 수정` : "📋 신규 현장 견적 등록";
         document.getElementById("estimateModalBody").innerHTML = `
           <div class="form-grid-3">
-            <div class="fg"><label>현장/고객명 *</label><input class="ws-input" id="esSite" value="${escHtml(ed.siteName)}"></div>
-            <div class="fg"><label>진행 상태</label><select class="ws-select" id="esStatus">${statuses.map((s) => `<option value="${escHtml(s)}" ${ed.status === s ? "selected" : ""}>${escHtml(s)}</option>`).join("")}</select></div>
+            <div class="fg"><label>현장/고객명 *</label><input class="ws-input" id="esSite" value="${escHtml(ed.siteName)}" placeholder="예: 신대방우성 12동 1110호"></div>
+            <div class="fg"><label>진행 단계</label><select class="ws-select" id="esStatus">${statuses.map((s) => `<option value="${escHtml(s)}" ${ed.status === s ? "selected" : ""}>${escHtml(s)}</option>`).join("")}</select></div>
             <div class="fg"><label>우선순위</label><select class="ws-select" id="esPrio">${["높음", "긴급", "보통", "낮음"].map((p) => `<option value="${p}" ${ed.priority === p ? "selected" : ""}>${p}</option>`).join("")}</select></div>
           </div>
           <div class="form-grid-3">
-            <div class="fg"><label>공사 범위</label><input class="ws-input" id="esScope" value="${escHtml(ed.scope || "전체공사")}"></div>
-            <div class="fg"><label>유입 경로</label><input class="ws-input" id="esSource" value="${escHtml(ed.source || "")}"></div>
+            <div class="fg"><label>공사 범위</label><input class="ws-input" id="esScope" value="${escHtml(ed.scope || "전체공사")}" placeholder="예: 전체공사, 주방, 욕실"></div>
+            <div class="fg"><label>유입 경로</label><input class="ws-input" id="esSource" value="${escHtml(ed.source || "")}" placeholder="예: 온라인, 소개, 블로그"></div>
             <div class="fg"><label>담당자</label><select class="ws-select" id="esMgr">${members.map((m) => `<option value="${escHtml(m)}" ${ed.manager === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}</select></div>
           </div>
           <div class="form-grid-3">
-            <div class="fg"><label>고객 성함</label><input class="ws-input" id="esCName" value="${escHtml(ed.clientName || "")}"></div>
-            <div class="fg"><label>고객 연락처</label><input class="ws-input" id="esCPhone" value="${escHtml(ed.clientPhone || "")}"></div>
-            <div class="fg"><label>예상 금액(원)</label><input type="number" class="ws-input" id="esExpAmt" value="${escHtml(ed.expectedAmount || "")}"></div>
+            <div class="fg"><label>고객 성함</label><input class="ws-input" id="esCName" value="${escHtml(ed.clientName || "")}" placeholder="고객명"></div>
+            <div class="fg"><label>고객 연락처</label><input class="ws-input" id="esCPhone" value="${escHtml(ed.clientPhone || "")}" placeholder="010-0000-0000"></div>
+            <div class="fg"><label>예상 공사금액(원)</label><input type="number" class="ws-input" id="esExpAmt" value="${escHtml(ed.expectedAmount || "")}" placeholder="예: 50000000"></div>
           </div>
           <div class="form-grid-3">
-            <div class="fg"><label>문의일</label><input type="date" class="ws-input" id="esInq" value="${escHtml(ed.inquiryDate || "")}"></div>
+            <div class="fg"><label>문의일 (접수)</label><input type="date" class="ws-input" id="esInq" value="${escHtml(ed.inquiryDate || "")}"></div>
             <div class="fg"><label>1차 상담일</label><input type="date" class="ws-input" id="esCons" value="${escHtml(ed.consultDate || "")}"></div>
-            <div class="fg"><label>방문 실측일</label><input type="date" class="ws-input" id="esVisit" value="${escHtml(ed.visitDate || "")}"></div>
+            <div class="fg"><label>현장 방문일 (실측)</label><input type="date" class="ws-input" id="esVisit" value="${escHtml(ed.visitDate || "")}"></div>
           </div>
           <div class="form-grid-3">
             <div class="fg"><label>견적 전달일</label><input type="date" class="ws-input" id="esSend" value="${escHtml(ed.estimateSendDate || "")}"></div>
-            <div class="fg"><label>착공 예정일</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
-            <div class="fg"><label>계약 금액(원)</label><input type="number" class="ws-input" id="esConAmt" value="${escHtml(ed.contractAmount || "")}"></div>
+            <div class="fg"><label>공사 예정일 (착공)</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
+            <div class="fg"><label>최종 계약금액(원)</label><input type="number" class="ws-input" id="esConAmt" value="${escHtml(ed.contractAmount || "")}" placeholder="예: 48000000"></div>
+          </div>
+          <div class="form-grid-3">
+            <div class="fg"><label>현장 주소</label><input class="ws-input" id="esAddr" value="${escHtml(ed.address || "")}" placeholder="도로명 및 동호수"></div>
+            <div class="fg"><label>다음 해야 할 일</label><input class="ws-input" id="esNext" value="${escHtml(ed.nextAction || "")}" placeholder="예: 1차 견적서 발송 후 해피콜"></div>
+            <div class="fg">
+              <label>⚠️ 보류·실패 사유</label>
+              <input class="ws-input" list="esFailReasonList" id="esFailReason" placeholder="선택 또는 직접 입력" value="${escHtml(ed.failReason || "")}">
+              <datalist id="esFailReasonList">
+                <option value="예산 차이">
+                <option value="일정 불일치">
+                <option value="연락 두절">
+                <option value="경쟁 업체 선택">
+                <option value="공사 취소">
+                <option value="고객 보류">
+                <option value="단순 문의">
+                <option value="기타">
+              </datalist>
+            </div>
           </div>
           <div class="form-grid-2">
-            <div class="fg"><label>현장 주소</label><input class="ws-input" id="esAddr" value="${escHtml(ed.address || "")}"></div>
-            <div class="fg"><label>다음 액션</label><input class="ws-input" id="esNext" value="${escHtml(ed.nextAction || "")}"></div>
+            <div class="fg"><label>견적서 파일(URL 또는 파일명)</label><input class="ws-input" id="esFile" value="${escHtml(ed.estimateFile || "")}" placeholder="Google Drive 링크 또는 파일명"></div>
+            <div class="fg"><label>상담 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="상담 메모, 고객 요구사항 등">${escHtml(ed.memo || "")}</textarea></div>
           </div>
-          <div class="fg"><label>상담 메모</label><textarea class="ws-textarea" id="esMemo">${escHtml(ed.memo || "")}</textarea></div>
         `;
         document.getElementById("estimateModalFooter").innerHTML = `
+          ${site ? `<button type="button" class="btn-act-danger" onclick="closeModal('estimateEditModal'); openDeleteConfirm('site', '${escJs(site.siteKey)}');" style="margin-right:auto;">🗑️ 견적 삭제</button>` : ""}
           <button type="button" class="btn-act-white" onclick="closeModal('estimateEditModal')">취소</button>
           <button type="button" class="btn-act-blue" onclick="saveEstimateModal()">💾 견적 저장</button>
         `;
@@ -8270,6 +8382,8 @@
           contractAmount: Number(document.getElementById("esConAmt").value) || "",
           address: document.getElementById("esAddr").value.trim(),
           nextAction: document.getElementById("esNext").value.trim(),
+          failReason: (document.getElementById("esFailReason") ? document.getElementById("esFailReason").value.trim() : ""),
+          estimateFile: (document.getElementById("esFile") ? document.getElementById("esFile").value.trim() : (ctx.ed.estimateFile || "")),
           memo: document.getElementById("esMemo").value.trim()
         };
         if (ctx.isEdit) {
@@ -9309,9 +9423,7 @@
         const site = getAllSites().find((s) => s.siteKey === siteKey);
         const isDone = Boolean(site && ((typeof isSiteCompleted === "function" && isSiteCompleted(site)) || site.isArchived || site.status === "계약 완료" || site.status === "완료" || site.status === "보관"));
         if (site && site.scope) state.scope = site.scope;
-        if (isDone) {
-          state.showArchivedSites = true;
-        }
+        state.showArchivedSites = isDone;
         if (site && site.scope === "newSite") {
           state.selectedQuoteKey = siteKey;
           if (isDone) {
@@ -9337,9 +9449,7 @@
         const site = getAllSites().find((s) => s.siteKey === siteKey);
         const isDone = Boolean(site && ((typeof isSiteCompleted === "function" && isSiteCompleted(site)) || site.isArchived || site.status === "계약 완료" || site.status === "완료" || site.status === "보관"));
         if (site && site.scope) state.scope = site.scope;
-        if (isDone) {
-          state.showArchivedSites = true;
-        }
+        state.showArchivedSites = isDone;
         if (site && site.scope === "newSite") {
           state.selectedQuoteKey = siteKey;
           if (isDone) {
