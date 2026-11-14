@@ -1648,7 +1648,21 @@
       animation: modalPop 0.16s ease-out;
     }
     .ws-modal-card.wide { max-width: 820px; }
-    #settingsModal .ws-modal-card.wide { max-width: min(1320px, 96vw); }
+    #settingsModal .ws-modal-card.wide {
+      max-width: min(1320px, 96vw);
+      height: min(760px, 86vh);
+    }
+    #settingsModal .ws-modal-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .m-cal-capture-area {
+      background: var(--bg, #f8fafc);
+      border-radius: 8px;
+    }
     .ws-modal-card.narrow { max-width: 420px; }
     @keyframes modalPop { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
@@ -5164,44 +5178,50 @@
 
         const mCalEl = document.getElementById("m-page-calendar");
         mCalEl.innerHTML = `
-          <div class="m-cal-top-card">
-            <!-- 1단: 좌측 날짜 탐색(◀ YYYY년 M월 ▶ 오늘) / 우측 뷰 전환(월간|주간) + 📸 캡쳐 -->
-            <div class="m-cal-row-primary">
-              <div style="display:flex;align-items:center;gap:3px;min-width:0;flex-shrink:1;">
-                <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(-1)" title="이전 달">◀</button>
-                <span id="mCalMonthTitle" style="font-size:13.5px;font-weight:900;color:var(--text);letter-spacing:-0.2px;white-space:nowrap;padding:0 2px;">${year}년 ${month}월</span>
-                <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(1)" title="다음 달">▶</button>
-                <button type="button" class="m-cal-nav-btn m-cal-today-btn" onclick="resetCalendarToday()" title="오늘로 이동">오늘</button>
-              </div>
-              <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
-                <div class="m-cal-view-switch">
-                  <button type="button" class="m-cal-view-btn ${state.mobileCalMode === "month" ? "active" : ""}" onclick="setMobileCalMode('month')">월간</button>
-                  <button type="button" class="m-cal-view-btn ${state.mobileCalMode === "week" ? "active" : ""}" onclick="setMobileCalMode('week')">주간</button>
+          <!-- 캘린더 전용 캡쳐 영역 (월간/주간 헤더 + 달력 그리드만 포함) -->
+          <div id="mCalCaptureArea" class="m-cal-capture-area">
+            <div class="m-cal-top-card">
+              <!-- 1단: 좌측 날짜 탐색(◀ YYYY년 M월 ▶ 오늘) / 우측 뷰 전환(월간|주간) + 📸 캡쳐 -->
+              <div class="m-cal-row-primary">
+                <div style="display:flex;align-items:center;gap:3px;min-width:0;flex-shrink:1;">
+                  <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(-1)" title="이전 달">◀</button>
+                  <span id="mCalMonthTitle" style="font-size:13.5px;font-weight:900;color:var(--text);letter-spacing:-0.2px;white-space:nowrap;padding:0 2px;">${year}년 ${month}월</span>
+                  <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(1)" title="다음 달">▶</button>
+                  <button type="button" class="m-cal-nav-btn m-cal-today-btn" onclick="resetCalendarToday()" title="오늘로 이동">오늘</button>
                 </div>
-                <button type="button" class="btn-m-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐">📸 캡쳐</button>
+                <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                  <div class="m-cal-view-switch">
+                    <button type="button" class="m-cal-view-btn ${state.mobileCalMode === "month" ? "active" : ""}" onclick="setMobileCalMode('month')">월간</button>
+                    <button type="button" class="m-cal-view-btn ${state.mobileCalMode === "week" ? "active" : ""}" onclick="setMobileCalMode('week')">주간</button>
+                  </div>
+                  <button type="button" class="btn-m-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐">📸 캡쳐</button>
+                </div>
               </div>
-            </div>
 
-            <!-- 2단: 좌측 [현장] 스코프 칩 + [전체 현장 ▾] 드롭다운 / 우측 단 1회 요약 뱃지(169건) -->
-            <div class="m-cal-row-secondary">
-              <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;">
-                ${filterChips.join("")}
-                <button type="button" id="btnMobileSiteFilter" class="m-site-filter-btn ${hasSubsetSites ? 'active' : ''}" onclick="openMobileSiteFilterModal()" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;">
-                  ${siteFilterButtonLabel}
-                </button>
-                ${hasSubsetSites ? `<button type="button" class="m-site-filter-clear-btn" onclick="resetAndApplyAllSitesFilter()" title="전체 현장 보기로 초기화">✕</button>` : ""}
+              <!-- 2단: 좌측 [현장] 스코프 칩 + [전체 현장 ▾] 드롭다운 / 우측 단 1회 요약 뱃지(169건) -->
+              <div class="m-cal-row-secondary">
+                <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;">
+                  ${filterChips.join("")}
+                  <button type="button" id="btnMobileSiteFilter" class="m-site-filter-btn ${hasSubsetSites ? 'active' : ''}" onclick="openMobileSiteFilterModal()" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;">
+                    ${siteFilterButtonLabel}
+                  </button>
+                  ${hasSubsetSites ? `<button type="button" class="m-site-filter-clear-btn" onclick="resetAndApplyAllSitesFilter()" title="전체 현장 보기로 초기화">✕</button>` : ""}
+                </div>
+                <span class="m-cal-count-badge">
+                  ${events.length}건
+                </span>
               </div>
-              <span class="m-cal-count-badge">
-                ${events.length}건
-              </span>
             </div>
+            ${calContentHtml}
           </div>
-          ${calContentHtml}
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <span style="font-size:12.5px;font-weight:800;color:var(--text);">📅 ${escHtml(state.selectedDayStr)} 공정 (${selEvents.length}건)</span>
-            <button type="button" class="btn-tool-tag" onclick="openNewTaskModal('', '${escJs(state.selectedDayStr)}')">+ 이 날 일정 추가</button>
+          <!-- 아래쪽 선택 날짜 공정 카드 목록 영역 (캡쳐 대상에서 제외) -->
+          <div id="mCalSelectedDayArea" class="m-cal-selected-day-area">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-size:12.5px;font-weight:800;color:var(--text);">📅 ${escHtml(state.selectedDayStr)} 공정 (${selEvents.length}건)</span>
+              <button type="button" class="btn-tool-tag" onclick="openNewTaskModal('', '${escJs(state.selectedDayStr)}')">+ 이 날 일정 추가</button>
+            </div>
+            ${selCardsHtml}
           </div>
-          ${selCardsHtml}
         `;
         state._lastCalSlideDir = "";
         setupCalendarSwipe(mCalEl);
@@ -8749,7 +8769,7 @@
               ` : ""}
             </div>
 
-            <div class="table-container" style="max-height:380px;overflow-y:auto;overflow-x:auto;">
+            <div class="table-container" style="flex:1;min-height:0;overflow-y:auto;overflow-x:auto;">
               <table class="clean-table" style="min-width:1380px;width:100%;border-collapse:separate;border-spacing:0;">
                 <thead>
                   <tr style="position:sticky;top:0;background:#ffffff;z-index:2;box-shadow:0 1px 2px rgba(0,0,0,0.05);">
@@ -8790,7 +8810,7 @@
               </div>
               <button type="button" class="btn-act-blue" style="height:32px;padding:0 14px;" onclick="addSettingItem('tasks')">+ 공종 추가</button>
             </div>
-            <div class="table-container" style="max-height:360px;overflow-y:auto;">
+            <div class="table-container" style="flex:1;min-height:0;overflow-y:auto;">
               <table class="clean-table">
                 <thead><tr><th style="width:50px;text-align:center;">순서</th><th>공종명</th><th style="width:120px;">구분</th><th>비고 / 설명</th><th style="width:110px;text-align:center;">순서/삭제</th></tr></thead>
                 <tbody>
@@ -8826,7 +8846,7 @@
                 <input class="ws-input" id="stMNote" placeholder="비고 / 메모" style="flex:1;">
               </div>
             </div>
-            <div class="table-container" style="max-height:360px;overflow-y:auto;">
+            <div class="table-container" style="flex:1;min-height:0;overflow-y:auto;">
               <table class="clean-table">
                 <thead><tr><th>이름</th><th>직급</th><th>연락처</th><th style="width:90px;text-align:center;">알림 수신</th><th>비고</th><th style="width:110px;text-align:center;">순서/삭제</th></tr></thead>
                 <tbody>
@@ -8853,7 +8873,7 @@
             </div>`;
         } else {
           contentHtml = `
-            <div style="display:flex;flex-direction:column;gap:12px;padding:8px 0;">
+            <div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:8px 0;">
               <div style="background:#f8fafc;padding:14px;border-radius:10px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
                 <div>
                   <div style="font-weight:800;font-size:13.5px;color:#0f172a;">📅 시트 날짜순 전체 정렬</div>
@@ -9057,6 +9077,33 @@
         renderActiveViews();
       };
 
+      function resetMobileScrollTop() {
+        try {
+          if (typeof window.scrollTo === "function") {
+            window.scrollTo(0, 0);
+          }
+          if (document.documentElement) document.documentElement.scrollTop = 0;
+          if (document.body) document.body.scrollTop = 0;
+          const scrollSelectors = [
+            "#mobileScreenInner",
+            ".mobile-screen-inner",
+            ".m-app-body",
+            ".m-body",
+            ".mobile-body",
+            "#mobilePhoneFrame",
+            ".device-viewport-wrapper",
+            ".m-page-pane",
+            ".m-page-pane.active"
+          ];
+          scrollSelectors.forEach((sel) => {
+            document.querySelectorAll(sel).forEach((el) => {
+              if (el && el.scrollTop > 0) el.scrollTop = 0;
+            });
+          });
+        } catch (_) {}
+      }
+      window.resetMobileScrollTop = resetMobileScrollTop;
+
       window.switchMobileTab = function (tabKey) {
         state.mobileTab = tabKey;
         state.mobileExpandedSiteKeys.clear();
@@ -9093,7 +9140,14 @@
         if (searchWrap) searchWrap.style.display = showSearchFilter ? "" : "none";
         if (filterBar) filterBar.style.display = showSearchFilter ? "" : "none";
 
+        resetMobileScrollTop();
         renderActiveViews();
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(() => {
+            resetMobileScrollTop();
+            requestAnimationFrame(resetMobileScrollTop);
+          });
+        }
       };
 
       window.onCategoryClicked = function (scope) {
@@ -9554,8 +9608,8 @@
             }
           } else {
             if (state.mobileTab === "calendar") {
-              // 모바일 캘린더: 상단 헤더와 하단 탭바 제외, 모바일 캘린더 영역만 캡쳐
-              targetEl = document.getElementById("m-page-calendar");
+              // 모바일 캘린더: 하단 선택 날짜 공정 상세 목록을 제외하고 순수 달력 영역(헤더 + 그리드/주간)만 캡쳐
+              targetEl = document.getElementById("mCalCaptureArea") || document.getElementById("m-page-calendar");
             } else if (state.mobileTab === "sites") {
               targetEl = document.getElementById("m-page-sites");
             } else if (state.mobileTab === "todo") {
@@ -9574,12 +9628,13 @@
 
           let canvas = null;
           if (typeof html2canvas === "function") {
+            const isMobile = state.device !== "pc";
             canvas = await html2canvas(targetEl, {
               useCORS: true,
               scale: Math.min(2, window.devicePixelRatio || 1.5),
               logging: false,
-              backgroundColor: "#ffffff",
-              ignoreElements: (el) => el.id === "toastBanner" || (el.classList && el.classList.contains("toast-banner")) || el.id === "captureModal"
+              backgroundColor: isMobile ? "#f8fafc" : "#ffffff",
+              ignoreElements: (el) => el.id === "toastBanner" || (el.classList && el.classList.contains("toast-banner")) || el.id === "captureModal" || el.id === "mCalSelectedDayArea" || (el.classList && el.classList.contains("m-cal-selected-day-area"))
             });
           } else {
             // fallback canvas (offline/mock)
