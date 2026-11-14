@@ -1100,10 +1100,10 @@ const moveResNew112 = sandbox.moveAsTaskToCompletedSheet(
   '신규 AS 현장 101호',
   '샤시 AS'
 );
-assertTest('Step 112-5: 완료현장에 없는 신규 AS 현장 완료 시 맨 아래에 현장명 포함 setValues 실행 검증',
+assertTest('Step 112-5: 완료현장에 없는 신규 AS 현장 완료 시 맨 아래에 [AS] 접두사 포함 setValues 실행 검증',
   moveResNew112.success === true &&
   insertedValsNew112 !== null &&
-  insertedValsNew112[0][0] === '신규 AS 현장 101호'
+  insertedValsNew112[0][0] === '[AS] 신규 AS 현장 101호'
 );
 
 // 112-6: PC UI 300px 사이드바 너비 및 담당자와 진행현장 사이 3개 탭(.pc-scope-tabs-container) 마크업 검증
@@ -2149,7 +2149,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
 
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
-  assertTest('index.html 내 exec?v=248 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=248'));
+  assertTest('index.html 내 exec?v=249 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=249'));
   assertTest('v2.html 내 담당자1 단일 추출 및 공사진행률 현장명 인라인 뱃지 표시 검증',
     v2RootHtml.includes('extractFirstManager') &&
     v2RootHtml.includes('extractFirstManager(r.manager')
@@ -2265,6 +2265,18 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     v2RootHtml.includes('window.submitAccessLogin = function') &&
     v2RootHtml.includes('switchMainTab("home", { keepDevice: true })') &&
     v2RootHtml.includes('switchMobileTab("home", { skipHistory: true })')
+  );
+  assertTest('v2.html 내 PC & 모바일 홈 브리핑 단건·AS 포함 및 뱃지 연동 검증',
+    v2RootHtml.includes('function getHomeScopeBadgeHtml(scope)') &&
+    v2RootHtml.includes('const activeConstructionSites = getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));') &&
+    v2RootHtml.includes('const activeScopeSites = getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));') &&
+    v2RootHtml.includes('getHomeScopeBadgeHtml(effScope)')
+  );
+  assertTest('현장서식.js 내 완료현장 이관 엔진(단건 [단건] 접두사 및 AS 동일현장 편입/단독 [AS] 접두사) 검증',
+    code.includes('finalDestSiteName =') &&
+    code.includes('[단건] " + cleanBaseSite') &&
+    code.includes('finalDestSiteName = matchingBlockSiteName;') &&
+    code.includes('bestAsMatch')
   );
 }
 console.log('\n========================================================');

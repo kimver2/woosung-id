@@ -4182,32 +4182,100 @@ function moveAsTaskToCompletedSheet(ss, asSheet, asRow, siteName, taskName) {
     var actualDate = pCols.date;
     var actualPartner = pCols.partner;
     var actualShared = pCols.isShared;
-    var actualMemo = pCols.memo;
+    var actualMemo = pCols.memo || "";
     var actualStatus = "완료";
     var actualCalId = pCols.calId;
     var nowMs = Date.now();
+
+    var cleanBaseSite = String(actualSite)
+      .replace(/^\[(단건|AS|as|신규|현장)\]\s*/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    var normBaseSite = cleanBaseSite.replace(/\s+/g, "").toLowerCase();
+
+    // 2. 완료현장 시트에서 동일 현장명 블록 탐색
+    var compLastRow = compSheet.getLastRow();
+    var matchingSiteLastRow = -1;
+    var matchingBlockSiteName = "";
+
+    if (compLastRow >= 2) {
+      var compCols = Math.max((typeof compSheet.getLastColumn === "function" ? compSheet.getLastColumn() : 11), 3);
+      var compRangeVals = compSheet.getRange(2, 1, compLastRow - 1, Math.min(compCols, 3)).getValues();
+      var compBlocks = [];
+      var curBlkSite = "";
+      var curBlkStart = -1;
+      var curBlkEnd = -1;
+
+      for (var ci = 0; ci < compRangeVals.length; ci++) {
+        var rowNumCi = ci + 2;
+        var rRawS = String(compRangeVals[ci][0] || "").trim();
+        var hasDataCi = Boolean(String(compRangeVals[ci][1] || "").trim() || String(compRangeVals[ci][2] || "").trim());
+
+        if (!rRawS && !hasDataCi) {
+          if (curBlkSite && curBlkStart !== -1) {
+            compBlocks.push({ site: curBlkSite, startRow: curBlkStart, endRow: curBlkEnd });
+          }
+          curBlkSite = "";
+          curBlkStart = -1;
+          curBlkEnd = -1;
+          continue;
+        }
+
+        var effBlkSite = rRawS || curBlkSite;
+        if (rRawS && rRawS !== curBlkSite) {
+          if (curBlkSite && curBlkStart !== -1) {
+            compBlocks.push({ site: curBlkSite, startRow: curBlkStart, endRow: curBlkEnd });
+          }
+          curBlkSite = rRawS;
+          curBlkStart = rowNumCi;
+          curBlkEnd = rowNumCi;
+        } else if (effBlkSite) {
+          if (curBlkStart === -1) {
+            curBlkStart = rowNumCi;
+            curBlkSite = effBlkSite;
+          }
+          curBlkEnd = rowNumCi;
+        }
+      }
+      if (curBlkSite && curBlkStart !== -1) {
+        compBlocks.push({ site: curBlkSite, startRow: curBlkStart, endRow: curBlkEnd });
+      }
+
+      var bestAsMatch = null;
+      for (var bi = 0; bi < compBlocks.length; bi++) {
+        var blk = compBlocks[bi];
+        var blkClean = String(blk.site).replace(/^\[(단건|AS|as|신규|현장)\]\s*/i, "").replace(/\s+/g, " ").trim();
+        var blkNorm = blkClean.replace(/\s+/g, "").toLowerCase();
+
+        if (blkNorm === normBaseSite) {
+          var isPrefixed = /^\[(단건|AS|as)\]/i.test(blk.site);
+          if (!isPrefixed) {
+            bestAsMatch = blk;
+            break;
+          } else if (!bestAsMatch) {
+            bestAsMatch = blk;
+          }
+        }
+      }
+      if (bestAsMatch) {
+        matchingSiteLastRow = bestAsMatch.endRow;
+        matchingBlockSiteName = bestAsMatch.site;
+      }
+    }
+
+    var finalSiteName = "";
+    if (matchingSiteLastRow >= 2 && matchingBlockSiteName) {
+      finalSiteName = matchingBlockSiteName;
+    } else {
+      finalSiteName = /^\[AS\]\s*/i.test(actualSite) ? actualSite : ("[AS] " + cleanBaseSite);
+    }
+    actualSite = finalSiteName;
+    if (actualMemo.indexOf("[AS]") === -1) actualMemo = actualMemo.trim() ? ("[AS] " + actualMemo.trim()) : "[AS]";
 
     var isComp11 = (typeof compSheet.getLastColumn === "function" && compSheet.getLastColumn() >= 11);
     var newRowVals = isComp11
       ? [actualSite, actualDate, actualTask, actualPartner, actualShared, actualMemo, pCols.manager1, pCols.manager2, actualStatus, actualCalId, nowMs]
       : [actualSite, actualDate, actualTask, actualPartner, actualShared, actualMemo, pCols.manager, actualStatus, actualCalId, nowMs];
-
-    // 2. 완료현장 시트에서 동일 현장명 탐색
-    var compLastRow = compSheet.getLastRow();
-    var matchingSiteLastRow = -1;
-
-    if (compLastRow >= 2) {
-      var compSites = compSheet.getRange(2, 1, compLastRow - 1, 1).getValues();
-      var lastKnownCompSite = "";
-      for (var ci = 0; ci < compSites.length; ci++) {
-        var rawCompSite = String(compSites[ci][0] || "").trim();
-        if (rawCompSite) lastKnownCompSite = rawCompSite;
-        var effCompSite = rawCompSite || lastKnownCompSite;
-        if (effCompSite === actualSite) {
-          matchingSiteLastRow = ci + 2;
-        }
-      }
-    }
 
     var insertedRow = -1;
     if (matchingSiteLastRow >= 2) {
@@ -4336,21 +4404,135 @@ function moveCompletedCategorySiteToCompletedSheet(ss, srcSheet, siteName) {
     }
 
     // 3. 모든 공정이 완료됨! -> '완료현장' 시트로 이동 준비
+    var srcSheetName = (srcSheet && typeof srcSheet.getName === "function") ? srcSheet.getName() : "";
+    var isSingle = (srcSheetName === "단건" || (typeof isSingleTaskSheet === "function" && isSingleTaskSheet(srcSheet)));
+    var isAs = (srcSheetName === "AS" || (typeof isAsSheet === "function" && isAsSheet(srcSheet)));
+    if (!isSingle && !isAs) {
+      if (/^\[단건\]/i.test(siteName)) isSingle = true;
+      else if (/^\[AS\]/i.test(siteName)) isAs = true;
+    }
+
+    var cleanBaseSite = String(siteName)
+      .replace(/^\[(단건|AS|as|신규|현장)\]\s*/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    var normBaseSite = cleanBaseSite.replace(/\s+/g, "").toLowerCase();
+
     var compLastRow = compSheet.getLastRow();
     var matchingSiteLastRow = -1;
+    var matchingBlockSiteName = "";
 
-    // 완료현장 시트에서 동일 현장명의 마지막 행 위치 탐색
+    // 완료현장 시트에서 동일 현장명 블록 탐색
     if (compLastRow >= 2) {
-      var compSites = compSheet.getRange(2, 1, compLastRow - 1, 1).getValues();
-      var lastKnownCompSite = "";
-      for (var ci = 0; ci < compSites.length; ci++) {
-        var rawCompSite = String(compSites[ci][0] || "").trim();
-        if (rawCompSite) lastKnownCompSite = rawCompSite;
-        var effCompSite = rawCompSite || lastKnownCompSite;
-        if (effCompSite === siteName) {
-          matchingSiteLastRow = ci + 2;
+      var compCols = Math.max((typeof compSheet.getLastColumn === "function" ? compSheet.getLastColumn() : 11), 3);
+      var compRangeVals = compSheet.getRange(2, 1, compLastRow - 1, Math.min(compCols, 3)).getValues();
+      var compBlocks = [];
+      var curBlkSite = "";
+      var curBlkStart = -1;
+      var curBlkEnd = -1;
+
+      for (var ci = 0; ci < compRangeVals.length; ci++) {
+        var rowNumCi = ci + 2;
+        var rRawS = String(compRangeVals[ci][0] || "").trim();
+        var hasDataCi = Boolean(String(compRangeVals[ci][1] || "").trim() || String(compRangeVals[ci][2] || "").trim());
+
+        if (!rRawS && !hasDataCi) {
+          if (curBlkSite && curBlkStart !== -1) {
+            compBlocks.push({ site: curBlkSite, startRow: curBlkStart, endRow: curBlkEnd });
+          }
+          curBlkSite = "";
+          curBlkStart = -1;
+          curBlkEnd = -1;
+          continue;
+        }
+
+        var effBlkSite = rRawS || curBlkSite;
+        if (rRawS && rRawS !== curBlkSite) {
+          if (curBlkSite && curBlkStart !== -1) {
+            compBlocks.push({ site: curBlkSite, startRow: curBlkStart, endRow: curBlkEnd });
+          }
+          curBlkSite = rRawS;
+          curBlkStart = rowNumCi;
+          curBlkEnd = rowNumCi;
+        } else if (effBlkSite) {
+          if (curBlkStart === -1) {
+            curBlkStart = rowNumCi;
+            curBlkSite = effBlkSite;
+          }
+          curBlkEnd = rowNumCi;
         }
       }
+      if (curBlkSite && curBlkStart !== -1) {
+        compBlocks.push({ site: curBlkSite, startRow: curBlkStart, endRow: curBlkEnd });
+      }
+
+      if (isAs) {
+        // AS 이관 시:
+        // 1순위: [단건], [AS]가 붙지 않은 원본 현장명 블록 (예: '보라매경남 102동 502호')
+        // 2순위: 동일한 정규화 현장명 블록 (예: '[AS] 보라매경남 102동 502호')
+        var bestAsMatch = null;
+        for (var bi = 0; bi < compBlocks.length; bi++) {
+          var blk = compBlocks[bi];
+          var blkClean = String(blk.site).replace(/^\[(단건|AS|as|신규|현장)\]\s*/i, "").replace(/\s+/g, " ").trim();
+          var blkNorm = blkClean.replace(/\s+/g, "").toLowerCase();
+
+          if (blkNorm === normBaseSite) {
+            var isPrefixed = /^\[(단건|AS|as)\]/i.test(blk.site);
+            if (!isPrefixed) {
+              bestAsMatch = blk;
+              break;
+            } else if (!bestAsMatch) {
+              bestAsMatch = blk;
+            }
+          }
+        }
+        if (bestAsMatch) {
+          matchingSiteLastRow = bestAsMatch.endRow;
+          matchingBlockSiteName = bestAsMatch.site;
+        }
+      } else if (isSingle) {
+        // 단건 이관 시: 이미 '[단건] 현장명' 블록이 존재하는 경우 매칭
+        var singleTargetName = /^\[단건\]\s*/.test(siteName) ? siteName : ("[단건] " + cleanBaseSite);
+        var singleNormTarget = singleTargetName.replace(/\s+/g, "").toLowerCase();
+        for (var sbi = 0; sbi < compBlocks.length; sbi++) {
+          var sBlk = compBlocks[sbi];
+          var sBlkNorm = String(sBlk.site).replace(/\s+/g, "").toLowerCase();
+          if (sBlkNorm === singleNormTarget) {
+            matchingSiteLastRow = sBlk.endRow;
+            matchingBlockSiteName = sBlk.site;
+            break;
+          }
+        }
+      } else {
+        for (var obi = 0; obi < compBlocks.length; obi++) {
+          var oBlk = compBlocks[obi];
+          if (oBlk.site === siteName || oBlk.site.replace(/\s+/g, "").toLowerCase() === normBaseSite) {
+            matchingSiteLastRow = oBlk.endRow;
+            matchingBlockSiteName = oBlk.site;
+            break;
+          }
+        }
+      }
+    }
+
+    var finalDestSiteName = "";
+    if (isSingle) {
+      // 1. 단건 시트 -> 완료현장 시트 이관 시:
+      // 현장명(A열) 앞에 [단건] 을 붙여서 저장 (이미 [단건]으로 시작하면 중복 붙이지 않음)
+      finalDestSiteName = /^\[단건\]\s*/.test(siteName) ? siteName : ("[단건] " + cleanBaseSite);
+    } else if (isAs) {
+      // 2. AS 시트 -> 완료현장 시트 이관 시:
+      // 완료현장 시트에 이미 동일한 현장명이 존재하면:
+      // [AS] 접두사를 붙이지 말고, 그 기존 현장 블록 안으로 해당 AS 공정 행을 편입(삽입)
+      // 완료현장 시트에 동일한 현장명이 없으면:
+      // 현장명 앞에 [AS] 를 붙여서 저장 (이미 [AS]로 시작하면 중복 붙이지 않음)
+      if (matchingSiteLastRow >= 2 && matchingBlockSiteName) {
+        finalDestSiteName = matchingBlockSiteName;
+      } else {
+        finalDestSiteName = /^\[AS\]\s*/i.test(siteName) ? siteName : ("[AS] " + cleanBaseSite);
+      }
+    } else {
+      finalDestSiteName = matchingBlockSiteName || siteName;
     }
 
     var isComp11 = (typeof compSheet.getLastColumn === "function" && compSheet.getLastColumn() >= 11);
@@ -4360,17 +4542,16 @@ function moveCompletedCategorySiteToCompletedSheet(ss, srcSheet, siteName) {
     for (var m = 0; m < targetSiteRows.length; m++) {
       var mVals = targetSiteRows[m].vals;
       var pCols = parseScheduleRowCols(mVals);
-      var rSite = siteName;
+      var rSite = finalDestSiteName;
       var rDate = pCols.date;
       var rTask = pCols.task;
       var rPartner = pCols.partner;
       var rShared = pCols.isShared;
       var rMemo = pCols.memo || "";
-      var srcSheetName = (srcSheet && typeof srcSheet.getName === "function") ? srcSheet.getName() : "";
-      if (srcSheetName === "단건" || isSingleTaskSheet(srcSheet)) {
-        if (rMemo.indexOf("[단건]") === -1) rMemo = "[단건] " + rMemo;
-      } else if (srcSheetName === "AS" || isAsSheet(srcSheet)) {
-        if (rMemo.indexOf("[AS]") === -1) rMemo = "[AS] " + rMemo;
+      if (isSingle) {
+        if (rMemo.indexOf("[단건]") === -1) rMemo = rMemo.trim() ? ("[단건] " + rMemo.trim()) : "[단건]";
+      } else if (isAs) {
+        if (rMemo.indexOf("[AS]") === -1) rMemo = rMemo.trim() ? ("[AS] " + rMemo.trim()) : "[AS]";
       }
       var rStatus = "완료";
       var rCalId = pCols.calId;
@@ -4440,10 +4621,10 @@ function moveCompletedCategorySiteToCompletedSheet(ss, srcSheet, siteName) {
       return {
         success: true,
         moved: true,
-        targetSite: siteName,
+        targetSite: finalDestSiteName,
         movedRowsCount: rowsToInsert.length,
         matchedExistingGroup: (matchingSiteLastRow >= 2),
-        message: "[" + siteName + "] 현장의 " + rowsToInsert.length + "개 공정이 완료현장 시트" + (matchingSiteLastRow >= 2 ? "의 기존 현장 그룹" : "") + "으로 정상 이동되었습니다."
+        message: "[" + finalDestSiteName + "] 현장의 " + rowsToInsert.length + "개 공정이 완료현장 시트" + (matchingSiteLastRow >= 2 ? "의 기존 현장 그룹" : "") + "으로 정상 이동되었습니다."
       };
     } finally {
       props.deleteProperty("IS_ARCHIVING_ACTIVE");

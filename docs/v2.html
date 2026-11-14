@@ -3482,6 +3482,16 @@
         return "";
       }
 
+      function getHomeScopeBadgeHtml(scope) {
+        if (scope === "single") {
+          return `<span style="display:inline-flex;align-items:center;font-size:10px;font-weight:800;color:#0284c7;background:#e0f2fe;border:1px solid #bae6fd;padding:1px 5px;border-radius:4px;vertical-align:middle;margin-right:4px;line-height:1.2;flex-shrink:0;">[단건]</span>`;
+        }
+        if (scope === "as") {
+          return `<span style="display:inline-flex;align-items:center;font-size:10px;font-weight:800;color:#d97706;background:#fef3c7;border:1px solid #fde68a;padding:1px 5px;border-radius:4px;vertical-align:middle;margin-right:4px;line-height:1.2;flex-shrink:0;">[AS]</span>`;
+        }
+        return "";
+      }
+
       function renderHomeTaskFilterGroupHtml(tasksList, todayYmd) {
         const counts = { all: tasksList.length, progress: 0, delayed: 0, planned: 0 };
         tasksList.forEach(({ task, ymd }) => {
@@ -3583,7 +3593,7 @@
             return `
             <div class="home-memo-item" style="font-size:12px;line-height:1.45;color:var(--text-sub);background:#f8fafc;padding:10px 11px;border-radius:8px;border:1px solid var(--border);border-left:3px solid #3b82f6;cursor:pointer;" onclick="openTaskEditModal('${escJs(x.task.id || x.taskId)}')">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
-                <strong style="color:#1e3a8a;">[${escHtml(x.site.siteName)}]</strong>
+                <strong style="color:#1e3a8a;display:inline-flex;align-items:center;">${getHomeScopeBadgeHtml(x.site ? x.site.scope : "")}[${escHtml(String((x.site && x.site.siteName) || "").replace(/^\[(단건|AS)\]\s*/i, ""))}]</strong>
                 ${memoYmd ? `<span style="font-size:10.5px;font-weight:700;color:var(--text-muted);">${escHtml(memoYmd)}</span>` : ""}
               </div>
               <div>${escHtml(x.task.memo)}</div>
@@ -3618,7 +3628,7 @@
         const todayDow = dowNames[new Date(todayYmd + "T00:00:00").getDay()] || "";
         const q = state.searchQuery.trim();
 
-        const activeConstructionSites = getAllSites().filter((s) => (s.scope || "site") === "site" && !isSiteCompleted(s));
+        const activeConstructionSites = getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
         const userActiveSites = activeConstructionSites.filter((s) => (s.tasks || []).some((t) => !isTaskCompleted(t) && taskMatchesMember(t, user)));
         let mySites = userActiveSites.length ? userActiveSites : activeConstructionSites;
         if (q) {
@@ -3699,6 +3709,8 @@
           const stBg = isDel ? "#fee2e2" : isToday ? "#dcfce7" : "#dbeafe";
           const stFg = isDel ? "#dc2626" : isToday ? "#15803d" : "#1e40af";
           const stLabel = isDel ? "⚠️ 지연" : isToday ? "🔥 오늘 진행" : escHtml(task.status || "예정");
+          const effScope = site.scope || (/^\[단건\]/i.test(site.siteName) ? "single" : /^\[AS\]/i.test(site.siteName) ? "as" : "site");
+          const cleanSiteName = String(site.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "");
           return `
             <div class="task-timeline-item ${cls}" onclick="openTaskEditModal('${escJs(task.id || task.taskId)}')">
               <div class="hti-top">
@@ -3710,7 +3722,7 @@
               </div>
               <div class="hti-mid">
                 <span style="width:8px;height:8px;border-radius:50%;background:${escHtml(site.colorHex || "#2563eb")};flex-shrink:0;"></span>
-                <strong style="font-size:13.5px;color:#0f172a;">${escHtml(site.siteName)}</strong>
+                <strong style="font-size:13.5px;color:#0f172a;display:inline-flex;align-items:center;">${getHomeScopeBadgeHtml(effScope)}${escHtml(cleanSiteName)}</strong>
                 <span style="font-size:11px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:2px 7px;border-radius:6px;font-weight:800;">${escHtml(task.taskName)}</span>
               </div>
               <div class="hti-foot">
@@ -3727,11 +3739,13 @@
           const mgrText = getUniqueSiteManagers(s.tasks).slice(0, 2).join(", ") || "미지정";
           const remainingCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t)).length;
           const delayCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t) && (t.isDelayed || (parseYmdFromTask(t) && parseYmdFromTask(t) < todayYmd))).length;
+          const effScope = s.scope || (/^\[단건\]/i.test(s.siteName) ? "single" : /^\[AS\]/i.test(s.siteName) ? "as" : "site");
+          const cleanSiteName = String(s.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "");
           return `
             <div class="home-site-mini-card" onclick="openSiteDetail('${escJs(s.siteKey)}')">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-                <span style="font-size:12.5px;font-weight:800;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                  <span style="color:${escHtml(s.colorHex || "#2563eb")};">●</span> ${escHtml(s.siteName)}
+                <span style="font-size:12.5px;font-weight:800;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;">
+                  <span style="color:${escHtml(s.colorHex || "#2563eb")};margin-right:4px;">●</span>${getHomeScopeBadgeHtml(effScope)}${escHtml(cleanSiteName)}
                 </span>
                 <span style="font-size:12px;font-weight:800;color:${barCol};flex-shrink:0;">${pct}%</span>
               </div>
@@ -7946,10 +7960,9 @@
         const dowNames = ["일", "월", "화", "수", "목", "금", "토"];
         const todayDow = dowNames[new Date(todayYmd + "T00:00:00").getDay()] || "";
         const q = state.searchQuery.trim();
-        const targetScope = state.scope === "newSite" ? "site" : (state.scope || "site");
         const filterMember = state.memberFilter || user;
 
-        const activeScopeSites = getAllSites().filter((s) => (s.scope || "site") === targetScope && !isSiteCompleted(s));
+        const activeScopeSites = getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
         let userScopedSites = activeScopeSites.filter((s) => (s.tasks || []).some((t) => !isTaskCompleted(t) && taskMatchesMember(t, filterMember)));
         let mySites = userScopedSites.length || state.memberFilter ? userScopedSites : activeScopeSites;
         if (q) {
@@ -8065,10 +8078,12 @@
                 const phone = lookupPartnerPhone(task.partner);
                 const tid = task.id || task.taskId;
                 const isDel = Boolean(task.isDelayed || (ymd && ymd < todayYmd));
+                const effScope = site.scope || (/^\[단건\]/i.test(site.siteName) ? "single" : /^\[AS\]/i.test(site.siteName) ? "as" : "site");
+                const cleanSiteName = String(site.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "");
                 return `
                   <div class="m-site-box ${isDel ? "danger" : ""}" style="border-radius:9px;" onclick="openTaskEditModal('${escJs(tid)}')">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-                      <span style="font-size:12.5px;font-weight:800;">${escHtml(site.siteName)}</span>
+                      <span style="font-size:12.5px;font-weight:800;display:inline-flex;align-items:center;">${getHomeScopeBadgeHtml(effScope)}${escHtml(cleanSiteName)}</span>
                       <button type="button" onclick="event.stopPropagation(); openSiteDetailMobile('${escJs(site.siteKey)}')" style="border:1px solid #cbd5e1;background:#fff;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:700;color:#334155;">상세 ➔</button>
                     </div>
                     <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px;">${escHtml(task.taskName)} · ${escHtml(task.partner || filterRegisteredManagers(task.manager).join(", ") || "-")}</div>
@@ -8105,9 +8120,11 @@
                 const pct = s.progressRate || 0;
                 const col = pct >= 80 ? "#10b981" : pct >= 40 ? "#2563eb" : "#f59e0b";
                 const remainingCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t)).length;
+                const effScope = s.scope || (/^\[단건\]/i.test(s.siteName) ? "single" : /^\[AS\]/i.test(s.siteName) ? "as" : "site");
+                const cleanSiteName = String(s.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "");
                 return `
                   <div onclick="openSiteDetailMobile('${escJs(s.siteKey)}')" style="min-width:162px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:9px 10px;flex-shrink:0;cursor:pointer;">
-                    <div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><span style="color:${escHtml(s.colorHex || "#2563eb")};">●</span> ${escHtml(s.siteName)}</div>
+                    <div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;"><span style="color:${escHtml(s.colorHex || "#2563eb")};margin-right:4px;">●</span>${getHomeScopeBadgeHtml(effScope)}${escHtml(cleanSiteName)}</div>
                     <div style="height:5px;border-radius:999px;background:#e2e8f0;margin:6px 0;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${col};"></div></div>
                     <div style="display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;color:var(--text-muted);">
                       <span style="color:${col};">${pct}%</span>
