@@ -242,9 +242,32 @@
       transform: scale(0.97);
     }
 
-    .m-cal-filter-banner {
-      background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 6px 8px;
-      margin-bottom: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 10.5px;
+    .m-cal-top-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 7px 9px;
+      margin-bottom: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    .m-cal-row-primary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      min-width: 0;
+    }
+    .m-cal-row-secondary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      min-width: 0;
+      padding-top: 5px;
+      border-top: 1px solid #f1f5f9;
     }
     .m-pill-chip {
       background: #ffffff; border: 1px solid #93c5fd; color: #1e40af; padding: 2px 6px;
@@ -253,13 +276,107 @@
     .m-pill-chip .del-x { color: #64748b; cursor: pointer; font-weight: 900; }
     .m-filter-count { margin-left: auto; font-weight: 800; color: #1d4ed8; }
 
+    .m-cal-nav-btn {
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      border-radius: 6px;
+      width: 26px;
+      height: 28px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #475569;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: all 0.15s;
+    }
+    .m-cal-nav-btn:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+    .m-cal-nav-btn.m-cal-today-btn {
+      width: auto;
+      padding: 0 8px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-color: #bfdbfe;
+      font-weight: 800;
+      margin-left: 1px;
+    }
+    .m-cal-nav-btn.m-cal-today-btn:hover {
+      background: #dbeafe;
+    }
+    .m-cal-view-switch {
+      display: inline-flex;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      padding: 2px;
+      border-radius: 7px;
+      height: 28px;
+      box-sizing: border-box;
+      align-items: center;
+      gap: 2px;
+    }
+    .m-cal-view-btn {
+      border: none;
+      background: transparent;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 0 7px;
+      height: 22px;
+      border-radius: 5px;
+      color: #64748b;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .m-cal-view-btn.active {
+      background: #ffffff !important;
+      color: #1d4ed8 !important;
+      font-weight: 800 !important;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
+    }
+    .btn-m-cal-capture {
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #334155;
+      font-size: 11px;
+      font-weight: 800;
+      height: 28px;
+      padding: 0 8px;
+      border-radius: 7px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .btn-m-cal-capture:hover {
+      background: #f8fafc;
+      border-color: #94a3b8;
+      color: #0f172a;
+    }
+    .m-cal-count-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: #1e40af;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      padding: 2px 7px;
+      border-radius: 6px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      letter-spacing: -0.2px;
+    }
     .m-cal-month-nav {
       display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
       background: #ffffff; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border);
-    }
-    .m-cal-nav-btn {
-      border: 1px solid var(--border); background: #f8fafc; border-radius: 5px;
-      padding: 3px 8px; font-size: 11px; font-weight: 700; color: var(--text-sub); cursor: pointer;
     }
     .m-cal-full-grid {
       display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -434,15 +551,21 @@
       transform: translateY(-0.5px) scale(1.08);
     }
 
-    /* 모바일 재무·신규 탭 선택 시 상단 검색창 및 분류/담당자 필터 영역 숨김 처리 */
-    .mobile-screen-inner.mtab-finance .m-search-wrap,
-    .mobile-screen-inner.mtab-finance .m-filter-bar,
-    .mobile-screen-inner[data-active-mtab="finance"] .m-search-wrap,
-    .mobile-screen-inner[data-active-mtab="finance"] .m-filter-bar,
-    .mobile-screen-inner.mtab-quote .m-search-wrap,
-    .mobile-screen-inner.mtab-quote .m-filter-bar,
+    /* 모바일 상단 검색창 및 분류/담당자 필터바는 캘린더와 현장 탭에서만 노출 (홈, To-Do, 신규, 재무 등 숨김) */
+    .mobile-screen-inner.hide-search-filter .m-search-wrap,
+    .mobile-screen-inner.hide-search-filter .m-filter-bar,
+    .mobile-screen-inner[data-active-mtab="home"] .m-search-wrap,
+    .mobile-screen-inner[data-active-mtab="home"] .m-filter-bar,
+    .mobile-screen-inner[data-active-mtab="todo"] .m-search-wrap,
+    .mobile-screen-inner[data-active-mtab="todo"] .m-filter-bar,
     .mobile-screen-inner[data-active-mtab="quote"] .m-search-wrap,
     .mobile-screen-inner[data-active-mtab="quote"] .m-filter-bar,
+    .mobile-screen-inner[data-active-mtab="finance"] .m-search-wrap,
+    .mobile-screen-inner[data-active-mtab="finance"] .m-filter-bar,
+    .mobile-screen-inner.mtab-finance .m-search-wrap,
+    .mobile-screen-inner.mtab-finance .m-filter-bar,
+    .mobile-screen-inner.mtab-quote .m-search-wrap,
+    .mobile-screen-inner.mtab-quote .m-filter-bar,
     .mobile-screen-inner.mtab-newSite .m-search-wrap,
     .mobile-screen-inner.mtab-newSite .m-filter-bar,
     .mobile-screen-inner[data-active-mtab="newSite"] .m-search-wrap,
@@ -802,20 +925,80 @@
       flex: 1; display: flex; flex-direction: column; background: #f8fafc; padding: 12px 16px; overflow: hidden; gap: 8px;
     }
     .pc-cal-toolbar {
-      display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0;
+      background: #ffffff; border: 1px solid var(--border); border-radius: 10px; padding: 7px 12px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03); margin-bottom: 2px;
+    }
+    .pc-cal-toolbar-left {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0;
+    }
+    .pc-cal-toolbar-right {
+      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    }
+    .pc-cal-chips-wrap {
+      display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+    .pc-cal-chips-wrap .m-pill-chip {
+      height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; box-sizing: border-box;
+      background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; display: inline-flex; align-items: center; gap: 4px;
+    }
+    .pc-cal-chips-wrap .m-pill-chip .del-x {
+      font-size: 13px; margin-left: 3px; cursor: pointer; color: #64748b; font-weight: 800;
+    }
+    .pc-cal-chips-wrap .m-pill-chip .del-x:hover {
+      color: #dc2626;
+    }
+    .cal-nav-segment {
+      display: inline-flex; align-items: center; background: #f1f5f9; border: 1px solid #cbd5e1;
+      border-radius: 8px; padding: 2px; height: 32px; box-sizing: border-box;
+    }
+    .cal-nav-seg-btn {
+      width: 28px; height: 26px; border-radius: 6px; border: none; background: transparent;
+      color: #475569; font-size: 11px; font-weight: 800; cursor: pointer; display: inline-flex;
+      align-items: center; justify-content: center; transition: all 0.15s;
+    }
+    .cal-nav-seg-btn:hover { background: #e2e8f0; color: #0f172a; }
+    .cal-nav-seg-btn.today {
+      width: auto; height: 26px; padding: 0 10px; border-radius: 6px; border: none;
+      background: #ffffff; color: #1e293b; font-size: 11.5px; font-weight: 800; cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06); transition: all 0.15s; margin: 0 2px;
+    }
+    .cal-nav-seg-btn.today:hover { background: #f8fafc; color: #1d4ed8; }
+    .cal-count-capsule {
+      display: inline-flex; align-items: center; height: 32px; padding: 0 11px; background: #f8fafc;
+      border: 1px solid #e2e8f0; border-radius: 8px; font-size: 12px; font-weight: 700; color: #475569;
+      white-space: nowrap; letter-spacing: -0.2px;
+    }
+    .cal-count-capsule strong { color: #0f172a; margin: 0 3px; font-weight: 800; }
+    .cal-count-capsule .dot { color: #94a3b8; margin: 0 4px; }
+    .pc-cal-divider { width: 1px; height: 18px; background: #e2e8f0; flex-shrink: 0; }
+    .cal-view-switch {
+      display: inline-flex; align-items: center; background: #f1f5f9; border: 1px solid #cbd5e1;
+      border-radius: 8px; padding: 2px; height: 32px; box-sizing: border-box; gap: 2px; flex-shrink: 0;
+    }
+    .cal-view-btn {
+      border: none; background: transparent; padding: 0 12px; height: 26px; border-radius: 6px;
+      font-size: 11.5px; font-weight: 700; color: var(--text-sub); cursor: pointer; transition: all 0.15s;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .cal-view-btn:hover:not(.active) { color: #0f172a; }
+    .cal-view-btn.active {
+      background: #ffffff !important; color: #1d4ed8 !important; font-weight: 800 !important;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08) !important;
+    }
+    .btn-cal-capture {
+      height: 32px; padding: 0 12px; border-radius: 8px; font-size: 12px; font-weight: 700;
+      background: #ffffff; color: #334155; border: 1px solid #cbd5e1; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .btn-cal-capture:hover {
+      background: #f8fafc !important; border-color: #94a3b8 !important; color: #0f172a !important;
     }
     .pc-cal-filter-banner {
       background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 6px 12px;
       display: flex; align-items: center; flex-wrap: wrap; gap: 7px; font-size: 12px; flex: 1;
     }
-    .cal-view-switch {
-      display: flex; background: #e2e8f0; padding: 2px; border-radius: 6px; gap: 2px; flex-shrink: 0;
-    }
-    .cal-view-btn {
-      border: none; background: transparent; padding: 4px 10px; border-radius: 5px;
-      font-size: 11.5px; font-weight: 700; color: var(--text-sub); cursor: pointer;
-    }
-    .cal-view-btn.active { background: #fff; color: #1e40af; box-shadow: var(--shadow-sm); }
 
     .calendar-paper {
       flex: 1; background: #ffffff; border: 1px solid var(--border); border-radius: var(--radius);
@@ -1295,7 +1478,7 @@
       animation: modalPop 0.16s ease-out;
     }
     .ws-modal-card.wide { max-width: 820px; }
-    #settingsModal .ws-modal-card.wide { max-width: min(1180px, 96vw); }
+    #settingsModal .ws-modal-card.wide { max-width: min(1320px, 96vw); }
     .ws-modal-card.narrow { max-width: 420px; }
     @keyframes modalPop { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
@@ -1654,7 +1837,7 @@
 
     <!-- ================= 2. 모바일 뷰 프레임 ================= -->
     <div class="mobile-phone-frame" id="mobilePhoneFrame">
-      <div class="mobile-screen-inner">
+      <div class="mobile-screen-inner hide-search-filter" id="mobileScreenInner" data-active-mtab="home">
         <div class="m-status-bar">
           <span>9:41</span>
           <div class="m-island"></div>
@@ -3244,24 +3427,29 @@
 
         const pcCalEl = document.getElementById("pcCalMain");
         pcCalEl.innerHTML = `
-          <div class="pc-cal-toolbar" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <div style="display:flex;align-items:center;gap:6px;">
-              <div class="date-control-group" style="display:inline-flex;align-items:center;gap:3px;background:#f8fafc;padding:3px 6px;border-radius:6px;border:1px solid var(--border);">
-                <button type="button" class="btn-icon-square" onclick="moveCalendarMonth(-1)" title="이전 달">◀</button>
-                <button type="button" class="btn-icon-square" onclick="moveCalendarMonth(1)" title="다음 달">▶</button>
-                <button type="button" class="btn-today-pill" onclick="resetCalendarToday()">오늘</button>
-                <span class="date-title-bold" id="pcMonthTitle" style="font-size:15px;font-weight:800;color:#0f172a;margin-left:4px;white-space:nowrap;">${state.calYear}년 ${state.calMonth}월</span>
+          <div class="pc-cal-toolbar">
+            <div class="pc-cal-toolbar-left">
+              <span class="date-title-bold" id="pcMonthTitle" style="font-size:17.5px;font-weight:900;color:#0f172a;letter-spacing:-0.3px;white-space:nowrap;margin:0 2px 0 0;">${state.calYear}년 ${state.calMonth}월</span>
+              <div class="cal-nav-segment">
+                <button type="button" class="cal-nav-seg-btn" onclick="moveCalendarMonth(-1)" title="이전 달">◀</button>
+                <button type="button" class="cal-nav-seg-btn today" onclick="resetCalendarToday()" title="오늘로 이동">오늘</button>
+                <button type="button" class="cal-nav-seg-btn" onclick="moveCalendarMonth(1)" title="다음 달">▶</button>
+              </div>
+              <div class="pc-cal-chips-wrap">
+                ${chips.join("")}
+                ${(hasSubsetSites || state.memberFilter || state.searchQuery.trim()) ? `<button type="button" class="btn-tool-tag" onclick="resetAllFilters()" style="height:32px;padding:0 10px;border-radius:8px;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;background:#fff;border:1px solid #cbd5e1;cursor:pointer;">초기화</button>` : ""}
               </div>
             </div>
-            <div class="pc-cal-filter-banner" style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;overflow-x:auto;">
-              ${chips.join("")}
-              <span style="margin-left:auto;font-weight:800;color:#1d4ed8;font-size:12px;white-space:nowrap;">표시 공정 ${events.length}건 (다중일자 포함)</span>
-              ${(hasSubsetSites || state.memberFilter || state.searchQuery.trim()) ? `<button type="button" class="btn-tool-tag" onclick="resetAllFilters()">초기화</button>` : ""}
-            </div>
-            <div class="cal-view-switch" style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-              <button type="button" class="cal-view-btn ${state.calViewMode === "month" ? "active" : ""}" onclick="setCalViewMode('month')">월간</button>
-              <button type="button" class="cal-view-btn ${state.calViewMode === "week" ? "active" : ""}" onclick="setCalViewMode('week')">주간</button>
-              <button type="button" class="btn-tool-tag btn-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐" style="font-weight:700;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:4px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:4px;">📸 캡쳐</button>
+            <div class="pc-cal-toolbar-right">
+              <span class="cal-count-capsule">
+                총 <strong>${events.length}건</strong> <span class="dot">·</span> 다중일자 포함
+              </span>
+              <div class="pc-cal-divider"></div>
+              <div class="cal-view-switch">
+                <button type="button" class="cal-view-btn ${state.calViewMode === "month" ? "active" : ""}" onclick="setCalViewMode('month')">월간</button>
+                <button type="button" class="cal-view-btn ${state.calViewMode === "week" ? "active" : ""}" onclick="setCalViewMode('week')">주간</button>
+              </div>
+              <button type="button" class="btn-tool-tag btn-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐">📸 캡쳐</button>
             </div>
           </div>
           <div class="calendar-paper">
@@ -4313,7 +4501,8 @@
       function renderMobileFilterBar() {
         const bar = document.getElementById("mFilterBar");
         if (!bar) return;
-        if (state.mobileTab === "finance" || state.mobileTab === "quote" || state.mobileTab === "newSite") {
+        const showSearchFilter = (state.mobileTab === "calendar" || state.mobileTab === "cal" || state.mobileTab === "sites");
+        if (!showSearchFilter) {
           bar.style.display = "none";
           return;
         } else {
@@ -4562,7 +4751,6 @@
 
         const filterChips = [`<span class="m-pill-chip">📂 <b>${scopeNameMap[state.scope] || state.scope}</b></span>`];
         if (state.memberFilter) filterChips.push(`<span class="m-pill-chip">👤 <b>${escHtml(state.memberFilter)}</b> <span class="del-x" onclick="onMMemberClick('')">✕</span></span>`);
-        if (hasSubsetSites) filterChips.push(`<span class="m-pill-chip">🏗️ <b>${escHtml(siteFilterButtonLabel.replace(/[🏗️▾]/g, '').trim())}</b> <span class="del-x" onclick="resetAndApplyAllSitesFilter()">✕</span></span>`);
         if (state.searchQuery.trim()) filterChips.push(`<span class="m-pill-chip">🔍 <b>"${escHtml(state.searchQuery.trim())}"</b> <span class="del-x" onclick="clearGlobalSearch()">✕</span></span>`);
 
         const eventsByDay = expandEventsByDay(events);
@@ -4714,33 +4902,37 @@
 
         const mCalEl = document.getElementById("m-page-calendar");
         mCalEl.innerHTML = `
-          <div class="m-cal-filter-banner">
-            ${filterChips.join("")}
-            <span class="m-filter-count">일치 ${events.length}건</span>
-          </div>
-          <div class="m-cal-month-nav">
-            <div style="display:flex;align-items:center;gap:5px;">
-              <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(-1)">◀</button>
-              <span id="mCalMonthTitle" style="font-size:14px;font-weight:800;color:var(--text);">${year}년 ${month}월</span>
-              <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(1)">▶</button>
-              <button type="button" class="m-cal-nav-btn" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;" onclick="resetCalendarToday()">오늘</button>
-            </div>
-            <div style="display:flex;align-items:center;gap:4px;">
-              <div style="display:flex;gap:2px;background:#f1f5f9;padding:2px;border-radius:6px;">
-                <button type="button" onclick="setMobileCalMode('month')" style="border:none;background:${state.mobileCalMode === "month" ? "#fff" : "transparent"};font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:4px;color:${state.mobileCalMode === "month" ? "#1d4ed8" : "var(--text-muted)"};cursor:pointer;">월간</button>
-                <button type="button" onclick="setMobileCalMode('week')" style="border:none;background:${state.mobileCalMode === "week" ? "#fff" : "transparent"};font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:4px;color:${state.mobileCalMode === "week" ? "#1d4ed8" : "var(--text-muted)"};cursor:pointer;">주간</button>
+          <div class="m-cal-top-card">
+            <!-- 1단: 좌측 날짜 탐색(◀ YYYY년 M월 ▶ 오늘) / 우측 뷰 전환(월간|주간) + 📸 캡쳐 -->
+            <div class="m-cal-row-primary">
+              <div style="display:flex;align-items:center;gap:3px;min-width:0;flex-shrink:1;">
+                <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(-1)" title="이전 달">◀</button>
+                <span id="mCalMonthTitle" style="font-size:13.5px;font-weight:900;color:var(--text);letter-spacing:-0.2px;white-space:nowrap;padding:0 2px;">${year}년 ${month}월</span>
+                <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(1)" title="다음 달">▶</button>
+                <button type="button" class="m-cal-nav-btn m-cal-today-btn" onclick="resetCalendarToday()" title="오늘로 이동">오늘</button>
               </div>
-              <button type="button" class="btn-m-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐" style="border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;font-size:10.5px;font-weight:800;padding:3px 7px;border-radius:6px;display:inline-flex;align-items:center;gap:2px;cursor:pointer;">📸 캡쳐</button>
+              <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                <div class="m-cal-view-switch">
+                  <button type="button" class="m-cal-view-btn ${state.mobileCalMode === "month" ? "active" : ""}" onclick="setMobileCalMode('month')">월간</button>
+                  <button type="button" class="m-cal-view-btn ${state.mobileCalMode === "week" ? "active" : ""}" onclick="setMobileCalMode('week')">주간</button>
+                </div>
+                <button type="button" class="btn-m-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐">📸 캡쳐</button>
+              </div>
             </div>
-          </div>
-          <div class="m-cal-site-filter-bar" style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin:2px 0 8px 0;">
-            <div style="display:flex;align-items:center;gap:5px;flex:1;min-width:0;">
-              <button type="button" id="btnMobileSiteFilter" class="m-site-filter-btn ${hasSubsetSites ? 'active' : ''}" onclick="openMobileSiteFilterModal()">
-                ${siteFilterButtonLabel}
-              </button>
-              ${hasSubsetSites ? `<button type="button" class="m-site-filter-clear-btn" onclick="resetAndApplyAllSitesFilter()" title="전체 현장 보기로 초기화">✕</button>` : ""}
+
+            <!-- 2단: 좌측 [현장] 스코프 칩 + [전체 현장 ▾] 드롭다운 / 우측 단 1회 요약 뱃지(169건) -->
+            <div class="m-cal-row-secondary">
+              <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;">
+                ${filterChips.join("")}
+                <button type="button" id="btnMobileSiteFilter" class="m-site-filter-btn ${hasSubsetSites ? 'active' : ''}" onclick="openMobileSiteFilterModal()" style="font-size:11px;padding:3px 8px;height:26px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:3px;max-width:160px;overflow:hidden;text-overflow:ellipsis;">
+                  ${siteFilterButtonLabel}
+                </button>
+                ${hasSubsetSites ? `<button type="button" class="m-site-filter-clear-btn" onclick="resetAndApplyAllSitesFilter()" title="전체 현장 보기로 초기화" style="height:26px;width:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:11px;border-radius:6px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;cursor:pointer;">✕</button>` : ""}
+              </div>
+              <span class="m-cal-count-badge">
+                ${events.length}건
+              </span>
             </div>
-            <span style="font-size:11px;color:var(--text-sub);white-space:nowrap;font-weight:600;">공정 ${events.length}건</span>
           </div>
           ${calContentHtml}
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -5350,16 +5542,17 @@
             state.dirtyPcTabs[tab] = false;
           }
         } else {
-          const hideTopBars = (state.mobileTab === "finance" || state.mobileTab === "quote" || state.mobileTab === "newSite");
-          const mInner = document.getElementById("mobileScreenInner");
+          const showSearchFilter = (state.mobileTab === "calendar" || state.mobileTab === "cal" || state.mobileTab === "sites");
+          const mInner = document.getElementById("mobileScreenInner") || document.querySelector(".mobile-screen-inner");
           if (mInner) {
+            mInner.classList.toggle("hide-search-filter", !showSearchFilter);
             mInner.classList.toggle("mtab-finance", state.mobileTab === "finance");
             mInner.classList.toggle("mtab-quote", state.mobileTab === "quote" || state.mobileTab === "newSite");
             mInner.classList.toggle("mtab-newSite", state.mobileTab === "quote" || state.mobileTab === "newSite");
             mInner.setAttribute("data-active-mtab", state.mobileTab);
           }
           const searchWrap = document.getElementById("mSearchWrap") || document.querySelector(".m-search-wrap");
-          if (searchWrap) searchWrap.style.display = hideTopBars ? "none" : "";
+          if (searchWrap) searchWrap.style.display = showSearchFilter ? "" : "none";
           renderMobileFilterBar();
           const tab = state.mobileTab;
           if (state.dirtyMobileTabs[tab]) {
@@ -7972,6 +8165,19 @@
         renderSettingsModal();
       };
 
+      window.onPartnerSearchInput = function (val, el) {
+        state.partnerSearchQuery = val;
+        const cursor = el ? el.selectionStart : null;
+        renderSettingsModal();
+        const nextInput = document.getElementById("stPartnerSearchInput");
+        if (nextInput) {
+          nextInput.focus();
+          if (cursor !== null) {
+            try { nextInput.setSelectionRange(cursor, cursor); } catch (e) {}
+          }
+        }
+      };
+
       function renderSettingsModal() {
         const s = state.settingsData || { partners: [], tasks: [], members: [] };
         const tab = state.settingsTab || "partners";
@@ -7981,26 +8187,58 @@
           const rawList = s.partners || [];
           const bizCounts = {}, catCounts = {}, prioCounts = {}, statCounts = {};
           rawList.forEach((p) => {
-            const b = p.biz || p.category || "기타";
+            const b = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
             bizCounts[b] = (bizCounts[b] || 0) + 1;
-            const c = p.category || "시공";
+            const c = String(p.category || (p.category === "" ? "미지정" : "시공")).trim();
             catCounts[c] = (catCounts[c] || 0) + 1;
-            const pr = p.priority || "일반";
+            const pr = String(p.priority || "미지정").trim();
             prioCounts[pr] = (prioCounts[pr] || 0) + 1;
-            const st = p.status || "운영 중";
+            const st = String(p.status || "운영 중").trim();
             statCounts[st] = (statCounts[st] || 0) + 1;
           });
 
           const q = (state.partnerSearchQuery || "").toLowerCase().trim();
+          const qWords = q ? q.split(/\s+/).filter(Boolean) : [];
+
           const filteredPartners = rawList.map((p, originalIdx) => ({ p, originalIdx })).filter(({ p }) => {
-            if (q) {
-              const hay = [p.name, p.fullName, p.biz, p.category, p.priority, p.manager, p.phone, p.status, p.feature, p.orderMethod, p.note, p.memo].join(" ").toLowerCase();
-              if (!hay.includes(q)) return false;
+            if (qWords.length > 0) {
+              const hayParts = [
+                p.name, p.fullName, p.partnerName, p.company, p.companyName, p.partner, p.dropdownVal,
+                p.biz, p.trade, p.task, p.category, p.cat,
+                p.manager, p.mgr, p.owner, p.leader,
+                p.phone, p.tel, p.contact,
+                p.priority, p.team,
+                p.status, p.stat,
+                p.feature, p.account, p.bank,
+                p.orderMethod, p.order,
+                p.note, p.memo
+              ];
+              try {
+                Object.keys(p).forEach((k) => {
+                  const v = p[k];
+                  if (typeof v === "string" || typeof v === "number") hayParts.push(String(v));
+                });
+              } catch (e) {}
+              const hay = hayParts.filter(Boolean).join(" ").toLowerCase();
+              const allMatch = qWords.every((w) => hay.includes(w));
+              if (!allMatch) return false;
             }
-            if (state.partnerBizFilter && (p.biz || p.category || "기타") !== state.partnerBizFilter) return false;
-            if (state.partnerCatFilter && (p.category || "시공") !== state.partnerCatFilter) return false;
-            if (state.partnerPrioFilter && (p.priority || "일반") !== state.partnerPrioFilter) return false;
-            if (state.partnerStatusFilter && (p.status || "운영 중") !== state.partnerStatusFilter) return false;
+            if (state.partnerBizFilter) {
+              const pB = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
+              if (pB !== state.partnerBizFilter) return false;
+            }
+            if (state.partnerCatFilter) {
+              const pC = String(p.category || "시공").trim();
+              if (pC !== state.partnerCatFilter) return false;
+            }
+            if (state.partnerPrioFilter) {
+              const pPr = String(p.priority || "미지정").trim();
+              if (pPr !== state.partnerPrioFilter) return false;
+            }
+            if (state.partnerStatusFilter) {
+              const pSt = String(p.status || "운영 중").trim();
+              if (pSt !== state.partnerStatusFilter) return false;
+            }
             return true;
           });
 
@@ -8015,53 +8253,53 @@
               </div>
               <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:8px;">
                 <div>
-                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">상호 / 업체 / 반장명 <span style="color:#ef4444;">*</span></label>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">상호 / 업체 / 반장명 <span style="color:#ef4444;">*</span></label>
                   <input class="ws-input" id="stPName" value="${escHtml((editItem && editItem.name) || "")}" placeholder="예: 큐브타일 (보경팀)">
                 </div>
                 <div>
-                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">대표 공종</label>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">대표 공종</label>
                   <input class="ws-input" id="stPBiz" value="${escHtml((editItem && (editItem.biz || editItem.category)) || "")}" placeholder="예: 타일, 도배, 목공">
                 </div>
                 <div>
-                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">대구분</label>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">대구분</label>
                   <select class="ws-select" id="stPCat">
                     ${["시공", "자재", "가구", "설비", "철거", "단품", "기타"].map((c) => `<option value="${c}" ${(editItem && editItem.category === c) ? "selected" : (c === "시공" ? "selected" : "")}>${c}</option>`).join("")}
                   </select>
                 </div>
                 <div>
-                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">우선순위 (팀)</label>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">우선순위 (팀)</label>
                   <select class="ws-select" id="stPPrio">
-                    ${["1팀", "2팀", "3팀", "일반", "미지정"].map((pr) => `<option value="${pr}" ${(editItem && editItem.priority === pr) ? "selected" : (pr === "일반" ? "selected" : "")}>${pr}</option>`).join("")}
+                    ${["1팀", "2팀", "3팀", "A팀", "B팀", "C팀", "일반", "미지정"].map((pr) => `<option value="${pr}" ${(editItem && editItem.priority === pr) ? "selected" : (pr === "일반" ? "selected" : "")}>${pr}</option>`).join("")}
                   </select>
                 </div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1.2fr 1fr 1fr;gap:8px;">
                 <div>
-                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">담당자 / 직책</label>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">담당자 / 직책</label>
                   <input class="ws-input" id="stPMgr" value="${escHtml((editItem && editItem.manager) || "")}" placeholder="예: 김소장, 박대표">
                 </div>
                 <div>
-                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">연락처 (전화번호)</label>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">연락처 (전화번호)</label>
                   <input class="ws-input" id="stPPhone" value="${escHtml((editItem && editItem.phone) || "")}" placeholder="010-0000-0000">
                 </div>
                 <div>
-                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">관리상태</label>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">관리상태</label>
                   <select class="ws-select" id="stPStatus">
                     ${["운영 중", "확인 필요", "신규 발굴", "보류"].map((st) => `<option value="${st}" ${(editItem && editItem.status === st) ? "selected" : (st === "운영 중" ? "selected" : "")}>${st}</option>`).join("")}
                   </select>
                 </div>
                 <div>
-                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">발주 / 접수방식</label>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">발주 / 접수방식</label>
                   <input class="ws-input" id="stPOrder" value="${escHtml((editItem && editItem.orderMethod) || "")}" placeholder="예: 카톡, 문자, 전화">
                 </div>
               </div>
               <div style="display:grid;grid-template-columns:1.5fr 1.5fr auto;gap:8px;align-items:end;">
                 <div>
-                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">주력분야 / 특징 / 계좌번호</label>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">주력분야 / 특징 / 계좌번호</label>
                   <input class="ws-input" id="stPFeature" value="${escHtml((editItem && editItem.feature) || "")}" placeholder="예: 국민 123-456-7890 홍길동 / 30평형 전문">
                 </div>
                 <div>
-                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;">비고 / 메모</label>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">비고 / 메모</label>
                   <input class="ws-input" id="stPNote" value="${escHtml((editItem && (editItem.note || editItem.memo)) || "")}" placeholder="특이사항 및 메모">
                 </div>
                 <div style="display:flex;gap:6px;">
@@ -8071,13 +8309,15 @@
               </div>
             </div>` : "";
 
+          const hasActiveFilters = !!(state.partnerSearchQuery || state.partnerBizFilter || state.partnerCatFilter || state.partnerPrioFilter || state.partnerStatusFilter);
+
           contentHtml = `
             ${formHtml}
             <div style="background:#f8fafc;padding:10px 12px;border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
               <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:240px;">
                 <span style="font-size:13px;color:#64748b;">🔍</span>
-                <input class="ws-input" style="height:30px;font-size:12px;padding:4px 8px;" placeholder="업체명, 대표공종, 담당자, 연락처, 메모 검색..." value="${escHtml(state.partnerSearchQuery || "")}" oninput="state.partnerSearchQuery=this.value; renderSettingsModal();">
-                ${state.partnerSearchQuery ? `<button type="button" onclick="state.partnerSearchQuery=''; renderSettingsModal();" style="border:none;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;">✕</button>` : ""}
+                <input id="stPartnerSearchInput" class="ws-input" style="height:30px;font-size:12px;padding:4px 8px;flex:1;" placeholder="업체명, 대표공종, 담당자, 연락처, 비고/계좌 검색..." value="${escHtml(state.partnerSearchQuery || "")}" oninput="onPartnerSearchInput(this.value, this)">
+                ${state.partnerSearchQuery ? `<button type="button" onclick="state.partnerSearchQuery=''; renderSettingsModal();" style="border:none;background:transparent;color:#94a3b8;font-size:13px;cursor:pointer;padding:0 4px;" title="검색어 지우기">✕</button>` : ""}
               </div>
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                 <select class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="state.partnerBizFilter=this.value; renderSettingsModal();">
@@ -8093,59 +8333,73 @@
                   ${Object.keys(prioCounts).sort().map((pr) => `<option value="${escHtml(pr)}" ${state.partnerPrioFilter === pr ? "selected" : ""}>${escHtml(pr)} (${prioCounts[pr]})</option>`).join("")}
                 </select>
                 <select class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="state.partnerStatusFilter=this.value; renderSettingsModal();">
-                  <option value="">상태 전체</option>
+                  <option value="">관리상태 전체</option>
                   ${Object.keys(statCounts).sort().map((st) => `<option value="${escHtml(st)}" ${state.partnerStatusFilter === st ? "selected" : ""}>${escHtml(st)} (${statCounts[st]})</option>`).join("")}
                 </select>
-                ${(state.partnerSearchQuery || state.partnerBizFilter || state.partnerCatFilter || state.partnerPrioFilter || state.partnerStatusFilter) ? `
+                ${hasActiveFilters ? `
                   <button type="button" class="btn-act-white" style="height:30px;padding:0 8px;font-size:11.5px;" onclick="state.partnerSearchQuery='';state.partnerBizFilter='';state.partnerCatFilter='';state.partnerPrioFilter='';state.partnerStatusFilter=''; renderSettingsModal();">초기화</button>` : ""}
                 ${!state.showPartnerForm ? `
                   <button type="button" class="btn-act-blue" style="height:30px;padding:0 12px;font-size:12px;display:inline-flex;align-items:center;gap:4px;" onclick="openPartnerForm(-1)">➕ 거래처 추가</button>` : ""}
               </div>
             </div>
 
+            ${hasActiveFilters ? `
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11.5px;">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                  <span style="font-weight:700;color:#1e40af;">🔍 적용된 필터 (${filteredPartners.length}건):</span>
+                  ${state.partnerSearchQuery ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">검색: "${escHtml(state.partnerSearchQuery)}" <span class="del-x" onclick="state.partnerSearchQuery='';renderSettingsModal();" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                  ${state.partnerBizFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">대표공종: ${escHtml(state.partnerBizFilter)} <span class="del-x" onclick="state.partnerBizFilter='';renderSettingsModal();" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                  ${state.partnerCatFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">대구분: ${escHtml(state.partnerCatFilter)} <span class="del-x" onclick="state.partnerCatFilter='';renderSettingsModal();" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                  ${state.partnerPrioFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">우선순위: ${escHtml(state.partnerPrioFilter)} <span class="del-x" onclick="state.partnerPrioFilter='';renderSettingsModal();" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                  ${state.partnerStatusFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">관리상태: ${escHtml(state.partnerStatusFilter)} <span class="del-x" onclick="state.partnerStatusFilter='';renderSettingsModal();" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                </div>
+                <button type="button" onclick="state.partnerSearchQuery='';state.partnerBizFilter='';state.partnerCatFilter='';state.partnerPrioFilter='';state.partnerStatusFilter='';renderSettingsModal();" style="border:none;background:#dbeafe;color:#1e40af;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;cursor:pointer;white-space:nowrap;">전체 해제</button>
+              </div>` : ""}
+
             <div class="table-container" style="max-height:380px;overflow-y:auto;overflow-x:auto;">
-              <table class="clean-table" style="min-width:1100px;">
+              <table class="clean-table" style="min-width:1380px;width:100%;border-collapse:separate;border-spacing:0;">
                 <thead>
-                  <tr style="position:sticky;top:0;background:#ffffff;z-index:2;">
-                    <th style="width:45px;text-align:center;">순서</th>
-                    <th style="width:60px;text-align:center;">이동</th>
-                    <th style="width:140px;">상호/업체명</th>
-                    <th style="width:90px;">대표공종</th>
-                    <th style="width:65px;text-align:center;">대구분</th>
-                    <th style="width:70px;text-align:center;">우선순위</th>
-                    <th style="width:85px;">담당/직책</th>
-                    <th style="width:115px;">연락처</th>
-                    <th style="width:75px;text-align:center;">관리상태</th>
-                    <th style="min-width:140px;">주력분야 및 특징 (계좌)</th>
-                    <th style="width:85px;">발주방식</th>
-                    <th style="min-width:110px;">비고</th>
-                    <th style="width:75px;text-align:center;">관리</th>
+                  <tr style="position:sticky;top:0;background:#ffffff;z-index:2;box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                    <th style="width:45px;text-align:center;white-space:nowrap;">순서</th>
+                    <th style="width:55px;text-align:center;white-space:nowrap;">이동</th>
+                    <th style="width:170px;min-width:170px;text-align:left;white-space:nowrap;">상호 / 업체 / 반장명</th>
+                    <th style="width:125px;min-width:125px;text-align:left;white-space:nowrap;">대표 공종</th>
+                    <th style="width:70px;min-width:70px;text-align:center;white-space:nowrap;">대구분</th>
+                    <th style="width:75px;min-width:75px;text-align:center;white-space:nowrap;">우선순위</th>
+                    <th style="width:100px;min-width:100px;text-align:left;white-space:nowrap;">담당 / 직책</th>
+                    <th style="width:130px;min-width:130px;text-align:left;white-space:nowrap;">연락처</th>
+                    <th style="width:85px;min-width:85px;text-align:center;white-space:nowrap;">관리상태</th>
+                    <th style="width:200px;min-width:200px;text-align:left;white-space:nowrap;">주력분야 및 특징 (계좌)</th>
+                    <th style="width:115px;min-width:115px;text-align:left;white-space:nowrap;">발주 / 접수방식</th>
+                    <th style="min-width:140px;text-align:left;white-space:nowrap;">비고 / 메모</th>
+                    <th style="width:75px;text-align:center;white-space:nowrap;">관리</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${filteredPartners.length ? filteredPartners.map(({ p, originalIdx }, idx) => {
-                    const prioColor = p.priority === "1팀" ? "#2563eb" : (p.priority === "2팀" ? "#0f766e" : (p.priority === "3팀" ? "#d97706" : "#64748b"));
+                    const prioColor = (p.priority === "1팀" || p.priority === "A팀") ? "#2563eb" : ((p.priority === "2팀" || p.priority === "B팀") ? "#0f766e" : ((p.priority === "3팀" || p.priority === "C팀") ? "#d97706" : "#64748b"));
                     const statusBg = p.status === "운영 중" ? "#dcfce7" : (p.status === "확인 필요" ? "#fef3c7" : (p.status === "보류" ? "#fee2e2" : "#eff6ff"));
                     const statusFg = p.status === "운영 중" ? "#166534" : (p.status === "확인 필요" ? "#92400e" : (p.status === "보류" ? "#991b1b" : "#1d4ed8"));
+                    const dispBiz = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
                     return `
                       <tr>
-                        <td style="text-align:center;font-size:11.5px;color:#94a3b8;font-weight:700;">${idx + 1}</td>
+                        <td style="text-align:center;font-size:11.5px;color:#94a3b8;font-weight:700;white-space:nowrap;">${idx + 1}</td>
                         <td style="text-align:center;white-space:nowrap;">
                           <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${originalIdx},-1)" title="위로">▲</button>
                           <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${originalIdx},1)" title="아래로">▼</button>
                         </td>
-                        <td><strong style="color:#0f172a;font-size:12.5px;">${escHtml(p.name || p.fullName)}</strong></td>
-                        <td><span style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px;font-weight:700;font-size:11px;">${escHtml(p.biz || p.category || "시공")}</span></td>
-                        <td style="text-align:center;font-size:11.5px;color:#475569;">${escHtml(p.category || "시공")}</td>
-                        <td style="text-align:center;"><span style="font-weight:800;color:${prioColor};font-size:11.5px;">${escHtml(p.priority || "일반")}</span></td>
+                        <td style="white-space:nowrap;"><strong style="color:#0f172a;font-size:12.5px;">${escHtml(p.name || p.fullName)}</strong></td>
+                        <td style="white-space:nowrap;"><span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:4px;font-weight:700;font-size:11px;">${escHtml(dispBiz)}</span></td>
+                        <td style="text-align:center;font-size:11.5px;color:#475569;white-space:nowrap;">${escHtml(p.category || "시공")}</td>
+                        <td style="text-align:center;white-space:nowrap;"><span style="font-weight:800;color:${prioColor};font-size:11.5px;">${escHtml(p.priority || "일반")}</span></td>
                         <td style="font-size:12px;color:#334155;white-space:nowrap;">${escHtml(p.manager || "-")}</td>
                         <td style="white-space:nowrap;">
-                          ${p.phone ? `<a href="tel:${escHtml(p.phone)}" style="color:#2563eb;text-decoration:none;font-weight:600;font-size:11.5px;">📞 ${escHtml(p.phone)}</a>` : `<span style="color:#94a3b8;">-</span>`}
+                          ${p.phone ? `<a href="tel:${escHtml(p.phone)}" style="color:#2563eb;text-decoration:none;font-weight:600;font-size:11.5px;white-space:nowrap;">📞 ${escHtml(p.phone)}</a>` : `<span style="color:#94a3b8;">-</span>`}
                         </td>
-                        <td style="text-align:center;"><span style="padding:2px 6px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};">${escHtml(p.status || "운영 중")}</span></td>
-                        <td style="font-size:11.5px;color:#475569;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.feature || "")}">${escHtml(p.feature || "-")}</td>
+                        <td style="text-align:center;white-space:nowrap;"><span style="padding:2px 7px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};white-space:nowrap;">${escHtml(p.status || "운영 중")}</span></td>
+                        <td style="font-size:11.5px;color:#475569;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.feature || "")}">${escHtml(p.feature || "-")}</td>
                         <td style="font-size:11.5px;color:#64748b;white-space:nowrap;">${escHtml(p.orderMethod || "-")}</td>
-                        <td style="font-size:11.5px;color:#64748b;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.note || p.memo || "")}">${escHtml(p.note || p.memo || "-")}</td>
+                        <td style="font-size:11.5px;color:#64748b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.note || p.memo || "")}">${escHtml(p.note || p.memo || "-")}</td>
                         <td style="text-align:center;white-space:nowrap;">
                           <button type="button" class="btn-tool-tag" onclick="openPartnerForm(${originalIdx})" title="수정">✏️</button>
                           <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="delSettingItem('partners',${originalIdx})" title="삭제">🗑️</button>
@@ -8458,17 +8712,18 @@
         const target = document.getElementById("m-page-" + tabKey);
         if (target) target.classList.add("active");
 
-        // 재무 탭 선택 시 모바일 상단 검색창 및 분류/담당자 필터 영역 숨김 처리 (기타 탭 복원)
-        const isFinance = (tabKey === "finance");
-        const mInner = document.getElementById("mobileScreenInner");
+        // 모바일 상단 검색창 및 분류/담당자 필터바는 캘린더와 현장 탭에서만 노출 (홈, To-Do, 신규, 재무 등 숨김)
+        const showSearchFilter = (tabKey === "calendar" || tabKey === "cal" || tabKey === "sites");
+        const mInner = document.getElementById("mobileScreenInner") || document.querySelector(".mobile-screen-inner");
         if (mInner) {
-          mInner.classList.toggle("mtab-finance", isFinance);
+          mInner.classList.toggle("hide-search-filter", !showSearchFilter);
+          mInner.classList.toggle("mtab-finance", tabKey === "finance");
           mInner.setAttribute("data-active-mtab", tabKey);
         }
         const searchWrap = document.getElementById("mSearchWrap") || document.querySelector(".m-search-wrap");
         const filterBar = document.getElementById("mFilterBar");
-        if (searchWrap) searchWrap.style.display = isFinance ? "none" : "";
-        if (filterBar) filterBar.style.display = isFinance ? "none" : "";
+        if (searchWrap) searchWrap.style.display = showSearchFilter ? "" : "none";
+        if (filterBar) filterBar.style.display = showSearchFilter ? "" : "none";
 
         renderActiveViews();
       };
