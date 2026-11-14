@@ -2447,6 +2447,8 @@
         financeSearchQuery: "",
         financeStatusFilter: "all",
         financeManagerFilter: "all",
+        financeYearFilter: "all",
+        financeMonthFilter: 0,
         settingsData: null,
         device: "pc",
         pcTab: "home",
@@ -5210,23 +5212,297 @@
         return n.toLocaleString("ko-KR");
       }
 
+      function normalizeDateYmd(str) {
+        if (!str) return "";
+        const m = String(str).match(/(\d{2,4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+        if (!m) return "";
+        let y = m[1];
+        if (y.length === 2) y = "20" + y;
+        const mo = String(m[2]).padStart(2, "0");
+        const d = String(m[3]).padStart(2, "0");
+        return `${y}-${mo}-${d}`;
+      }
+
+      function getCollectionPeriodInfo(row, matchedSite) {
+        const site = matchedSite || (row ? findMatchedSiteInfo(row.siteName) : null);
+        let periodDisplay = String(row && row.period ? row.period : "").trim();
+        let startYmd = "";
+        let endYmd = "";
+
+        if (periodDisplay) {
+          const m = periodDisplay.match(/(\d{2,4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/g);
+          if (m && m.length > 0) {
+            startYmd = normalizeDateYmd(m[0]);
+            if (m.length > 1) {
+              endYmd = normalizeDateYmd(m[1]);
+            } else {
+              const shortEnd = periodDisplay.match(/~\s*(\d{1,2})[.\-\/](\d{1,2})/);
+              if (shortEnd && startYmd) {
+                const sy = startYmd.slice(0, 4);
+                endYmd = `${sy}-${String(shortEnd[1]).padStart(2, "0")}-${String(shortEnd[2]).padStart(2, "0")}`;
+              } else {
+                endYmd = startYmd;
+              }
+            }
+          }
+        }
+
+        if ((!periodDisplay || !startYmd) && site) {
+          const dm = (typeof getSiteDateMetrics === "function") ? getSiteDateMetrics(site) : null;
+          if (dm && dm.earliest) {
+            startYmd = dm.earliest;
+            endYmd = dm.latest || dm.earliest;
+          } else if (site.earliestDateDisplay) {
+            startYmd = normalizeDateYmd(site.earliestDateDisplay);
+            endYmd = site.latestDateDisplay ? normalizeDateYmd(site.latestDateDisplay) : startYmd;
+          } else if (Array.isArray(site.tasks) && site.tasks.length > 0) {
+            const ymds = [];
+            site.tasks.forEach(t => {
+              const str = (t && (t.startDateStr || t.startDate || t.dateDisplay || t.date)) || "";
+              const m = normalizeDateYmd(str);
+              if (m) ymds.push(m);
+              const endStr = (t && (t.endDateStr || t.endDate)) || "";
+              const em = normalizeDateYmd(endStr);
+              if (em) ymds.push(em);
+            });
+            if (ymds.length > 0) {
+              ymds.sort();
+              startYmd = ymds[0];
+              endYmd = ymds[ymds.length - 1];
+            }
+          }
+
+          if (startYmd && !periodDisplay) {
+            const sFmt = startYmd.replace(/-/g, ".");
+            const eFmt = endYmd ? endYmd.replace(/-/g, ".") : sFmt;
+            periodDisplay = (sFmt === eFmt ? sFmt : `${sFmt} ~ ${eFmt}`);
+          }
+        }
+
+        let year = "";
+        let month = 0;
+        if (startYmd) {
+          year = startYmd.slice(0, 4);
+          month = parseInt(startYmd.slice(5, 7), 10) || 0;
+        } else if (endYmd) {
+          year = endYmd.slice(0, 4);
+          month = parseInt(endYmd.slice(5, 7), 10) || 0;
+        }
+
+        return {
+          periodDisplay,
+          startYmd,
+          endYmd,
+          year,
+          month
+        };
+      }
+
+      function isCollectionSiteCompleted(matchedSite, progress) {
+        if (progress !== null && progress !== undefined && progress >= 100) return true;
+        if (!matchedSite) return false;
+        if (typeof isSiteCompleted === "function" && isSiteCompleted(matchedSite)) return true;
+        if (matchedSite.isCompleted || matchedSite.status === "완료" || (matchedSite.progressRate !== null && matchedSite.progressRate !== undefined && Number(matchedSite.progressRate) >= 100)) return true;
+        return false;
+      }
+
+      function getCollectionRowFinancials(r) {
+        const total = Number(r.totalAmount) || 0;
+        const colVal = Number(r.collectedAmount);
+        const collected = (!isNaN(colVal) && colVal > 0) ? colVal : (
+          (Number(r.downPayment) || 0) + (Number(r.startPayment) || 0) +
+          (Number(r.midPayment1) || 0) + (Number(r.midPayment2) || 0) + (Number(r.midPayment3) || 0) +
+          (Number(r.finalPayment) || 0)
+        );
+        const uncollected = (r.uncollectedAmount !== undefined && r.uncollectedAmount !== null && r.uncollectedAmount !== "")
+          ? Number(r.uncollectedAmount)
+          : (total - collected);
+        const rate = total > 0 ? Math.round((collected / total) * 100) : 0;
+        return { total, collected, uncollected, rate };
+      }
+
+      function renderCollectionStepsHtml(r) {
+        const down = Number(r.downPayment) || 0;
+        const start = Number(r.startPayment) || 0;
+        const mid = (Number(r.midPayment1) || 0) + (Number(r.midPayment2) || 0) + (Number(r.midPayment3) || 0);
+        const fin = Number(r.finalPayment) || 0;
+
+        const tip = `계약: ${formatShortAmount(down)} / 착수: ${formatShortAmount(start)} / 중도: ${formatShortAmount(mid)} / 잔금: ${formatShortAmount(fin)}`;
+
+        const makeChip = (label, amt) => {
+          const isPaid = amt > 0;
+          const bg = isPaid ? "#dcfce7" : "#f1f5f9";
+          const color = isPaid ? "#15803d" : "#94a3b8";
+          const border = isPaid ? "#86efac" : "#e2e8f0";
+          return `<span style="font-size:10px;font-weight:800;padding:1px 5px;border-radius:4px;background:${bg};color:${color};border:1px solid ${border};white-space:nowrap;" title="${label}: ${amt > 0 ? amt.toLocaleString("ko-KR") + "원 입금완료" : "미입금"}">${label}</span>`;
+        };
+
+        return `
+          <div style="display:inline-flex;align-items:center;gap:3px;" title="${escHtml(tip)}">
+            ${makeChip("계", down)}
+            ${makeChip("착", start)}
+            ${makeChip("중", mid)}
+            ${makeChip("잔", fin)}
+          </div>
+        `;
+      }
+
+      function getCollectionYears(list) {
+        const yearsSet = new Set();
+        const curY = new Date().getFullYear();
+        yearsSet.add(curY);
+        yearsSet.add(curY - 1);
+        (list || []).forEach((r) => {
+          const info = getCollectionPeriodInfo(r);
+          if (info.year && /^\d{4}$/.test(info.year)) {
+            yearsSet.add(parseInt(info.year, 10));
+          }
+        });
+        return Array.from(yearsSet).sort((a, b) => b - a);
+      }
+
+      function getMonthlyCollectionStats(list, selectedYear) {
+        const months = [];
+        for (let m = 1; m <= 12; m++) {
+          months.push({
+            month: m,
+            count: 0,
+            totalAmount: 0,
+            collected: 0,
+            uncollected: 0,
+            uncollectedSitesCount: 0,
+            hasUncollected: false
+          });
+        }
+
+        (list || []).forEach((r) => {
+          const info = getCollectionPeriodInfo(r);
+          if (!info.month || info.month < 1 || info.month > 12) return;
+          if (selectedYear !== "all" && selectedYear !== "undetermined") {
+            if (info.year !== String(selectedYear)) return;
+          }
+
+          const mIdx = info.month - 1;
+          const stat = months[mIdx];
+          const fin = getCollectionRowFinancials(r);
+          stat.count++;
+          stat.totalAmount += fin.total;
+          stat.collected += fin.collected;
+          if (fin.uncollected > 0) {
+            stat.uncollected += fin.uncollected;
+            stat.uncollectedSitesCount++;
+            stat.hasUncollected = true;
+          }
+        });
+
+        return months;
+      }
+
+      function renderCollectionMonthStripHtml(allList, selectedYear, selectedMonth, isMobile) {
+        const months = getMonthlyCollectionStats(allList, selectedYear);
+        const years = getCollectionYears(allList);
+
+        const yearChipsHtml = `
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+            <span style="font-size:11.5px;font-weight:700;color:#475569;margin-right:2px;">📅 연도:</span>
+            <button type="button" class="btn-sub-chip ${selectedYear === "all" ? "active" : ""}" style="padding:3px 8px;font-size:11.5px;" onclick="window.setFinanceYearFilter('all')">전체</button>
+            ${years.map(y => `
+              <button type="button" class="btn-sub-chip ${String(selectedYear) === String(y) ? "active" : ""}" style="padding:3px 8px;font-size:11.5px;" onclick="window.setFinanceYearFilter('${y}')">${y}년</button>
+            `).join("")}
+            <button type="button" class="btn-sub-chip ${selectedYear === "undetermined" ? "active" : ""}" style="padding:3px 8px;font-size:11.5px;" onclick="window.setFinanceYearFilter('undetermined')">기간미정</button>
+          </div>
+        `;
+
+        const resetBtnHtml = (selectedMonth > 0 || selectedYear !== "all") ? `
+          <button type="button" onclick="window.resetFinanceDateFilters()" style="background:none;border:none;color:#2563eb;font-size:11.5px;font-weight:700;cursor:pointer;padding:2px 6px;">
+            ↺ 기간 필터 초기화
+          </button>
+        ` : "";
+
+        const monthCardsHtml = months.map((m) => {
+          const isSelected = selectedMonth === m.month;
+          const hasData = m.count > 0;
+          const bg = isSelected ? "#2563eb" : (hasData ? "#ffffff" : "#f8fafc");
+          const border = isSelected ? "#1d4ed8" : (hasData ? "#cbd5e1" : "#e2e8f0");
+          const textTitle = isSelected ? "#ffffff" : (hasData ? "#1e293b" : "#94a3b8");
+          const textCount = isSelected ? "#dbeafe" : (hasData ? "#2563eb" : "#94a3b8");
+          const textAmt = isSelected ? "#ffffff" : (hasData ? "#15803d" : "#cbd5e1");
+
+          return `
+            <div onclick="window.setFinanceMonthFilter(${m.month})"
+              style="cursor:pointer;padding:${isMobile ? "6px 8px" : "8px 6px"};border-radius:8px;background:${bg};border:1.5px solid ${border};text-align:center;transition:all 0.15s ease;flex:${isMobile ? "0 0 68px" : "1"};min-width:${isMobile ? "68px" : "0"};position:relative;box-shadow:${isSelected ? "0 2px 8px rgba(37,99,235,0.25)" : "none"};"
+              title="${m.month}월: ${m.count}건 / 수금 ${formatKrw(m.collected)}${m.uncollected > 0 ? " / 미수 " + formatKrw(m.uncollected) : ""}">
+              ${m.hasUncollected ? `
+                <span style="position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:#ef4444;" title="미수 현장 있음"></span>
+              ` : ""}
+              <div style="font-size:${isMobile ? "11px" : "12px"};font-weight:800;color:${textTitle};">${m.month}월</div>
+              <div style="font-size:10px;font-weight:700;color:${textCount};margin-top:2px;">${m.count > 0 ? m.count + "건" : "-"}</div>
+              <div style="font-size:10px;font-weight:700;color:${textAmt};margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                ${m.count > 0 ? formatShortAmount(m.collected) : ""}
+              </div>
+            </div>
+          `;
+        }).join("");
+
+        return `
+          <div class="standard-card" style="padding:${isMobile ? "10px 12px" : "12px 16px"};margin-bottom:14px;background:#fcfdfe;border:1px solid #e2e8f0;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+              ${yearChipsHtml}
+              <div style="display:flex;align-items:center;gap:6px;">
+                ${selectedMonth > 0 ? `<span style="font-size:11.5px;font-weight:800;color:#2563eb;background:#eff6ff;padding:2px 8px;border-radius:4px;border:1px solid #bfdbfe;">선택: ${selectedMonth}월</span>` : ""}
+                ${resetBtnHtml}
+              </div>
+            </div>
+            <div style="${isMobile ? "display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;" : "display:grid;grid-template-columns:repeat(12, 1fr);gap:6px;"}">
+              ${monthCardsHtml}
+            </div>
+          </div>
+        `;
+      }
+
       function getFilteredCollectionList() {
         const list = (state.financeDbData && Array.isArray(state.financeDbData.collection)) ? state.financeDbData.collection : [];
         const q = String(state.financeSearchQuery || "").trim().toLowerCase();
         const stFilter = state.financeStatusFilter || "all";
         const mgrFilter = state.financeManagerFilter || "all";
+        const yearFilter = state.financeYearFilter || "all";
+        const monthFilter = Number(state.financeMonthFilter) || 0;
 
         return list.filter((r) => {
           if (mgrFilter !== "all" && r.manager !== mgrFilter) return false;
 
-          const uncollected = Number(r.uncollectedAmount) || 0;
+          const matchedSite = findMatchedSiteInfo(r.siteName);
+          const progress = (matchedSite && matchedSite.progressRate !== undefined && matchedSite.progressRate !== null)
+            ? matchedSite.progressRate
+            : (r.progressRate !== "" && r.progressRate !== null && r.progressRate !== undefined ? Number(r.progressRate) : null);
+
+          const fin = getCollectionRowFinancials(r);
+          const uncollected = fin.uncollected;
           const status = String(r.status || "").trim();
+
           if (stFilter === "uncollected") {
             if (uncollected <= 0) return false;
+          } else if (stFilter === "doneUncollected") {
+            if (uncollected <= 0) return false;
+            const isDone = isCollectionSiteCompleted(matchedSite, progress);
+            if (!isDone) return false;
           } else if (stFilter === "closing") {
             if (status !== "마감중") return false;
           } else if (stFilter === "completed") {
             if (status !== "완료" && uncollected > 0) return false;
+          }
+
+          const pInfo = getCollectionPeriodInfo(r, matchedSite);
+          if (yearFilter !== "all") {
+            if (yearFilter === "undetermined") {
+              if (pInfo.year) return false;
+            } else {
+              if (pInfo.year !== String(yearFilter)) return false;
+            }
+          }
+
+          if (monthFilter > 0) {
+            if (pInfo.month !== monthFilter) return false;
           }
 
           if (q) {
@@ -5237,7 +5513,8 @@
               r.category,
               r.note,
               r.changeDesc,
-              r.taxInvoice
+              r.taxInvoice,
+              pInfo.periodDisplay
             ].filter(Boolean).join(" ").toLowerCase();
             if (!targetStr.includes(q)) return false;
           }
@@ -5245,6 +5522,15 @@
           return true;
         });
       }
+
+      window.state = state;
+      window.getCollectionPeriodInfo = getCollectionPeriodInfo;
+      window.getFilteredCollectionList = getFilteredCollectionList;
+      window.renderCollectionStepsHtml = renderCollectionStepsHtml;
+      window.getMonthlyCollectionStats = getMonthlyCollectionStats;
+      window.getCollectionYears = getCollectionYears;
+      window.isCollectionSiteCompleted = isCollectionSiteCompleted;
+      window.getCollectionRowFinancials = getCollectionRowFinancials;
 
       window.setFinanceSubTab = function(subTab) {
         state.financeSubTab = subTab;
@@ -5280,6 +5566,28 @@
 
       window.setFinanceManagerFilter = function(mgr) {
         state.financeManagerFilter = mgr;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.setFinanceYearFilter = function(year) {
+        state.financeYearFilter = year;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.setFinanceMonthFilter = function(month) {
+        state.financeMonthFilter = (state.financeMonthFilter === month) ? 0 : month;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.resetFinanceDateFilters = function() {
+        state.financeYearFilter = "all";
+        state.financeMonthFilter = 0;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
@@ -5328,14 +5636,41 @@
           if (mgrInput && (!mgrInput.value || mgrInput.value === "조항만") && matched.manager) {
             mgrInput.value = matched.manager;
           }
-          const periodInput = document.getElementById("colPeriod");
-          if (periodInput && !periodInput.value && matched.earliestDateDisplay) {
-            periodInput.value = matched.earliestDateDisplay;
-          }
           const catInput = document.getElementById("colCategory");
           if (catInput && matched.scopeType) {
             catInput.value = matched.scopeType;
           }
+          const periodInput = document.getElementById("colPeriod");
+          const sInput = document.getElementById("colStartDate");
+          const eInput = document.getElementById("colEndDate");
+          const dm = (typeof getSiteDateMetrics === "function") ? getSiteDateMetrics(matched) : null;
+          if (dm && dm.earliest) {
+            const sYmd = dm.earliest;
+            const eYmd = dm.latest || dm.earliest;
+            if (sInput && (!sInput.value || !periodInput.value)) sInput.value = sYmd;
+            if (eInput && (!eInput.value || !periodInput.value)) eInput.value = eYmd;
+            if (periodInput && !periodInput.value) {
+              const sFmt = sYmd.replace(/-/g, ".");
+              const eFmt = eYmd.replace(/-/g, ".");
+              periodInput.value = (sFmt === eFmt ? sFmt : `${sFmt} ~ ${eFmt}`);
+            }
+          }
+        }
+      };
+
+      window.onCollectionPeriodDateChange = function() {
+        const s = document.getElementById("colStartDate") ? document.getElementById("colStartDate").value : "";
+        const e = document.getElementById("colEndDate") ? document.getElementById("colEndDate").value : "";
+        const periodInput = document.getElementById("colPeriod");
+        if (!periodInput) return;
+        if (s && e) {
+          const sFmt = s.replace(/-/g, ".");
+          const eFmt = e.replace(/-/g, ".");
+          periodInput.value = (sFmt === eFmt ? sFmt : `${sFmt} ~ ${eFmt}`);
+        } else if (s) {
+          periodInput.value = s.replace(/-/g, ".");
+        } else if (e) {
+          periodInput.value = e.replace(/-/g, ".");
         }
       };
 
@@ -5383,6 +5718,12 @@
           note: ""
         };
 
+        const matchedSite = findMatchedSiteInfo(rData.siteName);
+        const pInfo = getCollectionPeriodInfo(rData, matchedSite);
+        const initStartDate = pInfo.startYmd || "";
+        const initEndDate = pInfo.endYmd || "";
+        const initPeriod = rData.period || pInfo.periodDisplay || "";
+
         const bodyEl = document.getElementById("collectionModalBody");
         if (!bodyEl) return;
 
@@ -5409,33 +5750,43 @@
             <div>
               <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">담당자</label>
               <select id="colManager" style="width:100%;height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;">
-                ${memberOptions.map(m => `<option value="${escHtml(m)}" ${rData.manager === m ? 'selected' : ''}>${escHtml(m)}</option>`).join("")}
+                ${memberOptions.map(m => `<option value="${escHtml(m)}" ${rData.manager === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}
               </select>
             </div>
             <div>
               <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">구분</label>
               <select id="colCategory" style="width:100%;height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;">
-                <option value="전체공사" ${rData.category === '전체공사' ? 'selected' : ''}>전체공사</option>
-                <option value="인테리어" ${rData.category === '인테리어' ? 'selected' : ''}>인테리어</option>
-                <option value="부분공사" ${rData.category === '부분공사' ? 'selected' : ''}>부분공사</option>
-                <option value="단품" ${rData.category === '단품' ? 'selected' : ''}>단품</option>
-                <option value="상업" ${rData.category === '상업' ? 'selected' : ''}>상업</option>
-                <option value="리모델링" ${rData.category === '리모델링' ? 'selected' : ''}>리모델링</option>
-                <option value="기타" ${rData.category === '기타' ? 'selected' : ''}>기타</option>
+                <option value="전체공사" ${rData.category === "전체공사" ? "selected" : ""}>전체공사</option>
+                <option value="인테리어" ${rData.category === "인테리어" ? "selected" : ""}>인테리어</option>
+                <option value="부분공사" ${rData.category === "부분공사" ? "selected" : ""}>부분공사</option>
+                <option value="단품" ${rData.category === "단품" ? "selected" : ""}>단품</option>
+                <option value="상업" ${rData.category === "상업" ? "selected" : ""}>상업</option>
+                <option value="리모델링" ${rData.category === "리모델링" ? "selected" : ""}>리모델링</option>
+                <option value="기타" ${rData.category === "기타" ? "selected" : ""}>기타</option>
               </select>
             </div>
             <div>
               <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">수금상태</label>
               <select id="colStatus" style="width:100%;height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;font-weight:700;">
-                <option value="진행중" ${rData.status === '진행중' ? 'selected' : ''}>진행중</option>
-                <option value="마감중" ${rData.status === '마감중' ? 'selected' : ''}>마감중</option>
-                <option value="완료" ${rData.status === '완료' ? 'selected' : ''}>완료</option>
+                <option value="진행중" ${rData.status === "진행중" ? "selected" : ""}>진행중</option>
+                <option value="마감중" ${rData.status === "마감중" ? "selected" : ""}>마감중</option>
+                <option value="완료" ${rData.status === "완료" ? "selected" : ""}>완료</option>
               </select>
             </div>
-            <div>
-              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">공사기간</label>
-              <input type="text" id="colPeriod" value="${escHtml(rData.period)}" placeholder="예: 2026.11.01 ~ 11.30"
-                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+          </div>
+
+          <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
+            <label style="display:block;font-size:12px;font-weight:700;margin-bottom:6px;color:#334155;">
+              공사기간 <span style="font-size:11px;font-weight:normal;color:#64748b;">(날짜 선택 시 YYYY.MM.DD 포맷 자동 완성, 직접 입력 가능)</span>
+            </label>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              <input type="date" id="colStartDate" value="${escHtml(initStartDate)}" onchange="window.onCollectionPeriodDateChange()"
+                style="height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;flex:1;min-width:130px;" />
+              <span style="color:#94a3b8;font-weight:700;">~</span>
+              <input type="date" id="colEndDate" value="${escHtml(initEndDate)}" onchange="window.onCollectionPeriodDateChange()"
+                style="height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;flex:1;min-width:130px;" />
+              <input type="text" id="colPeriod" value="${escHtml(initPeriod)}" placeholder="예: 2026.11.01 ~ 2026.11.30"
+                style="height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;flex:1.5;min-width:180px;" />
             </div>
           </div>
 
@@ -5444,95 +5795,94 @@
             <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:10px;">
               <div>
                 <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:3px;color:#475569;">계약금액(원)</label>
-                <input type="number" id="colContractAmount" value="${rData.contractAmount || ''}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                <input type="number" id="colContractAmount" value="${rData.contractAmount || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
                   style="width:100%;height:34px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;font-weight:700;text-align:right;" />
               </div>
               <div>
                 <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:3px;color:#475569;">증감액(+ -)</label>
-                <input type="number" id="colChangeAmount" value="${rData.changeAmount || ''}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                <input type="number" id="colChangeAmount" value="${rData.changeAmount || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
                   style="width:100%;height:34px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;font-weight:700;text-align:right;" />
               </div>
-              <div style="grid-column: 1 / -1;">
-                <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:3px;color:#475569;">추가/삭제 내역 메모</label>
-                <input type="text" id="colChangeDesc" value="${escHtml(rData.changeDesc)}" placeholder="예: 붙박이장 추가(+150만), 중문 제외(-80만)"
-                  style="width:100%;height:34px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;" />
+              <div>
+                <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:3px;color:#475569;">증감 사유</label>
+                <input type="text" id="colChangeDesc" value="${escHtml(rData.changeDesc)}" placeholder="공정 추가 등"
+                  style="width:100%;height:34px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;" />
               </div>
             </div>
           </div>
 
           <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
-            <div style="font-size:12.5px;font-weight:800;margin-bottom:8px;color:#1e293b;">📥 단계별 수금액(원)</div>
-            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
+            <div style="font-size:12.5px;font-weight:800;margin-bottom:8px;color:#1e293b;">📥 단계별 수금 실적(원)</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:8px;">
               <div>
-                <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">계약금</label>
-                <input type="number" id="colDownPayment" value="${rData.downPayment || ''}" placeholder="0" oninput="window.calcCollectionModalTotals()"
-                  style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;text-align:right;" />
+                <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#64748b;">1. 계약금</label>
+                <input type="number" id="colDownPayment" value="${rData.downPayment || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                  style="width:100%;height:32px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;text-align:right;" />
               </div>
               <div>
-                <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">착수금</label>
-                <input type="number" id="colStartPayment" value="${rData.startPayment || ''}" placeholder="0" oninput="window.calcCollectionModalTotals()"
-                  style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;text-align:right;" />
+                <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#64748b;">2. 착수금</label>
+                <input type="number" id="colStartPayment" value="${rData.startPayment || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                  style="width:100%;height:32px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;text-align:right;" />
               </div>
               <div>
-                <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">중도금 1차</label>
-                <input type="number" id="colMidPayment1" value="${rData.midPayment1 || ''}" placeholder="0" oninput="window.calcCollectionModalTotals()"
-                  style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;text-align:right;" />
+                <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#64748b;">3. 중도금 1차</label>
+                <input type="number" id="colMidPayment1" value="${rData.midPayment1 || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                  style="width:100%;height:32px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;text-align:right;" />
               </div>
               <div>
-                <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">중도금 2차</label>
-                <input type="number" id="colMidPayment2" value="${rData.midPayment2 || ''}" placeholder="0" oninput="window.calcCollectionModalTotals()"
-                  style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;text-align:right;" />
+                <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#64748b;">4. 중도금 2차</label>
+                <input type="number" id="colMidPayment2" value="${rData.midPayment2 || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                  style="width:100%;height:32px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;text-align:right;" />
               </div>
               <div>
-                <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">중도금 3차</label>
-                <input type="number" id="colMidPayment3" value="${rData.midPayment3 || ''}" placeholder="0" oninput="window.calcCollectionModalTotals()"
-                  style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;text-align:right;" />
+                <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#64748b;">5. 중도금 3차</label>
+                <input type="number" id="colMidPayment3" value="${rData.midPayment3 || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                  style="width:100%;height:32px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;text-align:right;" />
               </div>
               <div>
-                <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">잔금</label>
-                <input type="number" id="colFinalPayment" value="${rData.finalPayment || ''}" placeholder="0" oninput="window.calcCollectionModalTotals()"
-                  style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;text-align:right;" />
+                <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#64748b;">6. 잔금</label>
+                <input type="number" id="colFinalPayment" value="${rData.finalPayment || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                  style="width:100%;height:32px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;text-align:right;" />
               </div>
             </div>
-          </div>
 
-          <div style="background:#0f172a;color:#ffffff;padding:14px;border-radius:8px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <!-- 실시간 계산 요약 박스 -->
+            <div style="background:#1e293b;color:#f8fafc;padding:10px 14px;border-radius:6px;margin-top:10px;display:grid;grid-template-columns:repeat(4, 1fr);gap:8px;text-align:center;">
               <div>
                 <div style="font-size:11px;color:#94a3b8;">최종 계약금액</div>
-                <div id="colTotalAmountDisplay" style="font-size:16px;font-weight:800;color:#38bdf8;">0원</div>
+                <div id="colTotalAmountDisplay" style="font-size:13px;font-weight:800;color:#38bdf8;margin-top:2px;">0원</div>
               </div>
               <div>
                 <div style="font-size:11px;color:#94a3b8;">누적 수금액</div>
-                <div id="colCollectedDisplay" style="font-size:16px;font-weight:800;color:#4ade80;">0원</div>
+                <div id="colCollectedDisplay" style="font-size:13px;font-weight:800;color:#4ade80;margin-top:2px;">0원</div>
               </div>
               <div>
                 <div style="font-size:11px;color:#94a3b8;">미수금</div>
-                <div id="colUncollectedDisplay" style="font-size:18px;font-weight:900;color:#f87171;">0원</div>
+                <div id="colUncollectedDisplay" style="font-size:13px;font-weight:800;color:#f87171;margin-top:2px;">0원</div>
               </div>
-              <div style="text-align:right;">
+              <div>
                 <div style="font-size:11px;color:#94a3b8;">수금률</div>
-                <div id="colRateDisplay" style="font-size:16px;font-weight:800;color:#fbbf24;">0%</div>
+                <div id="colRateDisplay" style="font-size:13px;font-weight:800;color:#facc15;margin-top:2px;">0%</div>
               </div>
             </div>
-            <div style="height:6px;background:#334155;border-radius:3px;overflow:hidden;margin-top:10px;">
-              <div id="colRateBar" style="width:0%;height:100%;background:#38bdf8;transition:width 0.2s ease;"></div>
+            <div style="background:#334155;height:5px;border-radius:3px;overflow:hidden;margin-top:4px;">
+              <div id="colRateBar" style="background:#4ade80;height:100%;width:0%;transition:width 0.3s ease;"></div>
             </div>
           </div>
 
-          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
             <div>
-              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">계산서 발행</label>
-              <select id="colTaxInvoice" style="width:100%;height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;font-weight:700;">
-                <option value="미발행" ${rData.taxInvoice === '미발행' ? 'selected' : ''}>미발행</option>
-                <option value="세금계산서" ${rData.taxInvoice === '세금계산서' ? 'selected' : ''}>세금계산서</option>
-                <option value="현금영수증" ${rData.taxInvoice === '현금영수증' ? 'selected' : ''}>현금영수증</option>
-                <option value="발행완료" ${rData.taxInvoice === '발행완료' ? 'selected' : ''}>발행완료</option>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">세금계산서 발행</label>
+              <select id="colTaxInvoice" style="width:100%;height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;">
+                <option value="미발행" ${rData.taxInvoice === "미발행" ? "selected" : ""}>미발행</option>
+                <option value="세금계산서" ${rData.taxInvoice === "세금계산서" ? "selected" : ""}>세금계산서</option>
+                <option value="현금영수증" ${rData.taxInvoice === "현금영수증" ? "selected" : ""}>현금영수증</option>
+                <option value="발행완료" ${rData.taxInvoice === "발행완료" ? "selected" : ""}>발행완료</option>
               </select>
             </div>
             <div>
-              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">비고 / 특이사항</label>
-              <input type="text" id="colNote" value="${escHtml(rData.note)}" placeholder="입금 계좌, 영수증 번호, 특이사항 등"
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">특이사항 / 비고</label>
+              <input type="text" id="colNote" value="${escHtml(rData.note)}" placeholder="입금 예정일, 고객 특이사항 등"
                 style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
             </div>
           </div>
@@ -5541,19 +5891,19 @@
         const footEl = document.getElementById("collectionModalFooter");
         if (footEl) {
           footEl.innerHTML = `
-            <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
-              <div>
-                ${isEdit ? `<button type="button" class="btn-sub-danger" onclick="window.onDeleteCollectionRow('${escJs(row.id)}')">🗑️ 삭제</button>` : ''}
-              </div>
-              <div style="display:flex;gap:8px;">
-                <button type="button" class="btn-sub-secondary" onclick="window.closeCollectionModal()">닫기</button>
-                <button type="button" class="btn-act-blue" id="btnSaveCollectionRow" onclick="window.onSaveCollectionRow('${escJs(rData.id)}')">저장하기</button>
-              </div>
-            </div>
+            ${isEdit ? `
+              <button type="button" class="btn-sub-xs" style="color:#ef4444;border-color:#fca5a5;padding:6px 12px;margin-right:auto;" onclick="window.onDeleteCollectionRow('${escJs(row.id)}')">
+                🗑️ 삭제
+              </button>
+            ` : ""}
+            <button type="button" class="btn-secondary" onclick="window.closeCollectionModal()">취소</button>
+            <button type="button" class="btn-primary" id="btnSaveCollectionRow" onclick="window.onSaveCollectionRow('${escJs(rData.id)}')">
+              ${isEdit ? "수정 저장하기" : "신규 등록하기"}
+            </button>
           `;
         }
 
-        window.calcCollectionModalTotals();
+        calcCollectionModalTotals();
         openModal("collectionModal");
       };
 
@@ -5723,19 +6073,9 @@
         const filtered = getFilteredCollectionList();
 
         const totalContract = filtered.reduce((acc, r) => acc + (Number(r.totalAmount) || 0), 0);
-        const totalCollected = filtered.reduce((acc, r) => {
-          const colVal = Number(r.collectedAmount);
-          if (!isNaN(colVal) && colVal > 0) return acc + colVal;
-          const down = Number(r.downPayment) || 0;
-          const start = Number(r.startPayment) || 0;
-          const m1 = Number(r.midPayment1) || 0;
-          const m2 = Number(r.midPayment2) || 0;
-          const m3 = Number(r.midPayment3) || 0;
-          const fin = Number(r.finalPayment) || 0;
-          return acc + (down + start + m1 + m2 + m3 + fin);
-        }, 0);
-        const totalUncollected = filtered.reduce((acc, r) => acc + (Number(r.uncollectedAmount) || 0), 0);
-        const uncollectedSitesCount = filtered.filter((r) => (Number(r.uncollectedAmount) || 0) > 0).length;
+        const totalCollected = filtered.reduce((acc, r) => acc + getCollectionRowFinancials(r).collected, 0);
+        const totalUncollected = filtered.reduce((acc, r) => acc + getCollectionRowFinancials(r).uncollected, 0);
+        const uncollectedSitesCount = filtered.filter((r) => getCollectionRowFinancials(r).uncollected > 0).length;
         const unissuedTaxCount = filtered.filter((r) => !r.taxInvoice || r.taxInvoice === "미발행").length;
         const collectionRate = totalContract > 0 ? Math.round((totalCollected / totalContract) * 100) : 0;
 
@@ -5743,15 +6083,25 @@
         const stFilter = state.financeStatusFilter || "all";
         const mgrFilter = state.financeManagerFilter || "all";
 
+        const doneUncollectedCount = allCollection.filter(r => {
+          const mSite = findMatchedSiteInfo(r.siteName);
+          const prog = (mSite && mSite.progressRate !== undefined && mSite.progressRate !== null)
+            ? mSite.progressRate
+            : (r.progressRate !== "" && r.progressRate !== null && r.progressRate !== undefined ? Number(r.progressRate) : null);
+          const fin = getCollectionRowFinancials(r);
+          if (fin.uncollected <= 0) return false;
+          return isCollectionSiteCompleted(mSite, prog);
+        }).length;
+
         const subTabsHtml = `
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
             <div style="display:flex;gap:6px;background:#f1f5f9;padding:4px;border-radius:10px;">
-              <button type="button" class="btn-subtab-chip ${subTab === 'collection' ? 'active' : ''}" onclick="window.setFinanceSubTab('collection')">💰 현장 수금현황</button>
-              <button type="button" class="btn-subtab-chip ${subTab === 'expense' ? 'active' : ''}" onclick="window.setFinanceSubTab('expense')">🧾 월별 비용마감</button>
-              <button type="button" class="btn-subtab-chip ${subTab === 'monthly' ? 'active' : ''}" onclick="window.setFinanceSubTab('monthly')">📊 월간집계</button>
+              <button type="button" class="btn-subtab-chip ${subTab === "collection" ? "active" : ""}" onclick="window.setFinanceSubTab('collection')">💰 현장 수금현황</button>
+              <button type="button" class="btn-subtab-chip ${subTab === "expense" ? "active" : ""}" onclick="window.setFinanceSubTab('expense')">🧾 월별 비용마감</button>
+              <button type="button" class="btn-subtab-chip ${subTab === "monthly" ? "active" : ""}" onclick="window.setFinanceSubTab('monthly')">📊 월간집계</button>
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
-              <span style="font-size:12px;color:var(--text-muted);">${state.financeDbData && state.financeDbData.updatedAt ? '동기화: ' + escHtml(state.financeDbData.updatedAt) : ''}</span>
+              <span style="font-size:12px;color:var(--text-muted);">${state.financeDbData && state.financeDbData.updatedAt ? "동기화: " + escHtml(state.financeDbData.updatedAt) : ""}</span>
               <button type="button" class="btn-act-blue" style="height:32px;padding:0 12px;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;" onclick="openMonthlyReportModal()">📊 월간집계 리포트</button>
             </div>
           </div>
@@ -5773,9 +6123,9 @@
                 재무 전용 DB 시트와 성공적으로 연동되었습니다. 비용마감 실데이터 <strong>${expList.length}건</strong>, 고정 마스터 <strong>${fixList.length}건</strong>이 백엔드에서 정상 동기화되어 있으며, Step 3에서 월별 상세 청구/지급 편집 화면이 제공됩니다.
               </p>
               <div style="display:inline-flex;gap:18px;background:#ffffff;padding:10px 20px;border-radius:8px;border:1px solid #e2e8f0;font-size:13px;">
-                <div><span style="color:#64748b;">총 청구:</span> <strong style="color:#1e293b;">${totalClaim.toLocaleString('ko-KR')}원</strong></div>
-                <div><span style="color:#64748b;">총 지급:</span> <strong style="color:#15803d;">${totalPaid.toLocaleString('ko-KR')}원</strong></div>
-                <div><span style="color:#64748b;">외상 잔액:</span> <strong style="color:#dc2626;">${totalBal.toLocaleString('ko-KR')}원</strong></div>
+                <div><span style="color:#64748b;">총 청구:</span> <strong style="color:#1e293b;">${totalClaim.toLocaleString("ko-KR")}원</strong></div>
+                <div><span style="color:#64748b;">총 지급:</span> <strong style="color:#15803d;">${totalPaid.toLocaleString("ko-KR")}원</strong></div>
+                <div><span style="color:#64748b;">외상 잔액:</span> <strong style="color:#dc2626;">${totalBal.toLocaleString("ko-KR")}원</strong></div>
               </div>
             </div>
             ${expList.length > 0 ? `
@@ -5792,17 +6142,17 @@
                         <td>${escHtml(e.category)}</td>
                         <td>${escHtml(e.vendor)}</td>
                         <td>${escHtml(e.siteName)}</td>
-                        <td style="text-align:right;font-weight:700;">${Number(e.claimAmount || 0).toLocaleString('ko-KR')}원</td>
-                        <td style="text-align:right;color:#15803d;font-weight:700;">${Number(e.paidAmount || 0).toLocaleString('ko-KR')}원</td>
-                        <td style="text-align:right;color:#dc2626;font-weight:700;">${Number(e.balance || 0).toLocaleString('ko-KR')}원</td>
-                        <td>${escHtml(e.payDate || '-')}</td>
-                        <td>${escHtml(e.note || '-')}</td>
+                        <td style="text-align:right;font-weight:700;">${Number(e.claimAmount || 0).toLocaleString("ko-KR")}원</td>
+                        <td style="text-align:right;color:#15803d;font-weight:700;">${Number(e.paidAmount || 0).toLocaleString("ko-KR")}원</td>
+                        <td style="text-align:right;color:#dc2626;font-weight:700;">${Number(e.balance || 0).toLocaleString("ko-KR")}원</td>
+                        <td>${escHtml(e.payDate || "-")}</td>
+                        <td>${escHtml(e.note || "-")}</td>
                       </tr>
-                    `).join('')}
+                    `).join("")}
                   </tbody>
                 </table>
               </div>
-            ` : ''}
+            ` : ""}
           `;
           return;
         }
@@ -5852,6 +6202,8 @@
           </div>
         `;
 
+        const monthStripHtml = renderCollectionMonthStripHtml(allCollection, state.financeYearFilter || "all", state.financeMonthFilter || 0, false);
+
         const filterBarHtml = `
           <div class="standard-card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;padding:12px 16px;">
             <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;flex:1;min-width:320px;">
@@ -5860,19 +6212,20 @@
                   value="${escHtml(state.financeSearchQuery)}"
                   oninput="window.onFinanceSearchInput(this.value)"
                   style="width:100%;height:34px;padding:0 28px 0 10px;border-radius:6px;border:1px solid var(--border-dark);font-size:12.5px;outline:none;" />
-                ${state.financeSearchQuery ? `<button type="button" onclick="window.clearFinanceSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:bold;line-height:1;">✕</button>` : ''}
+                ${state.financeSearchQuery ? `<button type="button" onclick="window.clearFinanceSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:bold;line-height:1;">✕</button>` : ""}
               </div>
 
-              <div style="display:flex;gap:4px;">
-                <button type="button" class="btn-sub-chip ${stFilter === 'all' ? 'active' : ''}" onclick="window.setFinanceStatusFilter('all')">전체 (${allCollection.length})</button>
-                <button type="button" class="btn-sub-chip ${stFilter === 'uncollected' ? 'active' : ''}" onclick="window.setFinanceStatusFilter('uncollected')">미수 있음 (${allCollection.filter(r => (Number(r.uncollectedAmount) || 0) > 0).length})</button>
-                <button type="button" class="btn-sub-chip ${stFilter === 'closing' ? 'active' : ''}" onclick="window.setFinanceStatusFilter('closing')">마감중 (${allCollection.filter(r => r.status === '마감중').length})</button>
-                <button type="button" class="btn-sub-chip ${stFilter === 'completed' ? 'active' : ''}" onclick="window.setFinanceStatusFilter('completed')">완료 (${allCollection.filter(r => r.status === '완료' || (Number(r.uncollectedAmount) || 0) <= 0).length})</button>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                <button type="button" class="btn-sub-chip ${stFilter === "all" ? "active" : ""}" onclick="window.setFinanceStatusFilter('all')">전체 (${allCollection.length})</button>
+                <button type="button" class="btn-sub-chip ${stFilter === "uncollected" ? "active" : ""}" onclick="window.setFinanceStatusFilter('uncollected')">미수 있음 (${allCollection.filter(r => getCollectionRowFinancials(r).uncollected > 0).length})</button>
+                <button type="button" class="btn-sub-chip ${stFilter === "doneUncollected" ? "active" : ""}" style="${stFilter === "doneUncollected" ? "background:#fee2e2;color:#dc2626;border-color:#f87171;" : "color:#b91c1c;"}" onclick="window.setFinanceStatusFilter('doneUncollected')">공사완료 미수 ⚠️ (${doneUncollectedCount})</button>
+                <button type="button" class="btn-sub-chip ${stFilter === "closing" ? "active" : ""}" onclick="window.setFinanceStatusFilter('closing')">마감중 (${allCollection.filter(r => r.status === "마감중").length})</button>
+                <button type="button" class="btn-sub-chip ${stFilter === "completed" ? "active" : ""}" onclick="window.setFinanceStatusFilter('completed')">완료 (${allCollection.filter(r => r.status === "완료" || getCollectionRowFinancials(r).uncollected <= 0).length})</button>
               </div>
 
               <select onchange="window.setFinanceManagerFilter(this.value)" style="height:34px;padding:0 10px;border-radius:6px;border:1px solid var(--border-dark);font-size:12.5px;font-weight:600;">
-                <option value="all" ${mgrFilter === 'all' ? 'selected' : ''}>전체 담당자</option>
-                ${managers.map(m => `<option value="${escHtml(m)}" ${mgrFilter === m ? 'selected' : ''}>${escHtml(m)}</option>`).join('')}
+                <option value="all" ${mgrFilter === "all" ? "selected" : ""}>전체 담당자</option>
+                ${managers.map(m => `<option value="${escHtml(m)}" ${mgrFilter === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}
               </select>
             </div>
 
@@ -5890,17 +6243,12 @@
             ? matchedSite.progressRate
             : (r.progressRate !== "" && r.progressRate !== null && r.progressRate !== undefined ? Number(r.progressRate) : null);
 
-          const periodDisplay = r.period || (matchedSite && matchedSite.earliestDateDisplay ? matchedSite.earliestDateDisplay : "");
-          const collected = Number(r.collectedAmount) || (
-            (Number(r.downPayment) || 0) + (Number(r.startPayment) || 0) +
-            (Number(r.midPayment1) || 0) + (Number(r.midPayment2) || 0) + (Number(r.midPayment3) || 0) +
-            (Number(r.finalPayment) || 0)
-          );
-          const uncollected = (r.uncollectedAmount !== undefined && r.uncollectedAmount !== null && r.uncollectedAmount !== "")
-            ? Number(r.uncollectedAmount)
-            : ((Number(r.totalAmount) || 0) - collected);
+          const pInfo = getCollectionPeriodInfo(r, matchedSite);
+          const fin = getCollectionRowFinancials(r);
+          const collected = fin.collected;
+          const uncollected = fin.uncollected;
 
-          const midTotal = (Number(r.midPayment1) || 0) + (Number(r.midPayment2) || 0) + (Number(r.midPayment3) || 0);
+          const isDoneUncollected = uncollected > 0 && isCollectionSiteCompleted(matchedSite, progress);
 
           let stBadge = `<span style="padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;">진행중</span>`;
           if (r.status === "마감중") stBadge = `<span style="padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;background:#fef3c7;color:#d97706;border:1px solid #fde68a;">마감중</span>`;
@@ -5912,34 +6260,37 @@
           else if (r.taxInvoice === "발행완료") taxBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;">발행완료</span>`;
 
           return `
-            <tr style="cursor:pointer;${uncollected > 0 ? 'background:#fffbfb;' : ''}" onclick="window.openCollectionModal('${escJs(r.id)}')">
+            <tr style="cursor:pointer;${isDoneUncollected ? "background:#fff5f5;" : (uncollected > 0 ? "background:#fffbfb;" : "")}" onclick="window.openCollectionModal('${escJs(r.id)}')">
               <td>
-                <div style="font-weight:800;color:#1e293b;font-size:13px;">${escHtml(r.siteName)}</div>
-                ${periodDisplay ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">📅 ${escHtml(periodDisplay)}</div>` : ''}
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                  <span style="font-weight:800;color:#1e293b;font-size:13px;">${escHtml(r.siteName)}</span>
+                  ${isDoneUncollected ? `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:800;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;white-space:nowrap;">⚠️ 공사완료 미수</span>` : ""}
+                </div>
+                ${pInfo.periodDisplay ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;font-weight:600;">📅 ${escHtml(pInfo.periodDisplay)}</div>` : ""}
               </td>
               <td>
-                <span style="font-weight:700;">${escHtml(r.manager || '-')}</span>
-                <div style="font-size:11px;color:var(--text-muted);">${escHtml(r.category || '전체공사')}</div>
+                <span style="font-weight:700;">${escHtml(r.manager || "-")}</span>
+                <div style="font-size:11px;color:var(--text-muted);">${escHtml(r.category || "전체공사")}</div>
               </td>
               <td>
-                <div style="font-weight:600;color:#334155;">${escHtml(r.clientName || '-')}</div>
+                <div style="font-weight:600;color:#334155;">${escHtml(r.clientName || "-")}</div>
               </td>
               <td style="text-align:right;">
-                <div style="font-weight:800;color:#1e293b;">${Number(r.totalAmount || 0).toLocaleString('ko-KR')}원</div>
-                ${r.changeAmount ? `<div style="font-size:11px;color:${r.changeAmount > 0 ? '#2563eb' : '#dc2626'};">${r.changeAmount > 0 ? '+' : ''}${Number(r.changeAmount).toLocaleString('ko-KR')}</div>` : ''}
+                <div style="font-weight:800;color:#1e293b;">${Number(r.totalAmount || 0).toLocaleString("ko-KR")}원</div>
+                ${r.changeAmount ? `<div style="font-size:11px;color:${r.changeAmount > 0 ? "#2563eb" : "#dc2626"};">${r.changeAmount > 0 ? "+" : ""}${Number(r.changeAmount).toLocaleString("ko-KR")}</div>` : ""}
               </td>
               <td style="text-align:right;">
-                <div style="font-weight:700;color:#15803d;">${Number(collected).toLocaleString('ko-KR')}원</div>
-                <div style="font-size:10.5px;color:var(--text-muted);white-space:nowrap;">
-                  계 ${formatShortAmount(r.downPayment)} / 중 ${formatShortAmount(midTotal)} / 잔 ${formatShortAmount(r.finalPayment)}
+                <div style="font-weight:700;color:#15803d;">${Number(collected).toLocaleString("ko-KR")}원</div>
+                <div style="margin-top:3px;display:flex;justify-content:flex-end;">
+                  ${renderCollectionStepsHtml(r)}
                 </div>
               </td>
               <td style="text-align:right;">
                 ${uncollected > 0
-                  ? `<div style="color:#dc2626;font-weight:900;font-size:13.5px;">${Number(uncollected).toLocaleString('ko-KR')}원</div>`
+                  ? `<div style="color:#dc2626;font-weight:900;font-size:13.5px;">${Number(uncollected).toLocaleString("ko-KR")}원</div>`
                   : (uncollected === 0
                     ? `<span style="color:#15803d;font-weight:700;font-size:12px;">완납 (0원)</span>`
-                    : `<span style="color:#2563eb;font-weight:700;font-size:12px;">+${Number(-uncollected).toLocaleString('ko-KR')}원</span>`)}
+                    : `<span style="color:#2563eb;font-weight:700;font-size:12px;">+${Number(-uncollected).toLocaleString("ko-KR")}원</span>`)}
               </td>
               <td style="text-align:center;">
                 ${progress !== null ? `
@@ -5972,11 +6323,11 @@
             <table class="clean-table" style="min-width:1050px;font-size:12.5px;">
               <thead>
                 <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;text-align:left;">
-                  <th style="padding:10px 12px;width:180px;">현장명</th>
+                  <th style="padding:10px 12px;width:190px;">현장명 / 공사기간</th>
                   <th style="padding:10px 10px;width:110px;">담당자/구분</th>
                   <th style="padding:10px 10px;width:100px;">계약자</th>
                   <th style="padding:10px 12px;text-align:right;width:110px;">최종금액</th>
-                  <th style="padding:10px 12px;text-align:right;width:130px;">수금액 (단계)</th>
+                  <th style="padding:10px 12px;text-align:right;width:140px;">수금액 (단계)</th>
                   <th style="padding:10px 12px;text-align:right;width:120px;">미수금</th>
                   <th style="padding:10px 10px;text-align:center;width:90px;">공사진행율</th>
                   <th style="padding:10px 8px;text-align:center;width:80px;">수금상태</th>
@@ -5992,6 +6343,7 @@
         document.getElementById("pcFinanceMain").innerHTML = `
           ${subTabsHtml}
           ${kpiHtml}
+          ${monthStripHtml}
           ${filterBarHtml}
           ${tableHtml}
         `;
@@ -7520,29 +7872,29 @@
         const filtered = getFilteredCollectionList();
 
         const totalContract = filtered.reduce((acc, r) => acc + (Number(r.totalAmount) || 0), 0);
-        const totalCollected = filtered.reduce((acc, r) => {
-          const colVal = Number(r.collectedAmount);
-          if (!isNaN(colVal) && colVal > 0) return acc + colVal;
-          const down = Number(r.downPayment) || 0;
-          const start = Number(r.startPayment) || 0;
-          const m1 = Number(r.midPayment1) || 0;
-          const m2 = Number(r.midPayment2) || 0;
-          const m3 = Number(r.midPayment3) || 0;
-          const fin = Number(r.finalPayment) || 0;
-          return acc + (down + start + m1 + m2 + m3 + fin);
-        }, 0);
-        const totalUncollected = filtered.reduce((acc, r) => acc + (Number(r.uncollectedAmount) || 0), 0);
-        const uncollectedSitesCount = filtered.filter((r) => (Number(r.uncollectedAmount) || 0) > 0).length;
+        const totalCollected = filtered.reduce((acc, r) => acc + getCollectionRowFinancials(r).collected, 0);
+        const totalUncollected = filtered.reduce((acc, r) => acc + getCollectionRowFinancials(r).uncollected, 0);
+        const uncollectedSitesCount = filtered.filter((r) => getCollectionRowFinancials(r).uncollected > 0).length;
         const unissuedTaxCount = filtered.filter((r) => !r.taxInvoice || r.taxInvoice === "미발행").length;
         const collectionRate = totalContract > 0 ? Math.round((totalCollected / totalContract) * 100) : 0;
         const stFilter = state.financeStatusFilter || "all";
 
+        const doneUncollectedCount = allCollection.filter(r => {
+          const mSite = findMatchedSiteInfo(r.siteName);
+          const prog = (mSite && mSite.progressRate !== undefined && mSite.progressRate !== null)
+            ? mSite.progressRate
+            : (r.progressRate !== "" && r.progressRate !== null && r.progressRate !== undefined ? Number(r.progressRate) : null);
+          const fin = getCollectionRowFinancials(r);
+          if (fin.uncollected <= 0) return false;
+          return isCollectionSiteCompleted(mSite, prog);
+        }).length;
+
         const subTabsHtml = `
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:6px;">
             <div style="display:flex;gap:4px;background:#f1f5f9;padding:3px;border-radius:8px;overflow-x:auto;">
-              <button type="button" class="btn-subtab-chip ${subTab === 'collection' ? 'active' : ''}" style="padding:5px 10px;font-size:11.5px;" onclick="window.setFinanceSubTab('collection')">💰 수금현황</button>
-              <button type="button" class="btn-subtab-chip ${subTab === 'expense' ? 'active' : ''}" style="padding:5px 10px;font-size:11.5px;" onclick="window.setFinanceSubTab('expense')">🧾 비용마감</button>
-              <button type="button" class="btn-subtab-chip ${subTab === 'monthly' ? 'active' : ''}" style="padding:5px 10px;font-size:11.5px;" onclick="window.setFinanceSubTab('monthly')">📊 월간집계</button>
+              <button type="button" class="btn-subtab-chip ${subTab === "collection" ? "active" : ""}" style="padding:5px 10px;font-size:11.5px;" onclick="window.setFinanceSubTab('collection')">💰 수금현황</button>
+              <button type="button" class="btn-subtab-chip ${subTab === "expense" ? "active" : ""}" style="padding:5px 10px;font-size:11.5px;" onclick="window.setFinanceSubTab('expense')">🧾 비용마감</button>
+              <button type="button" class="btn-subtab-chip ${subTab === "monthly" ? "active" : ""}" style="padding:5px 10px;font-size:11.5px;" onclick="window.setFinanceSubTab('monthly')">📊 월간집계</button>
             </div>
             <button type="button" onclick="openMonthlyReportModal()" style="border:none;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:800;padding:5px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;">📊 리포트</button>
           </div>
@@ -7567,8 +7919,7 @@
             <div class="m-card-box" style="text-align:center;padding:24px 16px;">
               <div style="font-size:24px;margin-bottom:6px;">📊</div>
               <div style="font-size:15px;font-weight:800;color:#1e293b;">월간 공정·업체 집계 리포트</div>
-              <div style="font-size:12px;color:#64748b;margin:6px 0 14px 0;">월간 공정 현황과 협력업체 정산 집계를 확인합니다.</div>
-              <button type="button" onclick="openMonthlyReportModal()" style="border:none;background:#2563eb;color:#fff;font-size:12.5px;font-weight:700;padding:8px 16px;border-radius:8px;cursor:pointer;">📊 월간집계 열기</button>
+              <button type="button" class="btn-primary" style="margin-top:12px;padding:8px 16px;font-size:13px;" onclick="openMonthlyReportModal()">리포트 열기</button>
             </div>
           `;
           return;
@@ -7576,31 +7927,31 @@
 
         // Subtab === "collection"
         const kpiHtml = `
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-            <div class="m-card-box" style="margin-bottom:0;padding:10px 12px;border-left:3px solid #3b82f6;">
-              <div style="font-size:11px;color:var(--text-muted);font-weight:600;">총 계약금액</div>
-              <div style="font-size:16px;font-weight:800;color:#1e293b;margin-top:2px;">${formatKrw(totalContract)}</div>
-              <div style="font-size:10.5px;color:#64748b;margin-top:2px;">${filtered.length}개 현장</div>
+          <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:8px;margin-bottom:12px;">
+            <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #3b82f6;">
+              <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">총 계약금액</div>
+              <div style="font-size:15px;font-weight:800;color:#1e293b;margin-top:2px;">${formatKrw(totalContract)}</div>
+              <div style="font-size:10px;color:#64748b;margin-top:2px;">${filtered.length}건 / 수금률 ${collectionRate}%</div>
             </div>
-            <div class="m-card-box" style="margin-bottom:0;padding:10px 12px;border-left:3px solid #10b981;">
-              <div style="font-size:11px;color:var(--text-muted);font-weight:600;">누적 수금액</div>
-              <div style="font-size:16px;font-weight:800;color:#10b981;margin-top:2px;">${formatKrw(totalCollected)}</div>
-              <div style="font-size:10.5px;color:#16a34a;margin-top:2px;font-weight:700;">수금률 ${collectionRate}%</div>
+            <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #10b981;">
+              <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">누적 수금액</div>
+              <div style="font-size:15px;font-weight:800;color:#10b981;margin-top:2px;">${formatKrw(totalCollected)}</div>
+              <div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700;">회수 완료</div>
             </div>
-            <div class="m-card-box" style="margin-bottom:0;padding:10px 12px;border-left:3px solid #dc2626;background:#fff5f5;">
-              <div style="font-size:11px;color:#991b1b;font-weight:700;">총 미수금</div>
-              <div style="font-size:17px;font-weight:900;color:#dc2626;margin-top:2px;">${formatKrw(totalUncollected)}</div>
-              <div style="font-size:10.5px;color:#b91c1c;margin-top:2px;font-weight:600;">미수 ${uncollectedSitesCount}개소</div>
+            <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #dc2626;background:#fff8f8;">
+              <div style="font-size:10.5px;color:#991b1b;font-weight:700;">총 미수금</div>
+              <div style="font-size:15px;font-weight:900;color:#dc2626;margin-top:2px;">${formatKrw(totalUncollected)}</div>
+              <div style="font-size:10px;color:#b91c1c;margin-top:2px;font-weight:600;">${uncollectedSitesCount}개 현장 미수</div>
             </div>
-            <div class="m-card-box" style="margin-bottom:0;padding:10px 12px;border-left:3px solid #f59e0b;">
-              <div style="font-size:11px;color:var(--text-muted);font-weight:600;">미수 / 계산서미발행</div>
-              <div style="font-size:16px;font-weight:800;color:#1e293b;margin-top:2px;">
-                <span style="color:#dc2626;">${uncollectedSitesCount}</span> / <span style="color:#d97706;">${unissuedTaxCount}</span>
-              </div>
-              <div style="font-size:10.5px;color:#d97706;margin-top:2px;font-weight:600;">발행 관리 필요</div>
+            <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #f59e0b;">
+              <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">계산서 미발행</div>
+              <div style="font-size:15px;font-weight:800;color:#d97706;margin-top:2px;">${unissuedTaxCount}건</div>
+              <div style="font-size:10px;color:#b45309;margin-top:2px;">발행 필요</div>
             </div>
           </div>
         `;
+
+        const monthStripHtml = renderCollectionMonthStripHtml(allCollection, state.financeYearFilter || "all", state.financeMonthFilter || 0, true);
 
         const filterBarHtml = `
           <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
@@ -7609,17 +7960,18 @@
                 value="${escHtml(state.financeSearchQuery)}"
                 oninput="window.onFinanceSearchInput(this.value)"
                 style="width:100%;height:34px;padding:0 26px 0 9px;border-radius:6px;border:1px solid var(--border-dark);font-size:12px;outline:none;" />
-              ${state.financeSearchQuery ? `<button type="button" onclick="window.clearFinanceSearch()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:bold;line-height:1;">✕</button>` : ''}
+              ${state.financeSearchQuery ? `<button type="button" onclick="window.clearFinanceSearch()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:bold;line-height:1;">✕</button>` : ""}
             </div>
             <button type="button" onclick="window.openCollectionModal(null)" style="height:34px;padding:0 10px;font-size:12px;font-weight:700;border-radius:6px;background:#2563eb;color:#fff;border:none;cursor:pointer;white-space:nowrap;">
               + 등록
             </button>
           </div>
           <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;">
-            <button type="button" class="btn-sub-chip ${stFilter === 'all' ? 'active' : ''}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('all')">전체 (${allCollection.length})</button>
-            <button type="button" class="btn-sub-chip ${stFilter === 'uncollected' ? 'active' : ''}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('uncollected')">미수 (${allCollection.filter(r => (Number(r.uncollectedAmount) || 0) > 0).length})</button>
-            <button type="button" class="btn-sub-chip ${stFilter === 'closing' ? 'active' : ''}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('closing')">마감중 (${allCollection.filter(r => r.status === '마감중').length})</button>
-            <button type="button" class="btn-sub-chip ${stFilter === 'completed' ? 'active' : ''}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('completed')">완료 (${allCollection.filter(r => r.status === '완료' || (Number(r.uncollectedAmount) || 0) <= 0).length})</button>
+            <button type="button" class="btn-sub-chip ${stFilter === "all" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('all')">전체 (${allCollection.length})</button>
+            <button type="button" class="btn-sub-chip ${stFilter === "uncollected" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('uncollected')">미수 (${allCollection.filter(r => getCollectionRowFinancials(r).uncollected > 0).length})</button>
+            <button type="button" class="btn-sub-chip ${stFilter === "doneUncollected" ? "active" : ""}" style="padding:4px 8px;font-size:11px;${stFilter === "doneUncollected" ? "background:#fee2e2;color:#dc2626;border-color:#f87171;" : "color:#b91c1c;"}" onclick="window.setFinanceStatusFilter('doneUncollected')">공사완료 미수 ⚠️ (${doneUncollectedCount})</button>
+            <button type="button" class="btn-sub-chip ${stFilter === "closing" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('closing')">마감중 (${allCollection.filter(r => r.status === "마감중").length})</button>
+            <button type="button" class="btn-sub-chip ${stFilter === "completed" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('completed')">완료 (${allCollection.filter(r => r.status === "완료" || getCollectionRowFinancials(r).uncollected <= 0).length})</button>
           </div>
         `;
 
@@ -7629,17 +7981,13 @@
             ? matchedSite.progressRate
             : (r.progressRate !== "" && r.progressRate !== null && r.progressRate !== undefined ? Number(r.progressRate) : null);
 
-          const periodDisplay = r.period || (matchedSite && matchedSite.earliestDateDisplay ? matchedSite.earliestDateDisplay : "");
-          const collected = Number(r.collectedAmount) || (
-            (Number(r.downPayment) || 0) + (Number(r.startPayment) || 0) +
-            (Number(r.midPayment1) || 0) + (Number(r.midPayment2) || 0) + (Number(r.midPayment3) || 0) +
-            (Number(r.finalPayment) || 0)
-          );
-          const uncollected = (r.uncollectedAmount !== undefined && r.uncollectedAmount !== null && r.uncollectedAmount !== "")
-            ? Number(r.uncollectedAmount)
-            : ((Number(r.totalAmount) || 0) - collected);
+          const pInfo = getCollectionPeriodInfo(r, matchedSite);
+          const fin = getCollectionRowFinancials(r);
+          const collected = fin.collected;
+          const uncollected = fin.uncollected;
+          const rRate = fin.rate;
 
-          const rRate = (Number(r.totalAmount) || 0) > 0 ? Math.round((collected / Number(r.totalAmount)) * 100) : 0;
+          const isDoneUncollected = uncollected > 0 && isCollectionSiteCompleted(matchedSite, progress);
 
           let stBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#eff6ff;color:#2563eb;">진행중</span>`;
           if (r.status === "마감중") stBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#fef3c7;color:#d97706;">마감중</span>`;
@@ -7651,19 +7999,28 @@
           else if (r.taxInvoice === "발행완료") taxBadge = `<span style="padding:2px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#ecfdf5;color:#059669;">발행완료</span>`;
 
           return `
-            <div class="m-card-box" style="cursor:pointer;margin-bottom:10px;padding:12px;border-left:3px solid ${uncollected > 0 ? '#ef4444' : '#10b981'};" onclick="window.openCollectionModal('${escJs(r.id)}')">
+            <div class="m-card-box" style="cursor:pointer;margin-bottom:10px;padding:12px;border-left:3px solid ${isDoneUncollected ? "#dc2626" : (uncollected > 0 ? "#f59e0b" : "#10b981")};${isDoneUncollected ? "background:#fff8f8;" : ""}" onclick="window.openCollectionModal('${escJs(r.id)}')">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
                 <div>
-                  <div style="font-size:14.5px;font-weight:800;color:#1e293b;">${escHtml(r.siteName)}</div>
+                  <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                    <span style="font-size:14.5px;font-weight:800;color:#1e293b;">${escHtml(r.siteName)}</span>
+                    ${isDoneUncollected ? `<span style="padding:1px 5px;border-radius:3px;font-size:10px;font-weight:800;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;">⚠️ 공사완료 미수</span>` : ""}
+                  </div>
                   <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">
-                    ${escHtml(r.clientName || '계약자미지정')} · ${escHtml(r.manager || '담당미지정')} (${escHtml(r.category || '전체공사')})
+                    ${escHtml(r.clientName || "계약자미지정")} · ${escHtml(r.manager || "담당미지정")} (${escHtml(r.category || "전체공사")})
                   </div>
                 </div>
-                <div style="display:flex;gap:4px;flex-shrink:0;">
+                <div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">
                   ${stBadge}
                   ${taxBadge}
                 </div>
               </div>
+
+              ${pInfo.periodDisplay ? `
+                <div style="font-size:11.5px;font-weight:700;color:#3b82f6;margin-top:6px;display:flex;align-items:center;gap:4px;">
+                  📅 ${escHtml(pInfo.periodDisplay)}
+                </div>
+              ` : ""}
 
               <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;background:#f8fafc;padding:8px 10px;border-radius:6px;margin:8px 0;text-align:center;">
                 <div>
@@ -7676,14 +8033,19 @@
                 </div>
                 <div>
                   <div style="font-size:10px;color:var(--text-muted);">미수금</div>
-                  <div style="font-size:13px;font-weight:900;color:${uncollected > 0 ? '#dc2626' : '#15803d'};margin-top:2px;">
-                    ${uncollected > 0 ? formatKrw(uncollected) : (uncollected === 0 ? '완납' : '+' + formatKrw(-uncollected))}
+                  <div style="font-size:13px;font-weight:900;color:${uncollected > 0 ? "#dc2626" : "#15803d"};margin-top:2px;">
+                    ${uncollected > 0 ? formatKrw(uncollected) : (uncollected === 0 ? "완납" : "+" + formatKrw(-uncollected))}
                   </div>
                 </div>
               </div>
 
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px dashed #e2e8f0;">
+                <span style="font-size:11px;font-weight:700;color:#475569;">단계별 수금</span>
+                <div>${renderCollectionStepsHtml(r)}</div>
+              </div>
+
               ${progress !== null ? `
-                <div style="margin-top:4px;">
+                <div style="margin-top:6px;">
                   <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--text-muted);margin-bottom:2px;">
                     <span>공사진행율</span>
                     <span style="font-weight:700;color:#2563eb;">${progress}%</span>
@@ -7692,14 +8054,13 @@
                     <div style="width:${Math.min(progress, 100)}%;height:100%;background:#2563eb;"></div>
                   </div>
                 </div>
-              ` : ''}
+              ` : ""}
 
-              ${periodDisplay || r.note ? `
-                <div style="font-size:11px;color:var(--text-sub);margin-top:6px;display:flex;justify-content:space-between;align-items:center;">
-                  <span>${periodDisplay ? '📅 ' + escHtml(periodDisplay) : ''}</span>
-                  <span style="color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;">${escHtml(r.note)}</span>
+              ${r.note ? `
+                <div style="font-size:11px;color:var(--text-sub);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                  📝 ${escHtml(r.note)}
                 </div>
-              ` : ''}
+              ` : ""}
             </div>
           `;
         }).join("") || `
@@ -7712,6 +8073,7 @@
         document.getElementById("m-page-finance").innerHTML = `
           ${subTabsHtml}
           ${kpiHtml}
+          ${monthStripHtml}
           ${filterBarHtml}
           ${cardsHtml}
         `;

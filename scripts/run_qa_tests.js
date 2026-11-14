@@ -2149,7 +2149,29 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
 
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
-  assertTest('index.html 내 exec?v=244 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=244'));
+  assertTest('index.html 내 exec?v=245 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=245'));
+  assertTest('v2.html 내 공사기간 전면 표시 및 현장데이터 자동 매칭 함수 검증',
+    v2RootHtml.includes('getCollectionPeriodInfo') &&
+    v2RootHtml.includes('colStartDate') &&
+    v2RootHtml.includes('colEndDate') &&
+    v2RootHtml.includes('onCollectionPeriodDateChange')
+  );
+  assertTest('v2.html 내 연도별·월별 필터 및 1~12월 월별 요약 스트립 검증',
+    v2RootHtml.includes('financeYearFilter') &&
+    v2RootHtml.includes('financeMonthFilter') &&
+    v2RootHtml.includes('renderCollectionMonthStripHtml') &&
+    v2RootHtml.includes('getMonthlyCollectionStats') &&
+    v2RootHtml.includes('setFinanceYearFilter') &&
+    v2RootHtml.includes('setFinanceMonthFilter')
+  );
+  assertTest('v2.html 내 단계별 수금 (계약·착수·중도·잔금) 한눈에 보기 칩 검증',
+    v2RootHtml.includes('renderCollectionStepsHtml')
+  );
+  assertTest('v2.html 내 공사완료 미수 ⚠️ 자동 경고 뱃지 및 필터 칩 검증',
+    v2RootHtml.includes('공사완료 미수 ⚠️') &&
+    v2RootHtml.includes('doneUncollected') &&
+    v2RootHtml.includes('isCollectionSiteCompleted')
+  );
   assertTest('v2.html, preview_tabs.html, docs/v2.html, docs/preview_tabs.html 4개 파일 100% 동일 동기화 검증',
     v2RootHtml === previewHtml && v2RootHtml === v2DocsHtml && v2RootHtml === previewDocsHtml
   );
