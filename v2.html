@@ -952,11 +952,89 @@
     .m5-val.link { color: #2563eb; text-decoration: underline; cursor: pointer; }
 
     .stat-4bar {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 12px 16px;
-      background: #ffffff; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 10px 12px;
+      background: #ffffff; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px;
     }
-    .s4-lbl { font-size: 11.5px; color: var(--text-muted); font-weight: 600; }
-    .s4-val { font-size: 20px; font-weight: 800; color: var(--text); margin-top: 2px; }
+    .s4-tile {
+      appearance: none; -webkit-appearance: none;
+      background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 6px;
+      padding: 10px 12px; text-align: left; cursor: pointer;
+      display: flex; flex-direction: column; justify-content: center;
+      transition: all 0.15s ease-in-out; font-family: inherit; width: 100%; box-sizing: border-box;
+      outline: none;
+    }
+    .s4-tile:hover {
+      background: #f1f5f9; border-color: #cbd5e1; transform: translateY(-1px);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    .s4-tile .s4-lbl { font-size: 11.5px; color: var(--text-muted); font-weight: 700; transition: color 0.15s; }
+    .s4-tile .s4-val { font-size: 19px; font-weight: 800; color: var(--text); margin-top: 2px; line-height: 1.2; }
+    .s4-tile .s4-unit { font-size: 12.5px; font-weight: 600; color: var(--text-muted); margin-left: 2px; }
+
+    /* PC 타일 Active 상태별 시각적 하이라이트 */
+    .s4-tile.active {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+    .s4-tile.active[data-filter="all"] {
+      background: #ffffff; border-color: #334155;
+      box-shadow: 0 0 0 2px rgba(51, 65, 85, 0.25);
+    }
+    .s4-tile.active[data-filter="all"] .s4-lbl { color: #1e293b; }
+
+    .s4-tile.active[data-filter="done"] {
+      background: #f0fdf4; border-color: #10b981;
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
+    }
+    .s4-tile.active[data-filter="done"] .s4-lbl { color: #047857; }
+
+    .s4-tile.active[data-filter="active"] {
+      background: #eff6ff; border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
+    }
+    .s4-tile.active[data-filter="active"] .s4-lbl { color: #1d4ed8; }
+
+    .s4-tile.active[data-filter="delay"] {
+      background: #fef2f2; border-color: #ef4444;
+      box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3);
+    }
+    .s4-tile.active[data-filter="delay"] .s4-lbl { color: #b91c1c; }
+
+    /* 모바일 타일 스타일 및 Active 상태 */
+    .m-task-stat-tile {
+      appearance: none; -webkit-appearance: none;
+      background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 6px;
+      padding: 6px 2px; text-align: center; cursor: pointer;
+      transition: all 0.15s ease-in-out; font-family: inherit; width: 100%; box-sizing: border-box;
+      outline: none;
+    }
+    .m-task-stat-tile:hover {
+      background: #f8fafc; border-color: #cbd5e1;
+    }
+    .m-task-stat-tile .lbl { font-size: 10px; color: var(--text-muted); font-weight: 700; }
+    .m-task-stat-tile .val { font-size: 12.5px; font-weight: 800; color: var(--text); margin-top: 1px; }
+
+    .m-task-stat-tile.active {
+      font-weight: 800;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .m-task-stat-tile.active[data-filter="all"] {
+      background: #ffffff; border-color: #334155;
+      box-shadow: 0 0 0 1.5px rgba(51, 65, 85, 0.25);
+    }
+    .m-task-stat-tile.active[data-filter="done"] {
+      background: #f0fdf4; border-color: #10b981;
+      box-shadow: 0 0 0 1.5px rgba(16, 185, 129, 0.3);
+    }
+    .m-task-stat-tile.active[data-filter="active"] {
+      background: #eff6ff; border-color: #2563eb;
+      box-shadow: 0 0 0 1.5px rgba(37, 99, 235, 0.3);
+    }
+    .m-task-stat-tile.active[data-filter="delay"] {
+      background: #fef2f2; border-color: #ef4444;
+      box-shadow: 0 0 0 1.5px rgba(239, 68, 68, 0.3);
+    }
+
     .progress-stack { height: 7px; border-radius: 999px; background: #e2e8f0; overflow: hidden; display: flex; margin-bottom: 14px; }
 
     .site-task-filter-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
@@ -3288,10 +3366,22 @@
               </div>
 
               <div class="stat-4bar">
-                <div><div class="s4-lbl">전체 공정 수</div><div class="s4-val">${tasks.length}<span style="font-size:13px;font-weight:600;color:var(--text-muted);margin-left:2px;">건</span></div></div>
-                <div><div class="s4-lbl">완료 공정</div><div class="s4-val" style="color:#10b981;">${doneCnt}<span style="font-size:13px;font-weight:600;margin-left:2px;">건 (${pctDone}%)</span></div></div>
-                <div><div class="s4-lbl">예정 · 진행 공정</div><div class="s4-val" style="color:#2563eb;">${planCnt + progCnt}<span style="font-size:13px;font-weight:600;margin-left:2px;">건</span></div></div>
-                <div><div class="s4-lbl">공정 지연 ⚠️</div><div class="s4-val" style="color:#ef4444;">${delayCnt}<span style="font-size:13px;font-weight:600;margin-left:2px;">건 조치필요</span></div></div>
+                <button type="button" class="s4-tile btn-task-filter-tile ${state.siteTaskStatusFilter === "all" ? "active" : ""}" data-filter="all" onclick="setSiteTaskFilter('all')" title="전체 공정 필터">
+                  <div class="s4-lbl">전체 공정 수</div>
+                  <div class="s4-val">${tasks.length}<span class="s4-unit">건</span></div>
+                </button>
+                <button type="button" class="s4-tile btn-task-filter-tile ${state.siteTaskStatusFilter === "done" ? "active" : ""}" data-filter="done" onclick="setSiteTaskFilter('done')" title="완료 공정 필터">
+                  <div class="s4-lbl">완료 공정</div>
+                  <div class="s4-val" style="color:#10b981;">${doneCnt}<span class="s4-unit" style="color:#10b981;">건 (${pctDone}%)</span></div>
+                </button>
+                <button type="button" class="s4-tile btn-task-filter-tile ${state.siteTaskStatusFilter === "active" ? "active" : ""}" data-filter="active" onclick="setSiteTaskFilter('active')" title="예정 · 진행 공정 필터">
+                  <div class="s4-lbl">예정 · 진행 공정</div>
+                  <div class="s4-val" style="color:#2563eb;">${planCnt + progCnt}<span class="s4-unit" style="color:#2563eb;">건</span></div>
+                </button>
+                <button type="button" class="s4-tile btn-task-filter-tile ${state.siteTaskStatusFilter === "delay" ? "active" : ""}" data-filter="delay" onclick="setSiteTaskFilter('delay')" title="지연 공정 필터">
+                  <div class="s4-lbl">공정 지연 ⚠️</div>
+                  <div class="s4-val" style="color:#ef4444;">${delayCnt}<span class="s4-unit" style="color:#ef4444;">건 조치필요</span></div>
+                </button>
               </div>
 
               <div class="progress-stack" title="완료 ${pctDone}%">
@@ -3300,13 +3390,7 @@
                 <div style="width:${(progCnt / total) * 100}%;background:#2563eb;"></div>
               </div>
 
-              <div class="site-task-filter-row">
-                <div style="display:flex;gap:6px;">
-                  <button type="button" class="st-pill btn-pc-task-filter ${state.siteTaskStatusFilter === "all" ? "active" : ""}" data-filter="all" onclick="setSiteTaskFilter('all')">전체 (${tasks.length})</button>
-                  <button type="button" class="st-pill btn-pc-task-filter ${state.siteTaskStatusFilter === "delay" ? "active" : ""}" data-filter="delay" onclick="setSiteTaskFilter('delay')">⚠️ 지연 (${delayCnt})</button>
-                  <button type="button" class="st-pill btn-pc-task-filter ${state.siteTaskStatusFilter === "active" ? "active" : ""}" data-filter="active" onclick="setSiteTaskFilter('active')">예정·진행 (${planCnt + progCnt})</button>
-                  <button type="button" class="st-pill btn-pc-task-filter ${state.siteTaskStatusFilter === "done" ? "active" : ""}" data-filter="done" onclick="setSiteTaskFilter('done')">✓ 완료 (${doneCnt})</button>
-                </div>
+              <div class="site-task-filter-row" style="justify-content:flex-end;">
                 <div class="site-task-search-wrap" style="width:280px;box-sizing:border-box;">
                   <span class="search-icon">🔍</span>
                   <input type="text" id="pcSiteTaskSearchInput" class="ws-input" value="${escHtml(state.siteTaskSearch)}" placeholder="공종 / 업체 / 메모 검색" oninput="setSiteTaskSearch(this.value)" onkeydown="if(event.key==='Escape')clearSiteTaskSearch()" style="height:30px;font-size:12px;">
@@ -4682,22 +4766,22 @@
                 <!-- 모바일 현장 공정 요약 및 필터·검색 영역 -->
                 <div class="m-site-summary-panel" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:9px 10px;margin-bottom:10px;">
                   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center;margin-bottom:7px;">
-                    <div class="pc-task-stat-tile" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:5px 2px;">
-                      <div class="lbl" style="font-size:10px;color:var(--text-muted);font-weight:700;">전체 공정</div>
-                      <div class="val" style="font-size:12.5px;font-weight:800;color:var(--text);margin-top:1px;">${tasks.length}건</div>
-                    </div>
-                    <div class="pc-task-stat-tile" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:5px 2px;">
-                      <div class="lbl" style="font-size:10px;color:var(--text-muted);font-weight:700;">완료</div>
-                      <div class="val" style="font-size:12.5px;font-weight:800;color:#10b981;margin-top:1px;">${doneCnt}건</div>
-                    </div>
-                    <div class="pc-task-stat-tile" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:5px 2px;">
-                      <div class="lbl" style="font-size:10px;color:var(--text-muted);font-weight:700;">예정·진행</div>
-                      <div class="val" style="font-size:12.5px;font-weight:800;color:#2563eb;margin-top:1px;">${planCnt + progCnt}건</div>
-                    </div>
-                    <div class="pc-task-stat-tile" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:5px 2px;">
-                      <div class="lbl" style="font-size:10px;color:var(--text-muted);font-weight:700;">지연</div>
-                      <div class="val" style="font-size:12.5px;font-weight:800;color:#ef4444;margin-top:1px;">${delayCnt}건</div>
-                    </div>
+                    <button type="button" class="m-task-stat-tile btn-m-task-filter-tile ${curFilter === "all" ? "active" : ""}" data-filter="all" onclick="setSiteTaskFilter('all')">
+                      <div class="lbl">전체 공정</div>
+                      <div class="val">${tasks.length}건</div>
+                    </button>
+                    <button type="button" class="m-task-stat-tile btn-m-task-filter-tile ${curFilter === "done" ? "active" : ""}" data-filter="done" onclick="setSiteTaskFilter('done')">
+                      <div class="lbl">완료</div>
+                      <div class="val" style="color:#10b981;">${doneCnt}건</div>
+                    </button>
+                    <button type="button" class="m-task-stat-tile btn-m-task-filter-tile ${curFilter === "active" ? "active" : ""}" data-filter="active" onclick="setSiteTaskFilter('active')">
+                      <div class="lbl">예정·진행</div>
+                      <div class="val" style="color:#2563eb;">${planCnt + progCnt}건</div>
+                    </button>
+                    <button type="button" class="m-task-stat-tile btn-m-task-filter-tile ${curFilter === "delay" ? "active" : ""}" data-filter="delay" onclick="setSiteTaskFilter('delay')">
+                      <div class="lbl">지연 ⚠️</div>
+                      <div class="val" style="color:#ef4444;">${delayCnt}건</div>
+                    </button>
                   </div>
 
                   <div class="progress-stack" title="완료 ${pctDone}%" style="margin-bottom:8px;height:5px;border-radius:3px;">
@@ -4707,12 +4791,6 @@
                   </div>
 
                   <div style="display:flex;flex-direction:column;gap:6px;">
-                    <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;">
-                      <button type="button" class="st-pill btn-task-pill ${curFilter === "all" ? "active" : ""}" style="font-size:11px;padding:3px 8px;" onclick="setSiteTaskFilter('all')">전체 (${tasks.length})</button>
-                      <button type="button" class="st-pill btn-task-pill ${curFilter === "delay" ? "active" : ""}" style="font-size:11px;padding:3px 8px;${curFilter === "delay" ? "background:#ef4444;border-color:#ef4444;color:#fff;" : ""}" onclick="setSiteTaskFilter('delay')">⚠️ 지연 (${delayCnt})</button>
-                      <button type="button" class="st-pill btn-task-pill ${curFilter === "active" ? "active" : ""}" style="font-size:11px;padding:3px 8px;" onclick="setSiteTaskFilter('active')">예정·진행 (${planCnt + progCnt})</button>
-                      <button type="button" class="st-pill btn-task-pill ${curFilter === "done" ? "active" : ""}" style="font-size:11px;padding:3px 8px;" onclick="setSiteTaskFilter('done')">✓ 완료 (${doneCnt})</button>
-                    </div>
                     <div class="site-task-search-wrap" style="width:100%;margin:0;">
                       <span class="search-icon">🔍</span>
                       <input type="text" class="ws-input m-site-task-search-input" id="mSiteTaskSearch_${escJs(s.siteKey)}" style="font-size:11.5px;height:28px;" placeholder="공종 / 업체 / 메모 검색" value="${escHtml(curSearch)}" oninput="setSiteTaskSearch(this.value)" onkeydown="if(event.key==='Escape')clearSiteTaskSearch()">
@@ -6621,12 +6699,13 @@
           const siteInfo = getSiteInfo(siteName) || {};
           const clientDriveUrl = siteInfo.driveUrl || "";
 
+          let uploadRes = null;
           if (typeof google !== "undefined" && google.script && google.script.run && google.script.run.uploadSiteFilesToDriveFromWeb) {
-            await new Promise((resolve, reject) => {
+            uploadRes = await new Promise((resolve, reject) => {
               google.script.run
                 .withSuccessHandler(res => {
                   if (res && res.success === false) {
-                    reject(new Error(res.message || "드라이브 업로드 실패"));
+                    reject(new Error(res.error || res.message || "드라이브 업로드 실패"));
                   } else {
                     resolve(res);
                   }
@@ -6634,14 +6713,38 @@
                 .withFailureHandler(err => reject(err))
                 .uploadSiteFilesToDriveFromWeb(siteName, filesPayload, clientDriveUrl);
             });
+          } else if (location.protocol.startsWith("http")) {
+            // GitHub Pages 등 웹 환경: 실제 Google Apps Script doPost 엔드포인트로 비동기 Fetch 전송
+            const gasUrl = (window.WSDataService && window.WSDataService.GAS_API_URL) || GAS_AUTH_API_URL || "https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec";
+            const reqBody = JSON.stringify({
+              action: "uploadSiteFiles",
+              siteName: siteName,
+              clientDriveUrl: clientDriveUrl,
+              files: filesPayload
+            });
+            const resp = await fetch(gasUrl, {
+              method: "POST",
+              mode: "cors",
+              redirect: "follow",
+              headers: { "Content-Type": "text/plain;charset=utf-8" },
+              body: reqBody
+            });
+            if (!resp.ok) {
+              throw new Error(`Google Apps Script 서버 응답 오류 (HTTP ${resp.status})`);
+            }
+            uploadRes = await resp.json();
+            if (uploadRes && uploadRes.success === false) {
+              throw new Error(uploadRes.error || uploadRes.message || "드라이브 업로드 처리에 실패했습니다.");
+            }
           } else {
-            console.log("[Upload Mock] google.script.run 부재 환경 (테스트/오프라인) - 정상 가상 성공 처리:", { siteName, count: filesPayload.length });
+            console.log("[Upload Mock] 로컬 file:// 환경 (테스트/오프라인) - 정상 가상 성공 처리:", { siteName, count: filesPayload.length });
             await new Promise(r => setTimeout(r, 600));
           }
 
           state.uploadFiles = [];
           window.closeModal("siteFileUploadModal");
-          showToast(`✅ [${siteName}] 파일 ${filesPayload.length}건 Google Drive 업로드 완료!`);
+          const uploadedCount = (uploadRes && uploadRes.uploadedCount) ? uploadRes.uploadedCount : filesPayload.length;
+          showToast(`✅ [${siteName}] 파일 ${uploadedCount}건 Google Drive 업로드 완료!`);
         } catch (err) {
           console.error("파일 업로드 에러:", err);
           showToast(`❌ 업로드 실패: ${err.message || err}`);
@@ -7951,6 +8054,25 @@
       window.setSiteTaskFilter = function (f) {
         state.siteTaskStatusFilter = f;
 
+        // PC 상단 4개 요약 숫자 타일 버튼 active 동기화
+        const pcTiles = document.querySelectorAll(".btn-task-filter-tile, .s4-tile");
+        if (pcTiles.length > 0) {
+          pcTiles.forEach((tile) => {
+            if (tile.getAttribute("data-filter") === f) tile.classList.add("active");
+            else tile.classList.remove("active");
+          });
+        }
+
+        // 모바일 상단 4개 요약 숫자 타일 버튼 active 동기화
+        const mTiles = document.querySelectorAll(".btn-m-task-filter-tile, .m-task-stat-tile");
+        if (mTiles.length > 0) {
+          mTiles.forEach((tile) => {
+            if (tile.getAttribute("data-filter") === f) tile.classList.add("active");
+            else tile.classList.remove("active");
+          });
+        }
+
+        // 하위 호환성 (레거시 버튼 셀렉터 방어)
         const pcPills = document.querySelectorAll(".btn-pc-task-filter");
         if (pcPills.length > 0) {
           pcPills.forEach((p) => {
@@ -7962,26 +8084,15 @@
         const mPills = document.querySelectorAll(".btn-task-pill");
         if (mPills.length > 0) {
           mPills.forEach((p) => {
-            const isDelay = p.textContent.includes("지연");
-            const isDone = p.textContent.includes("완료");
-            const isActive = p.textContent.includes("예정·진행");
-            const isAll = p.textContent.includes("전체");
-            const match = (f === "delay" && isDelay) || (f === "done" && isDone) || (f === "active" && isActive) || (f === "all" && isAll);
-            if (match) {
-              p.classList.add("active");
-              if (isDelay) {
-                p.style.background = "#ef4444";
-                p.style.borderColor = "#ef4444";
-                p.style.color = "#fff";
-              }
-            } else {
-              p.classList.remove("active");
-              if (isDelay) {
-                p.style.background = "";
-                p.style.borderColor = "";
-                p.style.color = "";
-              }
-            }
+            const pFilter = p.getAttribute("data-filter");
+            const match = pFilter ? (pFilter === f) : (
+              (f === "delay" && p.textContent.includes("지연")) ||
+              (f === "done" && p.textContent.includes("완료")) ||
+              (f === "active" && p.textContent.includes("예정·진행")) ||
+              (f === "all" && p.textContent.includes("전체"))
+            );
+            if (match) p.classList.add("active");
+            else p.classList.remove("active");
           });
         }
 

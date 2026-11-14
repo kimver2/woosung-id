@@ -303,6 +303,28 @@
     saveSettings: function (settingsData) {
       this.saveSettingsCache(settingsData);
       return this.callGasApi("saveAllSettingsBatch", { data: settingsData });
+    },
+
+    uploadSiteFiles: function (siteName, filesPayload, clientDriveUrl) {
+      if (typeof fetch !== "function" || typeof location === "undefined" || !String(location.protocol || "").startsWith("http")) {
+        return Promise.resolve({ success: true, count: (filesPayload || []).length, offline: true });
+      }
+      var body = JSON.stringify({
+        action: "uploadSiteFiles",
+        siteName: siteName,
+        clientDriveUrl: clientDriveUrl || "",
+        files: filesPayload
+      });
+      return fetch(GAS_API_URL, {
+        method: "POST",
+        mode: "cors",
+        redirect: "follow",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: body
+      }).then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      });
     }
   };
 })(typeof window !== "undefined" ? window : globalThis);
