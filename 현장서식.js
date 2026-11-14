@@ -8065,21 +8065,46 @@ function getSettingsManagementData() {
       ensurePartnerDropdownFormulaColumn(ss, pSheet);
       var pLastR = pSheet.getLastRow();
       var pLastC = Math.max((typeof pSheet.getLastColumn === "function" ? pSheet.getLastColumn() : 11), 11);
+      var pHeaders = pSheet.getRange(1, 1, 1, pLastC).getValues()[0].map(function (h) {
+        return String(h || "").replace(/\s+/g, "").trim();
+      });
+
+      function findColIdx(candidates, fallback) {
+        for (var ci = 0; ci < candidates.length; ci++) {
+          var target = candidates[ci].replace(/\s+/g, "").trim();
+          var found = pHeaders.indexOf(target);
+          if (found !== -1) return found;
+        }
+        return fallback;
+      }
+
+      var cName = findColIdx(["거래처명", "업체/반장명", "상호", "업체명", "반장명"], 0);
+      var cBiz = findColIdx(["대표공종", "업태/공종", "공종", "업태", "주력공종"], 1);
+      var cCat = findColIdx(["대구분", "대분류", "구분", "분류"], 2);
+      var cPrio = findColIdx(["우선순위", "팀", "우선순위(팀)"], 3);
+      var cMgr = findColIdx(["담당자/직책", "담당자", "대표자", "직책", "담당"], 4);
+      var cPhone = findColIdx(["연락처", "전화번호", "휴대폰"], 5);
+      var cStatus = findColIdx(["관리상태", "상태", "운영상태"], 6);
+      var cFeature = findColIdx(["주력분야및특징", "주력분야", "특징", "계좌", "계좌번호"], 7);
+      var cOrder = findColIdx(["발주/접수방식", "발주방식", "접수방식", "발주"], 8);
+      var cNote = findColIdx(["비고", "메모", "비고및특이사항", "카톡방"], 9);
+      var cDropdown = findColIdx(["선택목록(공종_업체)", "드롭다운", "선택용", "표시명", "검색용"], 10);
+
       var pData = pSheet.getRange(2, 1, pLastR - 1, pLastC).getValues();
       for (var pi = 0; pi < pData.length; pi++) {
         var pRowVals = pData[pi];
-        var pName = String(pRowVals[0] || "").trim();
+        var pName = String((cName >= 0 && pRowVals[cName]) || pRowVals[0] || "").trim();
         if (!pName) continue;
-        var pBiz = String(pRowVals[1] || "").trim();
-        var pCat = String(pRowVals[2] || "").trim();
-        var pPrio = String(pRowVals[3] || "").trim();
-        var pMgr = String(pRowVals[4] || "").trim();
-        var pPhone = String(pRowVals[5] || "").trim();
-        var pStatus = String(pRowVals[6] || "").trim();
-        var pFeature = String(pRowVals[7] || "").trim();
-        var pOrder = String(pRowVals[8] || "").trim();
-        var pNote = String(pRowVals[9] || "").trim();
-        var pDropdown = (pRowVals.length >= 11 ? String(pRowVals[10] || "").trim() : "") || (pBiz ? (pBiz + "_" + pName) : pName);
+        var pBiz = String((cBiz >= 0 && pRowVals[cBiz]) || "").trim();
+        var pCat = String((cCat >= 0 && pRowVals[cCat]) || "").trim();
+        var pPrio = String((cPrio >= 0 && pRowVals[cPrio]) || "").trim();
+        var pMgr = String((cMgr >= 0 && pRowVals[cMgr]) || "").trim();
+        var pPhone = String((cPhone >= 0 && pRowVals[cPhone]) || "").trim();
+        var pStatus = String((cStatus >= 0 && pRowVals[cStatus]) || "").trim();
+        var pFeature = String((cFeature >= 0 && pRowVals[cFeature]) || "").trim();
+        var pOrder = String((cOrder >= 0 && pRowVals[cOrder]) || "").trim();
+        var pNote = String((cNote >= 0 && pRowVals[cNote]) || "").trim();
+        var pDropdown = String((cDropdown >= 0 && pRowVals[cDropdown]) || (pRowVals.length >= 11 ? pRowVals[10] : "") || "").trim() || (pBiz ? (pBiz + "_" + pName) : pName);
         partners.push({
           row: pi + 2,
           name: pName,

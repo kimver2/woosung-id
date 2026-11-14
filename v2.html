@@ -270,10 +270,27 @@
       border-top: 1px solid #f1f5f9;
     }
     .m-pill-chip {
-      background: #ffffff; border: 1px solid #93c5fd; color: #1e40af; padding: 2px 6px;
-      border-radius: 999px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px;
+      background: #f8fafc; border: 1px solid #cbd5e1; color: #1e293b; padding: 0 8px;
+      height: 28px; border-radius: 6px; font-size: 11.5px; font-weight: 700;
+      display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; white-space: nowrap;
     }
     .m-pill-chip .del-x { color: #64748b; cursor: pointer; font-weight: 900; }
+    .m-site-filter-btn {
+      height: 28px; padding: 0 8px; border-radius: 6px; font-size: 11.5px; font-weight: 700;
+      display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; white-space: nowrap;
+      border: 1px solid #cbd5e1; background: #ffffff; color: #334155; cursor: pointer;
+    }
+    .m-site-filter-btn.active { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
+    .m-site-filter-clear-btn {
+      height: 28px; width: 28px; padding: 0; border-radius: 6px; font-size: 11.5px; font-weight: 700;
+      display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+      border: 1px solid #fca5a5; background: #fef2f2; color: #dc2626; cursor: pointer; flex-shrink: 0;
+    }
+    .m-cal-count-badge {
+      height: 28px; padding: 0 8px; border-radius: 6px; font-size: 11.5px; font-weight: 800;
+      display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+      background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; white-space: nowrap; flex-shrink: 0;
+    }
     .m-filter-count { margin-left: auto; font-weight: 800; color: #1d4ed8; }
 
     .m-cal-nav-btn {
@@ -616,27 +633,45 @@
     /* ================= 1. 통합 상단 헤더 ================= */
     .unified-header {
       height: 56px; background: var(--surface); border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: space-between; padding: 0 12px; flex-shrink: 0; gap: 8px; z-index: 50;
+      display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex-shrink: 0; gap: 16px; z-index: 50;
     }
-    .header-left { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .header-left { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
     .brand-logo {
-      font-size: 15px; font-weight: 800; color: #1e3a8a; display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;
+      font-size: 16px; font-weight: 800; color: #1e3a8a; display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;
     }
     .brand-pill {
-      font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
-      background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
+      display: none;
     }
     .header-nav-tabs {
-      display: flex; align-items: center; gap: 4px;
+      display: grid; grid-template-columns: repeat(6, 114px); gap: 5px;
       background: #eef2f6; padding: 3px 4px; border-radius: 10px;
       border: 1px solid #cbd5e1;
     }
     .nav-tab-item {
-      height: 32px; display: inline-flex; align-items: center; gap: 4px; padding: 0 9px; font-size: 12.5px;
+      height: 32px; width: 114px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 4px; font-size: 12.5px;
       font-weight: 700; color: #334155; border: 1px solid #cbd5e1; border-radius: 7px;
       background: #ffffff; cursor: pointer; transition: all 0.14s ease; white-space: nowrap;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); outline: none;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); outline: none; text-align: center;
     }
+    .pc-page-search-wrap {
+      position: relative; display: inline-flex; align-items: center;
+    }
+    .pc-page-search-input {
+      width: 240px; height: 32px; padding: 0 30px 0 28px; border-radius: 8px;
+      border: 1px solid #cbd5e1; background: #ffffff; font-size: 12px; font-weight: 600;
+      color: #0f172a; outline: none; box-sizing: border-box; transition: all 0.15s ease;
+    }
+    .pc-page-search-input:focus {
+      border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); width: 280px;
+    }
+    .pc-page-search-icon {
+      position: absolute; left: 8px; font-size: 13px; color: #94a3b8; pointer-events: none;
+    }
+    .pc-page-search-clear {
+      position: absolute; right: 8px; font-size: 11px; font-weight: 700; color: #94a3b8;
+      cursor: pointer; padding: 2px 4px; border-radius: 4px; user-select: none;
+    }
+    .pc-page-search-clear:hover { color: #ef4444; background: #fef2f2; }
     .nav-tab-item:hover { color: #0f172a; background: #f8fafc; border-color: #94a3b8; transform: translateY(-0.5px); }
     .nav-tab-item.active {
       color: #ffffff; background: #1e40af; border-color: #1e3a8a;
@@ -1332,15 +1367,21 @@
     .todo-workspace-view, .standard-page-view { flex: 1; padding: 20px 26px; overflow-y: auto; background: var(--bg); }
     .todo-member-chip-bar { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 12px; }
     .tm-chip {
-      display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px 4px 5px; border-radius: 999px;
+      height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px 0 5px; border-radius: 999px; box-sizing: border-box;
       border: 1px solid var(--border); background: #ffffff; font-size: 12.5px; font-weight: 700; color: var(--text-sub); cursor: pointer;
+      line-height: normal; transition: all 0.14s ease;
     }
     .tm-chip.active { background: #1e40af; color: #ffffff; border-color: #1e40af; }
     .tm-avatar {
       width: 22px; height: 22px; border-radius: 50%; background: #eff6ff; color: #1d4ed8;
       display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900;
+      flex-shrink: 0; box-sizing: border-box; line-height: 1;
     }
+    .tm-avatar-all { background: #f1f5f9; color: #475569; font-size: 12px; }
+    .tm-avatar-unassigned { background: #fef2f2; color: #dc2626; font-size: 10.5px; }
     .tm-chip.active .tm-avatar { background: #ffffff; color: #1e40af; }
+    .tm-chip.active .tm-avatar-all { background: #ffffff; color: #1e40af; }
+    .tm-chip.active .tm-avatar-unassigned { background: #ffffff; color: #dc2626; }
 
     .todo-stat-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
     .todo-stat-pill { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 700; color: var(--text-sub); }
@@ -1775,7 +1816,6 @@
         <div class="header-left">
           <div class="brand-logo" onclick="switchMainTab('home')">
             🏢 우성아이디
-            <span class="brand-pill">v2</span>
           </div>
 
           <nav class="header-nav-tabs">
@@ -1790,12 +1830,6 @@
             </button>
             <button type="button" class="nav-tab-item" data-tab="finance" onclick="switchMainTab('finance')">💰 재무·원장</button>
           </nav>
-        </div>
-
-        <div class="header-center">
-          <span class="search-icon-left">🔍</span>
-          <input type="text" id="pcSearchInput" class="header-search-input" placeholder="현장, 공종, 담당자 검색" oninput="onGlobalSearch(this.value)">
-          <span class="search-shortcut-badge" id="pcSearchClearBadge" onclick="clearGlobalSearch()" title="검색 초기화">Alt+S</span>
         </div>
 
         <div class="header-right">
@@ -1860,7 +1894,6 @@
               <option value="한송이">한송이</option>
               <option value="차정률">차정률</option>
             </select>
-            <button type="button" onclick="openSettingsModal()" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="설정 및 도구">⚙️</button>
             <button type="button" onclick="triggerLiveSync(true)" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="새로고침">🔄</button>
             <button type="button" onclick="logoutDashboardAuth()" style="border:none;background:transparent;font-size:14px;cursor:pointer;" title="잠금 / 로그아웃">🔒</button>
           </div>
@@ -1895,8 +1928,9 @@
           <button type="button" class="m-bottom-btn" data-mtab="sites" onclick="switchMobileTab('sites')">
             <span class="icon">🏢</span><span>현장</span>
           </button>
-          <button type="button" class="m-bottom-btn" data-mtab="todo" onclick="switchMobileTab('todo')">
+          <button type="button" class="m-bottom-btn" data-mtab="todo" onclick="switchMobileTab('todo')" style="position:relative;">
             <span class="icon">✅</span><span>To-Do</span>
+            <span class="badge-count badge-red" id="mTodoBadge" style="display:none;position:absolute;top:2px;right:calc(50% - 18px);font-size:9px;padding:0 4px;line-height:1.3;min-width:14px;border-radius:999px;">0</span>
           </button>
           <button type="button" class="m-bottom-btn" data-mtab="quote" onclick="switchMobileTab('quote')">
             <span class="icon">📋</span><span>신규</span>
@@ -2240,6 +2274,13 @@
         }
         const raw = (state.dashData && state.dashData.members) || ["조항만", "송지은", "전예린", "한송이", "차정률"];
         return raw.map((m) => String(m || "").trim()).filter(Boolean);
+      }
+      function isUserAssignedTodo(t, user) {
+        if (!t) return false;
+        const mgr = String(t.manager || "").trim();
+        if (!mgr || mgr === "미지정" || mgr === "담당 미지정" || mgr === "담당자 미지정") return false;
+        if (!user) return false;
+        return mgr.includes(user);
       }
       function getMemberRoleTitle(name) {
         const cleanName = String(name || "").trim();
@@ -2637,12 +2678,18 @@
 
       function updateGlobalBadges() {
         const todoList = (state.todoData && state.todoData.list) || [];
-        const pendingTodo = todoList.filter((t) => t.status !== "완료").length;
+        const user = state.user;
+        const myPendingTodo = todoList.filter((t) => t.status !== "완료" && isUserAssignedTodo(t, user)).length;
         const newQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s)).length;
         const tb = document.getElementById("pcTodoBadge");
+        const mb = document.getElementById("mTodoBadge");
         const qb = document.getElementById("pcQuoteBadge");
         const mt = document.getElementById("pcMonthTitle");
-        if (tb) tb.textContent = pendingTodo;
+        if (tb) tb.textContent = myPendingTodo;
+        if (mb) {
+          mb.textContent = myPendingTodo;
+          mb.style.display = myPendingTodo > 0 ? "inline-block" : "none";
+        }
         if (qb) qb.textContent = newQuotes;
         if (mt) mt.textContent = state.calYear + "년 " + state.calMonth + "월";
       }
@@ -3026,7 +3073,7 @@
 
         const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s));
         const allTodos = (state.todoData && state.todoData.list) || [];
-        const myTodos = allTodos.filter((t) => !t.manager || t.manager.includes(user));
+        const myTodos = allTodos.filter((t) => isUserAssignedTodo(t, user));
         const myPendingTodos = myTodos.filter((t) => t.status !== "완료");
         const myPayable = (state.financeData && state.financeData.summary && state.financeData.summary.totalPayable) || 0;
 
@@ -3426,6 +3473,36 @@
         }
 
         const pcCalEl = document.getElementById("pcCalMain");
+        const existingInput = document.getElementById("pcSearchInput");
+        const isCalendarActive = state.pcTab === "calendar";
+        const paperEl = pcCalEl ? pcCalEl.querySelector(".calendar-paper") : null;
+        if (pcCalEl && existingInput && paperEl && isCalendarActive && pcCalEl.querySelector(".cal-body-matrix") && pcCalEl.contains(existingInput)) {
+          paperEl.innerHTML = `
+            <div class="cal-header-row">
+              <div class="cal-header-cell sun">일</div><div class="cal-header-cell">월</div>
+              <div class="cal-header-cell">화</div><div class="cal-header-cell">수</div>
+              <div class="cal-header-cell">목</div><div class="cal-header-cell">금</div>
+              <div class="cal-header-cell sat">토</div>
+            </div>
+            ${bodyHtml}
+          `;
+          const countEl = pcCalEl.querySelector(".cal-count-capsule");
+          if (countEl) countEl.innerHTML = `총 <strong>${events.length}건</strong> <span class="dot">·</span> 다중일자 포함`;
+          const chipsEl = pcCalEl.querySelector(".pc-cal-chips-wrap");
+          if (chipsEl) {
+            chipsEl.innerHTML = `
+              ${chips.join("")}
+              ${(hasSubsetSites || state.memberFilter || state.searchQuery.trim()) ? `<button type="button" class="btn-tool-tag" onclick="resetAllFilters()" style="height:32px;padding:0 10px;border-radius:8px;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;background:#fff;border:1px solid #cbd5e1;cursor:pointer;">초기화</button>` : ""}
+            `;
+          }
+          if (existingInput.value !== state.searchQuery) {
+            existingInput.value = state.searchQuery;
+          }
+          state._lastCalSlideDir = "";
+          setupCalendarSwipe(pcCalEl);
+          return;
+        }
+
         pcCalEl.innerHTML = `
           <div class="pc-cal-toolbar">
             <div class="pc-cal-toolbar-left">
@@ -3441,6 +3518,11 @@
               </div>
             </div>
             <div class="pc-cal-toolbar-right">
+              <div class="pc-page-search-wrap">
+                <span class="pc-page-search-icon">🔍</span>
+                <input type="text" id="pcSearchInput" class="pc-page-search-input" placeholder="현장, 공종, 담당자 검색 (Alt+S)" value="${escHtml(state.searchQuery)}" oninput="onGlobalSearch(this.value)">
+                ${state.searchQuery ? `<span class="pc-page-search-clear" onclick="clearGlobalSearch()" title="검색 초기화">✕</span>` : `<span class="search-shortcut-badge" style="position:absolute;right:6px;font-size:10px;padding:2px 4px;border-radius:4px;background:#f1f5f9;color:#64748b;pointer-events:none;">Alt+S</span>`}
+              </div>
               <span class="cal-count-capsule">
                 총 <strong>${events.length}건</strong> <span class="dot">·</span> 다중일자 포함
               </span>
@@ -3771,33 +3853,64 @@
           `;
         }
 
-        document.getElementById("pcSiteMain").innerHTML = `
+        const pcSiteEl = document.getElementById("pcSiteMain");
+        const existingInput = document.getElementById("pcSearchInput");
+        const isSitesActive = state.pcTab === "sites";
+        const bodyAreaEl = pcSiteEl ? document.getElementById("pcSiteBodyArea") : null;
+        if (pcSiteEl && existingInput && bodyAreaEl && isSitesActive && pcSiteEl.contains(existingInput)) {
+          bodyAreaEl.innerHTML = `
+            ${visibleSites.length ? `
+              <div class="carousel-wrap-box">
+                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcSiteCarouselTrack', -360)" title="이전 현장 보기">‹</button>
+                <div class="site-carousel-track" id="pcSiteCarouselTrack">${carouselHtml}</div>
+                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcSiteCarouselTrack', 360)" title="다음 현장 보기">›</button>
+              </div>` : ""}
+            ${detailHtml}
+          `;
+          const countSpan = document.getElementById("pcSiteVisibleCount");
+          if (countSpan) countSpan.textContent = `표시 ${visibleSites.length}개`;
+          if (existingInput.value !== state.searchQuery) {
+            existingInput.value = state.searchQuery;
+          }
+          return;
+        }
+
+        pcSiteEl.innerHTML = `
           <div class="site-carousel-controls">
             <div style="display:flex;align-items:center;gap:8px;">
               <div class="pc-est-status-tabs">
                 <button type="button" class="pc-c-status-tab ${!state.showArchivedSites ? "active" : ""}" onclick="if(state.showArchivedSites) toggleArchivedSites()">🏗️ 진행 현장 <span class="pc-badge-count">${activeCountAll}</span></button>
                 <button type="button" class="pc-c-status-tab done-tab ${state.showArchivedSites ? "active" : ""}" onclick="if(!state.showArchivedSites) toggleArchivedSites()">✅ 완료·보관 포함 <span class="pc-badge-count-done">${doneCountAll}</span></button>
               </div>
-              <span style="font-size:12px;font-weight:700;color:var(--text-muted);">표시 ${visibleSites.length}개</span>
+              <span id="pcSiteVisibleCount" style="font-size:12px;font-weight:700;color:var(--text-muted);">표시 ${visibleSites.length}개</span>
             </div>
-            <div style="display:flex;gap:5px;">
-              ${state.showArchivedSites ? `
-                <button type="button" class="st-pill ${state.siteSortBy !== "name" ? "active" : ""}" onclick="setSiteSort('recent')">최근완료순</button>
-                <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
-              ` : `
-                <button type="button" class="st-pill ${state.siteSortBy === "progress" ? "active" : ""}" onclick="setSiteSort('progress')">진행률순</button>
-                <button type="button" class="st-pill ${state.siteSortBy === "date" ? "active" : ""}" onclick="setSiteSort('date')">일정순</button>
-                <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
-              `}
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="pc-page-search-wrap">
+                <span class="pc-page-search-icon">🔍</span>
+                <input type="text" id="pcSearchInput" class="pc-page-search-input" placeholder="현장, 공종, 담당자 검색 (Alt+S)" value="${escHtml(state.searchQuery)}" oninput="onGlobalSearch(this.value)">
+                ${state.searchQuery ? `<span class="pc-page-search-clear" onclick="clearGlobalSearch()" title="검색 초기화">✕</span>` : `<span class="search-shortcut-badge" style="position:absolute;right:6px;font-size:10px;padding:2px 4px;border-radius:4px;background:#f1f5f9;color:#64748b;pointer-events:none;">Alt+S</span>`}
+              </div>
+              <div style="display:flex;gap:5px;">
+                ${state.showArchivedSites ? `
+                  <button type="button" class="st-pill ${state.siteSortBy !== "name" ? "active" : ""}" onclick="setSiteSort('recent')">최근완료순</button>
+                  <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
+                ` : `
+                  <button type="button" class="st-pill ${state.siteSortBy === "progress" ? "active" : ""}" onclick="setSiteSort('progress')">진행률순</button>
+                  <button type="button" class="st-pill ${state.siteSortBy === "date" ? "active" : ""}" onclick="setSiteSort('date')">일정순</button>
+                  <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
+                `}
+              </div>
             </div>
           </div>
-          ${visibleSites.length ? `
-            <div class="carousel-wrap-box">
-              <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcSiteCarouselTrack', -360)" title="이전 현장 보기">‹</button>
-              <div class="site-carousel-track" id="pcSiteCarouselTrack">${carouselHtml}</div>
-              <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcSiteCarouselTrack', 360)" title="다음 현장 보기">›</button>
-            </div>` : ""}
-          ${detailHtml}
+          <div id="pcSiteBodyArea">
+            ${visibleSites.length ? `
+              <div class="carousel-wrap-box">
+                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcSiteCarouselTrack', -360)" title="이전 현장 보기">‹</button>
+                <div class="site-carousel-track" id="pcSiteCarouselTrack">${carouselHtml}</div>
+                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcSiteCarouselTrack', 360)" title="다음 현장 보기">›</button>
+              </div>` : ""}
+            ${detailHtml}
+          </div>
         `;
       }
 
@@ -3907,12 +4020,18 @@
         const siteOptionsHtml = ongoingSites.map((s) => `<option value="${escHtml(s.siteName)}">🏢 ${escHtml(s.siteName)}</option>`).join("");
 
         const chipsHtml = `
-          <button type="button" class="tm-chip ${activeMemberFilter === "all" ? "active" : ""}" onclick="filterTodoMember('all')">전체 (${list.length})</button>
+          <button type="button" class="tm-chip ${activeMemberFilter === "all" ? "active" : ""}" onclick="filterTodoMember('all')">
+            <span class="tm-avatar tm-avatar-all">👥</span>
+            <span>전체 (${list.length})</span>
+          </button>
           ${displayMembers.map((m) => {
             const mCnt = list.filter((t) => t.manager && t.manager.includes(m)).length;
             return `<button type="button" class="tm-chip ${activeMemberFilter === m ? "active" : ""}" onclick="filterTodoMember('${escJs(m)}')"><span class="tm-avatar">${escHtml(m.slice(0, 1))}</span><span>${escHtml(m)} (${mCnt})</span></button>`;
           }).join("")}
-          <button type="button" class="tm-chip ${activeMemberFilter === "unassigned" ? "active" : ""}" onclick="filterTodoMember('unassigned')">미지정 (${list.filter((t) => !t.manager).length})</button>
+          <button type="button" class="tm-chip ${activeMemberFilter === "unassigned" ? "active" : ""}" onclick="filterTodoMember('unassigned')">
+            <span class="tm-avatar tm-avatar-unassigned">미</span>
+            <span>미지정 (${list.filter((t) => !t.manager || t.manager === "미지정" || t.manager === "담당 미지정").length})</span>
+          </button>
         `;
 
         let groupedHtml = "";
@@ -4206,10 +4325,18 @@
       window.onFilterQuoteTable = function (query) {
         state.quoteTableSearch = String(query || "");
         const q = state.quoteTableSearch.toLowerCase().trim();
+        const clearBtn = document.getElementById("pcEstimateSearchClearBtn");
+        if (clearBtn) clearBtn.style.display = state.quoteTableSearch ? "inline-block" : "none";
         document.querySelectorAll("#pcEstimateDataTable tbody tr").forEach((r) => {
           const s = r.getAttribute("data-search") || "";
           r.style.display = (!q || s.indexOf(q) !== -1) ? "" : "none";
         });
+      };
+      window.clearQuoteTableSearch = function () {
+        state.quoteTableSearch = "";
+        const el = document.getElementById("pcEstimateSearchInput");
+        if (el) el.value = "";
+        window.onFilterQuoteTable("");
       };
 
       function renderPcQuoteTab() {
@@ -4384,7 +4511,10 @@
                     <span class="pc-est-table-count">${filtered.length}건</span>
                   </div>
                   <div style="display:flex;align-items:center;gap:8px;">
-                    <input type="text" id="pcEstimateSearchInput" value="${escHtml(state.quoteTableSearch)}" placeholder="현장명, 고객명, 연락처 검색..." oninput="onFilterQuoteTable(this.value)" style="padding:6px 12px;border:1.5px solid #cbd5e1;border-radius:7px;font-size:12px;outline:none;width:210px;">
+                    <div style="position:relative;display:inline-flex;align-items:center;">
+                      <input type="text" id="pcEstimateSearchInput" value="${escHtml(state.quoteTableSearch)}" placeholder="현장명, 고객명, 연락처 검색..." oninput="onFilterQuoteTable(this.value)" style="padding:6px 28px 6px 12px;border:1.5px solid #cbd5e1;border-radius:7px;font-size:12px;outline:none;width:220px;box-sizing:border-box;">
+                      <button type="button" id="pcEstimateSearchClearBtn" onclick="clearQuoteTableSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:transparent;color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer;padding:2px 4px;display:${state.quoteTableSearch ? "inline-block" : "none"};" title="검색어 지우기">✕</button>
+                    </div>
                   </div>
                 </div>
                 <div style="overflow-x:auto;">
@@ -4573,7 +4703,7 @@
         const visibleMobileTasks = isTasksExpanded ? filteredMobileTasks : filteredMobileTasks.slice(0, limitTasks);
         const hiddenTasksCount = filteredMobileTasks.length - visibleMobileTasks.length;
         const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s));
-        const todos = ((state.todoData && state.todoData.list) || []).filter((t) => !t.manager || t.manager.includes(user));
+        const todos = ((state.todoData && state.todoData.list) || []).filter((t) => isUserAssignedTodo(t, user));
         const pendingTodos = todos.filter((t) => t.status !== "완료");
 
         document.getElementById("m-page-home").innerHTML = `
@@ -4749,7 +4879,7 @@
           }
         }
 
-        const filterChips = [`<span class="m-pill-chip">📂 <b>${scopeNameMap[state.scope] || state.scope}</b></span>`];
+        const filterChips = [`<span class="m-pill-chip">📁 <b>${scopeNameMap[state.scope] || state.scope}</b></span>`];
         if (state.memberFilter) filterChips.push(`<span class="m-pill-chip">👤 <b>${escHtml(state.memberFilter)}</b> <span class="del-x" onclick="onMMemberClick('')">✕</span></span>`);
         if (state.searchQuery.trim()) filterChips.push(`<span class="m-pill-chip">🔍 <b>"${escHtml(state.searchQuery.trim())}"</b> <span class="del-x" onclick="clearGlobalSearch()">✕</span></span>`);
 
@@ -4924,10 +5054,10 @@
             <div class="m-cal-row-secondary">
               <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;">
                 ${filterChips.join("")}
-                <button type="button" id="btnMobileSiteFilter" class="m-site-filter-btn ${hasSubsetSites ? 'active' : ''}" onclick="openMobileSiteFilterModal()" style="font-size:11px;padding:3px 8px;height:26px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:3px;max-width:160px;overflow:hidden;text-overflow:ellipsis;">
+                <button type="button" id="btnMobileSiteFilter" class="m-site-filter-btn ${hasSubsetSites ? 'active' : ''}" onclick="openMobileSiteFilterModal()" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;">
                   ${siteFilterButtonLabel}
                 </button>
-                ${hasSubsetSites ? `<button type="button" class="m-site-filter-clear-btn" onclick="resetAndApplyAllSitesFilter()" title="전체 현장 보기로 초기화" style="height:26px;width:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:11px;border-radius:6px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;cursor:pointer;">✕</button>` : ""}
+                ${hasSubsetSites ? `<button type="button" class="m-site-filter-clear-btn" onclick="resetAndApplyAllSitesFilter()" title="전체 현장 보기로 초기화">✕</button>` : ""}
               </div>
               <span class="m-cal-count-badge">
                 ${events.length}건
@@ -5243,12 +5373,17 @@
       function renderMobileTodoTab() {
         const list = (state.todoData && state.todoData.list) || [];
         const q = state.searchQuery.trim();
-        const m = state.memberFilter;
+        const activeMemberFilter = state.todoMemberFilter || "all";
+        const displayMembers = getMembersList();
         const groupBy = state.todoGroupBy || "due";
         const todayYmd = getTodayYmd();
 
         const filteredList = list.filter((t) => {
-          if (m && !(t.manager || "").includes(m)) return false;
+          if (activeMemberFilter === "unassigned") {
+            if (t.manager && t.manager !== "미지정" && t.manager !== "담당 미지정") return false;
+          } else if (activeMemberFilter !== "all") {
+            if (!t.manager || !t.manager.includes(activeMemberFilter)) return false;
+          }
           if (q && !matchesQuery([t.title, t.siteName, t.manager, t.detail].join(" "), q)) return false;
           return true;
         });
@@ -5260,6 +5395,23 @@
 
         const ongoingSites = getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
         const siteOptionsHtml = ongoingSites.map((s) => `<option value="${escHtml(s.siteName)}">🏢 ${escHtml(s.siteName)}</option>`).join("");
+
+        const chipsHtml = `
+          <div class="todo-member-chip-bar" style="margin-bottom:10px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;">
+            <button type="button" class="tm-chip ${activeMemberFilter === "all" ? "active" : ""}" onclick="filterTodoMember('all')">
+              <span class="tm-avatar tm-avatar-all">👥</span>
+              <span>전체 (${list.length})</span>
+            </button>
+            ${displayMembers.map((m) => {
+              const mCnt = list.filter((t) => t.manager && t.manager.includes(m)).length;
+              return `<button type="button" class="tm-chip ${activeMemberFilter === m ? "active" : ""}" onclick="filterTodoMember('${escJs(m)}')"><span class="tm-avatar">${escHtml(m.slice(0, 1))}</span><span>${escHtml(m)} (${mCnt})</span></button>`;
+            }).join("")}
+            <button type="button" class="tm-chip ${activeMemberFilter === "unassigned" ? "active" : ""}" onclick="filterTodoMember('unassigned')">
+              <span class="tm-avatar tm-avatar-unassigned">미</span>
+              <span>미지정 (${list.filter((t) => !t.manager || t.manager === "미지정" || t.manager === "담당 미지정").length})</span>
+            </button>
+          </div>
+        `;
 
         let groupedHtml = "";
         if (groupBy === "due") {
@@ -5375,6 +5527,8 @@
             </div>
             <button type="button" class="btn-act-blue" style="padding:5px 10px;font-size:11.5px;" onclick="openTodoModal(null)">+ 상세</button>
           </div>
+
+          ${chipsHtml}
 
           <!-- 모바일 한 줄 빠른 추가 바 -->
           <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:9px 10px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
@@ -8165,17 +8319,169 @@
         renderSettingsModal();
       };
 
-      window.onPartnerSearchInput = function (val, el) {
-        state.partnerSearchQuery = val;
-        const cursor = el ? el.selectionStart : null;
-        renderSettingsModal();
-        const nextInput = document.getElementById("stPartnerSearchInput");
-        if (nextInput) {
-          nextInput.focus();
-          if (cursor !== null) {
-            try { nextInput.setSelectionRange(cursor, cursor); } catch (e) {}
+      window.renderPartnerTableRow = function (p, originalIdx, idx) {
+        const prioColor = (p.priority === "1팀" || p.priority === "A팀") ? "#2563eb" : ((p.priority === "2팀" || p.priority === "B팀") ? "#0f766e" : ((p.priority === "3팀" || p.priority === "C팀") ? "#d97706" : "#64748b"));
+        const statusBg = p.status === "운영 중" ? "#dcfce7" : (p.status === "확인 필요" ? "#fef3c7" : (p.status === "보류" ? "#fee2e2" : "#eff6ff"));
+        const statusFg = p.status === "운영 중" ? "#166534" : (p.status === "확인 필요" ? "#92400e" : (p.status === "보류" ? "#991b1b" : "#1d4ed8"));
+        const dispBiz = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
+        return `
+          <tr>
+            <td style="text-align:center;font-size:11.5px;color:#94a3b8;font-weight:700;white-space:nowrap;">${idx + 1}</td>
+            <td style="text-align:center;white-space:nowrap;">
+              <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${originalIdx},-1)" title="위로">▲</button>
+              <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${originalIdx},1)" title="아래로">▼</button>
+            </td>
+            <td style="white-space:nowrap;"><strong style="color:#0f172a;font-size:12.5px;">${escHtml(p.name || p.fullName)}</strong></td>
+            <td style="white-space:nowrap;"><span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:4px;font-weight:700;font-size:11px;">${escHtml(dispBiz)}</span></td>
+            <td style="text-align:center;font-size:11.5px;color:#475569;white-space:nowrap;">${escHtml(p.category || "시공")}</td>
+            <td style="text-align:center;white-space:nowrap;"><span style="font-weight:800;color:${prioColor};font-size:11.5px;">${escHtml(p.priority || "일반")}</span></td>
+            <td style="font-size:12px;color:#334155;white-space:nowrap;">${escHtml(p.manager || "-")}</td>
+            <td style="white-space:nowrap;">
+              ${p.phone ? `<a href="tel:${escHtml(p.phone)}" style="color:#2563eb;text-decoration:none;font-weight:600;font-size:11.5px;white-space:nowrap;">📞 ${escHtml(p.phone)}</a>` : `<span style="color:#94a3b8;">-</span>`}
+            </td>
+            <td style="text-align:center;white-space:nowrap;"><span style="padding:2px 7px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};white-space:nowrap;">${escHtml(p.status || "운영 중")}</span></td>
+            <td style="font-size:11.5px;color:#475569;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.feature || "")}">${escHtml(p.feature || "-")}</td>
+            <td style="font-size:11.5px;color:#64748b;white-space:nowrap;">${escHtml(p.orderMethod || "-")}</td>
+            <td style="font-size:11.5px;color:#64748b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.note || p.memo || "")}">${escHtml(p.note || p.memo || "-")}</td>
+            <td style="text-align:center;white-space:nowrap;">
+              <button type="button" class="btn-tool-tag" onclick="openPartnerForm(${originalIdx})" title="수정">✏️</button>
+              <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="delSettingItem('partners',${originalIdx})" title="삭제">🗑️</button>
+            </td>
+          </tr>`;
+      };
+
+      window.getFilteredPartnersList = function () {
+        const s = state.settingsData || { partners: [] };
+        const rawList = s.partners || [];
+        const q = (state.partnerSearchQuery || "").toLowerCase().trim();
+        const qWords = q ? q.split(/\s+/).filter(Boolean) : [];
+
+        return rawList.map((p, originalIdx) => ({ p, originalIdx })).filter(({ p }) => {
+          if (!p) return false;
+          if (qWords.length > 0) {
+            const hayParts = [
+              p.name, p.fullName, p.partnerName, p.company, p.companyName, p.partner, p.dropdownVal,
+              p.biz, p.trade, p.task, p.category, p.cat,
+              p.manager, p.mgr, p.owner, p.leader,
+              p.phone, p.tel, p.contact,
+              p.priority, p.team,
+              p.status, p.stat,
+              p.feature, p.account, p.bank,
+              p.orderMethod, p.order,
+              p.note, p.memo
+            ];
+            try {
+              Object.keys(p).forEach((k) => {
+                const v = p[k];
+                if (typeof v === "string" || typeof v === "number") hayParts.push(String(v));
+              });
+            } catch (e) {}
+            const hay = hayParts.filter(Boolean).join(" ").toLowerCase();
+            const allMatch = qWords.every((w) => hay.includes(w));
+            if (!allMatch) return false;
+          }
+          if (state.partnerBizFilter) {
+            const pB = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
+            if (pB !== state.partnerBizFilter) return false;
+          }
+          if (state.partnerCatFilter) {
+            const pC = String(p.category || "시공").trim();
+            if (pC !== state.partnerCatFilter) return false;
+          }
+          if (state.partnerPrioFilter) {
+            const pPr = String(p.priority || "미지정").trim();
+            if (pPr !== state.partnerPrioFilter) return false;
+          }
+          if (state.partnerStatusFilter) {
+            const pSt = String(p.status || "운영 중").trim();
+            if (pSt !== state.partnerStatusFilter) return false;
+          }
+          return true;
+        });
+      };
+
+      window.updateSettingsPartnersTablePartial = function () {
+        const filtered = window.getFilteredPartnersList();
+        const tbody = document.getElementById("stPartnersTbody");
+        if (tbody) {
+          if (filtered.length) {
+            tbody.innerHTML = filtered.map(({ p, originalIdx }, idx) => window.renderPartnerTableRow(p, originalIdx, idx)).join("");
+          } else {
+            tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:36px;color:#94a3b8;font-weight:600;">조건에 일치하는 거래처가 없습니다.</td></tr>`;
           }
         }
+        const hasActiveFilters = !!(state.partnerSearchQuery || state.partnerBizFilter || state.partnerCatFilter || state.partnerPrioFilter || state.partnerStatusFilter);
+        const sumEl = document.getElementById("stPartnersFilterSummary");
+        if (sumEl) {
+          if (hasActiveFilters) {
+            sumEl.style.display = "flex";
+            sumEl.innerHTML = `
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span style="font-weight:700;color:#1e40af;">🔍 적용된 필터 (${filtered.length}건):</span>
+                ${state.partnerSearchQuery ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">검색: "${escHtml(state.partnerSearchQuery)}" <span class="del-x" onclick="clearPartnerSearch()" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                ${state.partnerBizFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">대표공종: ${escHtml(state.partnerBizFilter)} <span class="del-x" onclick="setPartnerFilter('partnerBizFilter','')" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                ${state.partnerCatFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">대구분: ${escHtml(state.partnerCatFilter)} <span class="del-x" onclick="setPartnerFilter('partnerCatFilter','')" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                ${state.partnerPrioFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">우선순위: ${escHtml(state.partnerPrioFilter)} <span class="del-x" onclick="setPartnerFilter('partnerPrioFilter','')" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                ${state.partnerStatusFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">관리상태: ${escHtml(state.partnerStatusFilter)} <span class="del-x" onclick="setPartnerFilter('partnerStatusFilter','')" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+              </div>
+              <button type="button" onclick="resetAllPartnerFilters()" style="border:none;background:#dbeafe;color:#1e40af;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;cursor:pointer;white-space:nowrap;">전체 해제</button>
+            `;
+          } else {
+            sumEl.style.display = "none";
+            sumEl.innerHTML = "";
+          }
+        }
+        const clearBtn = document.getElementById("stPartnerSearchClearBtn");
+        if (clearBtn) {
+          clearBtn.style.display = state.partnerSearchQuery ? "inline-block" : "none";
+        }
+      };
+
+      window.setPartnerFilter = function (filterKey, value) {
+        state[filterKey] = String(value || "");
+        const selMap = {
+          partnerBizFilter: "stPartnerBizSelect",
+          partnerCatFilter: "stPartnerCatSelect",
+          partnerPrioFilter: "stPartnerPrioSelect",
+          partnerStatusFilter: "stPartnerStatusSelect"
+        };
+        const elId = selMap[filterKey];
+        if (elId) {
+          const el = document.getElementById(elId);
+          if (el && el.value !== state[filterKey]) el.value = state[filterKey];
+        }
+        window.updateSettingsPartnersTablePartial();
+      };
+
+      window.onPartnerSearchInput = function (val) {
+        state.partnerSearchQuery = String(val || "");
+        window.updateSettingsPartnersTablePartial();
+      };
+
+      window.clearPartnerSearch = function () {
+        state.partnerSearchQuery = "";
+        const sIn = document.getElementById("stPartnerSearchInput");
+        if (sIn) { sIn.value = ""; sIn.focus(); }
+        window.updateSettingsPartnersTablePartial();
+      };
+
+      window.resetAllPartnerFilters = function () {
+        state.partnerSearchQuery = "";
+        state.partnerBizFilter = "";
+        state.partnerCatFilter = "";
+        state.partnerPrioFilter = "";
+        state.partnerStatusFilter = "";
+        const sIn = document.getElementById("stPartnerSearchInput");
+        if (sIn) sIn.value = "";
+        const bSel = document.getElementById("stPartnerBizSelect");
+        if (bSel) bSel.value = "";
+        const cSel = document.getElementById("stPartnerCatSelect");
+        if (cSel) cSel.value = "";
+        const pSel = document.getElementById("stPartnerPrioSelect");
+        if (pSel) pSel.value = "";
+        const stSel = document.getElementById("stPartnerStatusSelect");
+        if (stSel) stSel.value = "";
+        window.updateSettingsPartnersTablePartial();
       };
 
       function renderSettingsModal() {
@@ -8197,50 +8503,7 @@
             statCounts[st] = (statCounts[st] || 0) + 1;
           });
 
-          const q = (state.partnerSearchQuery || "").toLowerCase().trim();
-          const qWords = q ? q.split(/\s+/).filter(Boolean) : [];
-
-          const filteredPartners = rawList.map((p, originalIdx) => ({ p, originalIdx })).filter(({ p }) => {
-            if (qWords.length > 0) {
-              const hayParts = [
-                p.name, p.fullName, p.partnerName, p.company, p.companyName, p.partner, p.dropdownVal,
-                p.biz, p.trade, p.task, p.category, p.cat,
-                p.manager, p.mgr, p.owner, p.leader,
-                p.phone, p.tel, p.contact,
-                p.priority, p.team,
-                p.status, p.stat,
-                p.feature, p.account, p.bank,
-                p.orderMethod, p.order,
-                p.note, p.memo
-              ];
-              try {
-                Object.keys(p).forEach((k) => {
-                  const v = p[k];
-                  if (typeof v === "string" || typeof v === "number") hayParts.push(String(v));
-                });
-              } catch (e) {}
-              const hay = hayParts.filter(Boolean).join(" ").toLowerCase();
-              const allMatch = qWords.every((w) => hay.includes(w));
-              if (!allMatch) return false;
-            }
-            if (state.partnerBizFilter) {
-              const pB = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
-              if (pB !== state.partnerBizFilter) return false;
-            }
-            if (state.partnerCatFilter) {
-              const pC = String(p.category || "시공").trim();
-              if (pC !== state.partnerCatFilter) return false;
-            }
-            if (state.partnerPrioFilter) {
-              const pPr = String(p.priority || "미지정").trim();
-              if (pPr !== state.partnerPrioFilter) return false;
-            }
-            if (state.partnerStatusFilter) {
-              const pSt = String(p.status || "운영 중").trim();
-              if (pSt !== state.partnerStatusFilter) return false;
-            }
-            return true;
-          });
+          const filteredPartners = window.getFilteredPartnersList();
 
           const editIdx = state.editingPartnerIndex;
           const editItem = (typeof editIdx === "number" && editIdx >= 0) ? rawList[editIdx] : null;
@@ -8314,47 +8577,45 @@
           contentHtml = `
             ${formHtml}
             <div style="background:#f8fafc;padding:10px 12px;border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
-              <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:240px;">
-                <span style="font-size:13px;color:#64748b;">🔍</span>
-                <input id="stPartnerSearchInput" class="ws-input" style="height:30px;font-size:12px;padding:4px 8px;flex:1;" placeholder="업체명, 대표공종, 담당자, 연락처, 비고/계좌 검색..." value="${escHtml(state.partnerSearchQuery || "")}" oninput="onPartnerSearchInput(this.value, this)">
-                ${state.partnerSearchQuery ? `<button type="button" onclick="state.partnerSearchQuery=''; renderSettingsModal();" style="border:none;background:transparent;color:#94a3b8;font-size:13px;cursor:pointer;padding:0 4px;" title="검색어 지우기">✕</button>` : ""}
+              <div id="stPartnerSearchWrap" style="position:relative;display:flex;align-items:center;flex:1;min-width:240px;">
+                <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;color:#64748b;pointer-events:none;">🔍</span>
+                <input id="stPartnerSearchInput" class="ws-input" style="height:30px;font-size:12px;padding:4px 30px 4px 28px;box-sizing:border-box;width:100%;" placeholder="업체명, 대표공종, 담당자, 연락처, 비고/계좌 검색..." value="${escHtml(state.partnerSearchQuery || "")}" oninput="onPartnerSearchInput(this.value)">
+                <button type="button" id="stPartnerSearchClearBtn" onclick="clearPartnerSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:transparent;color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer;padding:2px 4px;display:${state.partnerSearchQuery ? "inline-block" : "none"};" title="검색어 지우기">✕</button>
               </div>
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                <select class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="state.partnerBizFilter=this.value; renderSettingsModal();">
+                <select id="stPartnerBizSelect" class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="setPartnerFilter('partnerBizFilter', this.value)">
                   <option value="">대표공종 전체 (${rawList.length})</option>
                   ${Object.keys(bizCounts).sort().map((b) => `<option value="${escHtml(b)}" ${state.partnerBizFilter === b ? "selected" : ""}>${escHtml(b)} (${bizCounts[b]})</option>`).join("")}
                 </select>
-                <select class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="state.partnerCatFilter=this.value; renderSettingsModal();">
+                <select id="stPartnerCatSelect" class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="setPartnerFilter('partnerCatFilter', this.value)">
                   <option value="">대구분 전체</option>
                   ${Object.keys(catCounts).sort().map((c) => `<option value="${escHtml(c)}" ${state.partnerCatFilter === c ? "selected" : ""}>${escHtml(c)} (${catCounts[c]})</option>`).join("")}
                 </select>
-                <select class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="state.partnerPrioFilter=this.value; renderSettingsModal();">
+                <select id="stPartnerPrioSelect" class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="setPartnerFilter('partnerPrioFilter', this.value)">
                   <option value="">우선순위 전체</option>
                   ${Object.keys(prioCounts).sort().map((pr) => `<option value="${escHtml(pr)}" ${state.partnerPrioFilter === pr ? "selected" : ""}>${escHtml(pr)} (${prioCounts[pr]})</option>`).join("")}
                 </select>
-                <select class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="state.partnerStatusFilter=this.value; renderSettingsModal();">
+                <select id="stPartnerStatusSelect" class="ws-select" style="height:30px;font-size:11.5px;padding:2px 6px;width:auto;" onchange="setPartnerFilter('partnerStatusFilter', this.value)">
                   <option value="">관리상태 전체</option>
                   ${Object.keys(statCounts).sort().map((st) => `<option value="${escHtml(st)}" ${state.partnerStatusFilter === st ? "selected" : ""}>${escHtml(st)} (${statCounts[st]})</option>`).join("")}
                 </select>
-                ${hasActiveFilters ? `
-                  <button type="button" class="btn-act-white" style="height:30px;padding:0 8px;font-size:11.5px;" onclick="state.partnerSearchQuery='';state.partnerBizFilter='';state.partnerCatFilter='';state.partnerPrioFilter='';state.partnerStatusFilter=''; renderSettingsModal();">초기화</button>` : ""}
-                ${!state.showPartnerForm ? `
-                  <button type="button" class="btn-act-blue" style="height:30px;padding:0 12px;font-size:12px;display:inline-flex;align-items:center;gap:4px;" onclick="openPartnerForm(-1)">➕ 거래처 추가</button>` : ""}
+                <button type="button" class="btn-act-white" style="height:30px;padding:0 8px;font-size:11.5px;" onclick="resetAllPartnerFilters()">초기화</button>
               </div>
             </div>
 
-            ${hasActiveFilters ? `
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11.5px;">
+            <div id="stPartnersFilterSummary" style="display:${hasActiveFilters ? "flex" : "none"};align-items:center;justify-content:space-between;gap:8px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11.5px;">
+              ${hasActiveFilters ? `
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                   <span style="font-weight:700;color:#1e40af;">🔍 적용된 필터 (${filteredPartners.length}건):</span>
-                  ${state.partnerSearchQuery ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">검색: "${escHtml(state.partnerSearchQuery)}" <span class="del-x" onclick="state.partnerSearchQuery='';renderSettingsModal();" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
-                  ${state.partnerBizFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">대표공종: ${escHtml(state.partnerBizFilter)} <span class="del-x" onclick="state.partnerBizFilter='';renderSettingsModal();" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
-                  ${state.partnerCatFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">대구분: ${escHtml(state.partnerCatFilter)} <span class="del-x" onclick="state.partnerCatFilter='';renderSettingsModal();" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
-                  ${state.partnerPrioFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">우선순위: ${escHtml(state.partnerPrioFilter)} <span class="del-x" onclick="state.partnerPrioFilter='';renderSettingsModal();" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
-                  ${state.partnerStatusFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">관리상태: ${escHtml(state.partnerStatusFilter)} <span class="del-x" onclick="state.partnerStatusFilter='';renderSettingsModal();" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                  ${state.partnerSearchQuery ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">검색: "${escHtml(state.partnerSearchQuery)}" <span class="del-x" onclick="clearPartnerSearch()" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                  ${state.partnerBizFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">대표공종: ${escHtml(state.partnerBizFilter)} <span class="del-x" onclick="setPartnerFilter('partnerBizFilter','')" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                  ${state.partnerCatFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">대구분: ${escHtml(state.partnerCatFilter)} <span class="del-x" onclick="setPartnerFilter('partnerCatFilter','')" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                  ${state.partnerPrioFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">우선순위: ${escHtml(state.partnerPrioFilter)} <span class="del-x" onclick="setPartnerFilter('partnerPrioFilter','')" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+                  ${state.partnerStatusFilter ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">관리상태: ${escHtml(state.partnerStatusFilter)} <span class="del-x" onclick="setPartnerFilter('partnerStatusFilter','')" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
                 </div>
-                <button type="button" onclick="state.partnerSearchQuery='';state.partnerBizFilter='';state.partnerCatFilter='';state.partnerPrioFilter='';state.partnerStatusFilter='';renderSettingsModal();" style="border:none;background:#dbeafe;color:#1e40af;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;cursor:pointer;white-space:nowrap;">전체 해제</button>
-              </div>` : ""}
+                <button type="button" onclick="resetAllPartnerFilters()" style="border:none;background:#dbeafe;color:#1e40af;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;cursor:pointer;white-space:nowrap;">전체 해제</button>
+              ` : ""}
+            </div>
 
             <div class="table-container" style="max-height:380px;overflow-y:auto;overflow-x:auto;">
               <table class="clean-table" style="min-width:1380px;width:100%;border-collapse:separate;border-spacing:0;">
@@ -8375,30 +8636,11 @@
                     <th style="width:75px;text-align:center;white-space:nowrap;">관리</th>
                   </tr>
                 </thead>
-                <tbody>
-                  ${filteredPartners.length ? filteredPartners.map(({ p, originalIdx }, idx) => {
-                    const prioColor = (p.priority === "1팀" || p.priority === "A팀") ? "#2563eb" : ((p.priority === "2팀" || p.priority === "B팀") ? "#0f766e" : ((p.priority === "3팀" || p.priority === "C팀") ? "#d97706" : "#64748b"));
-                    const statusBg = p.status === "운영 중" ? "#dcfce7" : (p.status === "확인 필요" ? "#fef3c7" : (p.status === "보류" ? "#fee2e2" : "#eff6ff"));
-                    const statusFg = p.status === "운영 중" ? "#166534" : (p.status === "확인 필요" ? "#92400e" : (p.status === "보류" ? "#991b1b" : "#1d4ed8"));
-                    const dispBiz = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
-                    return `
-                      <tr>
-                        <td style="text-align:center;font-size:11.5px;color:#94a3b8;font-weight:700;white-space:nowrap;">${idx + 1}</td>
-                        <td style="text-align:center;white-space:nowrap;">
-                          <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${originalIdx},-1)" title="위로">▲</button>
-                          <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${originalIdx},1)" title="아래로">▼</button>
-                        </td>
-                        <td style="white-space:nowrap;"><strong style="color:#0f172a;font-size:12.5px;">${escHtml(p.name || p.fullName)}</strong></td>
-                        <td style="white-space:nowrap;"><span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:4px;font-weight:700;font-size:11px;">${escHtml(dispBiz)}</span></td>
-                        <td style="text-align:center;font-size:11.5px;color:#475569;white-space:nowrap;">${escHtml(p.category || "시공")}</td>
-                        <td style="text-align:center;white-space:nowrap;"><span style="font-weight:800;color:${prioColor};font-size:11.5px;">${escHtml(p.priority || "일반")}</span></td>
-                        <td style="font-size:12px;color:#334155;white-space:nowrap;">${escHtml(p.manager || "-")}</td>
-                        <td style="white-space:nowrap;">
-                          ${p.phone ? `<a href="tel:${escHtml(p.phone)}" style="color:#2563eb;text-decoration:none;font-weight:600;font-size:11.5px;white-space:nowrap;">📞 ${escHtml(p.phone)}</a>` : `<span style="color:#94a3b8;">-</span>`}
-                        </td>
-                        <td style="text-align:center;white-space:nowrap;"><span style="padding:2px 7px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};white-space:nowrap;">${escHtml(p.status || "운영 중")}</span></td>
-                        <td style="font-size:11.5px;color:#475569;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.feature || "")}">${escHtml(p.feature || "-")}</td>
-                        <td style="font-size:11.5px;color:#64748b;white-space:nowrap;">${escHtml(p.orderMethod || "-")}</td>
+                <tbody id="stPartnersTbody">
+                  ${filteredPartners.length ? filteredPartners.map(({ p, originalIdx }, idx) => window.renderPartnerTableRow(p, originalIdx, idx)).join("") : `<tr><td colspan="13" style="text-align:center;padding:36px;color:#94a3b8;font-weight:600;">조건에 일치하는 거래처가 없습니다.</td></tr>`}
+                </tbody>
+              </table>
+            </div>`;
                         <td style="font-size:11.5px;color:#64748b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.note || p.memo || "")}">${escHtml(p.note || p.memo || "-")}</td>
                         <td style="text-align:center;white-space:nowrap;">
                           <button type="button" class="btn-tool-tag" onclick="openPartnerForm(${originalIdx})" title="수정">✏️</button>
@@ -8519,9 +8761,13 @@
         `;
         document.getElementById("settingsModalFooter").innerHTML = `
           <button type="button" class="btn-act-white" onclick="closeModal('settingsModal')">닫기</button>
-          <button type="button" class="btn-act-blue" onclick="saveSettingsModalAll()">💾 설정 일괄 저장</button>
+          <div style="display:flex;gap:6px;align-items:center;">
+            ${tab === "partners" ? `<button type="button" class="btn-act-blue" style="background:#2563eb;color:#fff;" onclick="openPartnerForm(-1)">➕ 거래처 추가</button>` : ""}
+            <button type="button" class="btn-act-blue" onclick="saveSettingsModalAll()">💾 설정 일괄 저장</button>
+          </div>
         `;
       }
+      window.renderSettingsModal = renderSettingsModal;
       window.renderSettingsModal_safe = renderSettingsModal;
       window.toggleMemberNotify = function (idx, checked) {
         if (state.settingsData && state.settingsData.members && state.settingsData.members[idx]) {
