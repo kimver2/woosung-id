@@ -5528,6 +5528,107 @@ function setupEstimateSheetMenu() {
   }
 }
 
+/**
+ * [신규견적] 공사 범위 및 유입 경로 드롭다운 선택 목록 추출
+ * 1순위: '신규견적' 시트 E열(공사 범위) 및 G열(유입 경로) 데이터 유효성 검사 (DataValidation) 기준값
+ * 2순위: 시스템 표준 기본 목록 (ESTIMATE_COLOR_MAP 기준)
+ * 3순위: 기존 신규견적 데이터 행에 기입된 고유값 병합 (중복 제거)
+ * @param {Spreadsheet} [ss] 스프레드시트 객체
+ * @param {Sheet} [estSheet] 신규견적 시트 객체 (선택)
+ * @returns {{ scopes: string[], sources: string[] }}
+ */
+function getEstimateDropdownOptions(ss, estSheet) {
+  var defaultScopes = ["전체공사", "주방", "욕실", "도배·마루", "붙박이·가구", "샷시·단열", "기타"];
+  var defaultSources = ["소개", "온라인", "기존 고객", "현장 문의", "워크인", "블로그", "기타"];
+  var scopes = [];
+  var sources = [];
+
+  function addVal(arr, val) {
+    var s = String(val || "").trim();
+    if (s && arr.indexOf(s) === -1) {
+      arr.push(s);
+    }
+  }
+
+  try {
+    if (!estSheet) {
+      if (!ss) {
+        if (typeof SpreadsheetApp !== "undefined" && typeof SpreadsheetApp.getActiveSpreadsheet === "function") {
+          ss = SpreadsheetApp.getActiveSpreadsheet();
+        }
+        if (!ss && typeof getAppSpreadsheet === "function") ss = getAppSpreadsheet();
+      }
+      if (ss && typeof findEstimateSheet === "function") {
+        estSheet = findEstimateSheet(ss, false);
+      }
+    }
+
+    if (estSheet) {
+      // 1) 시트 데이터 유효성 검사 (DataValidation) 목록 추출
+      try {
+        if (typeof estSheet.getRange === "function") {
+          var scopeRule = estSheet.getRange(2, 5).getDataValidation();
+          if (scopeRule && typeof scopeRule.getCriteriaValues === "function") {
+            var cVals = scopeRule.getCriteriaValues();
+            if (cVals && cVals[0] && Array.isArray(cVals[0])) {
+              cVals[0].forEach(function(sc) { addVal(scopes, sc); });
+            }
+          }
+        }
+      } catch (eRuleScope) {}
+
+      try {
+        if (typeof estSheet.getRange === "function") {
+          var sourceRule = estSheet.getRange(2, 7).getDataValidation();
+          if (sourceRule && typeof sourceRule.getCriteriaValues === "function") {
+            var cVals2 = sourceRule.getCriteriaValues();
+            if (cVals2 && cVals2[0] && Array.isArray(cVals2[0])) {
+              cVals2[0].forEach(function(so) { addVal(sources, so); });
+            }
+          }
+        }
+      } catch (eRuleSource) {}
+
+      // 2) 시스템 표준 기본 목록 병합
+      defaultScopes.forEach(function(sc) { addVal(scopes, sc); });
+      defaultSources.forEach(function(so) { addVal(sources, so); });
+
+      // 3) 기존 행 데이터에 입력된 값도 누락 없이 병합 (중복 제거)
+      var lastR = (typeof estSheet.getLastRow === "function") ? estSheet.getLastRow() : 0;
+      if (lastR >= 2 && typeof estSheet.getRange === "function") {
+        var rowCnt = lastR - 1;
+        try {
+          var scopeVals = estSheet.getRange(2, 5, rowCnt, 1).getValues();
+          for (var i = 0; i < scopeVals.length; i++) {
+            addVal(scopes, scopeVals[i][0]);
+          }
+        } catch (eGetScopeVals) {}
+
+        try {
+          var sourceVals = estSheet.getRange(2, 7, rowCnt, 1).getValues();
+          for (var j = 0; j < sourceVals.length; j++) {
+            addVal(sources, sourceVals[j][0]);
+          }
+        } catch (eGetSourceVals) {}
+      }
+    } else {
+      defaultScopes.forEach(function(sc) { addVal(scopes, sc); });
+      defaultSources.forEach(function(so) { addVal(sources, so); });
+    }
+  } catch (err) {
+    defaultScopes.forEach(function(sc) { addVal(scopes, sc); });
+    defaultSources.forEach(function(so) { addVal(sources, so); });
+  }
+
+  if (scopes.length === 0) scopes = defaultScopes.slice();
+  if (sources.length === 0) sources = defaultSources.slice();
+
+  return {
+    scopes: scopes,
+    sources: sources
+  };
+}
+
 
 
 var RAW_PARTNERS_FALLBACK_DATA = [];
@@ -10303,6 +10404,13 @@ function doGet(e) {
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
+  // 0-0-5) '신규견적' 드롭다운 옵션 목록 조회 (action=getEstimateOptions)
+  if (action === "getEstimateOptions") {
+    var optRes = getEstimateDropdownOptions(ss);
+    return ContentService.createTextOutput(JSON.stringify({ success: true, estimateOptions: optRes }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // 0-1) 현장별 병합 및 날짜 최신순 정렬 + 아코디언 정상화 요청 (action=consolidateAndSort / sortScheduleSheets / fixSheetGrouping)
   if (action === "consolidateAndSort" || action === "sortScheduleSheets" || action === "fixSheetGrouping") {
     ensureHourlySortTriggerInstalled();
@@ -12846,6 +12954,12 @@ function getSidebarDashboardData(forceRefresh) {
             if (!parsedCache.memberPhoneMap) {
               parsedCache.memberPhoneMap = getMemberPhoneMap(null);
             }
+            if (!parsedCache.estimateOptions) {
+              parsedCache.estimateOptions = {
+                scopes: ["전체공사", "주방", "욕실", "도배·마루", "붙박이·가구", "샷시·단열", "기타"],
+                sources: ["소개", "온라인", "기존 고객", "현장 문의", "워크인", "블로그", "기타"]
+              };
+            }
             return parsedCache;
           }
         }
@@ -13330,8 +13444,10 @@ function getSidebarDashboardData(forceRefresh) {
     } catch(eCompDash) {}
 
     // [신규견적 시트의 신규현장 일정 및 메타데이터 로드]
+    var estDropdownOptions = null;
     try {
       var estSheet = findEstimateSheet(ss, false);
+      estDropdownOptions = getEstimateDropdownOptions(ss, estSheet);
       if (estSheet && estSheet.getLastRow() >= 2) {
         var estNumCols = Math.max((typeof estSheet.getLastColumn === "function" ? estSheet.getLastColumn() : 20), 20);
         var estData = estSheet.getRange(2, 1, estSheet.getLastRow() - 1, estNumCols).getValues();
@@ -13692,7 +13808,8 @@ function getSidebarDashboardData(forceRefresh) {
       siteSuperintendents: getSiteSuperintendents(ss),
       holidays: getKoreanHolidaysMap(ss),
       sites: sitesList,
-      siteInfoMap: siteInfoMap
+      siteInfoMap: siteInfoMap,
+      estimateOptions: estDropdownOptions || getEstimateDropdownOptions(ss, null)
     };
 
     try {
@@ -13714,7 +13831,11 @@ function getSidebarDashboardData(forceRefresh) {
       memberPhoneMap: getMemberPhoneMap(null),
       siteSuperintendents: getSiteSuperintendents(null),
       sites: [],
-      siteInfoMap: {}
+      siteInfoMap: {},
+      estimateOptions: {
+        scopes: ["전체공사", "주방", "욕실", "도배·마루", "붙박이·가구", "샷시·단열", "기타"],
+        sources: ["소개", "온라인", "기존 고객", "현장 문의", "워크인", "블로그", "기타"]
+      }
     };
   }
 }
@@ -25392,9 +25513,23 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  const nsPrio = document.getElementById("sheetNewSitePrioritySelect");';
   html += '  if (nsPrio) nsPrio.value = eData.priority || "보통";';
   html += '  const nsScope = document.getElementById("sheetNewSiteScopeSelect");';
-  html += '  if (nsScope) nsScope.value = eData.scope || "전체공사";';
+  html += '  if (nsScope) {';
+  html += '    if (eData.scope) {';
+  html += '      var hasSc = false;';
+  html += '      for (var sci = 0; sci < nsScope.options.length; sci++) { if (nsScope.options[sci].value === eData.scope) { hasSc = true; break; } }';
+  html += '      if (!hasSc) { var scOpt = document.createElement("option"); scOpt.value = eData.scope; scOpt.textContent = eData.scope; nsScope.appendChild(scOpt); }';
+  html += '    }';
+  html += '    nsScope.value = eData.scope || "전체공사";';
+  html += '  }';
   html += '  const nsSource = document.getElementById("sheetNewSiteSourceSelect");';
-  html += '  if (nsSource) nsSource.value = eData.source || "소개";';
+  html += '  if (nsSource) {';
+  html += '    if (eData.source) {';
+  html += '      var hasSo = false;';
+  html += '      for (var soi = 0; soi < nsSource.options.length; soi++) { if (nsSource.options[soi].value === eData.source) { hasSo = true; break; } }';
+  html += '      if (!hasSo) { var soOpt = document.createElement("option"); soOpt.value = eData.source; soOpt.textContent = eData.source; nsSource.appendChild(soOpt); }';
+  html += '    }';
+  html += '    nsSource.value = eData.source || "소개";';
+  html += '  }';
   html += '  const nsClientName = document.getElementById("sheetNewSiteClientNameInput");';
   html += '  if (nsClientName) nsClientName.value = eData.clientName || "";';
   html += '  const nsClientPhone = document.getElementById("sheetNewSiteClientPhoneInput");';
