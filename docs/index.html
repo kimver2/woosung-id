@@ -193,7 +193,7 @@
   <iframe
     id="appFrame"
     credentialless
-    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=247"
+    src="https://script.google.com/macros/s/AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg/exec?v=248"
     allow="clipboard-write; camera; geolocation"
     onload="hideLoading()">
   </iframe>
@@ -413,6 +413,19 @@
           var topLock = document.getElementById('topAccessLockOverlay');
           if (topLock) topLock.style.display = 'none';
         } catch (eAuthSave) {}
+        return;
+      }
+      if (data.type === 'WS_CLEAR_AUTH' || data.type === 'WS_LOGOUT') {
+        try {
+          saveTopAuthData('', '', false);
+          try { localStorage.removeItem('ws_dashboard_auth_user_v2'); } catch (eU1) {}
+          setTopSavedCookie('ws_dashboard_auth_user_v2', '', 0);
+          var topLock = document.getElementById('topAccessLockOverlay');
+          if (topLock) {
+            topLock.style.display = 'flex';
+            checkTopPinLockout();
+          }
+        } catch (eAuthClr) {}
         return;
       }
       if (data.type === 'ORCA_BRIDGE_PING') {

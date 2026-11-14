@@ -2149,7 +2149,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
 
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
-  assertTest('index.html 내 exec?v=247 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=247'));
+  assertTest('index.html 내 exec?v=248 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=248'));
   assertTest('v2.html 내 담당자1 단일 추출 및 공사진행률 현장명 인라인 뱃지 표시 검증',
     v2RootHtml.includes('extractFirstManager') &&
     v2RootHtml.includes('extractFirstManager(r.manager')
@@ -2255,6 +2255,16 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     v2RootHtml.includes('window.onQuickPayFullExpense') &&
     v2RootHtml.includes('window.onLoadFixedExpenses') &&
     v2RootHtml.includes('getFilteredExpenseList')
+  );
+  assertTest('v2.html 내 로그인/로그아웃 시 항상 홈(home) 탭 초기화 및 별칭 함수 검증',
+    v2RootHtml.includes('function resetAllTabsToHome') &&
+    v2RootHtml.includes('window.resetAllTabsToHome = resetAllTabsToHome') &&
+    v2RootHtml.includes('window.logout = window.logoutDashboardAuth') &&
+    v2RootHtml.includes('window.doLogout = window.logoutDashboardAuth') &&
+    v2RootHtml.includes('window.unlockWithMember = function') &&
+    v2RootHtml.includes('window.submitAccessLogin = function') &&
+    v2RootHtml.includes('switchMainTab("home", { keepDevice: true })') &&
+    v2RootHtml.includes('switchMobileTab("home", { skipHistory: true })')
   );
 }
 console.log('\n========================================================');

@@ -13046,11 +13046,12 @@
         renderActiveViews();
       };
 
-      window.switchMainTab = function (tabKey) {
+      window.switchMainTab = function (tabKey, opts) {
+        opts = opts || {};
         if (tabKey === "finance" && !canViewFinance()) {
           tabKey = "partners";
         }
-        if (state.device === "mobile" && IS_PREVIEW_MODE) window.switchDeviceMode("pc");
+        if (state.device === "mobile" && IS_PREVIEW_MODE && !opts.keepDevice) window.switchDeviceMode("pc");
         state.pcTab = tabKey;
         state.dirtyPcTabs[tabKey] = true;
         if (tabKey === "home") {
@@ -13809,6 +13810,9 @@
         try { sessionStorage.removeItem(AUTH_COOKIE_NAME); sessionStorage.removeItem(AUTH_USER_COOKIE); } catch (e) {}
         setTopSavedCookie(AUTH_COOKIE_NAME, "", -1);
         setTopSavedCookie(AUTH_USER_COOKIE, "", -1);
+        if (window.parent && window.parent !== window) {
+          try { window.parent.postMessage({ type: "WS_CLEAR_AUTH" }, "*"); } catch (eClrPm) {}
+        }
       }
       function computeDashboardUserToken(userStr, pinStr) {
         const cleanUser = String(userStr || "").trim().toLowerCase();
@@ -13841,6 +13845,44 @@
         if (!dl) return;
         dl.innerHTML = getMembersList().map((m) => `<option value="${escHtml(m)}"></option>`).join("");
       }
+      function resetAllTabsToHome(opts) {
+        opts = opts || {};
+        state.pcTab = "home";
+        state.mobileTab = "home";
+        const tabKeysToRemove = [
+          "ws_active_tab", "ws_pc_tab", "ws_mobile_tab", "ws_tab",
+          "activeTab", "pcTab", "mobileTab", "currentTab"
+        ];
+        tabKeysToRemove.forEach((k) => {
+          try { localStorage.removeItem(k); } catch (_) {}
+          try { sessionStorage.removeItem(k); } catch (_) {}
+        });
+
+        try {
+          if (typeof location !== "undefined" && location.hash && (location.hash.includes("tab=") || location.hash.includes("mtab="))) {
+            if (typeof history !== "undefined" && history.replaceState) {
+              history.replaceState(null, "", location.pathname + location.search);
+            }
+          }
+        } catch (eHash) {}
+
+        if (typeof window.switchMainTab === "function") {
+          window.switchMainTab("home", { keepDevice: true });
+        }
+        if (typeof window.switchMobileTab === "function") {
+          window.switchMobileTab("home", { skipHistory: true });
+        }
+        if (typeof history !== "undefined" && history.replaceState) {
+          try { history.replaceState({ wsMobileTab: "home" }, ""); } catch (_) {}
+        }
+        if (typeof resetMobileScrollTop === "function") {
+          resetMobileScrollTop();
+        }
+        markAllDirty();
+        renderActiveViews();
+      }
+      window.resetAllTabsToHome = resetAllTabsToHome;
+
       function applyAuthenticatedUser(user) {
         const clean = String(user || "").trim();
         if (!clean) return;
@@ -13849,13 +13891,18 @@
         if (clean.toLowerCase() === ADMIN_USER_FALLBACK) {
           window.onUserChanged("조항만");
           syncUserSelectorOptions();
-          return;
+        } else {
+          const members = getMembersList();
+          const exact = members.find((m) => m.toLowerCase() === clean.toLowerCase());
+          window.onUserChanged(exact || clean);
+          syncUserSelectorOptions();
         }
-        const members = getMembersList();
-        const exact = members.find((m) => m.toLowerCase() === clean.toLowerCase());
-        window.onUserChanged(exact || clean);
-        syncUserSelectorOptions();
+        resetAllTabsToHome();
       }
+      window.applyAuthenticatedUser = applyAuthenticatedUser;
+      window.unlockWithMember = function (user) { applyAuthenticatedUser(user); };
+      window.submitAccessLogin = function () { return window.submitTopAccessPin(); };
+
       window.submitTopAccessPin = async function () {
         const lockState = checkTopPinLockout();
         const nameEl = document.getElementById("topAccessNameInput");
@@ -13911,6 +13958,7 @@
           const ov = document.getElementById("topAccessLockOverlay");
           if (ov) ov.classList.remove("open");
           applyAuthenticatedUser(verifiedUser);
+          resetAllTabsToHome();
           showToast(`🔓 ${verifiedUser}님 인증되었습니다.`);
         } else {
           let failCnt = 0;
@@ -13935,12 +13983,18 @@
         const errEl = document.getElementById("topAccessPinError");
         if (pinEl) pinEl.value = "";
         if (errEl) errEl.textContent = "";
+
+        // 로그아웃 시 PC 및 모바일 탭을 모두 홈("home")으로 즉시 초기화
+        resetAllTabsToHome();
+
         populateAuthMembersDatalist();
         syncUserSelectorOptions();
         if (ov) ov.classList.add("open");
         const nameEl = document.getElementById("topAccessNameInput");
         if (nameEl) setTimeout(() => nameEl.focus(), 60);
       };
+      window.logout = window.logoutDashboardAuth;
+      window.doLogout = window.logoutDashboardAuth;
       function initDashboardAuthLock() {
         populateAuthMembersDatalist();
         const searchParams = new URLSearchParams(location.search || "");
