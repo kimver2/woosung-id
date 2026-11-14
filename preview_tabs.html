@@ -8641,16 +8641,6 @@
                 </tbody>
               </table>
             </div>`;
-                        <td style="font-size:11.5px;color:#64748b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.note || p.memo || "")}">${escHtml(p.note || p.memo || "-")}</td>
-                        <td style="text-align:center;white-space:nowrap;">
-                          <button type="button" class="btn-tool-tag" onclick="openPartnerForm(${originalIdx})" title="수정">✏️</button>
-                          <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="delSettingItem('partners',${originalIdx})" title="삭제">🗑️</button>
-                        </td>
-                      </tr>`;
-                  }).join("") : `<tr><td colspan="13" style="text-align:center;padding:36px;color:#94a3b8;font-weight:600;">조건에 일치하는 거래처가 없습니다.</td></tr>`}
-                </tbody>
-              </table>
-            </div>`;
         } else if (tab === "tasks") {
           contentHtml = `
             <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid var(--border);display:grid;grid-template-columns:1.5fr 1fr 1.5fr auto;gap:8px;align-items:end;margin-bottom:8px;">
