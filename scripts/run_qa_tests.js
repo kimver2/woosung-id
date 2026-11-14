@@ -2149,7 +2149,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
 
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
-  assertTest('index.html 내 exec?v=246 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=246'));
+  assertTest('index.html 내 exec?v=247 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=247'));
   assertTest('v2.html 내 담당자1 단일 추출 및 공사진행률 현장명 인라인 뱃지 표시 검증',
     v2RootHtml.includes('extractFirstManager') &&
     v2RootHtml.includes('extractFirstManager(r.manager')
@@ -2227,6 +2227,34 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     v2RootHtml.includes('window.setFinanceSubTab') &&
     v2RootHtml.includes('ensureFinanceDbDataLoaded') &&
     v2RootHtml.includes('calcCollectionModalTotals')
+  );
+  assertTest('현장서식.js 내 Step 3 재무 DB 비용마감 API 및 라우팅 검증',
+    code.includes('function saveExpenseRow(') &&
+    code.includes('function deleteExpenseRow(') &&
+    code.includes('function generateFixedExpensesForMonth(') &&
+    code.includes('function saveExpenseBatchRows(') &&
+    code.includes('action === "saveExpenseRow"') &&
+    code.includes('action === "deleteExpenseRow"') &&
+    code.includes('action === "generateFixedExpensesForMonth"') &&
+    code.includes('action === "saveExpenseBatchRows"')
+  );
+  assertTest('data/dashboard_data.js 내 Step 3 비용마감 API 연동 및 docs 동기화 검증',
+    fs.readFileSync('data/dashboard_data.js', 'utf8').includes('saveExpenseRow:') &&
+    fs.readFileSync('data/dashboard_data.js', 'utf8').includes('deleteExpenseRow:') &&
+    fs.readFileSync('data/dashboard_data.js', 'utf8').includes('generateFixedExpensesForMonth:') &&
+    fs.readFileSync('data/dashboard_data.js', 'utf8').includes('saveExpenseBatchRows:') &&
+    fs.readFileSync('data/dashboard_data.js', 'utf8') === fs.readFileSync('docs/data/dashboard_data.js', 'utf8')
+  );
+  assertTest('v2.html 내 Step 3 비용마감 UI, 고정비/투입업체 모달 및 현장정산상세 모달 검증',
+    v2RootHtml.includes('id="expenseModal"') &&
+    v2RootHtml.includes('id="partnerImportModal"') &&
+    v2RootHtml.includes('id="siteFinanceDetailModal"') &&
+    v2RootHtml.includes('window.openExpenseModal') &&
+    v2RootHtml.includes('window.openPartnerImportModal') &&
+    v2RootHtml.includes('window.openSiteFinanceDetailModal') &&
+    v2RootHtml.includes('window.onQuickPayFullExpense') &&
+    v2RootHtml.includes('window.onLoadFixedExpenses') &&
+    v2RootHtml.includes('getFilteredExpenseList')
   );
 }
 console.log('\n========================================================');

@@ -441,6 +441,58 @@
         });
       }
       return this.callGasPost("deleteCollectionRow", { id: id, authUser: user });
+    },
+
+    saveExpenseRow: function (row, authUser) {
+      var user = authUser || "";
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (res) { resolve(res || { success: true }); })
+            .withFailureHandler(function (err) { reject(err); })
+            .saveExpenseRow({ row: row, authUser: user });
+        });
+      }
+      return this.callGasPost("saveExpenseRow", { row: row, authUser: user });
+    },
+
+    deleteExpenseRow: function (id, authUser) {
+      var user = authUser || "";
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (res) { resolve(res || { success: true }); })
+            .withFailureHandler(function (err) { reject(err); })
+            .deleteExpenseRow({ id: id, authUser: user });
+        });
+      }
+      return this.callGasPost("deleteExpenseRow", { id: id, authUser: user });
+    },
+
+    generateFixedExpensesForMonth: function (settleMonth, authUser) {
+      var user = authUser || "";
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (res) { resolve(res || { success: true }); })
+            .withFailureHandler(function (err) { reject(err); })
+            .generateFixedExpensesForMonth({ settleMonth: settleMonth, authUser: user });
+        });
+      }
+      return this.callGasPost("generateFixedExpensesForMonth", { settleMonth: settleMonth, authUser: user });
+    },
+
+    saveExpenseBatchRows: function (rows, authUser) {
+      var user = authUser || "";
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (res) { resolve(res || { success: true }); })
+            .withFailureHandler(function (err) { reject(err); })
+            .saveExpenseBatchRows({ rows: rows, authUser: user });
+        });
+      }
+      return this.callGasPost("saveExpenseBatchRows", { rows: rows, authUser: user });
     }
   };
 })(typeof window !== "undefined" ? window : globalThis);

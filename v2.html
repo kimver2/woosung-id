@@ -2373,6 +2373,47 @@
     </div>
   </div>
 
+  <!-- 8.6. 비용마감 등록 및 수정 모달 -->
+  <div class="ws-modal-backdrop" id="expenseModal" onclick="if(event.target===this) closeExpenseModal()">
+    <div class="ws-modal-card wide" style="max-width: 680px; width: 95%;">
+      <div class="ws-modal-header">
+        <div class="ws-modal-title" id="expenseModalTitle">🧾 비용마감 상세 및 등록</div>
+        <button type="button" class="ws-modal-close" onclick="closeExpenseModal()">✕</button>
+      </div>
+      <div class="ws-modal-body" id="expenseModalBody" style="display:flex;flex-direction:column;gap:14px;max-height:calc(85vh - 120px);overflow-y:auto;padding:16px;"></div>
+      <div class="ws-modal-footer" id="expenseModalFooter"></div>
+    </div>
+  </div>
+
+  <!-- 8.7. 현장 투입 협력업체 불러오기 모달 -->
+  <div class="ws-modal-backdrop" id="partnerImportModal" onclick="if(event.target===this) closePartnerImportModal()">
+    <div class="ws-modal-card wide" style="max-width: 860px; width: 95%;">
+      <div class="ws-modal-header">
+        <div class="ws-modal-title" id="partnerImportModalTitle">🏗️ 현장 투입 협력업체 불러오기</div>
+        <button type="button" class="ws-modal-close" onclick="closePartnerImportModal()">✕</button>
+      </div>
+      <div class="ws-modal-body" id="partnerImportModalBody" style="display:flex;flex-direction:column;gap:12px;max-height:calc(85vh - 120px);overflow-y:auto;padding:16px;"></div>
+      <div class="ws-modal-footer" id="partnerImportModalFooter"></div>
+    </div>
+  </div>
+
+  <!-- 8.8. 현장 정산·세부 공정별 지급 내역 모달 -->
+  <div class="ws-modal-backdrop" id="siteFinanceDetailModal" onclick="if(event.target===this) closeSiteFinanceDetailModal()">
+    <div class="ws-modal-card wide" style="max-width: 960px; width: 96%;">
+      <div class="ws-modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="ws-modal-title" id="siteFinanceDetailModalTitle">🏢 현장 정산 상세 (세부 공정별 지급 내역)</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button type="button" id="btnGoToCollectionEdit" class="btn-sub-xs" style="padding:4px 10px;font-size:12px;background:#f8fafc;border:1px solid #cbd5e1;cursor:pointer;">✏️ 수금 정보 수정</button>
+          <button type="button" class="ws-modal-close" onclick="closeSiteFinanceDetailModal()">✕</button>
+        </div>
+      </div>
+      <div class="ws-modal-body" id="siteFinanceDetailModalBody" style="display:flex;flex-direction:column;gap:16px;max-height:calc(85vh - 120px);overflow-y:auto;padding:18px;"></div>
+      <div class="ws-modal-footer" id="siteFinanceDetailModalFooter">
+        <button type="button" class="btn-secondary" onclick="closeSiteFinanceDetailModal()">닫기</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 9. 마스터 설정 관리 모달 -->
   <div class="ws-modal-backdrop" id="settingsModal" onclick="if(event.target===this) closeModal('settingsModal')">
     <div class="ws-modal-card wide">
@@ -2449,6 +2490,11 @@
         financeManagerFilter: "all",
         financeYearFilter: "all",
         financeMonthFilter: 0,
+        expenseSelectedMonth: _initTodayYmd.slice(0, 7),
+        expenseAllMonths: false,
+        expenseSearchQuery: "",
+        expenseItemFilter: "all",
+        expenseStatusFilter: "all",
         settingsData: null,
         device: "pc",
         pcTab: "home",
@@ -6054,6 +6100,947 @@
         });
       };
 
+      // ================= 비용마감 (Step 3) 헬퍼 및 모달 함수 =================
+      function getFilteredExpenseList() {
+        const allExpenses = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
+        const selMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
+        const allMonths = !!state.expenseAllMonths;
+        const q = (state.expenseSearchQuery || "").toLowerCase().trim();
+        const qWords = q ? q.split(/\s+/).filter(Boolean) : [];
+        const itemFilter = state.expenseItemFilter || "all";
+        const stFilter = state.expenseStatusFilter || "all";
+
+        return allExpenses.filter(e => {
+          // 1. 월 필터
+          if (!allMonths && selMonth) {
+            if (e.settleMonth !== selMonth) return false;
+          }
+
+          // 2. 항목 필터
+          if (itemFilter !== "all") {
+            if (itemFilter === "기타") {
+              if (["급여", "자재", "외주"].includes(e.item)) return false;
+            } else if (e.item !== itemFilter) {
+              return false;
+            }
+          }
+
+          // 3. 상태 필터
+          const claim = Number(e.claimAmount) || 0;
+          const paid = Number(e.paidAmount) || 0;
+          const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
+          if (stFilter === "unpaid" && bal <= 0) return false;
+          if (stFilter === "paid" && bal > 0) return false;
+
+          // 4. 검색어 필터
+          if (qWords.length > 0) {
+            const hay = [e.vendor, e.category, e.category2, e.siteName, e.item, e.note, e.payDate].join(" ").toLowerCase();
+            const match = qWords.every(w => hay.includes(w));
+            if (!match) return false;
+          }
+
+          return true;
+        });
+      }
+      window.getFilteredExpenseList = getFilteredExpenseList;
+
+      window.moveExpenseMonth = function(delta) {
+        let cur = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
+        let [y, m] = cur.split("-").map(Number);
+        m += delta;
+        if (m < 1) { m = 12; y -= 1; }
+        else if (m > 12) { m = 1; y += 1; }
+        state.expenseSelectedMonth = `${y}-${String(m).padStart(2, "0")}`;
+        state.expenseAllMonths = false;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.toggleExpenseAllMonths = function() {
+        state.expenseAllMonths = !state.expenseAllMonths;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.setExpenseItemFilter = function(filter) {
+        state.expenseItemFilter = filter;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.setExpenseStatusFilter = function(filter) {
+        state.expenseStatusFilter = filter;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.onExpenseSearchInput = function(val) {
+        state.expenseSearchQuery = val;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.clearExpenseSearch = function() {
+        state.expenseSearchQuery = "";
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.openExpenseModal = function(id, prefill) {
+        let row = null;
+        const expList = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
+        if (id) {
+          row = expList.find(e => e.id === id);
+        }
+
+        const isEdit = !!row;
+        const titleEl = document.getElementById("expenseModalTitle");
+        if (titleEl) {
+          titleEl.textContent = isEdit ? `🧾 비용마감 상세 및 수정 [${escHtml(row.id)}]` : "🧾 + 비용마감 신규 등록";
+        }
+
+        prefill = prefill || {};
+        const defMonth = prefill.settleMonth || (state.expenseSelectedMonth || getTodayYmd().slice(0, 7));
+
+        const rData = row ? Object.assign({}, row) : {
+          id: "",
+          settleMonth: defMonth,
+          item: prefill.item || "외주",
+          category: prefill.category || "",
+          vendor: prefill.vendor || "",
+          category2: prefill.category2 || "",
+          siteName: prefill.siteName || "공통",
+          claimAmount: prefill.claimAmount || 0,
+          paidAmount: prefill.paidAmount || 0,
+          balance: (prefill.claimAmount || 0) - (prefill.paidAmount || 0),
+          payDate: prefill.payDate || "",
+          note: prefill.note || ""
+        };
+
+        const siteOptions = Array.from(new Set([
+          "공통",
+          ...((state.dashData && state.dashData.sites) ? state.dashData.sites.map(s => s.siteName) : []),
+          ...expList.map(e => e.siteName)
+        ].filter(Boolean)));
+
+        const partnerList = getPartnersListForTab();
+        const vendorOptions = Array.from(new Set([
+          ...partnerList.map(p => p.fullName || p.name),
+          ...expList.map(e => e.vendor)
+        ].filter(Boolean)));
+
+        const bodyEl = document.getElementById("expenseModalBody");
+        if (!bodyEl) return;
+
+        bodyEl.innerHTML = `
+          <datalist id="expenseSiteDatalist">
+            ${siteOptions.map(s => `<option value="${escHtml(s)}"></option>`).join("")}
+          </datalist>
+          <datalist id="expenseVendorDatalist">
+            ${vendorOptions.map(v => `<option value="${escHtml(v)}"></option>`).join("")}
+          </datalist>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">정산월 (YYYY-MM) <span style="color:#ef4444;">*</span></label>
+              <input type="month" id="expSettleMonth" value="${escHtml(rData.settleMonth)}"
+                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">항목 <span style="color:#ef4444;">*</span></label>
+              <select id="expItem" style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;">
+                ${["급여", "자재", "외주", "장비", "식대", "공과금", "기타"].map(opt => `<option value="${opt}" ${rData.item === opt ? "selected" : ""}>${opt}</option>`).join("")}
+              </select>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">업체명 <span style="color:#ef4444;">*</span></label>
+              <input type="text" id="expVendor" list="expenseVendorDatalist" value="${escHtml(rData.vendor)}" placeholder="거래처명 입력 또는 선택"
+                onchange="window.onExpenseVendorChange(this.value)"
+                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+              <div id="expVendorHint" style="font-size:11px;color:#2563eb;margin-top:3px;font-weight:600;"></div>
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">구분 (공종/세부) <span style="color:#ef4444;">*</span></label>
+              <input type="text" id="expCategory" value="${escHtml(rData.category)}" placeholder="예: 목공, 타일, 인건비, 세무기장료"
+                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">연결 현장명</label>
+              <input type="text" id="expSiteName" list="expenseSiteDatalist" value="${escHtml(rData.siteName || "공통")}" placeholder="공통 또는 현장명 선택"
+                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">구분2 (계좌/대표자/보조정보)</label>
+              <input type="text" id="expCategory2" value="${escHtml(rData.category2)}" placeholder="은행/계좌번호 또는 대표자"
+                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+            </div>
+          </div>
+
+          <!-- 금액 및 잔금 영역 -->
+          <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
+            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
+              <div>
+                <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">청구금액 (원) <span style="color:#ef4444;">*</span></label>
+                <input type="number" id="expClaimAmount" value="${rData.claimAmount || 0}" min="0" step="1000"
+                  oninput="window.calcExpenseModalBalance()"
+                  style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:14px;font-weight:700;text-align:right;" />
+              </div>
+              <div>
+                <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#15803d;">지급금액 (원)</label>
+                <input type="number" id="expPaidAmount" value="${rData.paidAmount || 0}" min="0" step="1000"
+                  oninput="window.calcExpenseModalBalance()"
+                  style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:14px;font-weight:700;color:#15803d;text-align:right;" />
+              </div>
+              <div>
+                <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#dc2626;">남은 잔금 (외상)</label>
+                <input type="text" id="expBalanceDisplay" value="${(Number(rData.balance) || 0).toLocaleString('ko-KR')}원" readonly
+                  style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:14px;font-weight:900;color:#dc2626;background:#fff5f5;text-align:right;" />
+              </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px;">
+              <button type="button" class="btn-sub-xs" style="font-size:11px;padding:3px 8px;" onclick="window.setExpenseFullPaid()">전액 지급으로 맞춤</button>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">지급일</label>
+              <input type="date" id="expPayDate" value="${escHtml(rData.payDate)}"
+                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">특이사항 / 비고</label>
+              <input type="text" id="expNote" value="${escHtml(rData.note)}" placeholder="세금계산서 발행 여부, 특이사항 등"
+                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+            </div>
+          </div>
+        `;
+
+        const footEl = document.getElementById("expenseModalFooter");
+        if (footEl) {
+          footEl.innerHTML = `
+            ${isEdit ? `
+              <button type="button" class="btn-sub-xs" style="color:#ef4444;border-color:#fca5a5;padding:6px 12px;margin-right:auto;" onclick="window.onDeleteExpenseRow('${escJs(row.id)}')">
+                🗑️ 삭제
+              </button>
+            ` : ""}
+            <button type="button" class="btn-secondary" onclick="window.closeExpenseModal()">취소</button>
+            <button type="button" class="btn-primary" id="btnSaveExpenseRow" onclick="window.onSaveExpenseRow('${escJs(rData.id)}')">
+              ${isEdit ? "수정 저장하기" : "신규 등록하기"}
+            </button>
+          `;
+        }
+
+        calcExpenseModalBalance();
+        if (rData.vendor) onExpenseVendorChange(rData.vendor);
+        openModal("expenseModal");
+      };
+
+      window.closeExpenseModal = function() {
+        closeModal("expenseModal");
+      };
+
+      window.calcExpenseModalBalance = function() {
+        const claim = Number(document.getElementById("expClaimAmount")?.value) || 0;
+        const paid = Number(document.getElementById("expPaidAmount")?.value) || 0;
+        const bal = claim - paid;
+        const balEl = document.getElementById("expBalanceDisplay");
+        if (balEl) {
+          balEl.value = bal.toLocaleString("ko-KR") + "원";
+          balEl.style.color = bal > 0 ? "#dc2626" : (bal === 0 ? "#15803d" : "#2563eb");
+          balEl.style.background = bal > 0 ? "#fff5f5" : (bal === 0 ? "#f0fdf4" : "#eff6ff");
+        }
+      };
+
+      window.setExpenseFullPaid = function() {
+        const claim = Number(document.getElementById("expClaimAmount")?.value) || 0;
+        const paidEl = document.getElementById("expPaidAmount");
+        if (paidEl) paidEl.value = claim;
+        const dateEl = document.getElementById("expPayDate");
+        if (dateEl && !dateEl.value) dateEl.value = getTodayYmd();
+        calcExpenseModalBalance();
+      };
+
+      window.onExpenseVendorChange = function(vendorVal) {
+        if (!vendorVal) return;
+        const partners = getPartnersListForTab();
+        const vNorm = vendorVal.toLowerCase().trim();
+        const found = partners.find(p =>
+          (p.name && p.name.toLowerCase() === vNorm) ||
+          (p.fullName && p.fullName.toLowerCase() === vNorm) ||
+          (p.dropdownVal && p.dropdownVal.toLowerCase().includes(vNorm))
+        );
+        const hintEl = document.getElementById("expVendorHint");
+        const cat2El = document.getElementById("expCategory2");
+        const catEl = document.getElementById("expCategory");
+        if (found) {
+          const info = [found.feature, found.phone, found.manager].filter(Boolean).join(" · ");
+          if (hintEl) hintEl.textContent = info ? `💡 거래처 정보: ${info}` : "";
+          if (cat2El && !cat2El.value && found.feature) {
+            cat2El.value = found.feature;
+          }
+          if (catEl && !catEl.value && found.biz) {
+            catEl.value = found.biz;
+          }
+        } else {
+          if (hintEl) hintEl.textContent = "";
+        }
+      };
+
+      window.onSaveExpenseRow = function(id) {
+        const settleMonth = (document.getElementById("expSettleMonth")?.value || "").trim();
+        const item = (document.getElementById("expItem")?.value || "외주").trim();
+        const vendor = (document.getElementById("expVendor")?.value || "").trim();
+        const category = (document.getElementById("expCategory")?.value || "").trim();
+        const siteName = (document.getElementById("expSiteName")?.value || "공통").trim();
+        const category2 = (document.getElementById("expCategory2")?.value || "").trim();
+        const claimAmount = Number(document.getElementById("expClaimAmount")?.value) || 0;
+        const paidAmount = Number(document.getElementById("expPaidAmount")?.value) || 0;
+        const balance = claimAmount - paidAmount;
+        const payDate = (document.getElementById("expPayDate")?.value || "").trim();
+        const note = (document.getElementById("expNote")?.value || "").trim();
+
+        if (!settleMonth) {
+          alert("정산월(YYYY-MM)을 입력해 주세요.");
+          return;
+        }
+        if (!vendor) {
+          alert("업체명을 입력해 주세요.");
+          document.getElementById("expVendor")?.focus();
+          return;
+        }
+        if (!category) {
+          alert("구분(공종/세부내역)을 입력해 주세요.");
+          document.getElementById("expCategory")?.focus();
+          return;
+        }
+
+        const payload = {
+          id: id || "",
+          settleMonth: settleMonth,
+          item: item,
+          category: category,
+          vendor: vendor,
+          category2: category2,
+          siteName: siteName,
+          claimAmount: claimAmount,
+          paidAmount: paidAmount,
+          balance: balance,
+          payDate: payDate,
+          note: note
+        };
+
+        const btn = document.getElementById("btnSaveExpenseRow");
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = "저장 중...";
+        }
+
+        WSDataService.saveExpenseRow(payload, state.authUser).then(res => {
+          if (res && res.success) {
+            const saved = res.row || payload;
+            if (!saved.id && res.id) saved.id = res.id;
+
+            if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+            if (!Array.isArray(state.financeDbData.expense)) state.financeDbData.expense = [];
+
+            const idx = state.financeDbData.expense.findIndex(e => e.id === saved.id);
+            if (idx !== -1) {
+              state.financeDbData.expense[idx] = saved;
+            } else {
+              state.financeDbData.expense.unshift(saved);
+            }
+
+            closeExpenseModal();
+            state.dirtyPcTabs.finance = true;
+            state.dirtyMobileTabs.finance = true;
+            renderActiveViews();
+
+            // 현장 정산 상세 모달이 열려있다면 해당 모달 실시간 갱신
+            if (window.currentDetailSiteName) {
+              window.openSiteFinanceDetailModal(window.currentDetailSiteName, window.currentDetailColId);
+            }
+
+            showToast("✅ 비용마감 항목이 성공적으로 저장되었습니다.");
+          } else {
+            alert("비용마감 저장 실패: " + (res && res.error ? res.error : "알 수 없는 오류"));
+            if (btn) { btn.disabled = false; btn.textContent = "저장하기"; }
+          }
+        }).catch(err => {
+          console.error("saveExpenseRow error:", err);
+          alert("저장 통신 오류: " + (err.message || String(err)));
+          if (btn) { btn.disabled = false; btn.textContent = "저장하기"; }
+        });
+      };
+
+      window.onDeleteExpenseRow = function(id) {
+        if (!id) return;
+        if (!confirm("해당 비용마감 항목을 삭제하시겠습니까?")) return;
+
+        WSDataService.deleteExpenseRow(id, state.authUser).then(res => {
+          if (res && res.success) {
+            if (state.financeDbData && Array.isArray(state.financeDbData.expense)) {
+              state.financeDbData.expense = state.financeDbData.expense.filter(e => e.id !== id);
+            }
+            closeExpenseModal();
+            state.dirtyPcTabs.finance = true;
+            state.dirtyMobileTabs.finance = true;
+            renderActiveViews();
+
+            if (window.currentDetailSiteName) {
+              window.openSiteFinanceDetailModal(window.currentDetailSiteName, window.currentDetailColId);
+            }
+
+            showToast("🗑️ 비용마감 항목이 삭제되었습니다.");
+          } else {
+            alert("삭제 실패: " + (res && res.error ? res.error : "알 수 없는 오류"));
+          }
+        }).catch(err => {
+          console.error("deleteExpenseRow error:", err);
+          alert("삭제 통신 오류: " + (err.message || String(err)));
+        });
+      };
+
+      window.onQuickPayFullExpense = function(id) {
+        if (!id) return;
+        const expList = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
+        const item = expList.find(e => e.id === id);
+        if (!item) return;
+
+        const claim = Number(item.claimAmount) || 0;
+        if (!confirm(`[${item.vendor}]의 ${item.item}(${item.category}) 청구금액 전액(${claim.toLocaleString("ko-KR")}원)을 오늘 날짜로 지급 완료 처리하시겠습니까?`)) {
+          return;
+        }
+
+        const updated = Object.assign({}, item, {
+          paidAmount: claim,
+          balance: 0,
+          payDate: getTodayYmd()
+        });
+
+        WSDataService.saveExpenseRow(updated, state.authUser).then(res => {
+          if (res && res.success) {
+            const idx = expList.findIndex(e => e.id === id);
+            if (idx !== -1) expList[idx] = updated;
+
+            state.dirtyPcTabs.finance = true;
+            state.dirtyMobileTabs.finance = true;
+            renderActiveViews();
+
+            if (window.currentDetailSiteName) {
+              window.openSiteFinanceDetailModal(window.currentDetailSiteName, window.currentDetailColId);
+            }
+
+            showToast("💰 전액 지급 처리가 완료되었습니다.");
+          } else {
+            alert("전액지급 처리 실패: " + (res && res.error ? res.error : "알 수 없는 오류"));
+          }
+        }).catch(err => {
+          console.error("quickPayFull error:", err);
+          alert("전액지급 통신 오류: " + (err.message || String(err)));
+        });
+      };
+
+      window.onLoadFixedExpenses = function() {
+        const targetMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
+        if (!confirm(`[${targetMonth}]월의 고정비 마스터 항목을 불러오시겠습니까?\n(이미 등록된 항목은 중복 생성되지 않습니다)`)) {
+          return;
+        }
+
+        WSDataService.generateFixedExpensesForMonth(targetMonth, state.authUser).then(res => {
+          if (res && res.success) {
+            if (res.expense && Array.isArray(res.expense)) {
+              if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+              state.financeDbData.expense = res.expense;
+            }
+            state.dirtyPcTabs.finance = true;
+            state.dirtyMobileTabs.finance = true;
+            renderActiveViews();
+
+            if (res.createdCount > 0) {
+              alert(`${targetMonth}월 고정비 ${res.createdCount}건이 등록되었습니다.`);
+            } else {
+              alert(`해당 월에 이미 모든 고정비 항목이 등록되어 있거나 사용 중인 고정비 마스터가 없습니다.`);
+            }
+          } else {
+            alert("고정비 불러오기 실패: " + (res && res.error ? res.error : "알 수 없는 오류"));
+          }
+        }).catch(err => {
+          console.error("generateFixedExpenses error:", err);
+          alert("고정비 통신 오류: " + (err.message || String(err)));
+        });
+      };
+
+      window.openPartnerImportModal = function() {
+        const targetMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
+        const titleEl = document.getElementById("partnerImportModalTitle");
+        if (titleEl) {
+          titleEl.textContent = `🏗️ [${targetMonth}]월 현장 투입 협력업체 불러오기`;
+        }
+
+        const allSites = getAllSites();
+        const partnersMaster = getPartnersListForTab();
+        const expList = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
+
+        // 현장 공정 중 해당 월에 투입된 협력업체 집계
+        const aggregated = [];
+        const seenKey = new Set();
+
+        allSites.forEach(s => {
+          (s.tasks || []).forEach(t => {
+            const pName = String(t.partner || "").trim();
+            if (!pName || ["미등록", "업체 미등록", "-", "없음"].includes(pName)) return;
+
+            const ymd = parseYmdFromTask(t);
+            const isMonthMatch = (ymd && ymd.startsWith(targetMonth)) ||
+              (!ymd && s.period && s.period.includes(targetMonth));
+            if (!isMonthMatch) return;
+
+            const groupKey = `${s.siteName}||${t.taskName}||${pName}`;
+            if (!seenKey.has(groupKey)) {
+              seenKey.add(groupKey);
+
+              // 02_거래처 정보 매칭
+              const matchedP = partnersMaster.find(p =>
+                (p.name && p.name.trim() === pName) ||
+                (p.fullName && p.fullName.trim() === pName) ||
+                (p.dropdownVal && p.dropdownVal.includes(pName))
+              );
+
+              // 이미 비용마감에 등록되어 있는지 체크
+              const isAlreadySaved = expList.some(e =>
+                e.settleMonth === targetMonth &&
+                e.siteName === s.siteName &&
+                e.vendor === pName &&
+                (e.category === t.taskName || !e.category)
+              );
+
+              aggregated.push({
+                siteName: s.siteName,
+                category: t.taskName,
+                vendor: pName,
+                accountInfo: matchedP ? (matchedP.feature || matchedP.phone || "") : "",
+                partnerBiz: matchedP ? (matchedP.biz || "") : "",
+                partnerPhone: matchedP ? (matchedP.phone || "") : "",
+                isAlreadySaved: isAlreadySaved,
+                taskStatus: t.status || "진행중",
+                taskDate: ymd || ""
+              });
+            }
+          });
+        });
+
+        const bodyEl = document.getElementById("partnerImportModalBody");
+        if (!bodyEl) return;
+
+        if (aggregated.length === 0) {
+          bodyEl.innerHTML = `
+            <div style="padding:48px 16px;text-align:center;color:var(--text-muted);">
+              <div style="font-size:32px;margin-bottom:8px;">🏗️</div>
+              <div style="font-size:15px;font-weight:800;color:#1e293b;">${targetMonth}월에 투입된 협력업체 공정이 없습니다.</div>
+              <div style="font-size:12.5px;color:#64748b;margin-top:4px;">현장 일정 탭에서 해당 월의 공정에 협력업체를 먼저 지정해 주세요.</div>
+            </div>
+          `;
+          const footEl = document.getElementById("partnerImportModalFooter");
+          if (footEl) {
+            footEl.innerHTML = `<button type="button" class="btn-secondary" onclick="window.closePartnerImportModal()">닫기</button>`;
+          }
+          openModal("partnerImportModal");
+          return;
+        }
+
+        bodyEl.innerHTML = `
+          <div style="background:#eff6ff;padding:12px 14px;border-radius:8px;border:1px solid #bfdbfe;font-size:12.5px;color:#1e40af;">
+            <strong>💡 [${targetMonth}]월 투입된 협력업체 총 ${aggregated.length}건이 집계되었습니다.</strong><br/>
+            비용마감에 등록할 항목을 체크하고 청구금액 및 지급액을 입력해 주세요. (이미 등록된 항목은 회색으로 표시됩니다)
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
+            <label style="font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="checkAllPartnerImport" checked onchange="window.toggleAllPartnerImport(this.checked)" />
+              전체 선택 / 해제
+            </label>
+            <span style="font-size:12px;color:var(--text-muted);">미등록 ${aggregated.filter(a => !a.isAlreadySaved).length}건 / 기등록 ${aggregated.filter(a => a.isAlreadySaved).length}건</span>
+          </div>
+
+          <div class="table-container" style="max-height:420px;overflow-y:auto;">
+            <table class="clean-table" style="font-size:12px;min-width:760px;">
+              <thead>
+                <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                  <th style="width:36px;text-align:center;">선택</th>
+                  <th style="width:130px;">현장명</th>
+                  <th style="width:90px;">공종</th>
+                  <th style="width:120px;">업체명</th>
+                  <th style="width:130px;">거래처(계좌/연락처)</th>
+                  <th style="width:110px;text-align:right;">청구금액</th>
+                  <th style="width:110px;text-align:right;">지급금액</th>
+                  <th>비고</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${aggregated.map((item, idx) => `
+                  <tr style="${item.isAlreadySaved ? "background:#f8fafc;opacity:0.7;" : ""}">
+                    <td style="text-align:center;">
+                      <input type="checkbox" class="chk-partner-import" data-idx="${idx}" ${item.isAlreadySaved ? "" : "checked"} />
+                    </td>
+                    <td>
+                      <strong>${escHtml(item.siteName)}</strong>
+                      ${item.taskDate ? `<div style="font-size:11px;color:var(--text-muted);">${escHtml(item.taskDate.slice(5))}</div>` : ""}
+                    </td>
+                    <td><span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#f1f5f9;color:#334155;">${escHtml(item.category)}</span></td>
+                    <td>
+                      <strong style="color:#1e293b;">${escHtml(item.vendor)}</strong>
+                      ${item.isAlreadySaved ? `<span style="font-size:10px;color:#059669;display:block;">(이미 등록됨)</span>` : ""}
+                    </td>
+                    <td style="font-size:11px;color:#64748b;">
+                      ${item.accountInfo ? `<div style="color:#0284c7;font-weight:600;">💳 ${escHtml(item.accountInfo)}</div>` : ""}
+                      ${item.partnerPhone ? `<div>📞 ${escHtml(item.partnerPhone)}</div>` : ""}
+                      ${!item.accountInfo && !item.partnerPhone ? "<span>-</span>" : ""}
+                    </td>
+                    <td>
+                      <input type="number" id="pImpClaim_${idx}" value="0" min="0" step="10000"
+                        style="width:100%;height:30px;padding:0 6px;border-radius:4px;border:1px solid #cbd5e1;font-size:12px;font-weight:700;text-align:right;" />
+                    </td>
+                    <td>
+                      <input type="number" id="pImpPaid_${idx}" value="0" min="0" step="10000"
+                        style="width:100%;height:30px;padding:0 6px;border-radius:4px;border:1px solid #cbd5e1;font-size:12px;font-weight:700;color:#15803d;text-align:right;" />
+                    </td>
+                    <td>
+                      <input type="text" id="pImpNote_${idx}" value="${escHtml(item.siteName + " " + item.category + " 공정")}"
+                        style="width:100%;height:30px;padding:0 6px;border-radius:4px;border:1px solid #cbd5e1;font-size:12px;" />
+                    </td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+
+        window.currentPartnerImportData = aggregated;
+
+        const footEl = document.getElementById("partnerImportModalFooter");
+        if (footEl) {
+          footEl.innerHTML = `
+            <button type="button" class="btn-secondary" onclick="window.closePartnerImportModal()">취소</button>
+            <button type="button" class="btn-primary" id="btnSubmitPartnerImport" onclick="window.onSubmitPartnerImport()">
+              선택 항목 비용마감에 일괄 등록
+            </button>
+          `;
+        }
+
+        openModal("partnerImportModal");
+      };
+
+      window.closePartnerImportModal = function() {
+        closeModal("partnerImportModal");
+      };
+
+      window.toggleAllPartnerImport = function(checked) {
+        const chks = document.querySelectorAll(".chk-partner-import");
+        chks.forEach(c => c.checked = checked);
+      };
+
+      window.onSubmitPartnerImport = function() {
+        const chks = document.querySelectorAll(".chk-partner-import:checked");
+        if (!chks || chks.length === 0) {
+          alert("등록할 업체를 1개 이상 선택해 주세요.");
+          return;
+        }
+
+        const targetMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
+        const rawList = window.currentPartnerImportData || [];
+        const rows = [];
+
+        chks.forEach(chk => {
+          const idx = parseInt(chk.getAttribute("data-idx"), 10);
+          const item = rawList[idx];
+          if (!item) return;
+
+          const claim = Number(document.getElementById(`pImpClaim_${idx}`)?.value) || 0;
+          const paid = Number(document.getElementById(`pImpPaid_${idx}`)?.value) || 0;
+          const note = (document.getElementById(`pImpNote_${idx}`)?.value || "").trim();
+
+          rows.push({
+            settleMonth: targetMonth,
+            item: "외주",
+            category: item.category,
+            vendor: item.vendor,
+            category2: item.accountInfo || "",
+            siteName: item.siteName,
+            claimAmount: claim,
+            paidAmount: paid,
+            balance: claim - paid,
+            payDate: paid > 0 ? getTodayYmd() : "",
+            note: note
+          });
+        });
+
+        const btn = document.getElementById("btnSubmitPartnerImport");
+        if (btn) { btn.disabled = true; btn.textContent = "일괄 등록 중..."; }
+
+        WSDataService.saveExpenseBatchRows(rows, state.authUser).then(res => {
+          if (res && res.success) {
+            if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+            if (!Array.isArray(state.financeDbData.expense)) state.financeDbData.expense = [];
+
+            const newRows = res.rows || rows;
+            newRows.forEach(nr => {
+              state.financeDbData.expense.unshift(nr);
+            });
+
+            closePartnerImportModal();
+            state.dirtyPcTabs.finance = true;
+            state.dirtyMobileTabs.finance = true;
+            renderActiveViews();
+
+            alert(`${rows.length}개 업체의 비용마감 항목이 성공적으로 등록되었습니다.`);
+          } else {
+            alert("일괄 등록 실패: " + (res && res.error ? res.error : "알 수 없는 오류"));
+            if (btn) { btn.disabled = false; btn.textContent = "선택 항목 비용마감에 일괄 등록"; }
+          }
+        }).catch(err => {
+          console.error("saveExpenseBatchRows error:", err);
+          alert("일괄 등록 통신 오류: " + (err.message || String(err)));
+          if (btn) { btn.disabled = false; btn.textContent = "선택 항목 비용마감에 일괄 등록"; }
+        });
+      };
+
+      // ================= 현장 정산·세부 공정별 지급 내역 모달 =================
+      window.openSiteFinanceDetailModal = function(siteName, colId) {
+        window.currentDetailSiteName = siteName;
+        window.currentDetailColId = colId;
+
+        const collection = (state.financeDbData && Array.isArray(state.financeDbData.collection)) ? state.financeDbData.collection : [];
+        const colRow = collection.find(c => (colId && c.id === colId) || c.siteName === siteName) || {};
+
+        const allSites = getAllSites();
+        const site = allSites.find(s => s.siteName === siteName);
+
+        const expList = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
+        const siteExpenses = expList.filter(e => e.siteName === siteName);
+
+        const titleEl = document.getElementById("siteFinanceDetailModalTitle");
+        if (titleEl) {
+          titleEl.textContent = `🏢 [${escHtml(siteName)}] 현장 정산 상세 (세부 공정별 지급 내역)`;
+        }
+
+        // 상단 '수금 정보 수정' 버튼 연결
+        const editBtn = document.getElementById("btnGoToCollectionEdit");
+        if (editBtn) {
+          editBtn.onclick = function() {
+            closeSiteFinanceDetailModal();
+            openCollectionModal(colRow.id || null);
+          };
+        }
+
+        // 손익 요약 계산
+        const contractAmount = Number(colRow.totalAmount) || 0;
+        const colFin = getCollectionRowFinancials(colRow);
+        const collected = colFin.collected;
+        const uncollected = colFin.uncollected;
+
+        const totalExpenseClaim = siteExpenses.reduce((acc, e) => acc + (Number(e.claimAmount) || 0), 0);
+        const totalExpensePaid = siteExpenses.reduce((acc, e) => acc + (Number(e.paidAmount) || 0), 0);
+        const totalExpenseBal = siteExpenses.reduce((acc, e) => acc + (Number(e.balance) || 0), 0);
+
+        const profit = contractAmount - totalExpenseClaim;
+        const marginRate = contractAmount > 0 ? Math.round((profit / contractAmount) * 100) : 0;
+
+        const bodyEl = document.getElementById("siteFinanceDetailModalBody");
+        if (!bodyEl) return;
+
+        // 1. 손익 요약 4칸
+        const kpiSectionHtml = `
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;">
+            <div class="standard-card" style="margin-bottom:0;padding:12px 14px;border-left:4px solid #3b82f6;">
+              <div style="font-size:11.5px;color:var(--text-muted);font-weight:700;">최종 계약금액</div>
+              <div style="font-size:18px;font-weight:800;color:#1e293b;margin-top:2px;">${formatKrw(contractAmount)}</div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px;">
+                ${escHtml(colRow.clientName || "-")} · ${escHtml(extractFirstManager(colRow.manager, "-"))}
+              </div>
+            </div>
+            <div class="standard-card" style="margin-bottom:0;padding:12px 14px;border-left:4px solid #10b981;">
+              <div style="font-size:11.5px;color:var(--text-muted);font-weight:700;">누적 수금액 (미수금)</div>
+              <div style="font-size:18px;font-weight:800;color:#10b981;margin-top:2px;">${formatKrw(collected)}</div>
+              <div style="font-size:11px;color:${uncollected > 0 ? "#dc2626" : "#16a34a"};margin-top:2px;font-weight:700;">
+                ${uncollected > 0 ? `미수금: ${formatKrw(uncollected)}` : "완납 (미수금 0원)"}
+              </div>
+            </div>
+            <div class="standard-card" style="margin-bottom:0;padding:12px 14px;border-left:4px solid #f59e0b;background:#fffdf7;">
+              <div style="font-size:11.5px;color:#b45309;font-weight:700;">총 지출 (비용마감 합계)</div>
+              <div style="font-size:18px;font-weight:900;color:#d97706;margin-top:2px;">${formatKrw(totalExpenseClaim)}</div>
+              <div style="font-size:11px;color:#78350f;margin-top:2px;">
+                실지급 ${formatKrw(totalExpensePaid)} · 외상 ${formatKrw(totalExpenseBal)}
+              </div>
+            </div>
+            <div class="standard-card" style="margin-bottom:0;padding:12px 14px;border-left:4px solid ${profit >= 0 ? "#10b981" : "#dc2626"};background:${profit >= 0 ? "#f0fdf4" : "#fff5f5"};">
+              <div style="font-size:11.5px;color:${profit >= 0 ? "#166534" : "#991b1b"};font-weight:700;">예상 순이익 / 마진율</div>
+              <div style="font-size:18px;font-weight:900;color:${profit >= 0 ? "#15803d" : "#dc2626"};margin-top:2px;">${formatKrw(profit)}</div>
+              <div style="font-size:11.5px;font-weight:800;color:${profit >= 0 ? "#15803d" : "#dc2626"};margin-top:2px;">
+                마진율 ${marginRate}% (${siteExpenses.length}건 지출 반영)
+              </div>
+            </div>
+          </div>
+        `;
+
+        // 2. 세부 공정별 지급 내역
+        const tasks = site ? (site.tasks || []) : [];
+        const tasksSectionHtml = `
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div style="font-size:14px;font-weight:800;color:#1e293b;display:flex;align-items:center;gap:6px;">
+                <span>📋 세부 공정별 협력업체 투입 & 지급 현황</span>
+                <span style="font-size:11.5px;font-weight:600;color:var(--text-muted);">총 ${tasks.length}개 공정</span>
+              </div>
+            </div>
+            <div class="table-container" style="max-height:260px;overflow-y:auto;">
+              <table class="clean-table" style="font-size:12px;min-width:680px;">
+                <thead>
+                  <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                    <th style="width:110px;">공종</th>
+                    <th style="width:130px;">일정</th>
+                    <th style="width:130px;">협력업체</th>
+                    <th style="width:70px;text-align:center;">공정상태</th>
+                    <th style="text-align:right;width:110px;">청구금액</th>
+                    <th style="text-align:right;width:110px;">지급금액</th>
+                    <th style="text-align:right;width:100px;">외상잔액</th>
+                    <th style="width:80px;text-align:center;">지급입력</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${tasks.map(t => {
+                    const matchedExps = siteExpenses.filter(e => {
+                      const catMatch = e.category && (e.category === t.taskName || t.taskName.includes(e.category) || e.category.includes(t.taskName));
+                      const venMatch = e.vendor && t.partner && (e.vendor.includes(t.partner) || t.partner.includes(e.vendor));
+                      return catMatch || venMatch;
+                    });
+
+                    const taskClaim = matchedExps.reduce((acc, e) => acc + (Number(e.claimAmount) || 0), 0);
+                    const taskPaid = matchedExps.reduce((acc, e) => acc + (Number(e.paidAmount) || 0), 0);
+                    const taskBal = taskClaim - taskPaid;
+
+                    let stBadge = `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#eff6ff;color:#2563eb;">${escHtml(t.status || "예정")}</span>`;
+                    if (t.status === "진행중") stBadge = `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#fef3c7;color:#d97706;">진행중</span>`;
+                    else if (t.status === "완료") stBadge = `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#ecfdf5;color:#059669;">완료</span>`;
+
+                    const taskMonth = (parseYmdFromTask(t) || getTodayYmd()).slice(0, 7);
+
+                    return `
+                      <tr>
+                        <td><strong>${escHtml(t.taskName)}</strong></td>
+                        <td style="color:var(--text-sub);">${escHtml(t.dateDisplay || t.dateStr || "-")}</td>
+                        <td>
+                          <strong>${escHtml(t.partner || "-")}</strong>
+                          ${matchedExps.length > 0 ? `<span style="font-size:10.5px;color:#2563eb;display:block;">(${matchedExps.length}건 연결)</span>` : ""}
+                        </td>
+                        <td style="text-align:center;">${stBadge}</td>
+                        <td style="text-align:right;font-weight:700;">${taskClaim > 0 ? formatKrw(taskClaim) : "-"}</td>
+                        <td style="text-align:right;font-weight:700;color:#15803d;">${taskPaid > 0 ? formatKrw(taskPaid) : "-"}</td>
+                        <td style="text-align:right;font-weight:800;color:${taskBal > 0 ? "#dc2626" : "#15803d"};">${taskBal > 0 ? formatKrw(taskBal) : (taskClaim > 0 ? "완납" : "-")}</td>
+                        <td style="text-align:center;">
+                          <button type="button" class="btn-sub-xs" style="padding:3px 8px;font-size:11px;"
+                            onclick="window.openExpenseModal(null, { siteName: '${escJs(siteName)}', category: '${escJs(t.taskName)}', vendor: '${escJs(t.partner || "")}', settleMonth: '${escJs(taskMonth)}' })">
+                            + 지급 입력
+                          </button>
+                        </td>
+                      </tr>
+                    `;
+                  }).join("") || `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:20px;">등록된 세부 공정이 없습니다.</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+
+        // 3. 현장 연결 전체 지출 목록
+        const expensesSectionHtml = `
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div style="font-size:14px;font-weight:800;color:#1e293b;display:flex;align-items:center;gap:6px;">
+                <span>🧾 현장 연결 비용마감 지출 내역</span>
+                <span style="font-size:11.5px;font-weight:600;color:var(--text-muted);">총 ${siteExpenses.length}건 (총 ${formatKrw(totalExpenseClaim)})</span>
+              </div>
+              <button type="button" class="btn-act-blue" style="height:28px;padding:0 10px;font-size:11.5px;"
+                onclick="window.openExpenseModal(null, { siteName: '${escJs(siteName)}', settleMonth: '${escJs(getTodayYmd().slice(0, 7))}' })">
+                + 이 현장에 비용 추가
+              </button>
+            </div>
+            <div class="table-container" style="max-height:260px;overflow-y:auto;">
+              <table class="clean-table" style="font-size:12px;min-width:720px;">
+                <thead>
+                  <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                    <th style="width:70px;">정산월</th>
+                    <th style="width:60px;">항목</th>
+                    <th style="width:90px;">구분</th>
+                    <th style="width:120px;">업체명</th>
+                    <th style="text-align:right;width:100px;">청구금액</th>
+                    <th style="text-align:right;width:100px;">지급금액</th>
+                    <th style="text-align:right;width:90px;">잔금</th>
+                    <th style="width:85px;">지급일</th>
+                    <th>비고</th>
+                    <th style="width:85px;text-align:center;">관리</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${siteExpenses.map(e => {
+                    const claim = Number(e.claimAmount) || 0;
+                    const paid = Number(e.paidAmount) || 0;
+                    const bal = claim - paid;
+                    return `
+                      <tr>
+                        <td>${escHtml(e.settleMonth)}</td>
+                        <td><span style="padding:1px 5px;border-radius:3px;font-size:10.5px;background:#f1f5f9;color:#334155;font-weight:700;">${escHtml(e.item)}</span></td>
+                        <td>${escHtml(e.category)}</td>
+                        <td><strong>${escHtml(e.vendor)}</strong></td>
+                        <td style="text-align:right;font-weight:700;">${formatKrw(claim)}</td>
+                        <td style="text-align:right;font-weight:700;color:#15803d;">${formatKrw(paid)}</td>
+                        <td style="text-align:right;font-weight:800;color:${bal > 0 ? "#dc2626" : "#15803d"};">
+                          ${bal > 0 ? formatKrw(bal) : "완납"}
+                        </td>
+                        <td>${escHtml(e.payDate || "-")}</td>
+                        <td style="font-size:11px;color:var(--text-sub);">${escHtml(e.note || "-")}</td>
+                        <td style="text-align:center;">
+                          <div style="display:inline-flex;gap:4px;">
+                            ${bal > 0 ? `<button type="button" class="btn-sub-xs" style="padding:2px 5px;font-size:10.5px;color:#15803d;border-color:#86efac;" onclick="window.onQuickPayFullExpense('${escJs(e.id)}')">전액지급</button>` : ""}
+                            <button type="button" class="btn-sub-xs" style="padding:2px 5px;font-size:10.5px;" onclick="window.openExpenseModal('${escJs(e.id)}')">수정</button>
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join("") || `<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:24px;">등록된 현장 지출 내역이 없습니다.</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+
+        bodyEl.innerHTML = `
+          ${kpiSectionHtml}
+          ${tasksSectionHtml}
+          ${expensesSectionHtml}
+        `;
+
+        openModal("siteFinanceDetailModal");
+      };
+
+      window.closeSiteFinanceDetailModal = function() {
+        window.currentDetailSiteName = null;
+        window.currentDetailColId = null;
+        closeModal("siteFinanceDetailModal");
+      };
+
       function renderPcFinanceTab() {
         if (!canViewFinance()) {
           const el = document.getElementById("pcFinanceMain");
@@ -6116,51 +7103,196 @@
         `;
 
         if (subTab === "expense") {
-          const expList = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
-          const fixList = (state.financeDbData && Array.isArray(state.financeDbData.fixedMaster)) ? state.financeDbData.fixedMaster : [];
-          const totalClaim = expList.reduce((acc, r) => acc + (Number(r.claimAmount) || 0), 0);
-          const totalPaid = expList.reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0);
-          const totalBal = expList.reduce((acc, r) => acc + (Number(r.balance) || 0), 0);
+          const allExp = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
+          const filtered = getFilteredExpenseList();
+          const selMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
+          const allMonths = !!state.expenseAllMonths;
+
+          const totalClaim = filtered.reduce((acc, r) => acc + (Number(r.claimAmount) || 0), 0);
+          const totalPaid = filtered.reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0);
+          const totalBal = filtered.reduce((acc, r) => acc + (Number(r.balance) || 0), 0);
+          const unpaidCount = filtered.filter(r => (Number(r.balance) || 0) > 0).length;
+
+          const itemFilter = state.expenseItemFilter || "all";
+          const stFilter = state.expenseStatusFilter || "all";
+
+          // 월 선택기 및 4대 KPI 카드
+          const kpiHtml = `
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;background:#ffffff;padding:12px 16px;border-radius:10px;border:1px solid #e2e8f0;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <button type="button" class="btn-tool-tag" style="height:32px;padding:0 12px;font-size:13px;border-radius:6px;" onclick="window.moveExpenseMonth(-1)">◀ 이전달</button>
+                <div style="font-size:16px;font-weight:900;color:#1e293b;min-width:140px;text-align:center;">
+                  ${allMonths ? "📅 전체 정산월" : "📅 " + selMonth + "월"}
+                </div>
+                <button type="button" class="btn-tool-tag" style="height:32px;padding:0 12px;font-size:13px;border-radius:6px;" onclick="window.moveExpenseMonth(1)">다음달 ▶</button>
+                <button type="button" class="btn-sub-chip ${allMonths ? "active" : ""}" style="margin-left:6px;height:32px;padding:0 12px;font-size:12px;" onclick="window.toggleExpenseAllMonths()">
+                  ${allMonths ? "✅ 전체 월 표시 중" : "전체 월 보기"}
+                </button>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);">
+                조건 검색 결과: <strong style="color:#1e293b;">${filtered.length}건</strong> (전체 ${allExp.length}건)
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:16px;">
+              <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #3b82f6;">
+                <div style="font-size:12px;color:var(--text-muted);font-weight:600;">총 청구금액</div>
+                <div style="font-size:20px;font-weight:800;color:#1e293b;margin-top:4px;">${formatKrw(totalClaim)}</div>
+                <div style="font-size:11.5px;color:#64748b;margin-top:4px;">총 ${filtered.length}건 기준</div>
+              </div>
+              <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #10b981;">
+                <div style="font-size:12px;color:var(--text-muted);font-weight:600;">지급 완료금액</div>
+                <div style="font-size:20px;font-weight:800;color:#10b981;margin-top:4px;">${formatKrw(totalPaid)}</div>
+                <div style="font-size:11.5px;color:#16a34a;margin-top:4px;font-weight:700;">지급 완료율 ${totalClaim > 0 ? Math.round((totalPaid / totalClaim) * 100) : 0}%</div>
+              </div>
+              <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #dc2626;background:#fff5f5;">
+                <div style="font-size:12px;color:#991b1b;font-weight:700;">남은 미지급 잔금 (외상)</div>
+                <div style="font-size:22px;font-weight:900;color:#dc2626;margin-top:4px;">${formatKrw(totalBal)}</div>
+                <div style="font-size:11.5px;color:#b91c1c;margin-top:4px;font-weight:700;">미지급 건수: ${unpaidCount}건</div>
+              </div>
+              <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #8b5cf6;">
+                <div style="font-size:12px;color:var(--text-muted);font-weight:600;">등록 건수 / 미지급 건수</div>
+                <div style="font-size:20px;font-weight:800;color:#1e293b;margin-top:4px;">${filtered.length}건 <span style="font-size:14px;color:#dc2626;font-weight:700;">(미지급 ${unpaidCount}건)</span></div>
+                <div style="font-size:11.5px;color:#6d28d9;margin-top:4px;font-weight:600;">지급완료 ${filtered.length - unpaidCount}건</div>
+              </div>
+            </div>
+          `;
+
+          // 검색 · 필터 · 액션 바
+          const actionFilterBarHtml = `
+            <div class="standard-card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;padding:12px 16px;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;">
+                <div style="position:relative;width:240px;max-width:100%;">
+                  <input type="text" placeholder="업체명, 구분, 현장명, 비고 검색..."
+                    value="${escHtml(state.expenseSearchQuery)}"
+                    oninput="window.onExpenseSearchInput(this.value)"
+                    style="width:100%;height:34px;padding:0 28px 0 10px;border-radius:6px;border:1px solid var(--border-dark);font-size:12.5px;outline:none;" />
+                  ${state.expenseSearchQuery ? `<button type="button" onclick="window.clearExpenseSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:bold;line-height:1;">✕</button>` : ""}
+                </div>
+                <div style="display:flex;gap:4px;background:#f1f5f9;padding:3px;border-radius:6px;">
+                  ${[["all", "전체 항목"], ["급여", "급여"], ["자재", "자재"], ["외주", "외주"], ["기타", "기타"]].map(([k, label]) => `
+                    <button type="button" class="btn-sub-chip ${itemFilter === k ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;" onclick="window.setExpenseItemFilter('${k}')">${label}</button>
+                  `).join("")}
+                </div>
+                <div style="display:flex;gap:4px;background:#f1f5f9;padding:3px;border-radius:6px;">
+                  <button type="button" class="btn-sub-chip ${stFilter === "all" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;" onclick="window.setExpenseStatusFilter('all')">전체 상태</button>
+                  <button type="button" class="btn-sub-chip ${stFilter === "unpaid" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;${stFilter === "unpaid" ? "background:#fee2e2;color:#dc2626;border-color:#fca5a5;" : ""}" onclick="window.setExpenseStatusFilter('unpaid')">미지급만 (${allExp.filter(e => (Number(e.balance) || 0) > 0).length})</button>
+                  <button type="button" class="btn-sub-chip ${stFilter === "paid" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;" onclick="window.setExpenseStatusFilter('paid')">지급완료</button>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.onLoadFixedExpenses()">
+                  📌 이번 달 고정비 불러오기
+                </button>
+                <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;" onclick="window.openPartnerImportModal()">
+                  🏗️ 현장 투입 업체 불러오기
+                </button>
+                <button type="button" class="btn-primary" style="height:34px;padding:0 14px;font-size:12.5px;font-weight:800;display:inline-flex;align-items:center;gap:4px;" onclick="window.openExpenseModal(null)">
+                  + 비용 등록
+                </button>
+              </div>
+            </div>
+          `;
+
+          // PC Table
+          const rowsHtml = filtered.map(e => {
+            const claim = Number(e.claimAmount) || 0;
+            const paid = Number(e.paidAmount) || 0;
+            const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
+
+            let itemBadgeBg = "#f1f5f9";
+            let itemBadgeColor = "#334155";
+            if (e.item === "급여") { itemBadgeBg = "#eff6ff"; itemBadgeColor = "#2563eb"; }
+            else if (e.item === "자재") { itemBadgeBg = "#f5f3ff"; itemBadgeColor = "#7c3aed"; }
+            else if (e.item === "외주") { itemBadgeBg = "#fffbeb"; itemBadgeColor = "#d97706"; }
+
+            return `
+              <tr style="${bal > 0 ? "background:#fffbfb;" : ""}">
+                <td><span style="font-weight:700;color:#475569;">${escHtml(e.settleMonth)}</span></td>
+                <td>
+                  <span style="padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;background:${itemBadgeBg};color:${itemBadgeColor};">
+                    ${escHtml(e.item)}
+                  </span>
+                </td>
+                <td><span style="font-weight:600;color:#1e293b;">${escHtml(e.category)}</span></td>
+                <td>
+                  <div style="font-weight:800;color:#1e293b;">${escHtml(e.vendor)}</div>
+                  ${e.category2 ? `<div style="font-size:11px;color:var(--text-muted);">${escHtml(e.category2)}</div>` : ""}
+                </td>
+                <td>
+                  ${e.siteName && e.siteName !== "공통" ? `
+                    <span style="font-weight:700;color:#2563eb;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="window.openSiteFinanceDetailModal('${escJs(e.siteName)}')">
+                      ${escHtml(e.siteName)} 🔍
+                    </span>
+                  ` : `<span style="color:#64748b;font-weight:600;">공통</span>`}
+                </td>
+                <td style="text-align:right;font-weight:800;color:#1e293b;">${claim.toLocaleString("ko-KR")}원</td>
+                <td style="text-align:right;font-weight:700;color:#15803d;">${paid.toLocaleString("ko-KR")}원</td>
+                <td style="text-align:right;">
+                  ${bal > 0 ? `
+                    <div style="font-weight:900;color:#dc2626;font-size:13.5px;">${bal.toLocaleString("ko-KR")}원</div>
+                  ` : `
+                    <span style="color:#15803d;font-weight:700;font-size:12px;">완납 (0원)</span>
+                  `}
+                </td>
+                <td style="font-size:11.5px;color:var(--text-sub);">${escHtml(e.payDate || "-")}</td>
+                <td style="font-size:11.5px;color:var(--text-sub);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(e.note || "")}">
+                  ${escHtml(e.note || "-")}
+                </td>
+                <td style="text-align:center;">
+                  <div style="display:inline-flex;gap:4px;align-items:center;">
+                    ${bal > 0 ? `
+                      <button type="button" class="btn-sub-xs" style="padding:2px 7px;font-size:11px;color:#15803d;border-color:#86efac;background:#f0fdf4;" onclick="window.onQuickPayFullExpense('${escJs(e.id)}')">
+                        전액지급
+                      </button>
+                    ` : ""}
+                    <button type="button" class="btn-sub-xs" style="padding:2px 7px;font-size:11px;" onclick="window.openExpenseModal('${escJs(e.id)}')">
+                      수정
+                    </button>
+                    <button type="button" class="btn-sub-xs" style="padding:2px 6px;font-size:11px;color:#ef4444;border-color:#fca5a5;" onclick="window.onDeleteExpenseRow('${escJs(e.id)}')">
+                      🗑️
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join("") || `
+            <tr>
+              <td colspan="11" style="text-align:center;color:var(--text-muted);padding:42px 16px;">
+                <div style="font-size:26px;margin-bottom:6px;">🧾</div>
+                <div>조건에 해당하는 비용마감 내역이 없습니다.</div>
+              </td>
+            </tr>
+          `;
+
+          const tableHtml = `
+            <div class="table-container" style="overflow-x:auto;">
+              <table class="clean-table" style="min-width:1100px;font-size:12.5px;">
+                <thead>
+                  <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;text-align:left;">
+                    <th style="padding:10px 10px;width:80px;">정산월</th>
+                    <th style="padding:10px 8px;width:70px;">항목</th>
+                    <th style="padding:10px 10px;width:110px;">구분</th>
+                    <th style="padding:10px 12px;width:140px;">업체명</th>
+                    <th style="padding:10px 12px;width:130px;">연결 현장</th>
+                    <th style="padding:10px 12px;text-align:right;width:110px;">청구금액</th>
+                    <th style="padding:10px 12px;text-align:right;width:110px;">지급금액</th>
+                    <th style="padding:10px 12px;text-align:right;width:110px;">남은 잔금</th>
+                    <th style="padding:10px 10px;width:95px;">지급일</th>
+                    <th style="padding:10px 10px;">비고</th>
+                    <th style="padding:10px 8px;text-align:center;width:130px;">지급 / 관리</th>
+                  </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+              </table>
+            </div>
+          `;
 
           document.getElementById("pcFinanceMain").innerHTML = `
             ${subTabsHtml}
-            <div class="standard-card" style="background:#f8fafc;border:1px dashed #cbd5e1;padding:24px;text-align:center;margin-bottom:16px;">
-              <div style="font-size:28px;margin-bottom:8px;">🧾</div>
-              <h3 style="font-size:17px;font-weight:800;color:#1e293b;margin-bottom:6px;">월별 비용마감 관리 (Step 3 연동 예정)</h3>
-              <p style="font-size:13px;color:#64748b;max-width:620px;margin:0 auto 14px auto;">
-                재무 전용 DB 시트와 성공적으로 연동되었습니다. 비용마감 실데이터 <strong>${expList.length}건</strong>, 고정 마스터 <strong>${fixList.length}건</strong>이 백엔드에서 정상 동기화되어 있으며, Step 3에서 월별 상세 청구/지급 편집 화면이 제공됩니다.
-              </p>
-              <div style="display:inline-flex;gap:18px;background:#ffffff;padding:10px 20px;border-radius:8px;border:1px solid #e2e8f0;font-size:13px;">
-                <div><span style="color:#64748b;">총 청구:</span> <strong style="color:#1e293b;">${totalClaim.toLocaleString("ko-KR")}원</strong></div>
-                <div><span style="color:#64748b;">총 지급:</span> <strong style="color:#15803d;">${totalPaid.toLocaleString("ko-KR")}원</strong></div>
-                <div><span style="color:#64748b;">외상 잔액:</span> <strong style="color:#dc2626;">${totalBal.toLocaleString("ko-KR")}원</strong></div>
-              </div>
-            </div>
-            ${expList.length > 0 ? `
-              <div class="table-container">
-                <table class="clean-table">
-                  <thead>
-                    <tr><th>정산월</th><th>항목</th><th>구분</th><th>업체명</th><th>현장명</th><th style="text-align:right;">청구금액</th><th style="text-align:right;">지급금액</th><th style="text-align:right;">잔금</th><th>지급일</th><th>비고</th></tr>
-                  </thead>
-                  <tbody>
-                    ${expList.slice(0, 15).map(e => `
-                      <tr>
-                        <td>${escHtml(e.settleMonth)}</td>
-                        <td><strong>${escHtml(e.item)}</strong></td>
-                        <td>${escHtml(e.category)}</td>
-                        <td>${escHtml(e.vendor)}</td>
-                        <td>${escHtml(e.siteName)}</td>
-                        <td style="text-align:right;font-weight:700;">${Number(e.claimAmount || 0).toLocaleString("ko-KR")}원</td>
-                        <td style="text-align:right;color:#15803d;font-weight:700;">${Number(e.paidAmount || 0).toLocaleString("ko-KR")}원</td>
-                        <td style="text-align:right;color:#dc2626;font-weight:700;">${Number(e.balance || 0).toLocaleString("ko-KR")}원</td>
-                        <td>${escHtml(e.payDate || "-")}</td>
-                        <td>${escHtml(e.note || "-")}</td>
-                      </tr>
-                    `).join("")}
-                  </tbody>
-                </table>
-              </div>
-            ` : ""}
+            ${kpiHtml}
+            ${actionFilterBarHtml}
+            ${tableHtml}
           `;
           return;
         }
@@ -6271,7 +7403,7 @@
             <tr style="cursor:pointer;${isDoneUncollected ? "background:#fff5f5;" : (uncollected > 0 ? "background:#fffbfb;" : "")}" onclick="window.openCollectionModal('${escJs(r.id)}')">
               <td>
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                  <span style="font-weight:800;color:#1e293b;font-size:13px;">${escHtml(r.siteName)}</span>
+                  <span style="font-weight:800;color:#1e293b;font-size:13px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="event.stopPropagation(); window.openSiteFinanceDetailModal('${escJs(r.siteName)}', '${escJs(r.id)}')">${escHtml(r.siteName)} 🔍</span>
                   ${(progress !== null && !isNaN(progress)) ? `
                     <span style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;white-space:nowrap;" title="공사진행률: ${progress}%">
                       <span style="display:inline-block;width:24px;height:4px;background:#cbd5e1;border-radius:2px;overflow:hidden;vertical-align:middle;">
@@ -7906,14 +9038,179 @@
         `;
 
         if (subTab === "expense") {
-          const expList = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
+          const allExp = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
+          const filtered = getFilteredExpenseList();
+          const selMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
+          const allMonths = !!state.expenseAllMonths;
+
+          const totalClaim = filtered.reduce((acc, r) => acc + (Number(r.claimAmount) || 0), 0);
+          const totalPaid = filtered.reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0);
+          const totalBal = filtered.reduce((acc, r) => acc + (Number(r.balance) || 0), 0);
+          const unpaidCount = filtered.filter(r => (Number(r.balance) || 0) > 0).length;
+
+          const itemFilter = state.expenseItemFilter || "all";
+          const stFilter = state.expenseStatusFilter || "all";
+
+          const monthSelectorHtml = `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px;background:#ffffff;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0;">
+              <button type="button" class="btn-sub-chip" style="padding:4px 8px;font-size:11px;" onclick="window.moveExpenseMonth(-1)">◀ 이전</button>
+              <div style="font-size:13.5px;font-weight:800;color:#1e293b;">
+                ${allMonths ? "📅 전체 월" : "📅 " + selMonth + "월"}
+              </div>
+              <button type="button" class="btn-sub-chip" style="padding:4px 8px;font-size:11px;" onclick="window.moveExpenseMonth(1)">다음 ▶</button>
+              <button type="button" class="btn-sub-chip ${allMonths ? "active" : ""}" style="padding:4px 7px;font-size:10.5px;" onclick="window.toggleExpenseAllMonths()">
+                ${allMonths ? "전체" : "전체보기"}
+              </button>
+            </div>
+          `;
+
+          const kpiHtml = `
+            <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:8px;margin-bottom:12px;">
+              <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #3b82f6;">
+                <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">총 청구금액</div>
+                <div style="font-size:15px;font-weight:800;color:#1e293b;margin-top:2px;">${formatKrw(totalClaim)}</div>
+                <div style="font-size:10px;color:#64748b;margin-top:2px;">총 ${filtered.length}건</div>
+              </div>
+              <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #10b981;">
+                <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">지급 완료금액</div>
+                <div style="font-size:15px;font-weight:800;color:#10b981;margin-top:2px;">${formatKrw(totalPaid)}</div>
+                <div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700;">지급 완료</div>
+              </div>
+              <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #dc2626;background:#fff8f8;">
+                <div style="font-size:10.5px;color:#991b1b;font-weight:700;">남은 미지급 잔금</div>
+                <div style="font-size:15px;font-weight:900;color:#dc2626;margin-top:2px;">${formatKrw(totalBal)}</div>
+                <div style="font-size:10px;color:#b91c1c;margin-top:2px;font-weight:700;">${unpaidCount}건 미지급</div>
+              </div>
+              <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #8b5cf6;">
+                <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">등록 / 완료 건수</div>
+                <div style="font-size:15px;font-weight:800;color:#6d28d9;margin-top:2px;">${filtered.length}건 / ${filtered.length - unpaidCount}건</div>
+                <div style="font-size:10px;color:#7c3aed;margin-top:2px;">처리 현황</div>
+              </div>
+            </div>
+          `;
+
+          const actionFilterBarHtml = `
+            <div style="display:flex;gap:6px;margin-bottom:8px;">
+              <div style="position:relative;flex:1;">
+                <input type="text" placeholder="업체명, 구분, 현장명 검색..."
+                  value="${escHtml(state.expenseSearchQuery)}"
+                  oninput="window.onExpenseSearchInput(this.value)"
+                  style="width:100%;height:34px;padding:0 26px 0 9px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;outline:none;" />
+                ${state.expenseSearchQuery ? `<button type="button" onclick="window.clearExpenseSearch()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:bold;line-height:1;">✕</button>` : ""}
+              </div>
+              <button type="button" class="btn-primary" style="height:34px;padding:0 10px;font-size:12px;font-weight:700;white-space:nowrap;" onclick="window.openExpenseModal(null)">
+                + 등록
+              </button>
+            </div>
+
+            <div style="display:flex;gap:6px;margin-bottom:8px;overflow-x:auto;">
+              <button type="button" class="btn-sub-xs" style="padding:4px 8px;font-size:11px;white-space:nowrap;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.onLoadFixedExpenses()">
+                📌 고정비 불러오기
+              </button>
+              <button type="button" class="btn-sub-xs" style="padding:4px 8px;font-size:11px;white-space:nowrap;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;" onclick="window.openPartnerImportModal()">
+                🏗️ 투입 업체 불러오기
+              </button>
+            </div>
+
+            <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;">
+              ${[["all", "전체"], ["급여", "급여"], ["자재", "자재"], ["외주", "외주"], ["기타", "기타"]].map(([k, label]) => `
+                <button type="button" class="btn-sub-chip ${itemFilter === k ? "active" : ""}" style="padding:3px 7px;font-size:11px;" onclick="window.setExpenseItemFilter('${k}')">${label}</button>
+              `).join("")}
+              <button type="button" class="btn-sub-chip ${stFilter === "unpaid" ? "active" : ""}" style="padding:3px 7px;font-size:11px;${stFilter === "unpaid" ? "background:#fee2e2;color:#dc2626;border-color:#fca5a5;" : ""}" onclick="window.setExpenseStatusFilter('${stFilter === "unpaid" ? "all" : "unpaid"}')">미지급만</button>
+            </div>
+          `;
+
+          const cardsHtml = filtered.map(e => {
+            const claim = Number(e.claimAmount) || 0;
+            const paid = Number(e.paidAmount) || 0;
+            const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
+
+            let itemBadgeBg = "#f1f5f9";
+            let itemBadgeColor = "#334155";
+            if (e.item === "급여") { itemBadgeBg = "#eff6ff"; itemBadgeColor = "#2563eb"; }
+            else if (e.item === "자재") { itemBadgeBg = "#f5f3ff"; itemBadgeColor = "#7c3aed"; }
+            else if (e.item === "외주") { itemBadgeBg = "#fffbeb"; itemBadgeColor = "#d97706"; }
+
+            return `
+              <div class="m-card-box" style="margin-bottom:10px;padding:12px;border-left:3px solid ${bal > 0 ? "#dc2626" : "#10b981"};${bal > 0 ? "background:#fffdfd;" : ""}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                      <span style="padding:1px 6px;border-radius:3px;font-size:10.5px;font-weight:700;background:${itemBadgeBg};color:${itemBadgeColor};">
+                        ${escHtml(e.item)}
+                      </span>
+                      <span style="font-size:14px;font-weight:800;color:#1e293b;">${escHtml(e.vendor)}</span>
+                    </div>
+                    <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px;">
+                      ${escHtml(e.settleMonth)} · ${escHtml(e.category)}
+                      ${e.siteName && e.siteName !== "공통" ? ` · <span style="color:#2563eb;font-weight:700;cursor:pointer;text-decoration:underline;" onclick="window.openSiteFinanceDetailModal('${escJs(e.siteName)}')">${escHtml(e.siteName)}</span>` : " · 공통"}
+                    </div>
+                  </div>
+                  <div>
+                    ${bal > 0 ? `
+                      <span style="padding:2px 6px;border-radius:4px;font-size:10.5px;font-weight:800;background:#fee2e2;color:#dc2626;">미지급</span>
+                    ` : `
+                      <span style="padding:2px 6px;border-radius:4px;font-size:10.5px;font-weight:800;background:#ecfdf5;color:#059669;">완납</span>
+                    `}
+                  </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;background:#f8fafc;padding:8px 10px;border-radius:6px;margin:8px 0;text-align:center;">
+                  <div>
+                    <div style="font-size:10px;color:var(--text-muted);">청구금액</div>
+                    <div style="font-size:12.5px;font-weight:800;color:#1e293b;margin-top:2px;">${formatKrw(claim)}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:10px;color:var(--text-muted);">지급완료</div>
+                    <div style="font-size:12.5px;font-weight:800;color:#15803d;margin-top:2px;">${formatKrw(paid)}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:10px;color:var(--text-muted);">남은 잔금</div>
+                    <div style="font-size:13px;font-weight:900;color:${bal > 0 ? "#dc2626" : "#15803d"};margin-top:2px;">
+                      ${bal > 0 ? formatKrw(bal) : "완납"}
+                    </div>
+                  </div>
+                </div>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;padding-top:4px;">
+                  <div style="font-size:11px;color:var(--text-sub);">
+                    📅 ${escHtml(e.payDate ? `지급: ${e.payDate}` : "지급일 미지정")}
+                  </div>
+                  <div style="display:flex;gap:4px;">
+                    ${bal > 0 ? `
+                      <button type="button" class="btn-sub-xs" style="padding:3px 7px;font-size:11px;color:#15803d;border-color:#86efac;background:#f0fdf4;" onclick="window.onQuickPayFullExpense('${escJs(e.id)}')">
+                        전액지급
+                      </button>
+                    ` : ""}
+                    <button type="button" class="btn-sub-xs" style="padding:3px 7px;font-size:11px;" onclick="window.openExpenseModal('${escJs(e.id)}')">
+                      수정
+                    </button>
+                    <button type="button" class="btn-sub-xs" style="padding:3px 6px;font-size:11px;color:#ef4444;border-color:#fca5a5;" onclick="window.onDeleteExpenseRow('${escJs(e.id)}')">
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+
+                ${e.note ? `
+                  <div style="font-size:11px;color:var(--text-sub);margin-top:6px;border-top:1px dashed #e2e8f0;padding-top:4px;">
+                    📝 ${escHtml(e.note)}
+                  </div>
+                ` : ""}
+              </div>
+            `;
+          }).join("") || `
+            <div class="m-card-box" style="text-align:center;padding:32px 16px;color:var(--text-muted);">
+              <div style="font-size:24px;margin-bottom:6px;">🧾</div>
+              <div>조건에 해당하는 비용마감 내역이 없습니다.</div>
+            </div>
+          `;
+
           document.getElementById("m-page-finance").innerHTML = `
             ${subTabsHtml}
-            <div class="m-card-box" style="text-align:center;padding:24px 16px;">
-              <div style="font-size:24px;margin-bottom:6px;">🧾</div>
-              <div style="font-size:15px;font-weight:800;color:#1e293b;">월별 비용마감 (Step 3 연동 예정)</div>
-              <div style="font-size:12px;color:#64748b;margin-top:4px;">현재 실데이터 ${expList.length}건이 연동되어 있습니다.</div>
-            </div>
+            ${monthSelectorHtml}
+            ${kpiHtml}
+            ${actionFilterBarHtml}
+            ${cardsHtml}
           `;
           return;
         }
@@ -8008,7 +9305,7 @@
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
                 <div>
                   <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                    <span style="font-size:14.5px;font-weight:800;color:#1e293b;">${escHtml(r.siteName)}</span>
+                    <span style="font-size:14.5px;font-weight:800;color:#1e293b;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="event.stopPropagation(); window.openSiteFinanceDetailModal('${escJs(r.siteName)}', '${escJs(r.id)}')">${escHtml(r.siteName)} 🔍</span>
                     ${(progress !== null && !isNaN(progress)) ? `
                       <span style="display:inline-flex;align-items:center;gap:3px;padding:1px 5px;border-radius:4px;font-size:10.5px;font-weight:700;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;white-space:nowrap;" title="공사진행률: ${progress}%">
                         <span style="display:inline-block;width:20px;height:3.5px;background:#cbd5e1;border-radius:2px;overflow:hidden;vertical-align:middle;">
