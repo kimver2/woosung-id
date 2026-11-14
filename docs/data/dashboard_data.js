@@ -58,10 +58,16 @@
 
     getInitialFinanceData: function () {
       var cached = safeReadStorage(CACHE_KEYS.finance);
-      if (cached && Array.isArray(cached.ledger)) {
+      if (cached && (Array.isArray(cached.collection) || Array.isArray(cached.ledger))) {
         return cached;
       }
       return global.WS_SNAPSHOT_FINANCE;
+    },
+
+    saveFinanceCache: function (data) {
+      if (data && typeof data === "object") {
+        safeWriteStorage(CACHE_KEYS.finance, data);
+      }
     },
 
     saveDashboardCache: function (data) {
@@ -401,6 +407,40 @@
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
       });
+    },
+
+    getFinanceDbData: function (authUser) {
+      var user = authUser || "";
+      if (typeof fetch !== "function" || typeof location === "undefined" || !String(location.protocol || "").startsWith("http")) {
+        return Promise.resolve({ success: true, offline: true, collection: [], expense: [], fixedMaster: [] });
+      }
+      return this.callGasApi("getFinanceDbData", { authUser: user });
+    },
+
+    saveCollectionRow: function (row, authUser) {
+      var user = authUser || "";
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (res) { resolve(res || { success: true }); })
+            .withFailureHandler(function (err) { reject(err); })
+            .saveCollectionRow({ row: row, authUser: user });
+        });
+      }
+      return this.callGasPost("saveCollectionRow", { row: row, authUser: user });
+    },
+
+    deleteCollectionRow: function (id, authUser) {
+      var user = authUser || "";
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (res) { resolve(res || { success: true }); })
+            .withFailureHandler(function (err) { reject(err); })
+            .deleteCollectionRow({ id: id, authUser: user });
+        });
+      }
+      return this.callGasPost("deleteCollectionRow", { id: id, authUser: user });
     }
   };
 })(typeof window !== "undefined" ? window : globalThis);

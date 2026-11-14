@@ -2149,7 +2149,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
 
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
-  assertTest('index.html 내 exec?v=243 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=243'));
+  assertTest('index.html 내 exec?v=244 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=244'));
   assertTest('v2.html, preview_tabs.html, docs/v2.html, docs/preview_tabs.html 4개 파일 100% 동일 동기화 검증',
     v2RootHtml === previewHtml && v2RootHtml === v2DocsHtml && v2RootHtml === previewDocsHtml
   );
@@ -2184,6 +2184,23 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     code.includes('FINANCE_DB_SPREADSHEET_ID = "1rmH7176tFYRk97qGjdI-ztn6UMnWwyNBNl06wexFOYc"') &&
     code.includes('function setupFinanceDbAndMigrate') &&
     code.includes('action === "setupFinanceDbAndMigrate"')
+  );
+  assertTest('현장서식.js 내 Step 1 재무 DB API (getFinanceDbData, saveCollectionRow, deleteCollectionRow) 검증',
+    code.includes('function getFinanceDbData(') &&
+    code.includes('function saveCollectionRow(') &&
+    code.includes('function deleteCollectionRow(') &&
+    code.includes('action === "getFinanceDbData"') &&
+    code.includes('action === "saveCollectionRow"') &&
+    code.includes('action === "deleteCollectionRow"')
+  );
+  assertTest('v2.html 내 Step 2 현장 수금현황 UI, 서브탭 및 수금 상세 모달(collectionModal) 검증',
+    v2RootHtml.includes('id="collectionModal"') &&
+    v2RootHtml.includes('window.openCollectionModal') &&
+    v2RootHtml.includes('window.onSaveCollectionRow') &&
+    v2RootHtml.includes('window.onDeleteCollectionRow') &&
+    v2RootHtml.includes('window.setFinanceSubTab') &&
+    v2RootHtml.includes('ensureFinanceDbDataLoaded') &&
+    v2RootHtml.includes('calcCollectionModalTotals')
   );
 }
 console.log('\n========================================================');

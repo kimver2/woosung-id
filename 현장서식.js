@@ -10533,6 +10533,347 @@ function setupFinanceDbAndMigrate(p) {
 }
 
 /**
+ * [재무 DB] 관리자 권한 확인 헬퍼 (조항만 대표, admin, chohangman)
+ */
+function isFinanceAdminUser_(u) {
+  var user = String(u || "").trim().toLowerCase();
+  return user === "조항만" || user === "admin" || user === "chohangman";
+}
+
+/**
+ * [재무 DB] 수금현황, 비용마감, 비용마감_고정 실데이터 읽기
+ */
+function getFinanceDbData(p) {
+  try {
+    p = p || {};
+    var u = p.authUser || p.user || (p.data && p.data.authUser) || "";
+    if (!isFinanceAdminUser_(u)) {
+      return { success: false, error: "재무 DB 조회 권한이 없습니다. (조항만 대표 / 관리자 전용)" };
+    }
+
+    var ssId = (p && p.spreadsheetId) || FINANCE_DB_SPREADSHEET_ID;
+    var ss = SpreadsheetApp.openById(ssId);
+    if (!ss) {
+      return { success: false, error: "재무 DB 스프레드시트를 열 수 없습니다: " + ssId };
+    }
+
+    // 1. 수금현황 시트 읽기 (21개 컬럼)
+    var sheetCol = ss.getSheetByName("수금현황");
+    var collection = [];
+    if (sheetCol && sheetCol.getLastRow() >= 2) {
+      var colData = sheetCol.getRange(2, 1, sheetCol.getLastRow() - 1, 21).getValues();
+      collection = colData.map(function (r) {
+        var contractAmount = Number(r[7]) || 0;
+        var changeAmount = Number(r[8]) || 0;
+        var totalAmount = (r[11] !== "" && r[11] !== null && r[11] !== undefined) ? Number(r[11]) : (contractAmount + changeAmount);
+        var downPayment = Number(r[12]) || 0;
+        var startPayment = Number(r[13]) || 0;
+        var midPayment1 = Number(r[14]) || 0;
+        var midPayment2 = Number(r[15]) || 0;
+        var midPayment3 = Number(r[16]) || 0;
+        var finalPayment = Number(r[17]) || 0;
+        var collected = downPayment + startPayment + midPayment1 + midPayment2 + midPayment3 + finalPayment;
+        var uncollectedAmount = (r[18] !== "" && r[18] !== null && r[18] !== undefined) ? Number(r[18]) : (totalAmount - collected);
+
+        return {
+          id: String(r[0] || "").trim(),
+          siteName: String(r[1] || "").trim(),
+          period: String(r[2] || "").trim(),
+          manager: String(r[3] || "").trim(),
+          category: String(r[4] || "").trim(),
+          status: String(r[5] || "진행중").trim(),
+          clientName: String(r[6] || "").trim(),
+          contractAmount: contractAmount,
+          changeAmount: changeAmount,
+          changeDesc: String(r[9] || "").trim(),
+          progressRate: (r[10] !== "" && r[10] !== null && r[10] !== undefined) ? Number(r[10]) : null,
+          totalAmount: totalAmount,
+          downPayment: downPayment,
+          startPayment: startPayment,
+          midPayment1: midPayment1,
+          midPayment2: midPayment2,
+          midPayment3: midPayment3,
+          finalPayment: finalPayment,
+          collectedAmount: collected,
+          uncollectedAmount: uncollectedAmount,
+          taxInvoice: String(r[19] || "미발행").trim(),
+          note: String(r[20] || "").trim()
+        };
+      }).filter(function (item) {
+        return item.id || item.siteName;
+      });
+    }
+
+    // 2. 비용마감 시트 읽기 (12개 컬럼)
+    var sheetExp = ss.getSheetByName("비용마감");
+    var expense = [];
+    if (sheetExp && sheetExp.getLastRow() >= 2) {
+      var expData = sheetExp.getRange(2, 1, sheetExp.getLastRow() - 1, 12).getValues();
+      expense = expData.map(function (r) {
+        return {
+          id: String(r[0] || "").trim(),
+          settleMonth: String(r[1] || "").trim(),
+          item: String(r[2] || "").trim(),
+          category: String(r[3] || "").trim(),
+          vendor: String(r[4] || "").trim(),
+          category2: String(r[5] || "").trim(),
+          siteName: String(r[6] || "").trim(),
+          claimAmount: Number(r[7]) || 0,
+          paidAmount: Number(r[8]) || 0,
+          balance: Number(r[9]) || 0,
+          payDate: String(r[10] || "").trim(),
+          note: String(r[11] || "").trim()
+        };
+      }).filter(function (item) {
+        return item.id || item.vendor || item.item;
+      });
+    }
+
+    // 3. 비용마감_고정 마스터 시트 읽기 (8개 컬럼)
+    var sheetFixed = ss.getSheetByName("비용마감_고정");
+    var fixedMaster = [];
+    if (sheetFixed && sheetFixed.getLastRow() >= 2) {
+      var fixedData = sheetFixed.getRange(2, 1, sheetFixed.getLastRow() - 1, 8).getValues();
+      fixedMaster = fixedData.map(function (r) {
+        return {
+          id: String(r[0] || "").trim(),
+          active: String(r[1] || "").trim(),
+          item: String(r[2] || "").trim(),
+          category: String(r[3] || "").trim(),
+          vendor: String(r[4] || "").trim(),
+          category2: String(r[5] || "").trim(),
+          baseAmount: Number(r[6]) || 0,
+          note: String(r[7] || "").trim()
+        };
+      }).filter(function (item) {
+        return item.id || item.item || item.vendor;
+      });
+    }
+
+    var nowStr = Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd HH:mm");
+    return {
+      success: true,
+      updatedAt: nowStr,
+      collection: collection,
+      expense: expense,
+      fixedMaster: fixedMaster
+    };
+  } catch (err) {
+    Logger.log("getFinanceDbData error: " + err.toString());
+    return {
+      success: false,
+      error: "재무 DB 데이터 조회 실패: " + (err.message || String(err))
+    };
+  }
+}
+
+/**
+ * [재무 DB] 수금현황 시트 행 저장/수정 (COL-xxxx 자동 채번, 금액 계산 및 서식 보장)
+ */
+function saveCollectionRow(p) {
+  try {
+    p = p || {};
+    var u = p.authUser || p.user || (p.row && p.row.authUser) || "";
+    if (!isFinanceAdminUser_(u)) {
+      return { success: false, error: "수금 정보 저장 권한이 없습니다. (조항만 대표 / 관리자 전용)" };
+    }
+
+    var rowData = p.row || p.data || p;
+    if (typeof rowData === "string") {
+      try { rowData = JSON.parse(rowData); } catch (e) { rowData = {}; }
+    }
+
+    var ssId = (p && p.spreadsheetId) || FINANCE_DB_SPREADSHEET_ID;
+    var ss = SpreadsheetApp.openById(ssId);
+    if (!ss) {
+      return { success: false, error: "재무 DB 스프레드시트를 열 수 없습니다: " + ssId };
+    }
+
+    var sheetCol = ss.getSheetByName("수금현황");
+    if (!sheetCol) {
+      sheetCol = getOrCreateSheet_(ss, "수금현황");
+    }
+
+    var lastRow = sheetCol.getLastRow();
+    var id = String(rowData.id || "").trim();
+    var targetRowIdx = -1;
+
+    // 기존 ID 검색
+    if (id && lastRow >= 2) {
+      var idValues = sheetCol.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (var i = 0; i < idValues.length; i++) {
+        if (String(idValues[i][0] || "").trim() === id) {
+          targetRowIdx = i + 2;
+          break;
+        }
+      }
+    }
+
+    // 신규 추가 시 COL-xxxx 자동 채번
+    if (!id || targetRowIdx === -1) {
+      var maxNum = 0;
+      if (lastRow >= 2) {
+        var allIds = sheetCol.getRange(2, 1, lastRow - 1, 1).getValues();
+        for (var j = 0; j < allIds.length; j++) {
+          var idStr = String(allIds[j][0] || "").trim();
+          var match = idStr.match(/^COL-(\d+)$/i);
+          if (match) {
+            var num = parseInt(match[1], 10);
+            if (num > maxNum) maxNum = num;
+          }
+        }
+      }
+      id = "COL-" + ("0000" + (maxNum + 1)).slice(-4);
+      targetRowIdx = lastRow + 1;
+    }
+
+    var contractAmount = Number(rowData.contractAmount) || 0;
+    var changeAmount = Number(rowData.changeAmount) || 0;
+    var totalAmount = contractAmount + changeAmount;
+
+    var downPayment = Number(rowData.downPayment) || 0;
+    var startPayment = Number(rowData.startPayment) || 0;
+    var midPayment1 = Number(rowData.midPayment1) || 0;
+    var midPayment2 = Number(rowData.midPayment2) || 0;
+    var midPayment3 = Number(rowData.midPayment3) || 0;
+    var finalPayment = Number(rowData.finalPayment) || 0;
+    var collected = downPayment + startPayment + midPayment1 + midPayment2 + midPayment3 + finalPayment;
+    var uncollectedAmount = totalAmount - collected;
+
+    var progressRate = (rowData.progressRate !== undefined && rowData.progressRate !== null && rowData.progressRate !== "")
+      ? Number(rowData.progressRate) : "";
+
+    var rowValues = [
+      id,                                                // 1: ID
+      String(rowData.siteName || "").trim(),             // 2: 현장명
+      String(rowData.period || "").trim(),               // 3: 공사기간
+      String(rowData.manager || "").trim(),              // 4: 담당자
+      String(rowData.category || "").trim(),             // 5: 구분
+      String(rowData.status || "진행중").trim(),          // 6: 수금여부
+      String(rowData.clientName || "").trim(),           // 7: 계약자명
+      contractAmount,                                    // 8: 계약금액
+      changeAmount,                                      // 9: 증감액
+      String(rowData.changeDesc || "").trim(),           // 10: 추가삭제내역
+      progressRate,                                      // 11: 공사진행율
+      totalAmount,                                       // 12: 최종금액
+      downPayment,                                       // 13: 계약금
+      startPayment,                                      // 14: 착수금
+      midPayment1,                                       // 15: 중도금1차
+      midPayment2,                                       // 16: 중도금2차
+      midPayment3,                                       // 17: 중도금3차
+      finalPayment,                                      // 18: 잔금
+      uncollectedAmount,                                 // 19: 미수금
+      String(rowData.taxInvoice || "미발행").trim(),      // 20: 계산서발행
+      String(rowData.note || "").trim()                  // 21: 비고
+    ];
+
+    sheetCol.getRange(targetRowIdx, 1, 1, 21).setValues([rowValues]);
+
+    // 금액 컬럼 #,##0 서식 보장
+    var colAmountIndices = [8, 9, 12, 13, 14, 15, 16, 17, 18, 19];
+    colAmountIndices.forEach(function (colIdx) {
+      sheetCol.getRange(targetRowIdx, colIdx, 1, 1).setNumberFormat("#,##0");
+    });
+
+    var savedRow = {
+      id: id,
+      siteName: String(rowData.siteName || "").trim(),
+      period: String(rowData.period || "").trim(),
+      manager: String(rowData.manager || "").trim(),
+      category: String(rowData.category || "").trim(),
+      status: String(rowData.status || "진행중").trim(),
+      clientName: String(rowData.clientName || "").trim(),
+      contractAmount: contractAmount,
+      changeAmount: changeAmount,
+      changeDesc: String(rowData.changeDesc || "").trim(),
+      progressRate: progressRate,
+      totalAmount: totalAmount,
+      downPayment: downPayment,
+      startPayment: startPayment,
+      midPayment1: midPayment1,
+      midPayment2: midPayment2,
+      midPayment3: midPayment3,
+      finalPayment: finalPayment,
+      collectedAmount: collected,
+      uncollectedAmount: uncollectedAmount,
+      taxInvoice: String(rowData.taxInvoice || "미발행").trim(),
+      note: String(rowData.note || "").trim()
+    };
+
+    return {
+      success: true,
+      id: id,
+      row: savedRow,
+      isNew: (targetRowIdx > lastRow),
+      message: "수금 정보가 성공적으로 저장되었습니다."
+    };
+  } catch (err) {
+    Logger.log("saveCollectionRow error: " + err.toString());
+    return {
+      success: false,
+      error: "수금 정보 저장 실패: " + (err.message || String(err))
+    };
+  }
+}
+
+/**
+ * [재무 DB] 수금현황 시트 행 삭제
+ */
+function deleteCollectionRow(p) {
+  try {
+    p = p || {};
+    var u = p.authUser || p.user || "";
+    if (!isFinanceAdminUser_(u)) {
+      return { success: false, error: "수금 정보 삭제 권한이 없습니다. (조항만 대표 / 관리자 전용)" };
+    }
+
+    var targetId = String(p.id || "").trim();
+    if (!targetId) {
+      return { success: false, error: "삭제할 수금 정보 ID가 지정되지 않았습니다." };
+    }
+
+    var ssId = (p && p.spreadsheetId) || FINANCE_DB_SPREADSHEET_ID;
+    var ss = SpreadsheetApp.openById(ssId);
+    if (!ss) {
+      return { success: false, error: "재무 DB 스프레드시트를 열 수 없습니다: " + ssId };
+    }
+
+    var sheetCol = ss.getSheetByName("수금현황");
+    if (!sheetCol || sheetCol.getLastRow() < 2) {
+      return { success: false, error: "수금현황 시트가 비어있거나 존재하지 않습니다." };
+    }
+
+    var lastRow = sheetCol.getLastRow();
+    var idValues = sheetCol.getRange(2, 1, lastRow - 1, 1).getValues();
+    var foundRowIdx = -1;
+    for (var i = 0; i < idValues.length; i++) {
+      if (String(idValues[i][0] || "").trim() === targetId) {
+        foundRowIdx = i + 2;
+        break;
+      }
+    }
+
+    if (foundRowIdx === -1) {
+      return { success: false, error: "해당 ID(" + targetId + ")의 수금 정보를 찾을 수 없습니다." };
+    }
+
+    sheetCol.deleteRow(foundRowIdx);
+
+    return {
+      success: true,
+      id: targetId,
+      message: "수금 정보가 성공적으로 삭제되었습니다."
+    };
+  } catch (err) {
+    Logger.log("deleteCollectionRow error: " + err.toString());
+    return {
+      success: false,
+      error: "수금 정보 삭제 실패: " + (err.message || String(err))
+    };
+  }
+}
+
+/**
  * 모바일 웹 드롭다운 상태 변경 화면 (doGet)
  */
 function doGet(e) {
@@ -10563,6 +10904,41 @@ function doGet(e) {
     }
     var financeRes = setupFinanceDbAndMigrate(pFinance);
     return ContentService.createTextOutput(JSON.stringify(financeRes))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 0-0-0-Finance-Read) 재무 전용 DB 3개 시트 데이터 조회 (action=getFinanceDbData)
+  if (action === "getFinanceDbData") {
+    var pFinanceRead = p;
+    if (typeof p.data === "string") {
+      try { pFinanceRead = Object.assign({}, p, JSON.parse(p.data)); } catch (eFr) {}
+    }
+    var fDbRes = getFinanceDbData(pFinanceRead);
+    return ContentService.createTextOutput(JSON.stringify(fDbRes))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 0-0-0-Finance-SaveCol) 수금현황 행 저장/수정 (action=saveCollectionRow)
+  if (action === "saveCollectionRow") {
+    var pSaveCol = p;
+    if (typeof p.row === "string") {
+      try { pSaveCol = Object.assign({}, p, { row: JSON.parse(p.row) }); } catch (eSc) {}
+    } else if (typeof p.data === "string") {
+      try { pSaveCol = Object.assign({}, p, { row: JSON.parse(p.data) }); } catch (eSc) {}
+    }
+    var saveColRes = saveCollectionRow(pSaveCol);
+    return ContentService.createTextOutput(JSON.stringify(saveColRes))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 0-0-0-Finance-DelCol) 수금현황 행 삭제 (action=deleteCollectionRow)
+  if (action === "deleteCollectionRow") {
+    var pDelCol = p;
+    if (typeof p.data === "string") {
+      try { pDelCol = Object.assign({}, p, JSON.parse(p.data)); } catch (eDc) {}
+    }
+    var delColRes = deleteCollectionRow(pDelCol);
+    return ContentService.createTextOutput(JSON.stringify(delColRes))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -11403,6 +11779,41 @@ function doPost(e) {
       }
       var financeRes = setupFinanceDbAndMigrate(pFinance);
       return ContentService.createTextOutput(JSON.stringify(financeRes))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 재무 전용 DB 3개 시트 데이터 조회
+    if (action === "getFinanceDbData") {
+      var pFinanceRead = p;
+      if (typeof p.data === "string") {
+        try { pFinanceRead = Object.assign({}, p, JSON.parse(p.data)); } catch (eFr) {}
+      }
+      var fDbRes = getFinanceDbData(pFinanceRead);
+      return ContentService.createTextOutput(JSON.stringify(fDbRes))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 수금현황 행 저장/수정
+    if (action === "saveCollectionRow") {
+      var pSaveCol = p;
+      if (typeof p.row === "string") {
+        try { pSaveCol = Object.assign({}, p, { row: JSON.parse(p.row) }); } catch (eSc) {}
+      } else if (typeof p.data === "string") {
+        try { pSaveCol = Object.assign({}, p, { row: JSON.parse(p.data) }); } catch (eSc) {}
+      }
+      var saveColRes = saveCollectionRow(pSaveCol);
+      return ContentService.createTextOutput(JSON.stringify(saveColRes))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 수금현황 행 삭제
+    if (action === "deleteCollectionRow") {
+      var pDelCol = p;
+      if (typeof p.data === "string") {
+        try { pDelCol = Object.assign({}, p, JSON.parse(p.data)); } catch (eDc) {}
+      }
+      var delColRes = deleteCollectionRow(pDelCol);
+      return ContentService.createTextOutput(JSON.stringify(delColRes))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
