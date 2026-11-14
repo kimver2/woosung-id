@@ -2403,6 +2403,49 @@ function sortSiteScheduleTasksByDate(ss, sheet, silent, sortBlocks) {
   var backgrounds = rangeAll.getBackgrounds();
 
   // 1단계: 모든 행을 순회하며 현장명별로 행들을 100% 하나로 묶기 (동일 현장명 완전 통합)
+  var isCompletedSheet = (typeof isCompletedSitesSheet === "function" && isCompletedSitesSheet(sheet));
+
+  var cleanBaseSiteName = function(name) {
+    if (!name) return "";
+    return String(name)
+      .replace(/^\[(단건|AS|as|신규|현장)\]\s*/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+  var normSiteKey = function(name) {
+    return cleanBaseSiteName(name).replace(/\s+/g, "").toLowerCase();
+  };
+
+  // 완료현장 시트인 경우: 동일 원현장명이 존재하는 일반 현장들을 사전 식별하여 AS 행을 원현장명으로 완전 통합
+  var compGeneralSitesMap = {};
+  var compGeneralSiteNameMap = {};
+  if (isCompletedSheet) {
+    var compScanLast = "";
+    for (var sc = 0; sc < values.length; sc++) {
+      var scRaw = String(values[sc][0] || "").trim();
+      if (scRaw) compScanLast = scRaw;
+      var scEff = scRaw || compScanLast;
+      var scTask = String(values[sc][2] || "").trim();
+      var scMemo = String(values[sc][5] || "").trim();
+      var scDate = values[sc][1];
+      if (!scEff || (!scTask && !scDate)) continue;
+
+      var scBase = cleanBaseSiteName(scEff);
+      var scKey = normSiteKey(scEff);
+      if (!scKey) continue;
+
+      var isSingleTag = /^\[단건\]/i.test(scEff) || /^\[단건\]/i.test(scMemo) || /^\[단건\]/i.test(scTask);
+      var isAsTag = /^\[AS\]/i.test(scEff) || /^\[AS\]/i.test(scMemo) || scTask === "AS" || /^\[AS\]/i.test(scTask);
+
+      if (!isSingleTag && !isAsTag && scTask) {
+        compGeneralSitesMap[scKey] = true;
+        if (!compGeneralSiteNameMap[scKey]) {
+          compGeneralSiteNameMap[scKey] = scBase;
+        }
+      }
+    }
+  }
+
   var siteOrder = [];
   var siteGroups = {};
   var emptyRows = [];
@@ -2428,6 +2471,35 @@ function sortSiteScheduleTasksByDate(ss, sheet, silent, sortBlocks) {
       continue;
     }
 
+    var groupKey = effectiveSite;
+    var groupDisplayName = effectiveSite;
+
+    if (isCompletedSheet) {
+      var effBase = cleanBaseSiteName(effectiveSite);
+      var effKey = normSiteKey(effectiveSite);
+      if (effKey && compGeneralSitesMap[effKey]) {
+        // [규칙 1]: 완료현장에 동일 원현장명이 존재하는 경우:
+        // AS 행이더라도 A열에 [AS] 접두사를 붙이지 않고 원현장명으로 완전 통합
+        groupDisplayName = compGeneralSiteNameMap[effKey] || effBase;
+        groupKey = "COMPLETED_GEN::" + effKey;
+      } else if (effKey) {
+        var rowTask = String(rowVals[2] || "").trim();
+        var rowMemo = String(rowVals[5] || "").trim();
+        var isSingleRow = /^\[단건\]/i.test(effectiveSite) || /^\[단건\]/i.test(rowMemo) || /^\[단건\]/i.test(rowTask);
+        var isAsRow = /^\[AS\]/i.test(effectiveSite) || /^\[AS\]/i.test(rowMemo) || rowTask === "AS" || /^\[AS\]/i.test(rowTask);
+        if (isSingleRow) {
+          groupDisplayName = /^\[단건\]\s*/i.test(effectiveSite) ? effectiveSite : ("[단건] " + effBase);
+          groupKey = "COMPLETED_SINGLE::" + effKey;
+        } else if (isAsRow) {
+          groupDisplayName = /^\[AS\]\s*/i.test(effectiveSite) ? effectiveSite : ("[AS] " + effBase);
+          groupKey = "COMPLETED_AS::" + effKey;
+        } else {
+          groupDisplayName = effectiveSite;
+          groupKey = "COMPLETED_OTHER::" + effKey;
+        }
+      }
+    }
+
     // 날짜 파싱하여 밀리초 계산
     var dateVal = rowVals[1];
     var dateMs = 0;
@@ -2442,32 +2514,33 @@ function sortSiteScheduleTasksByDate(ss, sheet, silent, sortBlocks) {
       }
     }
 
-    if (!siteGroups[effectiveSite]) {
-      siteGroups[effectiveSite] = {
-        siteName: effectiveSite,
+    if (!siteGroups[groupKey]) {
+      siteGroups[groupKey] = {
+        siteName: groupDisplayName,
+        groupKey: groupKey,
         items: [],
         explicitCount: 0,
         firstRowIdx: i,
         defaultManager1: "",
         defaultManager2: ""
       };
-      siteOrder.push(effectiveSite);
+      siteOrder.push(groupKey);
     }
 
     var mgr1Val = String(rowVals[6] || "").trim();
     var mgr2Val = String(rowVals[7] || "").trim();
-    if (mgr1Val && !siteGroups[effectiveSite].defaultManager1) {
-      siteGroups[effectiveSite].defaultManager1 = mgr1Val;
+    if (mgr1Val && !siteGroups[groupKey].defaultManager1) {
+      siteGroups[groupKey].defaultManager1 = mgr1Val;
     }
-    if (mgr2Val && !siteGroups[effectiveSite].defaultManager2) {
-      siteGroups[effectiveSite].defaultManager2 = mgr2Val;
+    if (mgr2Val && !siteGroups[groupKey].defaultManager2) {
+      siteGroups[groupKey].defaultManager2 = mgr2Val;
     }
 
     if (rawSite) {
-      siteGroups[effectiveSite].explicitCount++;
+      siteGroups[groupKey].explicitCount++;
     }
 
-    siteGroups[effectiveSite].items.push({
+    siteGroups[groupKey].items.push({
       origIdx: i,
       vals: rowVals,
       bg: backgrounds[i],
@@ -2539,7 +2612,7 @@ function sortSiteScheduleTasksByDate(ss, sheet, silent, sortBlocks) {
   // - 날짜가 같거나 둘 다 없는 경우: 원래 등장 순서(firstRowIdx) 보존
   // [정렬 정책 준수]: sortBlocks === false일 때는 현장 블록들 간의 순서를 바꾸지 않고 원래 등장 순서(firstRowIdx) 보존
   // (웹에서 신규 등록한 현장이 다른 현장 사이로 끼어들지 않고 시트 최하단에 보존됨. 전체 현장 블록 정렬은 매일 새벽 4시 트리거에서만 수행)
-  var isCompletedSheet = (typeof isCompletedSitesSheet === "function" && isCompletedSitesSheet(sheet));
+  if (typeof isCompletedSheet === "undefined") isCompletedSheet = (typeof isCompletedSitesSheet === "function" && isCompletedSitesSheet(sheet));
   blocks.sort(function(blkA, blkB) {
     if (sortBlocks === false) {
       return blkA.firstRowIdx - blkB.firstRowIdx;
@@ -4248,6 +4321,9 @@ function moveAsTaskToCompletedSheet(ss, asSheet, asRow, siteName, taskName) {
     var finalSiteName = "";
     if (matchingSiteLastRow >= 2 && matchingBlockSiteName) {
       finalSiteName = matchingBlockSiteName;
+      if (/^\[(AS|as)\]\s*/i.test(finalSiteName)) {
+        finalSiteName = cleanBaseSite;
+      }
     } else {
       finalSiteName = /^\[AS\]\s*/i.test(actualSite) ? actualSite : ("[AS] " + cleanBaseSite);
     }
@@ -4302,8 +4378,9 @@ function moveAsTaskToCompletedSheet(ss, asSheet, asRow, siteName, taskName) {
       SpreadsheetApp.flush();
     }
 
-    // 5. 완료현장 시트 아코디언/그룹화 자동 정돈
+    // 5. 완료현장 시트 날짜 오름차순 정렬 및 아코디언/그룹화 자동 정돈
     try {
+      sortSiteScheduleTasksByDate(ss, compSheet, true, false);
       groupCompletedSitesBySite(compSheet);
     } catch(eGrp) {}
 
@@ -4510,6 +4587,9 @@ function moveCompletedCategorySiteToCompletedSheet(ss, srcSheet, siteName) {
       // 현장명 앞에 [AS] 를 붙여서 저장 (이미 [AS]로 시작하면 중복 붙이지 않음)
       if (matchingSiteLastRow >= 2 && matchingBlockSiteName) {
         finalDestSiteName = matchingBlockSiteName;
+        if (/^\[(AS|as)\]\s*/i.test(finalDestSiteName)) {
+          finalDestSiteName = cleanBaseSite;
+        }
       } else {
         finalDestSiteName = /^\[AS\]\s*/i.test(siteName) ? siteName : ("[AS] " + cleanBaseSite);
       }
@@ -4593,8 +4673,9 @@ function moveCompletedCategorySiteToCompletedSheet(ss, srcSheet, siteName) {
 
       SpreadsheetApp.flush();
 
-      // 완료현장 그룹화 자동 갱신
+      // 완료현장 그룹화 및 날짜 오름차순 정렬 자동 갱신
       try {
+        sortSiteScheduleTasksByDate(ss, compSheet, true, false);
         groupCompletedSitesBySite(compSheet);
       } catch(eGrp) {}
 
@@ -4661,9 +4742,10 @@ function normalizeExistingCompletedSheetPrefixes(ss) {
       };
     }
 
-    var lastCol = Math.max((typeof compSheet.getLastColumn === "function" ? compSheet.getLastColumn() : 11), 11);
-    var range = compSheet.getRange(2, 1, lastRow - 1, lastCol);
+    var numCols = Math.max((typeof compSheet.getLastColumn === "function" ? compSheet.getLastColumn() : 11), 11);
+    var range = compSheet.getRange(2, 1, lastRow - 1, numCols);
     var values = range.getValues();
+    var backgrounds = range.getBackgrounds();
 
     var cleanBase = function(name) {
       if (!name) return "";
@@ -4676,240 +4758,261 @@ function normalizeExistingCompletedSheetPrefixes(ss) {
       return cleanBase(name).replace(/\s+/g, "").toLowerCase();
     };
 
-    // 1단계: 블록 파싱
-    var blocks = [];
-    var curBlk = null;
+    // 1단계: 완료현장 시트 전체 행 분석하여 일반 현장(General Site) 식별
+    // - 동일 원현장명을 공유하는 일반 공정(철거, 마루, 전기 등)이 1개라도 존재하는지 확인
+    var generalSitesMap = {};
+    var generalSiteNameMap = {};
+    var lastKnownSite = "";
 
     for (var i = 0; i < values.length; i++) {
-      var rowNum = i + 2;
-      var rawA = String(values[i][0] || "").trim();
-      var rawTask = String(values[i][2] || "").trim();
-      var rawDate = values[i][1];
-      var rawMemo = String(values[i][5] || "").trim();
-      var hasData = Boolean(rawA || rawTask || String(rawDate || "").trim() || rawMemo);
+      var rowA = String(values[i][0] || "").trim();
+      if (rowA) lastKnownSite = rowA;
+      var effSite = rowA || lastKnownSite;
+      var taskName = String(values[i][2] || "").trim();
+      var dateVal = values[i][1];
+      var memoStr = String(values[i][5] || "").trim();
+
+      if (!effSite || (!taskName && !dateVal)) continue;
+
+      var bName = cleanBase(effSite);
+      var bKey = normKey(effSite);
+      if (!bKey) continue;
+
+      var isSingleTag = /^\[단건\]/i.test(effSite) || /^\[단건\]/i.test(memoStr) || /^\[단건\]/i.test(taskName);
+      var isAsTag = /^\[AS\]/i.test(effSite) || /^\[AS\]/i.test(memoStr) || taskName === "AS" || /^\[AS\]/i.test(taskName);
+
+      // 본공사 일반 공정(AS/단건 태그가 아닌 공정)이 1개라도 있으면 일반 현장으로 분류
+      if (!isSingleTag && !isAsTag && taskName) {
+        generalSitesMap[bKey] = true;
+        if (!generalSiteNameMap[bKey]) {
+          generalSiteNameMap[bKey] = bName;
+        }
+      }
+    }
+
+    // 2단계: 각 행의 소속 현장 및 정규화된 현장명 결정 및 현장 그룹핑
+    var siteOrder = [];
+    var siteGroups = {};
+    var emptyRows = [];
+    lastKnownSite = "";
+
+    for (var j = 0; j < values.length; j++) {
+      var rVals = values[j];
+      var rawA = String(rVals[0] || "").trim();
+      var taskStr = String(rVals[2] || "").trim();
+      var dateV = rVals[1];
+      var memoS = String(rVals[5] || "").trim();
+      var hasData = Boolean(rawA || taskStr || String(dateV || "").trim() || memoS);
 
       if (!hasData) {
-        if (curBlk) {
-          blocks.push(curBlk);
-          curBlk = null;
-        }
+        emptyRows.push({ vals: rVals, bg: backgrounds[j] });
+        lastKnownSite = "";
         continue;
       }
 
-      if (rawA) {
-        if (curBlk) {
-          blocks.push(curBlk);
-        }
-        curBlk = {
-          siteName: rawA,
-          startRow: rowNum,
-          endRow: rowNum,
-          rows: [{ rowNum: rowNum, vals: values[i] }]
-        };
-      } else if (curBlk) {
-        curBlk.endRow = rowNum;
-        curBlk.rows.push({ rowNum: rowNum, vals: values[i] });
-      } else {
-        curBlk = {
-          siteName: "",
-          startRow: rowNum,
-          endRow: rowNum,
-          rows: [{ rowNum: rowNum, vals: values[i] }]
-        };
+      var effectiveSite = rawA || lastKnownSite;
+      if (rawA) lastKnownSite = rawA;
+
+      if (!effectiveSite) {
+        emptyRows.push({ vals: rVals, bg: backgrounds[j] });
+        continue;
       }
-    }
-    if (curBlk) {
-      blocks.push(curBlk);
-    }
 
-    // 각 블록의 특성 파악
-    for (var b = 0; b < blocks.length; b++) {
-      var blk = blocks[b];
-      blk.base = cleanBase(blk.siteName);
-      blk.key = normKey(blk.siteName);
+      var bBase = cleanBase(effectiveSite);
+      var bKey = normKey(effectiveSite);
+      var groupKey = "";
+      var canonicalName = "";
 
-      var hasSingleMemo = false;
-      var hasAsTaskOrMemo = false;
-      var hasGeneralTask = false;
-
-      for (var r = 0; r < blk.rows.length; r++) {
-        var rVals = blk.rows[r].vals;
-        var tTask = String(rVals[2] || "").trim();
-        var tMemo = String(rVals[5] || "").trim();
-
-        if (/^\[단건\]/i.test(tMemo) || /^\[단건\]/i.test(blk.siteName)) {
-          hasSingleMemo = true;
-        }
-        if (/^\[AS\]/i.test(tMemo) || tTask === "AS" || /^\[AS\]/i.test(blk.siteName)) {
-          hasAsTaskOrMemo = true;
-        }
-        if (tTask && tTask !== "AS" && !/^\[단건\]/i.test(tMemo) && !/^\[AS\]/i.test(tMemo)) {
-          hasGeneralTask = true;
+      // 날짜 파싱 (밀리초 계산)
+      var dateMs = 0;
+      if (dateV) {
+        try {
+          var parsedDate = parseScheduleDateRange(dateV);
+          if (parsedDate && parsedDate.startDate) {
+            dateMs = (parsedDate.startTime) ? parsedDate.startTime.getTime() : parsedDate.startDate.getTime();
+          }
+        } catch (eD) {
+          dateMs = 0;
         }
       }
 
-      blk.isSingle = hasSingleMemo;
-      blk.isAsOnly = (hasAsTaskOrMemo && !hasGeneralTask && !hasSingleMemo);
-      blk.isGeneral = hasGeneralTask;
+      if (bKey && generalSitesMap[bKey]) {
+        // [규칙 1]: 완료현장에 동일 원현장명이 존재하는 경우:
+        // 기존 현장에 포함된 AS건에는 A열(현장명)에 [AS] 접두사를 붙이지 않고 원현장명 그대로 저장/정리!
+        canonicalName = generalSiteNameMap[bKey] || bBase;
+        groupKey = "COMPLETED_GEN::" + bKey;
+
+        // 기존에 [AS] 접두사가 붙어있던 행이면 원현장명 복원 카운트
+        if (/^\[AS\]\s*/i.test(effectiveSite) || /^\[AS\]\s*/i.test(rawA)) {
+          asMergedCount++;
+          details.push("기존 현장 AS 접두사 제거 및 정상화: [" + (rawA || effectiveSite) + "] -> [" + canonicalName + "] (" + (dateV ? formatScheduleDateDisplay(dateV) : "") + " " + taskStr + ")");
+        }
+      } else if (bKey) {
+        // [규칙 2]: 동일 원현장명이 없는 단독 현장
+        var isSingleRow = /^\[단건\]/i.test(effectiveSite) || /^\[단건\]/i.test(memoS) || /^\[단건\]/i.test(taskStr);
+        var isAsRow = /^\[AS\]/i.test(effectiveSite) || /^\[AS\]/i.test(memoS) || taskStr === "AS" || /^\[AS\]/i.test(taskStr);
+
+        if (isSingleRow) {
+          canonicalName = /^\[단건\]\s*/i.test(effectiveSite) ? effectiveSite : ("[단건] " + bBase);
+          groupKey = "COMPLETED_SINGLE::" + bKey;
+          if (!/^\[단건\]\s*/i.test(effectiveSite)) {
+            singleCount++;
+            details.push("단건 접두사 반영: [" + effectiveSite + "] -> [" + canonicalName + "]");
+          }
+        } else if (isAsRow) {
+          canonicalName = /^\[AS\]\s*/i.test(effectiveSite) ? effectiveSite : ("[AS] " + bBase);
+          groupKey = "COMPLETED_AS::" + bKey;
+          if (!/^\[AS\]\s*/i.test(effectiveSite)) {
+            asPrefixedCount++;
+            details.push("단독 AS 접두사 반영: [" + effectiveSite + "] -> [" + canonicalName + "]");
+          }
+        } else {
+          canonicalName = effectiveSite;
+          groupKey = "COMPLETED_OTHER::" + bKey;
+        }
+      }
+
+      if (!siteGroups[groupKey]) {
+        siteGroups[groupKey] = {
+          siteName: canonicalName,
+          groupKey: groupKey,
+          items: [],
+          firstRowIdx: j,
+          defaultManager1: "",
+          defaultManager2: ""
+        };
+        siteOrder.push(groupKey);
+      }
+
+      var mgr1Val = String(rVals[6] || "").trim();
+      var mgr2Val = String(rVals[7] || "").trim();
+      if (mgr1Val && !siteGroups[groupKey].defaultManager1) {
+        siteGroups[groupKey].defaultManager1 = mgr1Val;
+      }
+      if (mgr2Val && !siteGroups[groupKey].defaultManager2) {
+        siteGroups[groupKey].defaultManager2 = mgr2Val;
+      }
+
+      siteGroups[groupKey].items.push({
+        origIdx: j,
+        vals: rVals,
+        bg: backgrounds[j],
+        dateMs: dateMs,
+        taskName: taskStr,
+        rawSite: rawA
+      });
     }
 
-    // 2단계: AS 단독 블록 중, 동일 원현장명의 일반 블록이 별도로 존재하는 경우 병합(이동)
-    var rowsToMerge = [];
-    for (var ab = 0; ab < blocks.length; ab++) {
-      var asBlk = blocks[ab];
-      if (!asBlk.isAsOnly || !asBlk.key) continue;
+    // 3단계: 각 현장 블록 내부 공정들을 날짜 오름차순(시작일 빠른 순)으로 정렬
+    // [규칙 3]: 동일 현장 블록(그룹) 내에서는 날짜(B열) 오름차순으로 정렬되어,
+    // 가장 늦은 날짜의 AS 행은 해당 현장 그룹의 제일 아래에 위치
+    var blocks = [];
+    for (var s = 0; s < siteOrder.length; s++) {
+      var sKey = siteOrder[s];
+      var grp = siteGroups[sKey];
+      if (!grp || grp.items.length === 0) continue;
 
-      var matchGen = null;
-      for (var gb = 0; gb < blocks.length; gb++) {
-        if (gb === ab) continue;
-        var gBlk = blocks[gb];
-        if (gBlk.key === asBlk.key && (gBlk.isGeneral || !gBlk.isAsOnly)) {
-          matchGen = gBlk;
+      if (grp.items.length > 1) {
+        grp.items.sort(function(itemA, itemB) {
+          var aMs = itemA.dateMs || 0;
+          var bMs = itemB.dateMs || 0;
+          if (aMs && bMs) {
+            if (aMs !== bMs) return aMs - bMs; // 오름차순 (빠른 날짜 우선, 늦은 날짜는 아래로)
+          } else if (aMs) {
+            return -1;
+          } else if (bMs) {
+            return 1;
+          }
+          return itemA.origIdx - itemB.origIdx;
+        });
+      }
+
+      // 현장명 표기: A열 전체에 canonicalName 적용 ([AS] 접두사 배제 보장)
+      for (var r = 0; r < grp.items.length; r++) {
+        grp.items[r].vals[0] = grp.siteName;
+      }
+
+      // 담당자 자동 상속
+      if (grp.defaultManager1) {
+        for (var mr = 0; mr < grp.items.length; mr++) {
+          if (!String(grp.items[mr].vals[6] || "").trim()) {
+            grp.items[mr].vals[6] = grp.defaultManager1;
+            if (grp.defaultManager2 && !String(grp.items[mr].vals[7] || "").trim()) {
+              grp.items[mr].vals[7] = grp.defaultManager2;
+            }
+          }
+        }
+      }
+
+      // 첫 번째 유효 일정 날짜(firstDateMs) 산출
+      var firstMs = 0;
+      for (var fi = 0; fi < grp.items.length; fi++) {
+        if (grp.items[fi].dateMs > 0) {
+          firstMs = grp.items[fi].dateMs;
           break;
         }
       }
+      grp.firstDateMs = firstMs;
+      blocks.push(grp);
+    }
 
-      if (matchGen) {
-        rowsToMerge.push({ asBlock: asBlk, targetBlock: matchGen });
+    // 4단계: 현장 블록들 간 정렬 (완료현장 시트: 최근 완료된 현장 우선, 내림차순 DESC)
+    blocks.sort(function(blkA, blkB) {
+      var aDate = blkA.firstDateMs || 0;
+      var bDate = blkB.firstDateMs || 0;
+      if (aDate && bDate) {
+        if (aDate !== bDate) return bDate - aDate;
+      } else if (aDate) {
+        return -1;
+      } else if (bDate) {
+        return 1;
+      }
+      return blkA.firstRowIdx - blkB.firstRowIdx;
+    });
+
+    // 5단계: newValues 및 newBackgrounds 구성 후 Diff 검사 및 일괄 쓰기
+    var newValues = [];
+    var newBackgrounds = [];
+    for (var sb = 0; sb < blocks.length; sb++) {
+      var bItem = blocks[sb];
+      for (var si = 0; si < bItem.items.length; si++) {
+        newValues.push(bItem.items[si].vals);
+        newBackgrounds.push(bItem.items[si].bg);
+      }
+    }
+    for (var er = 0; er < emptyRows.length; er++) {
+      newValues.push(emptyRows[er].vals);
+      newBackgrounds.push(emptyRows[er].bg);
+    }
+
+    var anyChanged = false;
+    if (newValues.length !== values.length) {
+      anyChanged = true;
+    } else {
+      for (var ch = 0; ch < values.length; ch++) {
+        for (var col = 0; col < numCols; col++) {
+          if (values[ch][col] !== newValues[ch][col]) {
+            anyChanged = true;
+            break;
+          }
+        }
+        if (anyChanged) break;
       }
     }
 
-    if (rowsToMerge.length > 0) {
-      rowsToMerge.sort(function(a, b) {
-        return b.asBlock.startRow - a.asBlock.startRow;
-      });
-
-      for (var mi = 0; mi < rowsToMerge.length; mi++) {
-        var mItem = rowsToMerge[mi];
-        var srcStart = mItem.asBlock.startRow;
-        var numRows = mItem.asBlock.rows.length;
-        var destTargetRow = mItem.targetBlock.endRow;
-
-        var srcVals = compSheet.getRange(srcStart, 1, numRows, lastCol).getValues();
-
-        compSheet.insertRowsAfter(destTargetRow, numRows);
-        for (var sr = 0; sr < srcVals.length; sr++) {
-          srcVals[sr][0] = mItem.targetBlock.siteName;
-        }
-        compSheet.getRange(destTargetRow + 1, 1, numRows, lastCol).setValues(srcVals);
-
-        var actualSrcStart = (srcStart > destTargetRow) ? (srcStart + numRows) : srcStart;
-        compSheet.deleteRows(actualSrcStart, numRows);
-
-        asMergedCount += numRows;
-        details.push("AS 병합: [" + mItem.asBlock.siteName + "] (" + numRows + "건) -> [" + mItem.targetBlock.siteName + "] 블록 편입");
-      }
-
-      // 병합 후 데이터 재로딩
-      lastRow = compSheet.getLastRow();
-      range = compSheet.getRange(2, 1, lastRow - 1, lastCol);
-      values = range.getValues();
-
-      blocks = [];
-      curBlk = null;
-      for (var ri = 0; ri < values.length; ri++) {
-        var rNum = ri + 2;
-        var rA = String(values[ri][0] || "").trim();
-        var rTask2 = String(values[ri][2] || "").trim();
-        var rDate2 = values[ri][1];
-        var rMemo2 = String(values[ri][5] || "").trim();
-        var hasD2 = Boolean(rA || rTask2 || String(rDate2 || "").trim() || rMemo2);
-
-        if (!hasD2) {
-          if (curBlk) { blocks.push(curBlk); curBlk = null; }
-          continue;
-        }
-        if (rA) {
-          if (curBlk) blocks.push(curBlk);
-          curBlk = { siteName: rA, startRow: rNum, endRow: rNum, rows: [{ rowNum: rNum, vals: values[ri] }] };
-        } else if (curBlk) {
-          curBlk.endRow = rNum;
-          curBlk.rows.push({ rowNum: rNum, vals: values[ri] });
-        } else {
-          curBlk = { siteName: "", startRow: rNum, endRow: rNum, rows: [{ rowNum: rNum, vals: values[ri] }] };
-        }
-      }
-      if (curBlk) blocks.push(curBlk);
-    }
-
-    // 3단계: 단건 및 단독 AS 현장명 접두사 정규화 (A열 업데이트)
-    var updates = [];
-
-    for (var bi = 0; bi < blocks.length; bi++) {
-      var bItem = blocks[bi];
-      var bBase = cleanBase(bItem.siteName);
-      if (!bBase) continue;
-
-      var isSingleBlock = false;
-      var isAsBlock = false;
-      var isGeneralBlock = false;
-
-      for (var bj = 0; bj < bItem.rows.length; bj++) {
-        var rowVals = bItem.rows[bj].vals;
-        var memoStr = String(rowVals[5] || "").trim();
-        var taskStr = String(rowVals[2] || "").trim();
-
-        if (/^\[단건\]/i.test(memoStr)) {
-          isSingleBlock = true;
-        }
-        if (/^\[AS\]/i.test(memoStr) || taskStr === "AS") {
-          isAsBlock = true;
-        }
-        if (taskStr && taskStr !== "AS" && !/^\[단건\]/i.test(memoStr) && !/^\[AS\]/i.test(memoStr)) {
-          isGeneralBlock = true;
-        }
-      }
-
-      if (isSingleBlock) {
-        if (!/^\[단건\]\s*/i.test(bItem.siteName)) {
-          var newSingleName = "[단건] " + bBase;
-          updates.push({
-            row: bItem.startRow,
-            oldName: bItem.siteName,
-            newName: newSingleName,
-            type: "단건",
-            allRows: bItem.rows
-          });
-        }
-      } else if (isAsBlock && !isGeneralBlock) {
-        if (!/^\[AS\]\s*/i.test(bItem.siteName)) {
-          var newAsName = "[AS] " + bBase;
-          updates.push({
-            row: bItem.startRow,
-            oldName: bItem.siteName,
-            newName: newAsName,
-            type: "AS",
-            allRows: bItem.rows
-          });
-        }
-      }
-    }
-
-    // A열 셀 업데이트
-    for (var u = 0; u < updates.length; u++) {
-      var up = updates[u];
-      compSheet.getRange(up.row, 1).setValue(up.newName);
-
-      for (var vr = 1; vr < up.allRows.length; vr++) {
-        var subRowValA = String(up.allRows[vr].vals[0] || "").trim();
-        if (subRowValA && subRowValA === up.oldName) {
-          compSheet.getRange(up.allRows[vr].rowNum, 1).setValue(up.newName);
-        }
-      }
-
-      if (up.type === "단건") {
-        singleCount++;
-        details.push("단건 접두사 반영: [" + up.oldName + "] -> [" + up.newName + "] (row " + up.row + ")");
-      } else if (up.type === "AS") {
-        asPrefixedCount++;
-        details.push("AS 접두사 반영: [" + up.oldName + "] -> [" + up.newName + "] (row " + up.row + ")");
-      }
-    }
-
-    if (updates.length > 0 || asMergedCount > 0) {
+    if (anyChanged) {
+      range.setValues(newValues);
+      range.setBackgrounds(newBackgrounds);
       SpreadsheetApp.flush();
-      invalidateDashboardServerCache();
     }
+
+    // 6단계: 동일 현장 아코디언 행 그룹화 정상화 (완료현장은 기본 접힘 상태)
+    try {
+      groupSheetRowsBySite(compSheet, true);
+    } catch(eGrp) {}
+
+    SpreadsheetApp.flush();
+    invalidateDashboardServerCache();
 
     var totalProcessed = singleCount + asPrefixedCount + asMergedCount;
     return {
@@ -4919,9 +5022,12 @@ function normalizeExistingCompletedSheetPrefixes(ss) {
       asMergedCount: asMergedCount,
       totalProcessed: totalProcessed,
       details: details,
-      message: "완료현장 시트 정규화 완료 (단건 접두사: " + singleCount + "건, AS 접두사: " + asPrefixedCount + "건, AS 병합: " + asMergedCount + "건)"
+      message: "완료현장 시트 정규화 및 날짜 정렬 완료 (단건 접두사: " + singleCount + "건, AS 접두사: " + asPrefixedCount + "건, AS 병합 및 접두사 정리: " + asMergedCount + "건)"
     };
   } catch (err) {
+    if (typeof Logger !== "undefined" && typeof Logger.log === "function") {
+      Logger.log("normalizeExistingCompletedSheetPrefixes 오류: " + err.toString());
+    }
     return {
       success: false,
       error: "완료현장 시트 정규화 중 오류: " + (err.message || String(err)),
@@ -4933,6 +5039,7 @@ function normalizeExistingCompletedSheetPrefixes(ss) {
     }
   }
 }
+
 
 /**
  * [상단 메뉴용] 완료현장 시트 단건/AS 기존 접두사 자동 정리 팝업 트리거
@@ -6923,8 +7030,9 @@ function archiveCompletedSiteBlocks(isManual) {
 
       SpreadsheetApp.flush();
 
-      // 3-3. 완료현장 시트 동일 현장별 자동 접기(그룹화) 적용
+      // 3-3. 완료현장 시트 동일 현장별 자동 접기(그룹화) 및 날짜 정렬 적용
       try {
+        sortSiteScheduleTasksByDate(ss, destSheet, true, false);
         groupCompletedSitesBySite(destSheet);
       } catch(eGrp) {}
 
