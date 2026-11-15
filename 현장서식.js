@@ -11480,36 +11480,6 @@ function ensureFixedMasterSheet_(ss) {
     .setHorizontalAlignment("center");
   sheet.setFrozenRows(1);
 
-  // 기본 고정비 7종 초기 금액(0원인 경우) 자동 보정
-  var defaultAmounts = {
-    "조진상 고문": { baseAmount: 2500000, payDay: "매월 25일" },
-    "조형진 대리": { baseAmount: 2538700, payDay: "매월 25일" },
-    "인경호 소장": { baseAmount: 4300000, payDay: "매월 25일" },
-    "한송이 주임": { baseAmount: 2100000, payDay: "매월 25일" },
-    "송지은 과장": { baseAmount: 2078550, payDay: "매월 25일" },
-    "전예린 대리": { baseAmount: 2654997, payDay: "매월 25일" },
-    "상가(지하층)": { baseAmount: 450000, payDay: "매월 말일" }
-  };
-
-  var lastRow = sheet.getLastRow();
-  if (lastRow >= 2) {
-    var rowsData = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
-    var needUpdate = false;
-    for (var rIdx = 0; rIdx < rowsData.length; rIdx++) {
-      var vend = String(rowsData[rIdx][4] || "").trim();
-      var curAmt = parseAmountStringToNumber(rowsData[rIdx][6]);
-      if (defaultAmounts[vend] && curAmt === 0) {
-        rowsData[rIdx][6] = defaultAmounts[vend].baseAmount;
-        if (!rowsData[rIdx][7]) rowsData[rIdx][7] = defaultAmounts[vend].payDay;
-        needUpdate = true;
-      }
-    }
-    if (needUpdate) {
-      sheet.getRange(2, 1, rowsData.length, 9).setValues(rowsData);
-      sheet.getRange(2, 7, rowsData.length, 1).setNumberFormat("#,##0");
-    }
-  }
-
   return sheet;
 }
 

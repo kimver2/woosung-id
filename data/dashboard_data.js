@@ -415,7 +415,7 @@
       if (typeof fetch !== "function" || typeof location === "undefined" || !String(location.protocol || "").startsWith("http")) {
         return Promise.resolve({ success: true, offline: true, collection: [], expense: [], fixedMaster: [] });
       }
-      return this.callGasApi("getFinanceDbData", { authUser: user });
+      return this.callGasApi("getFinanceDbData", { authUser: user, _t: Date.now() });
     },
 
     saveCollectionRow: function (row, authUser) {
