@@ -1,10 +1,10 @@
 # 🚀 우성아이디 현장 관리 시스템 인수인계 및 프로젝트 현황 보고서 (HANDOVER.md)
 
-> **최종 갱신 일시**: 2026-10-27 (KST)  
-> **현재 Git 브랜치**: `main` (GitHub Remote: `origin/main` 동기화)  
-> **Apps Script 배포 상태**: `Version 176` (Deployment ID: `AKfycbxRcwYEilQ8wxRyMHxmPXUmLJjZ9qL2oclioJ7iQIYXdENmgjgWemu9D3T2m-FXHVvg`)  
-> **QA 검증 현황**: 총 1,125개 항목 전수 통과 (1125 / 1125 PASS, 0 FAIL)  
-> **핵심 파일**: [`현장서식.js`](file:///Users/kimver2/orca/projects/kimver2/현장서식.js)  
+> **최종 갱신 일시**: 2026-11-16 (KST)  
+> **현재 Git 브랜치**: `main` (GitHub Remote: `origin/main` 및 `origin/feature/finance` 100% 동기화)  
+> **Apps Script 배포 상태**: `Version @48` (고정 Deployment ID: `AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg`)  
+> **QA 검증 현황**: 총 204개 핵심 통합 검증 항목 전수 통과 (`204 / 204 PASS, 0 FAIL`)  
+> **핵심 파일**: [`현장서식.js`](file:///Users/kimver2/orca/projects/kimver2/현장서식.js), [`index.html`](file:///Users/kimver2/orca/projects/kimver2/index.html) (`v2.html` 메인 승격), [`data/dashboard_data.js`](file:///Users/kimver2/orca/projects/kimver2/data/dashboard_data.js)  
 
 ---
 
@@ -94,6 +94,25 @@ Google Sheets를 백엔드 DB 및 실시간 공유 문서로 활용하며, PC/�
 - **드라이브 미등록 현장 파일 업로드 클릭 시 안내 토스트 & 등록창 연동 (v174)**: 구글 드라이브 폴더 링크가 등록되지 않은 현장에서 `[📤 파일 업로드]` 버튼을 클릭했을 때, 드라이브 링크 버튼과 동일하게 `💡 [현장명] 등록된 드라이브 링크가 없습니다.` 안내 토스트를 띄우고 즉시 `현장 정보 관리` 팝업을 열어 드라이브 링크 입력 필드로 포커스를 자동 이동하도록 동기화.
 - **파일 업로드 팝업 내 [📷 사진 촬영] 및 [📁 파일 선택] 2대 명시적 버튼 탑재 (v175)**: 모바일/iframe 보안 제약으로 발생하던 파일 선택 무반응 문제를 해결하기 위해, 네이티브 `<label>` 기반의 **`[📷 사진 촬영]` (카메라 `capture="environment"` 즉시 실행)** 및 **`[📁 파일 선택]` (갤러리/도면/문서 복수 선택)** 2대 대형 버튼을 신설하고 인터랙션 CSS 및 연속 촬영 초기화 로직 구현.
 - **안내문/특이사항 안내/안내문 확인 버튼 텍스트 잘림 방지 전면 고도화 (v176)**: 반장님 작업 안내문 모달 내 텍스트 높이 자동 확장 엔진(`autoResizePartnerGuideTextarea`)을 도입하여 하단 문구가 잘리지 않고 한눈에 온전히 보이도록 개선하고, 모바일 카드의 `[📋 안내문 확인]` 버튼 `white-space: nowrap !important;` 및 특이사항 메모의 `white-space: pre-wrap;`를 적용하여 모든 안내 영역의 텍스트 잘림을 완벽 차단.
+
+### 4) v2 통합 대시보드 메인 승격 및 재무·원장(`우성아이디_재무DB`) 구축 완료 (2026-11-16, `feature/finance` ➔ `main` 인계)
+- **v2 대시보드 메인(`index.html`) 정식 승격**:
+  - 기존 GAS `iframe` 래퍼 대신 클라이언트 SPA인 `v2`를 메인 `index.html`로 정식 승격하여 `https://kimver2.github.io/woosung-id/` 접속 시 0.1초 즉시 렌더링 및 기존 로그인 토큰(`ws_dashboard_auth_token_v2`, `ws_dashboard_auth_user_v2`) 100% 호환 유지.
+  - 6개 HTML 파일(`index.html`, `docs/index.html`, `v2.html`, `docs/v2.html`, `preview_tabs.html`, `docs/preview_tabs.html`) 및 `data/dashboard_data.js` ↔ `docs/data/dashboard_data.js`, `sw.js` ↔ `docs/sw.js` (`ws-dashboard-pwa-v2`) 100% 바이트 단위 동기화 체계 확립.
+- **권한별 6번째 탭 분기 (`재무·원장` vs `거래처`)**:
+  - 재무 권한 보유자(`조항만` 등 `canViewFinance()`)에게는 `💰 재무·원장` 탭 노출, 일반 구성원에게는 `🤝 거래처` 전용 탭 노출.
+  - `02_거래처` 시트 L열(`계좌번호`) 연동 및 계좌번호 전체 노출 UI 적용.
+- **`우성아이디_재무DB` (`1rmH7176tFYRk97qGjdI-ztn6UMnWwyNBNl06wexFOYc`) 4대 서브탭 완비**:
+  1. **`💰 현장 수금현황`**: 연도별(`전체`, `2026년`, `2025년`, `기간미정`)·월별(1~12월 요약 스트립) 필터, 단계별 수금(계약·착수·중도·잔금) 칩, 공사완료 미수(`⚠️`) 자동 경고 뱃지, 현장 정산 상세 모달(`siteFinanceDetailModal`) 연동. (2025년 12건 공사기간 `25.MM.DD` 보정 및 월 스트립·테이블·미수 뱃지 100% 정합성 일치 완료)
+  2. **`🧾 월별 비용마감`**: 정산월 `YY.MM`(`26.11`) 표준 포맷 정규화(`normalizeSettleMonth_`, `normalizeMonthStr`), `이번 달 고정비 불러오기`(중복 방어 및 현장명 `'공통'` 자동 지정), `[현장 투입 협력업체 불러오기]`(대형 모달 `1140px` 및 `비고` 영역 `220px` 확대), 전액지급 원클릭 처리, 천단위 쉼표 자동 포맷.
+  3. **`📊 월간집계` (Step 4 손익·현금흐름 리포트)**: 연간 총 수금액 vs 총 지출액(변동비+고정비) vs 순이익(이익률 %) vs 미수금/미지급금 비교 4대 KPI 카드, 1~12월 손익 & 현금흐름 요약표, 현장별 마진율 분석표 탑재 (기존 공정·업체 집계 모달 버튼 유지).
+  4. **`📌 고정비 관리`**: `비용마감_고정` 시트 연동, 고정비 추가/수정/삭제 및 `ON/OFF` 토글, `ID`(`FIX-xxx`) 컬럼/모달 비노출 처리, 시트 직접 편집/삭제 내용 보존(자동 재시드 방지).
+- **신규 견적 ➔ 진행 현장 승격 시 `수금현황` 자동 생성 (`promoteEstimateToSite`)**:
+  - 승격 모달에 `재무DB [수금현황] 자동 등록` 체크박스(`pmModalAutoCollection`, 기본 체크)를 탑재하여 계약금액·고객명·담당자·공사기간이 `수금현황` 시트에 중복 없이 자동 생성되도록 연동.
+- **실시간 동기화·캐시 정합성 및 Double-Submit 방어**:
+  - 상단 `🔄 동기화` 클릭 시 진행/완료 안내 모달(`syncStatusModal`) 표시 및 대시보드·To-Do·거래처·재무DB 병렬 최신화.
+  - 모든 GET API 호출에 `_t: Date.now()` 캐시 버스팅 적용, `05_ToDo` 시트 직접 편집 시 `onEdit` 내 `invalidateTodoServerCache()` 호출 보강.
+  - 재무·원장 탭 및 서브탭 전환 시 최상단 스크롤(`resetPcScrollTop`, `resetFinanceScrollTop`) 자동 초기화 및 모든 저장/삭제/불러오기 액션에 Double-submit 방어 가드 탑재.
 
 ---
 
