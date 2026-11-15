@@ -1788,6 +1788,7 @@
     }
     #expenseModal,
     #collectionModal,
+    #fixedMasterModal,
     #partnerImportModal {
       z-index: 10080;
     }
@@ -2425,6 +2426,18 @@
     </div>
   </div>
 
+  <!-- 8.7.5. 고정비 마스터 등록 및 수정 모달 -->
+  <div class="ws-modal-backdrop" id="fixedMasterModal" onclick="if(event.target===this) closeFixedMasterModal()">
+    <div class="ws-modal-card wide" style="max-width: 620px; width: 95%;">
+      <div class="ws-modal-header">
+        <div class="ws-modal-title" id="fixedMasterModalTitle">📌 고정비 마스터 상세 및 등록</div>
+        <button type="button" class="ws-modal-close" onclick="closeFixedMasterModal()">✕</button>
+      </div>
+      <div class="ws-modal-body" id="fixedMasterModalBody" style="display:flex;flex-direction:column;gap:14px;max-height:calc(85vh - 120px);overflow-y:auto;padding:16px;"></div>
+      <div class="ws-modal-footer" id="fixedMasterModalFooter"></div>
+    </div>
+  </div>
+
   <!-- 8.8. 현장 정산·세부 공정별 지급 내역 모달 -->
   <div class="ws-modal-backdrop" id="siteFinanceDetailModal" onclick="if(event.target===this) closeSiteFinanceDetailModal()">
     <div class="ws-modal-card wide" style="max-width: 960px; width: 96%;">
@@ -2523,6 +2536,8 @@
         expenseSearchQuery: "",
         expenseItemFilter: "all",
         expenseStatusFilter: "all",
+        fixedSearchQuery: "",
+        fixedActiveFilter: "all",
         financeMonthlyYear: _initTodayYmd.slice(0, 4),
         monthlySiteSearch: "",
         monthlySiteSort: "marginDesc",
@@ -6405,6 +6420,33 @@
       };
 
       // ================= 비용마감 (Step 3) 헬퍼 및 모달 함수 =================
+      function normalizeMonthStr(m) {
+        if (m === null || m === undefined || m === "") return "";
+        if (Object.prototype.toString.call(m) === "[object Date]" || m instanceof Date) {
+          const y = m.getFullYear();
+          const mm = ("0" + (m.getMonth() + 1)).slice(-2);
+          return `${y}-${mm}`;
+        }
+        const s = String(m).trim();
+        if (/^\d{4}-\d{2}$/.test(s)) return s;
+
+        if (s.includes("GMT") || s.includes("T") || s.includes("한국") || s.includes("Standard Time")) {
+          const d = new Date(s);
+          if (!isNaN(d.getTime())) {
+            const dy = d.getFullYear();
+            const dm = ("0" + (d.getMonth() + 1)).slice(-2);
+            return `${dy}-${dm}`;
+          }
+        }
+
+        const match = s.match(/(\d{4})[.\-\/](\d{1,2})/);
+        if (match) {
+          return `${match[1]}-${("0" + match[2]).slice(-2)}`;
+        }
+        return s;
+      }
+      window.normalizeMonthStr = normalizeMonthStr;
+
       function getFilteredExpenseList() {
         const allExpenses = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
         const selMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
@@ -6415,15 +6457,16 @@
         const stFilter = state.expenseStatusFilter || "all";
 
         return allExpenses.filter(e => {
-          // 1. 월 필터
+          // 1. 월 필터 (Date 객체/문자열 완벽 정규화 후 비교)
           if (!allMonths && selMonth) {
-            if (e.settleMonth !== selMonth) return false;
+            const expMonth = normalizeMonthStr(e.settleMonth);
+            if (expMonth !== selMonth) return false;
           }
 
           // 2. 항목 필터
           if (itemFilter !== "all") {
             if (itemFilter === "기타") {
-              if (["급여", "자재", "외주"].includes(e.item)) return false;
+              if (["급여", "자재", "외주", "고정비"].includes(e.item)) return false;
             } else if (e.item !== itemFilter) {
               return false;
             }
@@ -6891,8 +6934,12 @@
           if (res && res.success) {
             if (res.expense && Array.isArray(res.expense)) {
               if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
-              state.financeDbData.expense = res.expense;
+              state.financeDbData.expense = res.expense.map(e => ({
+                ...e,
+                settleMonth: normalizeMonthStr(e.settleMonth)
+              }));
             }
+            state.expenseSelectedMonth = targetMonth;
             state.dirtyPcTabs.finance = true;
             state.dirtyMobileTabs.finance = true;
             renderActiveViews();
@@ -6908,6 +6955,310 @@
         }).catch(err => {
           console.error("generateFixedExpenses error:", err);
           alert("고정비 통신 오류: " + (err.message || String(err)));
+        });
+      };
+
+      // ================= 고정비 마스터 (Step 4.5) 헬퍼 및 모달 함수 =================
+      function getFilteredFixedMasterList() {
+        const all = (state.financeDbData && Array.isArray(state.financeDbData.fixedMaster)) ? state.financeDbData.fixedMaster : [];
+        const q = (state.fixedSearchQuery || "").toLowerCase().trim();
+        const qWords = q ? q.split(/\s+/).filter(Boolean) : [];
+        const actFilter = state.fixedActiveFilter || "all";
+
+        return all.filter(f => {
+          if (actFilter === "Y" && f.active === "N") return false;
+          if (actFilter === "N" && f.active !== "N") return false;
+
+          if (qWords.length > 0) {
+            const hay = [
+              f.id, f.item, f.category, f.vendor,
+              f.accountNumber, f.category2, f.payDay, f.note
+            ].join(" ").toLowerCase();
+            const matched = qWords.every(w => hay.includes(w));
+            if (!matched) return false;
+          }
+          return true;
+        });
+      }
+      window.getFilteredFixedMasterList = getFilteredFixedMasterList;
+
+      window.setFixedActiveFilter = function(filter) {
+        state.fixedActiveFilter = filter;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.onFixedSearchInput = function(val) {
+        state.fixedSearchQuery = val;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.clearFixedSearch = function() {
+        state.fixedSearchQuery = "";
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.openFixedMasterModal = function(id) {
+        let row = null;
+        const fmList = (state.financeDbData && Array.isArray(state.financeDbData.fixedMaster)) ? state.financeDbData.fixedMaster : [];
+        if (id) {
+          row = fmList.find(f => f.id === id);
+        }
+
+        const isEdit = !!row;
+        const titleEl = document.getElementById("fixedMasterModalTitle");
+        if (titleEl) {
+          titleEl.textContent = isEdit ? `📌 고정비 마스터 수정 [${escHtml(row.id)}]` : "📌 + 고정비 마스터 신규 등록";
+        }
+
+        const rData = row ? Object.assign({}, row) : {
+          id: "",
+          active: "Y",
+          item: "고정비",
+          category: "급여",
+          vendor: "",
+          accountNumber: "",
+          baseAmount: 0,
+          payDay: "매월 25일",
+          note: ""
+        };
+
+        const partnerList = getPartnersListForTab();
+        const vendorOptions = Array.from(new Set([
+          ...partnerList.map(p => p.fullName || p.name),
+          ...fmList.map(f => f.vendor)
+        ].filter(Boolean)));
+
+        const bodyEl = document.getElementById("fixedMasterModalBody");
+        if (!bodyEl) return;
+
+        bodyEl.innerHTML = `
+          <datalist id="fixedMasterVendorDatalist">
+            ${vendorOptions.map(v => `<option value="${escHtml(v)}"></option>`).join("")}
+          </datalist>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">고정비 ID</label>
+              <input type="text" id="fmId" value="${escHtml(rData.id || "신규 등록 시 자동 채번 (FIX-xxx)")}" readonly
+                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#f8fafc;color:#64748b;" />
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">사용 여부 (월별 자동생성 대상)</label>
+              <select id="fmActive" style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;">
+                <option value="Y" ${rData.active !== "N" ? "selected" : ""}>🟢 사용 (Y) - 매월 불러오기 시 자동 생성</option>
+                <option value="N" ${rData.active === "N" ? "selected" : ""}>⚪ 미사용 (N) - 일시 중지 / 제외</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">항목 <span style="color:#ef4444;">*</span></label>
+              <select id="fmItem" style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;">
+                ${["고정비", "급여", "자재", "외주", "세금", "소모품비", "기타"].map(opt => `<option value="${opt}" ${rData.item === opt ? "selected" : ""}>${opt}</option>`).join("")}
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">구분 (세부 분류) <span style="color:#ef4444;">*</span></label>
+              <input type="text" id="fmCategory" value="${escHtml(rData.category)}" placeholder="예: 급여, 임대료, 통신비, 관리비, 세무기장료"
+                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">업체명 / 지급처 <span style="color:#ef4444;">*</span></label>
+              <input type="text" id="fmVendor" list="fixedMasterVendorDatalist" value="${escHtml(rData.vendor)}" placeholder="예: 조진상 고문, 상가(지하층), KT 등"
+                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">지급일 / 이체일</label>
+              <input type="text" id="fmPayDay" value="${escHtml(rData.payDay || "")}" placeholder="예: 매월 10일, 매월 25일, 말일"
+                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+            </div>
+          </div>
+
+          <div>
+            <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">계좌번호 (은행 및 계좌 정보)</label>
+            <input type="text" id="fmAccountNumber" value="${escHtml(rData.accountNumber || rData.category2 || "")}" placeholder="예: 국민 123-45-678901 (조진상)"
+              style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+          </div>
+
+          <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
+            <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#1e293b;">월 고정금액 (기본 청구액) <span style="color:#ef4444;">*</span></label>
+            <div style="position:relative;">
+              <input type="text" inputmode="numeric" id="fmBaseAmount" value="${(Number(rData.baseAmount) || 0).toLocaleString('ko-KR')}" placeholder="0"
+                oninput="window.onFixedMasterAmountInput(this)"
+                style="width:100%;height:40px;padding:0 36px 0 12px;border-radius:6px;border:1px solid #cbd5e1;font-size:16px;font-weight:800;color:#1e293b;text-align:right;" />
+              <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:13px;font-weight:700;color:#64748b;">원</span>
+            </div>
+            <div style="font-size:11.5px;color:#64748b;margin-top:5px;">💡 매월 고정비 불러오기 시 이 금액이 청구금액 및 미지급 잔금으로 자동 등록됩니다.</div>
+          </div>
+
+          <div>
+            <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">비고 / 메모</label>
+            <input type="text" id="fmNote" value="${escHtml(rData.note || "")}" placeholder="세무 관련 메모, 정기 이체 관련 특이사항 등"
+              style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+          </div>
+        `;
+
+        const footEl = document.getElementById("fixedMasterModalFooter");
+        if (footEl) {
+          footEl.innerHTML = `
+            ${isEdit ? `
+              <button type="button" class="ws-btn ws-btn-danger" style="margin-right:auto;" onclick="window.onDeleteFixedMasterRow('${escJs(row.id)}')">
+                🗑️ 삭제
+              </button>
+            ` : ""}
+            <div style="display:flex;gap:8px;align-items:center;${isEdit ? '' : 'margin-left:auto;'}">
+              <button type="button" class="ws-btn ws-btn-secondary" onclick="window.closeFixedMasterModal()">취소</button>
+              <button type="button" class="ws-btn ws-btn-primary" id="btnSaveFixedMaster" onclick="window.onSaveFixedMasterRow('${escJs(rData.id)}')">
+                저장
+              </button>
+            </div>
+          `;
+        }
+
+        openModal("fixedMasterModal");
+      };
+
+      window.closeFixedMasterModal = function() {
+        closeModal("fixedMasterModal");
+      };
+
+      window.onFixedMasterAmountInput = function(inputEl) {
+        if (!inputEl) return;
+        var raw = String(inputEl.value || "").replace(/[^0-9]/g, "");
+        var num = parseInt(raw, 10);
+        if (isNaN(num)) num = 0;
+        inputEl.value = num.toLocaleString("ko-KR");
+      };
+
+      window.onSaveFixedMasterRow = function(id) {
+        const item = String(document.getElementById("fmItem")?.value || "고정비").trim();
+        const category = String(document.getElementById("fmCategory")?.value || "").trim();
+        const vendor = String(document.getElementById("fmVendor")?.value || "").trim();
+        const active = String(document.getElementById("fmActive")?.value || "Y").trim();
+        const payDay = String(document.getElementById("fmPayDay")?.value || "").trim();
+        const accountNumber = String(document.getElementById("fmAccountNumber")?.value || "").trim();
+        const note = String(document.getElementById("fmNote")?.value || "").trim();
+        const rawAmt = String(document.getElementById("fmBaseAmount")?.value || "0").replace(/[^0-9]/g, "");
+        const baseAmount = parseInt(rawAmt, 10) || 0;
+
+        if (!vendor) {
+          alert("업체명 / 지급처를 입력해 주세요.");
+          document.getElementById("fmVendor")?.focus();
+          return;
+        }
+
+        const payload = {
+          id: id || "",
+          active: active,
+          item: item,
+          category: category,
+          vendor: vendor,
+          accountNumber: accountNumber,
+          category2: accountNumber,
+          baseAmount: baseAmount,
+          payDay: payDay,
+          note: note
+        };
+
+        const btn = document.getElementById("btnSaveFixedMaster");
+        if (btn) { btn.disabled = true; btn.textContent = "저장 중..."; }
+
+        WSDataService.saveFixedMasterRow(payload, state.authUser).then(res => {
+          if (res && res.success) {
+            if (res.fixedMaster && Array.isArray(res.fixedMaster)) {
+              if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+              state.financeDbData.fixedMaster = res.fixedMaster;
+            }
+            closeFixedMasterModal();
+            showToast("✅ 고정비 마스터 항목이 저장되었습니다.");
+            state.dirtyPcTabs.finance = true;
+            state.dirtyMobileTabs.finance = true;
+            renderActiveViews();
+          } else {
+            alert("고정비 저장 실패: " + ((res && res.error) || "알 수 없는 오류"));
+            if (btn) { btn.disabled = false; btn.textContent = "저장"; }
+          }
+        }).catch(err => {
+          console.error("saveFixedMaster error:", err);
+          alert("고정비 저장 통신 오류: " + (err.message || String(err)));
+          if (btn) { btn.disabled = false; btn.textContent = "저장"; }
+        });
+      };
+
+      window.onDeleteFixedMasterRow = function(id) {
+        if (!id) return;
+        if (!confirm(`[${id}] 고정비 마스터 항목을 삭제하시겠습니까?\n(기존에 등록된 월별 비용마감 내역은 삭제되지 않습니다)`)) {
+          return;
+        }
+
+        WSDataService.deleteFixedMasterRow(id, state.authUser).then(res => {
+          if (res && res.success) {
+            if (res.fixedMaster && Array.isArray(res.fixedMaster)) {
+              if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+              state.financeDbData.fixedMaster = res.fixedMaster;
+            } else if (state.financeDbData && Array.isArray(state.financeDbData.fixedMaster)) {
+              state.financeDbData.fixedMaster = state.financeDbData.fixedMaster.filter(f => f.id !== id);
+            }
+            closeFixedMasterModal();
+            showToast("🗑️ 고정비 마스터 항목이 삭제되었습니다.");
+            state.dirtyPcTabs.finance = true;
+            state.dirtyMobileTabs.finance = true;
+            renderActiveViews();
+          } else {
+            alert("고정비 삭제 실패: " + ((res && res.error) || "알 수 없는 오류"));
+          }
+        }).catch(err => {
+          console.error("deleteFixedMaster error:", err);
+          alert("고정비 삭제 통신 오류: " + (err.message || String(err)));
+        });
+      };
+
+      window.onToggleFixedMasterActive = function(id, currentActive) {
+        const fmList = (state.financeDbData && Array.isArray(state.financeDbData.fixedMaster)) ? state.financeDbData.fixedMaster : [];
+        const item = fmList.find(f => f.id === id);
+        if (!item) return;
+
+        const nextActive = (currentActive === "Y") ? "N" : "Y";
+        const updated = Object.assign({}, item, { active: nextActive });
+
+        item.active = nextActive;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+
+        WSDataService.saveFixedMasterRow(updated, state.authUser).then(res => {
+          if (res && res.success) {
+            if (res.fixedMaster && Array.isArray(res.fixedMaster)) {
+              state.financeDbData.fixedMaster = res.fixedMaster;
+              state.dirtyPcTabs.finance = true;
+              state.dirtyMobileTabs.finance = true;
+              renderActiveViews();
+            }
+            showToast(nextActive === "Y" ? `🟢 [${item.vendor || item.category}] 활성화되었습니다.` : `⚪ [${item.vendor || item.category}] 비활성화되었습니다.`);
+          } else {
+            item.active = currentActive;
+            state.dirtyPcTabs.finance = true;
+            state.dirtyMobileTabs.finance = true;
+            renderActiveViews();
+            alert("상태 변경 실패: " + ((res && res.error) || "알 수 없는 오류"));
+          }
+        }).catch(err => {
+          item.active = currentActive;
+          state.dirtyPcTabs.finance = true;
+          state.dirtyMobileTabs.finance = true;
+          renderActiveViews();
+          console.error("toggleFixedMasterActive error:", err);
+          alert("상태 변경 통신 오류: " + (err.message || String(err)));
         });
       };
 
@@ -7868,6 +8219,7 @@
               <button type="button" class="btn-subtab-chip ${subTab === "collection" ? "active" : ""}" onclick="window.setFinanceSubTab('collection')">💰 현장 수금현황</button>
               <button type="button" class="btn-subtab-chip ${subTab === "expense" ? "active" : ""}" onclick="window.setFinanceSubTab('expense')">🧾 월별 비용마감</button>
               <button type="button" class="btn-subtab-chip ${subTab === "monthly" ? "active" : ""}" onclick="window.setFinanceSubTab('monthly')">📊 월간집계</button>
+              <button type="button" class="btn-subtab-chip ${subTab === "fixed" ? "active" : ""}" onclick="window.setFinanceSubTab('fixed')">📌 고정비 관리</button>
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
               <span style="font-size:12px;color:var(--text-muted);">${state.financeDbData && state.financeDbData.updatedAt ? "동기화: " + escHtml(state.financeDbData.updatedAt) : ""}</span>
@@ -7944,7 +8296,7 @@
                   ${state.expenseSearchQuery ? `<button type="button" onclick="window.clearExpenseSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:bold;line-height:1;">✕</button>` : ""}
                 </div>
                 <div style="display:flex;gap:4px;background:#f1f5f9;padding:3px;border-radius:6px;">
-                  ${[["all", "전체 항목"], ["급여", "급여"], ["자재", "자재"], ["외주", "외주"], ["기타", "기타"]].map(([k, label]) => `
+                  ${[["all", "전체 항목"], ["급여", "급여"], ["자재", "자재"], ["외주", "외주"], ["고정비", "고정비"], ["기타", "기타"]].map(([k, label]) => `
                     <button type="button" class="btn-sub-chip ${itemFilter === k ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;" onclick="window.setExpenseItemFilter('${k}')">${label}</button>
                   `).join("")}
                 </div>
@@ -7979,6 +8331,7 @@
             if (e.item === "급여") { itemBadgeBg = "#eff6ff"; itemBadgeColor = "#2563eb"; }
             else if (e.item === "자재") { itemBadgeBg = "#f5f3ff"; itemBadgeColor = "#7c3aed"; }
             else if (e.item === "외주") { itemBadgeBg = "#fffbeb"; itemBadgeColor = "#d97706"; }
+            else if (e.item === "고정비") { itemBadgeBg = "#fef3c7"; itemBadgeColor = "#b45309"; }
 
             return `
               <tr style="${bal > 0 ? "background:#fffbfb;" : ""}">
@@ -8075,6 +8428,147 @@
           document.getElementById("pcFinanceMain").innerHTML = `
             ${subTabsHtml}
             ${buildFinanceMonthlyDashboardHtml(false)}
+          `;
+          return;
+        }
+
+        if (subTab === "fixed") {
+          const allFixed = (state.financeDbData && Array.isArray(state.financeDbData.fixedMaster)) ? state.financeDbData.fixedMaster : [];
+          const filtered = getFilteredFixedMasterList();
+          const activeList = allFixed.filter(f => f.active !== "N");
+          const activeCount = activeList.length;
+          const inactiveCount = allFixed.length - activeCount;
+          const totalMonthlyFixed = activeList.reduce((acc, f) => acc + (Number(f.baseAmount) || 0), 0);
+          const actFilter = state.fixedActiveFilter || "all";
+
+          // KPI 카드
+          const fixedKpiHtml = `
+            <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:14px;">
+              <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #f59e0b;background:#fffbeb;">
+                <div style="font-size:12px;color:#b45309;font-weight:700;">매월 고정 지출 예상액</div>
+                <div style="font-size:22px;font-weight:900;color:#b45309;margin-top:4px;">${formatKrw(totalMonthlyFixed)}</div>
+                <div style="font-size:11.5px;color:#d97706;margin-top:4px;font-weight:700;">활성 고정비 ${activeCount}건 합계</div>
+              </div>
+              <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #16a34a;">
+                <div style="font-size:12px;color:#166534;font-weight:700;">사용 중 (자동 생성 대상)</div>
+                <div style="font-size:22px;font-weight:900;color:#16a34a;margin-top:4px;">${activeCount}건</div>
+                <div style="font-size:11.5px;color:#15803d;margin-top:4px;">매월 '고정비 불러오기' 시 자동 등록</div>
+              </div>
+              <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #64748b;">
+                <div style="font-size:12px;color:var(--text-muted);font-weight:600;">미사용 / 일시 중지</div>
+                <div style="font-size:22px;font-weight:800;color:#475569;margin-top:4px;">${inactiveCount}건</div>
+                <div style="font-size:11.5px;color:#64748b;margin-top:4px;">자동 생성 제외 항목</div>
+              </div>
+              <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #6366f1;">
+                <div style="font-size:12px;color:var(--text-muted);font-weight:600;">고정비 마스터 등록 총계</div>
+                <div style="font-size:22px;font-weight:800;color:#1e293b;margin-top:4px;">${allFixed.length}건</div>
+                <div style="font-size:11.5px;color:#4f46e5;margin-top:4px;">비용마감_고정 시트 연동</div>
+              </div>
+            </div>
+          `;
+
+          // 검색 · 필터 · 액션 바
+          const fixedActionBarHtml = `
+            <div class="standard-card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;padding:12px 16px;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;">
+                <div style="position:relative;width:260px;max-width:100%;">
+                  <input type="text" placeholder="업체명, 항목, 구분, 계좌, 비고 검색..."
+                    value="${escHtml(state.fixedSearchQuery || "")}"
+                    oninput="window.onFixedSearchInput(this.value)"
+                    style="width:100%;height:34px;padding:0 28px 0 10px;border-radius:6px;border:1px solid var(--border-dark);font-size:12.5px;outline:none;" />
+                  ${state.fixedSearchQuery ? `<button type="button" onclick="window.clearFixedSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:bold;line-height:1;">✕</button>` : ""}
+                </div>
+                <div style="display:flex;gap:4px;background:#f1f5f9;padding:3px;border-radius:6px;">
+                  <button type="button" class="btn-sub-chip ${actFilter === "all" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;" onclick="window.setFixedActiveFilter('all')">전체 (${allFixed.length})</button>
+                  <button type="button" class="btn-sub-chip ${actFilter === "Y" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;${actFilter === "Y" ? "background:#dcfce7;color:#15803d;border-color:#86efac;" : ""}" onclick="window.setFixedActiveFilter('Y')">사용중 (${activeCount})</button>
+                  <button type="button" class="btn-sub-chip ${actFilter === "N" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;" onclick="window.setFixedActiveFilter('N')">미사용 (${inactiveCount})</button>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.onLoadFixedExpenses()">
+                  📌 이번 달 고정비 불러오기
+                </button>
+                <button type="button" class="btn-primary" style="height:34px;padding:0 14px;font-size:12.5px;font-weight:800;display:inline-flex;align-items:center;gap:4px;" onclick="window.openFixedMasterModal(null)">
+                  + 고정비 추가
+                </button>
+              </div>
+            </div>
+          `;
+
+          // PC Table Rows
+          const fixedRowsHtml = filtered.map(f => {
+            const isActive = f.active !== "N";
+            const amt = Number(f.baseAmount) || 0;
+            const toggleHtml = `
+              <button type="button" onclick="window.onToggleFixedMasterActive('${escJs(f.id)}', '${isActive ? "Y" : "N"}')"
+                style="border:none;background:none;cursor:pointer;padding:2px 4px;font-size:16px;line-height:1;" title="${isActive ? "미사용으로 변경" : "사용으로 변경"}">
+                ${isActive ? '<span style="display:inline-block;padding:2px 8px;border-radius:12px;background:#dcfce7;color:#15803d;font-size:11px;font-weight:800;">ON</span>' : '<span style="display:inline-block;padding:2px 8px;border-radius:12px;background:#f1f5f9;color:#94a3b8;font-size:11px;font-weight:700;">OFF</span>'}
+              </button>
+            `;
+
+            let itemBadgeBg = "#fef3c7";
+            let itemBadgeColor = "#b45309";
+            if (f.item === "급여") { itemBadgeBg = "#eff6ff"; itemBadgeColor = "#2563eb"; }
+
+            return `
+              <tr style="border-bottom:1px solid var(--border);${!isActive ? "opacity:0.6;background:#fafafa;" : ""}">
+                <td style="padding:10px 8px;text-align:center;">${toggleHtml}</td>
+                <td style="padding:10px 8px;text-align:center;font-family:monospace;font-size:11.5px;color:var(--text-muted);font-weight:700;">${escHtml(f.id)}</td>
+                <td style="padding:10px 8px;text-align:center;">
+                  <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:${itemBadgeBg};color:${itemBadgeColor};">
+                    ${escHtml(f.item || "고정비")}
+                  </span>
+                </td>
+                <td style="padding:10px 10px;font-weight:700;color:#334155;">${escHtml(f.category || "-")}</td>
+                <td style="padding:10px 12px;font-weight:800;color:#1e293b;font-size:13.5px;">${escHtml(f.vendor || "-")}</td>
+                <td style="padding:10px 10px;font-size:12px;color:#475569;">${escHtml(f.accountNumber || f.category2 || "-")}</td>
+                <td style="padding:10px 12px;text-align:right;font-weight:900;font-size:14px;color:#1e293b;">${formatKrw(amt)}</td>
+                <td style="padding:10px 10px;text-align:center;font-size:12px;color:#64748b;">${escHtml(f.payDay || "-")}</td>
+                <td style="padding:10px 10px;font-size:12px;color:var(--text-sub);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(f.note || "-")}</td>
+                <td style="padding:10px 8px;text-align:center;">
+                  <div style="display:inline-flex;gap:4px;">
+                    <button type="button" class="btn-sub-xs" style="padding:3px 8px;font-size:11px;" onclick="window.openFixedMasterModal('${escJs(f.id)}')">수정</button>
+                    <button type="button" class="btn-sub-xs" style="padding:3px 7px;font-size:11px;color:#ef4444;border-color:#fca5a5;" onclick="window.onDeleteFixedMasterRow('${escJs(f.id)}')">🗑️</button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join("") || `
+            <tr>
+              <td colspan="10" style="text-align:center;padding:48px 16px;color:var(--text-muted);">
+                <div style="font-size:24px;margin-bottom:6px;">📌</div>
+                <div>등록된 고정비 마스터 항목이 없습니다.</div>
+              </td>
+            </tr>
+          `;
+
+          const fixedTableHtml = `
+            <div class="standard-card" style="padding:0;overflow:hidden;border:1px solid #e2e8f0;">
+              <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left;">
+                <thead>
+                  <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:12px;">
+                    <th style="padding:10px 8px;text-align:center;width:65px;">사용</th>
+                    <th style="padding:10px 8px;text-align:center;width:80px;">ID</th>
+                    <th style="padding:10px 8px;text-align:center;width:85px;">항목</th>
+                    <th style="padding:10px 10px;width:110px;">구분</th>
+                    <th style="padding:10px 12px;width:150px;">업체명 / 지급처</th>
+                    <th style="padding:10px 10px;width:160px;">계좌번호 (은행)</th>
+                    <th style="padding:10px 12px;text-align:right;width:125px;">월 고정금액</th>
+                    <th style="padding:10px 10px;text-align:center;width:105px;">지급일</th>
+                    <th style="padding:10px 10px;">비고</th>
+                    <th style="padding:10px 8px;text-align:center;width:105px;">관리</th>
+                  </tr>
+                </thead>
+                <tbody>${fixedRowsHtml}</tbody>
+              </table>
+            </div>
+          `;
+
+          document.getElementById("pcFinanceMain").innerHTML = `
+            ${subTabsHtml}
+            ${fixedKpiHtml}
+            ${fixedActionBarHtml}
+            ${fixedTableHtml}
           `;
           return;
         }
@@ -9817,6 +10311,7 @@
               <button type="button" class="btn-subtab-chip ${subTab === "collection" ? "active" : ""}" style="padding:5px 10px;font-size:11.5px;" onclick="window.setFinanceSubTab('collection')">💰 수금현황</button>
               <button type="button" class="btn-subtab-chip ${subTab === "expense" ? "active" : ""}" style="padding:5px 10px;font-size:11.5px;" onclick="window.setFinanceSubTab('expense')">🧾 비용마감</button>
               <button type="button" class="btn-subtab-chip ${subTab === "monthly" ? "active" : ""}" style="padding:5px 10px;font-size:11.5px;" onclick="window.setFinanceSubTab('monthly')">📊 월간집계</button>
+              <button type="button" class="btn-subtab-chip ${subTab === "fixed" ? "active" : ""}" style="padding:5px 10px;font-size:11.5px;" onclick="window.setFinanceSubTab('fixed')">📌 고정비 관리</button>
             </div>
             <button type="button" onclick="openMonthlyReportModal()" style="border:none;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:800;padding:5px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;">📊 리포트</button>
           </div>
@@ -9898,7 +10393,7 @@
             </div>
 
             <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;">
-              ${[["all", "전체"], ["급여", "급여"], ["자재", "자재"], ["외주", "외주"], ["기타", "기타"]].map(([k, label]) => `
+              ${[["all", "전체"], ["급여", "급여"], ["자재", "자재"], ["외주", "외주"], ["고정비", "고정비"], ["기타", "기타"]].map(([k, label]) => `
                 <button type="button" class="btn-sub-chip ${itemFilter === k ? "active" : ""}" style="padding:3px 7px;font-size:11px;" onclick="window.setExpenseItemFilter('${k}')">${label}</button>
               `).join("")}
               <button type="button" class="btn-sub-chip ${stFilter === "unpaid" ? "active" : ""}" style="padding:3px 7px;font-size:11px;${stFilter === "unpaid" ? "background:#fee2e2;color:#dc2626;border-color:#fca5a5;" : ""}" onclick="window.setExpenseStatusFilter('${stFilter === "unpaid" ? "all" : "unpaid"}')">미지급만</button>
@@ -9915,6 +10410,7 @@
             if (e.item === "급여") { itemBadgeBg = "#eff6ff"; itemBadgeColor = "#2563eb"; }
             else if (e.item === "자재") { itemBadgeBg = "#f5f3ff"; itemBadgeColor = "#7c3aed"; }
             else if (e.item === "외주") { itemBadgeBg = "#fffbeb"; itemBadgeColor = "#d97706"; }
+            else if (e.item === "고정비") { itemBadgeBg = "#fef3c7"; itemBadgeColor = "#b45309"; }
 
             return `
               <div class="m-card-box" style="margin-bottom:10px;padding:12px;border-left:3px solid ${bal > 0 ? "#dc2626" : "#10b981"};${bal > 0 ? "background:#fffdfd;" : ""}">
@@ -10006,6 +10502,117 @@
             mTarget.innerHTML = `
               ${subTabsHtml}
               ${buildFinanceMonthlyDashboardHtml(true)}
+            `;
+          }
+          return;
+        }
+
+        if (subTab === "fixed") {
+          const allFixed = (state.financeDbData && Array.isArray(state.financeDbData.fixedMaster)) ? state.financeDbData.fixedMaster : [];
+          const filtered = getFilteredFixedMasterList();
+          const activeList = allFixed.filter(f => f.active !== "N");
+          const activeCount = activeList.length;
+          const inactiveCount = allFixed.length - activeCount;
+          const totalMonthlyFixed = activeList.reduce((acc, f) => acc + (Number(f.baseAmount) || 0), 0);
+          const actFilter = state.fixedActiveFilter || "all";
+
+          const mKpiHtml = `
+            <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:8px;margin-bottom:12px;">
+              <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #f59e0b;background:#fffbeb;">
+                <div style="font-size:10.5px;color:#b45309;font-weight:700;">월 고정 지출</div>
+                <div style="font-size:15px;font-weight:900;color:#b45309;margin-top:2px;">${formatKrw(totalMonthlyFixed)}</div>
+                <div style="font-size:10px;color:#d97706;margin-top:2px;">활성 ${activeCount}건 합계</div>
+              </div>
+              <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #16a34a;">
+                <div style="font-size:10.5px;color:#166534;font-weight:700;">사용 중 / 등록</div>
+                <div style="font-size:15px;font-weight:900;color:#16a34a;margin-top:2px;">${activeCount}건 <span style="font-size:11px;color:#64748b;font-weight:600;">/ ${allFixed.length}건</span></div>
+                <div style="font-size:10px;color:#15803d;margin-top:2px;">미사용 ${inactiveCount}건</div>
+              </div>
+            </div>
+          `;
+
+          const mActionBarHtml = `
+            <div style="margin-bottom:10px;display:flex;flex-direction:column;gap:8px;">
+              <div style="position:relative;width:100%;">
+                <input type="text" placeholder="업체명, 항목, 구분, 계좌 검색..."
+                  value="${escHtml(state.fixedSearchQuery || "")}"
+                  oninput="window.onFixedSearchInput(this.value)"
+                  style="width:100%;height:34px;padding:0 28px 0 10px;border-radius:6px;border:1px solid var(--border-dark);font-size:12px;outline:none;" />
+                ${state.fixedSearchQuery ? `<button type="button" onclick="window.clearFixedSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:bold;line-height:1;">✕</button>` : ""}
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                <div style="display:flex;gap:4px;overflow-x:auto;">
+                  <button type="button" class="btn-sub-chip ${actFilter === "all" ? "active" : ""}" style="padding:3px 7px;font-size:11px;" onclick="window.setFixedActiveFilter('all')">전체 (${allFixed.length})</button>
+                  <button type="button" class="btn-sub-chip ${actFilter === "Y" ? "active" : ""}" style="padding:3px 7px;font-size:11px;${actFilter === "Y" ? "background:#dcfce7;color:#15803d;border-color:#86efac;" : ""}" onclick="window.setFixedActiveFilter('Y')">사용중 (${activeCount})</button>
+                  <button type="button" class="btn-sub-chip ${actFilter === "N" ? "active" : ""}" style="padding:3px 7px;font-size:11px;" onclick="window.setFixedActiveFilter('N')">미사용 (${inactiveCount})</button>
+                </div>
+                <button type="button" class="btn-primary" style="height:30px;padding:0 10px;font-size:11.5px;font-weight:800;white-space:nowrap;" onclick="window.openFixedMasterModal(null)">
+                  + 고정비 추가
+                </button>
+              </div>
+              <button type="button" class="btn-sub-xs" style="padding:6px 10px;font-size:11.5px;width:100%;background:#ffffff;border:1px solid #cbd5e1;font-weight:700;" onclick="window.onLoadFixedExpenses()">
+                📌 이번 달 고정비 불러오기
+              </button>
+            </div>
+          `;
+
+          const mCardsHtml = filtered.map(f => {
+            const isActive = f.active !== "N";
+            const amt = Number(f.baseAmount) || 0;
+
+            let itemBadgeBg = "#fef3c7";
+            let itemBadgeColor = "#b45309";
+            if (f.item === "급여") { itemBadgeBg = "#eff6ff"; itemBadgeColor = "#2563eb"; }
+
+            return `
+              <div class="m-card-box" style="margin-bottom:8px;padding:12px;border:1px solid #e2e8f0;${!isActive ? "opacity:0.6;background:#fafafa;" : ""}">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <button type="button" onclick="window.onToggleFixedMasterActive('${escJs(f.id)}', '${isActive ? "Y" : "N"}')"
+                      style="border:none;background:none;cursor:pointer;padding:0;" title="${isActive ? "미사용으로 변경" : "사용으로 변경"}">
+                      ${isActive ? '<span style="display:inline-block;padding:2px 7px;border-radius:10px;background:#dcfce7;color:#15803d;font-size:10px;font-weight:800;">ON</span>' : '<span style="display:inline-block;padding:2px 7px;border-radius:10px;background:#f1f5f9;color:#94a3b8;font-size:10px;font-weight:700;">OFF</span>'}
+                    </button>
+                    <span style="font-family:monospace;font-size:11px;color:#64748b;font-weight:700;">${escHtml(f.id)}</span>
+                    <span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:${itemBadgeBg};color:${itemBadgeColor};">${escHtml(f.item || "고정비")}</span>
+                    <span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:600;background:#f1f5f9;color:#475569;">${escHtml(f.category || "-")}</span>
+                  </div>
+                  <div style="display:flex;gap:4px;">
+                    <button type="button" class="btn-sub-xs" style="padding:3px 7px;font-size:11px;" onclick="window.openFixedMasterModal('${escJs(f.id)}')">수정</button>
+                    <button type="button" class="btn-sub-xs" style="padding:3px 6px;font-size:11px;color:#ef4444;border-color:#fca5a5;" onclick="window.onDeleteFixedMasterRow('${escJs(f.id)}')">🗑️</button>
+                  </div>
+                </div>
+
+                <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
+                  <div style="font-size:14px;font-weight:900;color:#1e293b;">${escHtml(f.vendor || "-")}</div>
+                  <div style="font-size:15px;font-weight:900;color:#1e293b;">${formatKrw(amt)}</div>
+                </div>
+
+                <div style="font-size:11.5px;color:#475569;display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
+                  ${f.accountNumber || f.category2 ? `<span>🏦 ${escHtml(f.accountNumber || f.category2)}</span>` : ""}
+                  ${f.payDay ? `<span>📅 ${escHtml(f.payDay)}</span>` : ""}
+                </div>
+
+                ${f.note ? `
+                  <div style="font-size:11px;color:var(--text-sub);margin-top:6px;border-top:1px dashed #e2e8f0;padding-top:4px;">
+                    📝 ${escHtml(f.note)}
+                  </div>
+                ` : ""}
+              </div>
+            `;
+          }).join("") || `
+            <div class="m-card-box" style="text-align:center;padding:32px 16px;color:var(--text-muted);">
+              <div style="font-size:24px;margin-bottom:6px;">📌</div>
+              <div>등록된 고정비 마스터 항목이 없습니다.</div>
+            </div>
+          `;
+
+          const mTarget = document.getElementById("mobileFinanceMain") || document.getElementById("m-page-finance");
+          if (mTarget) {
+            mTarget.innerHTML = `
+              ${subTabsHtml}
+              ${mKpiHtml}
+              ${mActionBarHtml}
+              ${mCardsHtml}
             `;
           }
           return;

@@ -496,6 +496,46 @@
       return this.callGasPost("saveExpenseBatchRows", { rows: rows, authUser: user });
     },
 
+    saveFixedMasterRow: function (row, authUser) {
+      var user = authUser || "";
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (res) { resolve(res || { success: true }); })
+            .withFailureHandler(function (err) { reject(err); })
+            .saveFixedMasterRow({ row: row, authUser: user });
+        });
+      }
+      return this.callGasPost("saveFixedMaster", { row: row, authUser: user });
+    },
+
+    deleteFixedMasterRow: function (id, authUser) {
+      var user = authUser || "";
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (res) { resolve(res || { success: true }); })
+            .withFailureHandler(function (err) { reject(err); })
+            .deleteFixedMasterRow({ id: id, authUser: user });
+        });
+      }
+      return this.callGasPost("deleteFixedMaster", { id: id, authUser: user });
+    },
+
+    cleanupCorruptedFixedExpenses: function (settleMonth, authUser) {
+      var user = authUser || "";
+      var m = settleMonth || "2026-11";
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (res) { resolve(res || { success: true }); })
+            .withFailureHandler(function (err) { reject(err); })
+            .cleanupCorruptedFixedExpenses({ settleMonth: m, authUser: user });
+        });
+      }
+      return this.callGasPost("cleanupCorruptedFixedExpenses", { settleMonth: m, authUser: user });
+    },
+
     mapPartnerBankAccounts: function () {
       if (typeof google !== "undefined" && google.script && google.script.run) {
         return new Promise(function (resolve, reject) {

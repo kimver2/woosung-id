@@ -2090,7 +2090,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
 
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
-  assertTest('index.html 내 exec?v=250 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=250'));
+  assertTest('index.html 내 exec?v=251 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=251'));
   assertTest('v2.html 내 담당자1 단일 추출 및 공사진행률 현장명 인라인 뱃지 표시 검증',
     v2RootHtml.includes('extractFirstManager') &&
     v2RootHtml.includes('extractFirstManager(r.manager')
@@ -2290,6 +2290,34 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     v2RootHtml.includes('buildFinanceMonthlyDashboardHtml(false)') &&
     v2RootHtml.includes('buildFinanceMonthlyDashboardHtml(true)') &&
     v2RootHtml.includes('openMonthlyReportModal()')
+  );
+  assertTest('현장서식.js 내 고정비 마스터 및 정산월 정규화 API (saveFixedMasterRow, deleteFixedMasterRow, cleanupCorruptedFixedExpenses, normalizeSettleMonth_) 검증',
+    code.includes('function saveFixedMasterRow(') &&
+    code.includes('function deleteFixedMasterRow(') &&
+    code.includes('function cleanupCorruptedFixedExpenses(') &&
+    code.includes('function ensureFixedMasterSheet_(') &&
+    code.includes('function normalizeSettleMonth_(') &&
+    code.includes('action === "saveFixedMaster"') &&
+    code.includes('action === "deleteFixedMaster"') &&
+    code.includes('action === "cleanupCorruptedFixedExpenses"')
+  );
+  assertTest('data/dashboard_data.js 내 고정비 마스터 API 연동 및 docs 동기화 검증',
+    fs.readFileSync('data/dashboard_data.js', 'utf8').includes('saveFixedMasterRow:') &&
+    fs.readFileSync('data/dashboard_data.js', 'utf8').includes('deleteFixedMasterRow:') &&
+    fs.readFileSync('data/dashboard_data.js', 'utf8').includes('cleanupCorruptedFixedExpenses:') &&
+    fs.readFileSync('data/dashboard_data.js', 'utf8') === fs.readFileSync('docs/data/dashboard_data.js', 'utf8')
+  );
+  assertTest('v2.html 내 📌 고정비 관리 서브탭(fixed), 고정비 모달(fixedMasterModal), ON/OFF 토글 및 정규화(normalizeMonthStr) 검증',
+    v2RootHtml.includes('subTab === "fixed"') &&
+    v2RootHtml.includes('setFinanceSubTab(\'fixed\')') &&
+    v2RootHtml.includes('id="fixedMasterModal"') &&
+    v2RootHtml.includes('window.openFixedMasterModal') &&
+    v2RootHtml.includes('window.onSaveFixedMasterRow') &&
+    v2RootHtml.includes('window.onDeleteFixedMasterRow') &&
+    v2RootHtml.includes('window.onToggleFixedMasterActive') &&
+    v2RootHtml.includes('window.getFilteredFixedMasterList') &&
+    v2RootHtml.includes('function normalizeMonthStr(m)') &&
+    v2RootHtml.includes('window.onFixedMasterAmountInput')
   );
 }
 console.log('\n========================================================');

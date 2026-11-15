@@ -11396,6 +11396,124 @@ function isFinanceAdminUser_(u) {
 }
 
 /**
+ * [재무 DB] 정산월 값을 YYYY-MM 문자열로 엄격하게 정규화 (Date 객체, 타임스탬프, 다양한 구분자 방어)
+ */
+function normalizeSettleMonth_(val) {
+  if (val === null || val === undefined || val === "") return "";
+  if (Object.prototype.toString.call(val) === "[object Date]" || val instanceof Date) {
+    try {
+      return Utilities.formatDate(val, "Asia/Seoul", "yyyy-MM");
+    } catch (eDate) {
+      var dy = val.getFullYear();
+      var dm = ("0" + (val.getMonth() + 1)).slice(-2);
+      return dy + "-" + dm;
+    }
+  }
+  var str = String(val).trim();
+  if (/^\d{4}-\d{2}$/.test(str)) return str;
+
+  if (str.includes("GMT") || str.includes("T") || str.includes("한국") || str.includes("Standard Time")) {
+    var d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      try {
+        return Utilities.formatDate(d, "Asia/Seoul", "yyyy-MM");
+      } catch (eD2) {
+        var y2 = d.getFullYear();
+        var m2 = ("0" + (d.getMonth() + 1)).slice(-2);
+        return y2 + "-" + m2;
+      }
+    }
+  }
+
+  var mMatch = str.match(/(\d{4})[.\-\/](\d{1,2})/);
+  if (mMatch) {
+    return mMatch[1] + "-" + ("0" + mMatch[2]).slice(-2);
+  }
+
+  return str;
+}
+
+/**
+ * [재무 DB] 비용마감_고정 시트 헤더 및 기본 7개 항목 금액 자동 초기화/정규화
+ */
+function ensureFixedMasterSheet_(ss) {
+  var sheet = ss.getSheetByName("비용마감_고정");
+  if (!sheet) {
+    sheet = getOrCreateSheet_(ss, "비용마감_고정");
+  }
+
+  var standardHeaders = [
+    "ID", "사용여부", "항목", "구분", "업체명", "계좌번호", "월 고정금액", "지급일", "비고"
+  ];
+
+  if (sheet.getLastRow() < 1) {
+    sheet.getRange(1, 1, 1, standardHeaders.length).setValues([standardHeaders]);
+    sheet.getRange(1, 1, 1, standardHeaders.length)
+      .setBackground("#1e293b")
+      .setFontColor("#ffffff")
+      .setFontWeight("bold")
+      .setHorizontalAlignment("center");
+    sheet.setFrozenRows(1);
+    return sheet;
+  }
+
+  var currentCols = sheet.getLastColumn();
+  if (currentCols < standardHeaders.length) {
+    sheet.insertColumnsAfter(currentCols, standardHeaders.length - currentCols);
+  }
+
+  var currentHeaders = sheet.getRange(1, 1, 1, Math.max(currentCols, standardHeaders.length)).getValues()[0];
+  if (currentCols === 8 && String(currentHeaders[7]).trim() === "비고") {
+    var lastR = sheet.getLastRow();
+    if (lastR >= 2) {
+      var noteVals = sheet.getRange(2, 8, lastR - 1, 1).getValues();
+      sheet.getRange(2, 9, lastR - 1, 1).setValues(noteVals);
+      sheet.getRange(2, 8, lastR - 1, 1).clearContent();
+    }
+  }
+
+  sheet.getRange(1, 1, 1, standardHeaders.length).setValues([standardHeaders]);
+  sheet.getRange(1, 1, 1, standardHeaders.length)
+    .setBackground("#1e293b")
+    .setFontColor("#ffffff")
+    .setFontWeight("bold")
+    .setHorizontalAlignment("center");
+  sheet.setFrozenRows(1);
+
+  // 기본 고정비 7종 초기 금액(0원인 경우) 자동 보정
+  var defaultAmounts = {
+    "조진상 고문": { baseAmount: 2500000, payDay: "매월 25일" },
+    "조형진 대리": { baseAmount: 2538700, payDay: "매월 25일" },
+    "인경호 소장": { baseAmount: 4300000, payDay: "매월 25일" },
+    "한송이 주임": { baseAmount: 2100000, payDay: "매월 25일" },
+    "송지은 과장": { baseAmount: 2078550, payDay: "매월 25일" },
+    "전예린 대리": { baseAmount: 2654997, payDay: "매월 25일" },
+    "상가(지하층)": { baseAmount: 450000, payDay: "매월 말일" }
+  };
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    var rowsData = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
+    var needUpdate = false;
+    for (var rIdx = 0; rIdx < rowsData.length; rIdx++) {
+      var vend = String(rowsData[rIdx][4] || "").trim();
+      var curAmt = parseAmountStringToNumber(rowsData[rIdx][6]);
+      if (defaultAmounts[vend] && curAmt === 0) {
+        rowsData[rIdx][6] = defaultAmounts[vend].baseAmount;
+        if (!rowsData[rIdx][7]) rowsData[rIdx][7] = defaultAmounts[vend].payDay;
+        needUpdate = true;
+      }
+    }
+    if (needUpdate) {
+      sheet.getRange(2, 1, rowsData.length, 9).setValues(rowsData);
+      sheet.getRange(2, 7, rowsData.length, 1).setNumberFormat("#,##0");
+    }
+  }
+
+  return sheet;
+}
+
+/**
  * [재무 DB] 수금현황, 비용마감, 비용마감_고정 실데이터 읽기
  */
 function getFinanceDbData(p) {
@@ -11465,17 +11583,23 @@ function getFinanceDbData(p) {
     if (sheetExp && sheetExp.getLastRow() >= 2) {
       var expData = sheetExp.getRange(2, 1, sheetExp.getLastRow() - 1, 12).getValues();
       expense = expData.map(function (r) {
+        var sMonth = normalizeSettleMonth_(r[1]);
+        var claim = parseAmountStringToNumber(r[7]);
+        var paid = parseAmountStringToNumber(r[8]);
+        var bal = (r[9] !== "" && r[9] !== null && r[9] !== undefined) ? parseAmountStringToNumber(r[9]) : (claim - paid);
+
         return {
           id: String(r[0] || "").trim(),
-          settleMonth: String(r[1] || "").trim(),
+          settleMonth: sMonth,
           item: String(r[2] || "").trim(),
           category: String(r[3] || "").trim(),
           vendor: String(r[4] || "").trim(),
           category2: String(r[5] || "").trim(),
+          accountNumber: String(r[5] || "").trim(),
           siteName: String(r[6] || "").trim(),
-          claimAmount: Number(r[7]) || 0,
-          paidAmount: Number(r[8]) || 0,
-          balance: Number(r[9]) || 0,
+          claimAmount: claim,
+          paidAmount: paid,
+          balance: bal,
           payDate: String(r[10] || "").trim(),
           note: String(r[11] || "").trim()
         };
@@ -11484,21 +11608,26 @@ function getFinanceDbData(p) {
       });
     }
 
-    // 3. 비용마감_고정 마스터 시트 읽기 (8개 컬럼)
-    var sheetFixed = ss.getSheetByName("비용마감_고정");
+    // 3. 비용마감_고정 마스터 시트 읽기 (9개 컬럼)
+    var sheetFixed = ensureFixedMasterSheet_(ss);
     var fixedMaster = [];
     if (sheetFixed && sheetFixed.getLastRow() >= 2) {
-      var fixedData = sheetFixed.getRange(2, 1, sheetFixed.getLastRow() - 1, 8).getValues();
+      var fixedCols = Math.max(sheetFixed.getLastColumn(), 9);
+      var fixedData = sheetFixed.getRange(2, 1, sheetFixed.getLastRow() - 1, fixedCols).getValues();
       fixedMaster = fixedData.map(function (r) {
+        var rawAmt = r[6];
+        var amt = parseAmountStringToNumber(rawAmt);
         return {
           id: String(r[0] || "").trim(),
-          active: String(r[1] || "").trim(),
-          item: String(r[2] || "").trim(),
+          active: String(r[1] || "Y").trim().toUpperCase(),
+          item: String(r[2] || "고정비").trim(),
           category: String(r[3] || "").trim(),
           vendor: String(r[4] || "").trim(),
           category2: String(r[5] || "").trim(),
-          baseAmount: Number(r[6]) || 0,
-          note: String(r[7] || "").trim()
+          accountNumber: String(r[5] || "").trim(),
+          baseAmount: amt,
+          payDay: String(r[7] || "").trim(),
+          note: String(r[8] || "").trim()
         };
       }).filter(function (item) {
         return item.id || item.item || item.vendor;
@@ -11788,14 +11917,14 @@ function saveExpenseRow(p) {
       targetRowIdx = lastRow + 1;
     }
 
-    var settleMonth = String(rowData.settleMonth || "").trim();
+    var settleMonth = normalizeSettleMonth_(rowData.settleMonth);
     var item = String(rowData.item || "기타").trim();
     var category = String(rowData.category || "").trim();
     var vendor = String(rowData.vendor || "").trim();
     var category2 = String(rowData.category2 || "").trim();
     var siteName = String(rowData.siteName || "공통").trim();
-    var claimAmount = Number(rowData.claimAmount) || 0;
-    var paidAmount = Number(rowData.paidAmount) || 0;
+    var claimAmount = parseAmountStringToNumber(rowData.claimAmount);
+    var paidAmount = parseAmountStringToNumber(rowData.paidAmount);
     var balance = claimAmount - paidAmount;
     var payDate = String(rowData.payDate || "").trim();
     var note = String(rowData.note || "").trim();
@@ -11817,6 +11946,9 @@ function saveExpenseRow(p) {
     ];
 
     sheetExp.getRange(targetRowIdx, 1, 1, 12).setValues([rowValues]);
+
+    // 정산월 컬럼 텍스트 서식 @ 보장 (구글시트 Date 자동변환 방어)
+    sheetExp.getRange(targetRowIdx, 2, 1, 1).setNumberFormat("@");
 
     // 금액 컬럼 #,##0 서식 보장 (8: 청구금액, 9: 지급금액, 10: 잔금)
     var colAmountIndices = [8, 9, 10];
@@ -11923,7 +12055,7 @@ function generateFixedExpensesForMonth(p) {
       return { success: false, error: "고정비 일괄 생성 권한이 없습니다. (조항만 대표 / 관리자 전용)" };
     }
 
-    var targetMonth = String(p.settleMonth || p.month || "").trim();
+    var targetMonth = normalizeSettleMonth_(p.settleMonth || p.month || "");
     if (!targetMonth || !/^\d{4}-\d{2}$/.test(targetMonth)) {
       return { success: false, error: "유효한 정산월(YYYY-MM)을 지정해 주세요: " + targetMonth };
     }
@@ -11935,26 +12067,30 @@ function generateFixedExpensesForMonth(p) {
     }
 
     // 1. 비용마감_고정 마스터 시트 읽기
-    var sheetFixed = ss.getSheetByName("비용마감_고정");
+    var sheetFixed = ensureFixedMasterSheet_(ss);
     if (!sheetFixed || sheetFixed.getLastRow() < 2) {
       return { success: false, error: "비용마감_고정 마스터 시트가 비어있습니다." };
     }
 
     var fixedLastRow = sheetFixed.getLastRow();
-    var fixedData = sheetFixed.getRange(2, 1, fixedLastRow - 1, 8).getValues();
+    var fixedCols = Math.max(sheetFixed.getLastColumn(), 9);
+    var fixedData = sheetFixed.getRange(2, 1, fixedLastRow - 1, fixedCols).getValues();
     var activeMasters = [];
     for (var f = 0; f < fixedData.length; f++) {
       var fr = fixedData[f];
       var isActive = String(fr[1] || "").trim().toUpperCase() === "Y";
       if (isActive && (fr[2] || fr[4])) {
+        var baseAmt = parseAmountStringToNumber(fr[6]);
         activeMasters.push({
           id: String(fr[0] || "").trim(),
-          item: String(fr[2] || "기타").trim(),
+          item: String(fr[2] || "고정비").trim(),
           category: String(fr[3] || "").trim(),
           vendor: String(fr[4] || "").trim(),
           category2: String(fr[5] || "").trim(),
-          baseAmount: Number(fr[6]) || 0,
-          note: String(fr[7] || "").trim()
+          accountNumber: String(fr[5] || "").trim(),
+          baseAmount: baseAmt,
+          payDay: String(fr[7] || "").trim(),
+          note: String(fr[8] || "").trim()
         });
       }
     }
@@ -11963,7 +12099,7 @@ function generateFixedExpensesForMonth(p) {
       return { success: true, createdCount: 0, message: "사용(Y) 설정된 고정비 마스터 항목이 없습니다." };
     }
 
-    // 2. 비용마감 시트의 기존 항목 확인 및 중복 체크
+    // 2. 비용마감 시트의 기존 항목 확인 및 중복 체크 (settleMonth 정규화로 중복 완전 방어)
     var sheetExp = ss.getSheetByName("비용마감");
     if (!sheetExp) sheetExp = getOrCreateSheet_(ss, "비용마감");
 
@@ -11976,7 +12112,7 @@ function generateFixedExpensesForMonth(p) {
       for (var e = 0; e < expData.length; e++) {
         var er = expData[e];
         var eId = String(er[0] || "").trim();
-        var eMonth = String(er[1] || "").trim();
+        var eMonth = normalizeSettleMonth_(er[1]);
         var eItem = String(er[2] || "").trim();
         var eCat = String(er[3] || "").trim();
         var eVendor = String(er[4] || "").trim();
@@ -12006,10 +12142,11 @@ function generateFixedExpensesForMonth(p) {
 
       maxNum++;
       var newId = "EXP-" + ("00000" + maxNum).slice(-5);
-      var claim = am.baseAmount;
+      var claim = parseAmountStringToNumber(am.baseAmount);
       var paid = 0;
       var bal = claim;
       var note = am.note || "고정비 자동생성";
+      var payDate = am.payDay || "";
 
       rowsToInsert.push([
         newId,
@@ -12017,12 +12154,12 @@ function generateFixedExpensesForMonth(p) {
         am.item,
         am.category,
         am.vendor,
-        am.category2,
+        am.accountNumber || am.category2 || "",
         "공통",
         claim,
         paid,
         bal,
-        "",
+        payDate,
         note
       ]);
     }
@@ -12031,6 +12168,9 @@ function generateFixedExpensesForMonth(p) {
       var startRow = expLastRow + 1;
       sheetExp.getRange(startRow, 1, rowsToInsert.length, 12).setValues(rowsToInsert);
 
+      // 서식 설정: 정산월 컬럼(Col 2)은 반드시 텍스트 서식 @ 적용!
+      sheetExp.getRange(startRow, 2, rowsToInsert.length, 1).setNumberFormat("@");
+
       var colAmountIndices = [8, 9, 10];
       colAmountIndices.forEach(function (colIdx) {
         sheetExp.getRange(startRow, colIdx, rowsToInsert.length, 1).setNumberFormat("#,##0");
@@ -12038,32 +12178,12 @@ function generateFixedExpensesForMonth(p) {
     }
 
     // 최신 비용마감 데이터 읽어서 반환
-    var updatedExpLastRow = sheetExp.getLastRow();
-    var latestExpenses = [];
-    if (updatedExpLastRow >= 2) {
-      var allExpData = sheetExp.getRange(2, 1, updatedExpLastRow - 1, 12).getValues();
-      latestExpenses = allExpData.map(function (r) {
-        return {
-          id: String(r[0] || "").trim(),
-          settleMonth: String(r[1] || "").trim(),
-          item: String(r[2] || "").trim(),
-          category: String(r[3] || "").trim(),
-          vendor: String(r[4] || "").trim(),
-          category2: String(r[5] || "").trim(),
-          siteName: String(r[6] || "").trim(),
-          claimAmount: Number(r[7]) || 0,
-          paidAmount: Number(r[8]) || 0,
-          balance: Number(r[9]) || 0,
-          payDate: String(r[10] || "").trim(),
-          note: String(r[11] || "").trim()
-        };
-      }).filter(function (it) { return it.id || it.vendor || it.item; });
-    }
+    var updatedDb = getFinanceDbData({ authUser: u, spreadsheetId: ssId });
 
     return {
       success: true,
       createdCount: rowsToInsert.length,
-      expense: latestExpenses,
+      expense: (updatedDb && updatedDb.expense) || [],
       message: targetMonth + "월 고정비 " + rowsToInsert.length + "건이 생성되었습니다."
     };
   } catch (err) {
@@ -12071,6 +12191,234 @@ function generateFixedExpensesForMonth(p) {
     return {
       success: false,
       error: "고정비 일괄 생성 실패: " + (err.message || String(err))
+    };
+  }
+}
+
+/**
+ * [재무 DB] 비용마감_고정 마스터 행 저장/수정 (FIX-xxx 자동 채번, 금액 파싱 및 서식 보장)
+ */
+function saveFixedMasterRow(p) {
+  try {
+    p = p || {};
+    var u = p.authUser || p.user || (p.row && p.row.authUser) || "";
+    if (!isFinanceAdminUser_(u)) {
+      return { success: false, error: "고정비 마스터 저장 권한이 없습니다. (조항만 대표 / 관리자 전용)" };
+    }
+
+    var row = p.row || p.data || p;
+    if (typeof row === "string") {
+      try { row = JSON.parse(row); } catch (e) { row = {}; }
+    }
+
+    var ssId = (p && p.spreadsheetId) || FINANCE_DB_SPREADSHEET_ID;
+    var ss = SpreadsheetApp.openById(ssId);
+    if (!ss) {
+      return { success: false, error: "재무 DB 스프레드시트를 열 수 없습니다: " + ssId };
+    }
+
+    var sheetFixed = ensureFixedMasterSheet_(ss);
+    var lastRow = sheetFixed.getLastRow();
+
+    var targetId = String(row.id || "").trim();
+    var active = (row.active === false || String(row.active).trim().toUpperCase() === "N") ? "N" : "Y";
+    var item = String(row.item || "고정비").trim();
+    var category = String(row.category || "").trim();
+    var vendor = String(row.vendor || "").trim();
+    var accountNumber = String(row.accountNumber || row.category2 || "").trim();
+    var baseAmount = parseAmountStringToNumber(row.baseAmount);
+    var payDay = String(row.payDay || "").trim();
+    var note = String(row.note || "").trim();
+
+    var foundRowIdx = -1;
+    var maxNum = 0;
+
+    if (lastRow >= 2) {
+      var idColValues = sheetFixed.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (var i = 0; i < idColValues.length; i++) {
+        var curId = String(idColValues[i][0] || "").trim();
+        var match = curId.match(/^FIX-(\d+)$/i);
+        if (match) {
+          var n = parseInt(match[1], 10);
+          if (n > maxNum) maxNum = n;
+        }
+        if (targetId && curId === targetId) {
+          foundRowIdx = i + 2;
+        }
+      }
+    }
+
+    if (!targetId || foundRowIdx === -1) {
+      // 신규 채번: FIX-001 형식
+      maxNum++;
+      targetId = "FIX-" + ("000" + maxNum).slice(-3);
+      var insertRow = [
+        targetId,
+        active,
+        item,
+        category,
+        vendor,
+        accountNumber,
+        baseAmount,
+        payDay,
+        note
+      ];
+      var nextRow = Math.max(lastRow + 1, 2);
+      sheetFixed.getRange(nextRow, 1, 1, 9).setValues([insertRow]);
+      sheetFixed.getRange(nextRow, 7, 1, 1).setNumberFormat("#,##0");
+      sheetFixed.getRange(nextRow, 1, 1, 2).setHorizontalAlignment("center");
+    } else {
+      // 기존 행 업데이트
+      var updateRow = [
+        targetId,
+        active,
+        item,
+        category,
+        vendor,
+        accountNumber,
+        baseAmount,
+        payDay,
+        note
+      ];
+      sheetFixed.getRange(foundRowIdx, 1, 1, 9).setValues([updateRow]);
+      sheetFixed.getRange(foundRowIdx, 7, 1, 1).setNumberFormat("#,##0");
+      sheetFixed.getRange(foundRowIdx, 1, 1, 2).setHorizontalAlignment("center");
+    }
+
+    var updatedDb = getFinanceDbData({ authUser: u, spreadsheetId: ssId });
+    return {
+      success: true,
+      id: targetId,
+      fixedMaster: (updatedDb && updatedDb.fixedMaster) || [],
+      message: "고정비 마스터 항목이 성공적으로 저장되었습니다."
+    };
+  } catch (err) {
+    Logger.log("saveFixedMasterRow error: " + err.toString());
+    return {
+      success: false,
+      error: "고정비 마스터 저장 실패: " + (err.message || String(err))
+    };
+  }
+}
+
+/**
+ * [재무 DB] 비용마감_고정 마스터 행 삭제
+ */
+function deleteFixedMasterRow(p) {
+  try {
+    p = p || {};
+    var u = p.authUser || p.user || "";
+    if (!isFinanceAdminUser_(u)) {
+      return { success: false, error: "고정비 마스터 삭제 권한이 없습니다. (조항만 대표 / 관리자 전용)" };
+    }
+
+    var targetId = String(p.id || "").trim();
+    if (!targetId) {
+      return { success: false, error: "삭제할 고정비 마스터 ID가 지정되지 않았습니다." };
+    }
+
+    var ssId = (p && p.spreadsheetId) || FINANCE_DB_SPREADSHEET_ID;
+    var ss = SpreadsheetApp.openById(ssId);
+    if (!ss) {
+      return { success: false, error: "재무 DB 스프레드시트를 열 수 없습니다: " + ssId };
+    }
+
+    var sheetFixed = ensureFixedMasterSheet_(ss);
+    var lastRow = sheetFixed.getLastRow();
+    if (lastRow < 2) {
+      return { success: false, error: "비용마감_고정 시트에 데이터가 없습니다." };
+    }
+
+    var idColValues = sheetFixed.getRange(2, 1, lastRow - 1, 1).getValues();
+    var deleteRowIdx = -1;
+    for (var i = 0; i < idColValues.length; i++) {
+      if (String(idColValues[i][0] || "").trim() === targetId) {
+        deleteRowIdx = i + 2;
+        break;
+      }
+    }
+
+    if (deleteRowIdx === -1) {
+      return { success: false, error: "해당 ID의 고정비 마스터를 찾을 수 없습니다: " + targetId };
+    }
+
+    sheetFixed.deleteRow(deleteRowIdx);
+
+    var updatedDb = getFinanceDbData({ authUser: u, spreadsheetId: ssId });
+    return {
+      success: true,
+      deletedId: targetId,
+      fixedMaster: (updatedDb && updatedDb.fixedMaster) || [],
+      message: "고정비 마스터 항목(" + targetId + ")이 삭제되었습니다."
+    };
+  } catch (err) {
+    Logger.log("deleteFixedMasterRow error: " + err.toString());
+    return {
+      success: false,
+      error: "고정비 마스터 삭제 실패: " + (err.message || String(err))
+    };
+  }
+}
+
+/**
+ * [재무 DB] 0원 비정상 중복 고정비 행 정리
+ */
+function cleanupCorruptedFixedExpenses(p) {
+  try {
+    p = p || {};
+    var u = p.authUser || p.user || "";
+    if (!isFinanceAdminUser_(u)) {
+      return { success: false, error: "관리자 권한이 없습니다." };
+    }
+
+    var targetMonth = normalizeSettleMonth_(p.settleMonth || p.month || "2026-11");
+    var ssId = (p && p.spreadsheetId) || FINANCE_DB_SPREADSHEET_ID;
+    var ss = SpreadsheetApp.openById(ssId);
+    if (!ss) return { success: false, error: "재무 DB 스프레드시트를 열 수 없습니다." };
+
+    var sheetExp = ss.getSheetByName("비용마감");
+    if (!sheetExp || sheetExp.getLastRow() < 2) {
+      return { success: true, count: 0, message: "비용마감 시트에 삭제할 내역이 없습니다." };
+    }
+
+    var lastRow = sheetExp.getLastRow();
+    var expData = sheetExp.getRange(2, 1, lastRow - 1, 12).getValues();
+    var rowsToDelete = [];
+
+    // 역순으로 탐색하여 행 삭제 인덱스 수집
+    for (var i = expData.length - 1; i >= 0; i--) {
+      var r = expData[i];
+      var m = normalizeSettleMonth_(r[1]);
+      var item = String(r[2] || "").trim();
+      var claim = parseAmountStringToNumber(r[7]);
+      var paid = parseAmountStringToNumber(r[8]);
+      var note = String(r[11] || "").trim();
+
+      // targetMonth 대상 고정비 자동생성 행 중 금액이 0원인 건 삭제 대상
+      if (m === targetMonth && (item === "고정비" || note.indexOf("고정비") !== -1) && claim === 0 && paid === 0) {
+        rowsToDelete.push(i + 2); // 1-based sheet row
+      }
+    }
+
+    var deletedCount = rowsToDelete.length;
+    for (var d = 0; d < rowsToDelete.length; d++) {
+      sheetExp.deleteRow(rowsToDelete[d]);
+    }
+
+    var updatedDb = getFinanceDbData({ authUser: u, spreadsheetId: ssId });
+
+    return {
+      success: true,
+      deletedCount: deletedCount,
+      targetMonth: targetMonth,
+      expense: (updatedDb && updatedDb.expense) || [],
+      message: targetMonth + "월 비정상 0원 고정비 " + deletedCount + "건이 정리되었습니다."
+    };
+  } catch (err) {
+    Logger.log("cleanupCorruptedFixedExpenses error: " + err.toString());
+    return {
+      success: false,
+      error: "고정비 정리 실패: " + (err.message || String(err))
     };
   }
 }
@@ -12125,14 +12473,14 @@ function saveExpenseBatchRows(p) {
       var r = rows[k] || {};
       maxNum++;
       var id = String(r.id || "").trim() || ("EXP-" + ("00000" + maxNum).slice(-5));
-      var settleMonth = String(r.settleMonth || "").trim();
+      var settleMonth = normalizeSettleMonth_(r.settleMonth);
       var item = String(r.item || "외주").trim();
       var category = String(r.category || "").trim();
       var vendor = String(r.vendor || "").trim();
       var category2 = String(r.category2 || "").trim();
       var siteName = String(r.siteName || "공통").trim();
-      var claimAmount = Number(r.claimAmount) || 0;
-      var paidAmount = Number(r.paidAmount) || 0;
+      var claimAmount = parseAmountStringToNumber(r.claimAmount);
+      var paidAmount = parseAmountStringToNumber(r.paidAmount);
       var balance = claimAmount - paidAmount;
       var payDate = String(r.payDate || "").trim();
       var note = String(r.note || "").trim();
@@ -12158,19 +12506,24 @@ function saveExpenseBatchRows(p) {
       });
     }
 
-    var startRow = lastRow + 1;
-    sheetExp.getRange(startRow, 1, newValues.length, 12).setValues(newValues);
+    if (newValues.length > 0) {
+      var startRow = lastRow + 1;
+      sheetExp.getRange(startRow, 1, newValues.length, 12).setValues(newValues);
 
-    var colAmountIndices = [8, 9, 10];
-    colAmountIndices.forEach(function (colIdx) {
-      sheetExp.getRange(startRow, colIdx, newValues.length, 1).setNumberFormat("#,##0");
-    });
+      // 정산월 컬럼 텍스트 서식 @ 보장 (구글시트 Date 자동변환 방어)
+      sheetExp.getRange(startRow, 2, newValues.length, 1).setNumberFormat("@");
+
+      var colAmountIndices = [8, 9, 10];
+      colAmountIndices.forEach(function (colIdx) {
+        sheetExp.getRange(startRow, colIdx, newValues.length, 1).setNumberFormat("#,##0");
+      });
+    }
 
     return {
       success: true,
       count: newValues.length,
       rows: savedRows,
-      message: newValues.length + "건의 비용마감 항목이 일괄 저장되었습니다."
+      message: newValues.length + "건의 비용마감 항목이 성공적으로 저장되었습니다."
     };
   } catch (err) {
     Logger.log("saveExpenseBatchRows error: " + err.toString());
@@ -12609,6 +12962,41 @@ function doGet(e) {
     }
     var genFixedRes = generateFixedExpensesForMonth(pGenFixed);
     return ContentService.createTextOutput(JSON.stringify(genFixedRes))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 0-0-0-Finance-SaveFixed) 고정비 마스터 행 저장/수정 (action=saveFixedMaster or saveFixedMasterRow)
+  if (action === "saveFixedMaster" || action === "saveFixedMasterRow") {
+    var pSaveFixed = p;
+    if (typeof p.row === "string") {
+      try { pSaveFixed = Object.assign({}, p, { row: JSON.parse(p.row) }); } catch (eSf) {}
+    } else if (typeof p.data === "string") {
+      try { pSaveFixed = Object.assign({}, p, { row: JSON.parse(p.data) }); } catch (eSf) {}
+    }
+    var saveFixedRes = saveFixedMasterRow(pSaveFixed);
+    return ContentService.createTextOutput(JSON.stringify(saveFixedRes))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 0-0-0-Finance-DelFixed) 고정비 마스터 행 삭제 (action=deleteFixedMaster or deleteFixedMasterRow)
+  if (action === "deleteFixedMaster" || action === "deleteFixedMasterRow") {
+    var pDelFixed = p;
+    if (typeof p.data === "string") {
+      try { pDelFixed = Object.assign({}, p, JSON.parse(p.data)); } catch (eDf) {}
+    }
+    var delFixedRes = deleteFixedMasterRow(pDelFixed);
+    return ContentService.createTextOutput(JSON.stringify(delFixedRes))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 0-0-0-Finance-CleanFixed) 0원 비정상 중복 고정비 행 정리 (action=cleanupCorruptedFixedExpenses)
+  if (action === "cleanupCorruptedFixedExpenses") {
+    var pCleanFixed = p;
+    if (typeof p.data === "string") {
+      try { pCleanFixed = Object.assign({}, p, JSON.parse(p.data)); } catch (eCf) {}
+    }
+    var cleanFixedRes = cleanupCorruptedFixedExpenses(pCleanFixed);
+    return ContentService.createTextOutput(JSON.stringify(cleanFixedRes))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -13554,6 +13942,41 @@ function doPost(e) {
       }
       var genFixedRes = generateFixedExpensesForMonth(pGenFixed);
       return ContentService.createTextOutput(JSON.stringify(genFixedRes))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 고정비 마스터 행 저장/수정
+    if (action === "saveFixedMaster" || action === "saveFixedMasterRow") {
+      var pSaveFixed = p;
+      if (typeof p.row === "string") {
+        try { pSaveFixed = Object.assign({}, p, { row: JSON.parse(p.row) }); } catch (eSf) {}
+      } else if (typeof p.data === "string") {
+        try { pSaveFixed = Object.assign({}, p, { row: JSON.parse(p.data) }); } catch (eSf) {}
+      }
+      var saveFixedRes = saveFixedMasterRow(pSaveFixed);
+      return ContentService.createTextOutput(JSON.stringify(saveFixedRes))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 고정비 마스터 행 삭제
+    if (action === "deleteFixedMaster" || action === "deleteFixedMasterRow") {
+      var pDelFixed = p;
+      if (typeof p.data === "string") {
+        try { pDelFixed = Object.assign({}, p, JSON.parse(p.data)); } catch (eDf) {}
+      }
+      var delFixedRes = deleteFixedMasterRow(pDelFixed);
+      return ContentService.createTextOutput(JSON.stringify(delFixedRes))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 0원 비정상 중복 고정비 행 정리
+    if (action === "cleanupCorruptedFixedExpenses") {
+      var pCleanFixed = p;
+      if (typeof p.data === "string") {
+        try { pCleanFixed = Object.assign({}, p, JSON.parse(p.data)); } catch (eCf) {}
+      }
+      var cleanFixedRes = cleanupCorruptedFixedExpenses(pCleanFixed);
+      return ContentService.createTextOutput(JSON.stringify(cleanFixedRes))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
