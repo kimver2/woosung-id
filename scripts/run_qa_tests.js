@@ -2231,6 +2231,21 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     v2RootHtml.includes('renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), false)') &&
     v2RootHtml.includes('renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), true)')
   );
+  assertTest('v2.html 내 정산월 표시 포맷(formatShortSettleMonth, 26.11, nowrap) 및 화면 노출 검증',
+    v2RootHtml.includes('function formatShortSettleMonth(val)') &&
+    v2RootHtml.includes('window.formatShortSettleMonth = formatShortSettleMonth') &&
+    v2RootHtml.includes('formatShortSettleMonth(e.settleMonth)') &&
+    v2RootHtml.includes('white-space:nowrap;font-weight:700;color:#475569;')
+  );
+  assertTest('v2.html 내 비용/수금 모달 금액 입력칸 천단위 쉼표 포맷 및 숫자 파싱 검증',
+    v2RootHtml.includes('function formatNumberInputWithCommas(inputEl)') &&
+    v2RootHtml.includes('id="expClaimAmount" value="${(Number(rData.claimAmount) || 0).toLocaleString(\'ko-KR\')}"') &&
+    v2RootHtml.includes('id="expPaidAmount" value="${(Number(rData.paidAmount) || 0).toLocaleString(\'ko-KR\')}"') &&
+    v2RootHtml.includes('window.onExpenseAmountInput') &&
+    v2RootHtml.includes('window.setExpenseFullPaid') &&
+    v2RootHtml.includes('window.matchExpenseFullPaid') &&
+    v2RootHtml.includes('replace(/,/g, "")')
+  );
 }
 console.log('\n========================================================');
 console.log(`📊 [QA 검증 최종 결과]: 총 ${passCount + failCount}개 항목 중 ${passCount}개 통과, ${failCount}개 실패`);

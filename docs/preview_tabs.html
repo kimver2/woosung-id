@@ -2659,6 +2659,83 @@
         if (Math.abs(n) >= 10000) return Math.round(n / 10000).toLocaleString("ko-KR") + "만";
         return n.toLocaleString("ko-KR") + "원";
       }
+      function formatShortSettleMonth(val) {
+        if (!val) return "";
+        const s = String(val).trim();
+        const m = s.match(/^(?:20)?(\d{2})[-./](\d{1,2})/);
+        if (m) {
+          return `${m[1]}.${m[2].padStart(2, "0")}`;
+        }
+        return s;
+      }
+      window.formatShortSettleMonth = formatShortSettleMonth;
+
+      function formatNumberInputWithCommas(inputEl) {
+        if (!inputEl) return;
+        const start = inputEl.selectionStart;
+        const oldVal = inputEl.value || "";
+        const oldDigitsBeforeCursor = oldVal.slice(0, start).replace(/[^0-9]/g, "").length;
+        const rawDigits = oldVal.replace(/[^0-9]/g, "");
+        if (!rawDigits) {
+          inputEl.value = "";
+          return;
+        }
+        const n = parseInt(rawDigits, 10);
+        const formatted = isNaN(n) ? "" : n.toLocaleString("ko-KR");
+        inputEl.value = formatted;
+        
+        let newCursor = formatted.length;
+        if (typeof start === "number" && start < oldVal.length) {
+          let counted = 0;
+          for (let i = 0; i < formatted.length; i++) {
+            if (/[0-9]/.test(formatted[i])) {
+              counted++;
+            }
+            if (counted === oldDigitsBeforeCursor) {
+              newCursor = i + 1;
+              break;
+            }
+          }
+        }
+        try {
+          inputEl.setSelectionRange(newCursor, newCursor);
+        } catch (_) {}
+      }
+      window.formatNumberInputWithCommas = formatNumberInputWithCommas;
+
+      function formatSignedNumberInputWithCommas(inputEl) {
+        if (!inputEl) return;
+        const start = inputEl.selectionStart;
+        const oldVal = inputEl.value || "";
+        const isNegative = oldVal.trim().startsWith("-");
+        const oldDigitsBeforeCursor = oldVal.slice(0, start).replace(/[^0-9]/g, "").length;
+        const rawDigits = oldVal.replace(/[^0-9]/g, "");
+        if (!rawDigits) {
+          inputEl.value = isNegative ? "-" : "";
+          return;
+        }
+        const n = parseInt(rawDigits, 10);
+        const formatted = (isNegative ? "-" : "") + (isNaN(n) ? "" : n.toLocaleString("ko-KR"));
+        inputEl.value = formatted;
+        
+        let newCursor = formatted.length;
+        if (typeof start === "number" && start < oldVal.length) {
+          let counted = 0;
+          for (let i = 0; i < formatted.length; i++) {
+            if (/[0-9]/.test(formatted[i])) {
+              counted++;
+            }
+            if (counted === oldDigitsBeforeCursor) {
+              newCursor = i + 1;
+              break;
+            }
+          }
+        }
+        try {
+          inputEl.setSelectionRange(newCursor, newCursor);
+        } catch (_) {}
+      }
+      window.formatSignedNumberInputWithCommas = formatSignedNumberInputWithCommas;
       function getSiteInfo(siteName) {
         const map = (state.dashData && state.dashData.siteInfoMap) || {};
         if (map[siteName]) return map[siteName];
@@ -5836,17 +5913,33 @@
         renderActiveViews();
       };
 
+      window.onCollectionAmountInput = function(inputEl, isSigned) {
+        if (isSigned) {
+          formatSignedNumberInputWithCommas(inputEl);
+        } else {
+          formatNumberInputWithCommas(inputEl);
+        }
+        calcCollectionModalTotals();
+      };
+
       window.calcCollectionModalTotals = function() {
-        const contract = Number(document.getElementById("colContractAmount") ? document.getElementById("colContractAmount").value : 0) || 0;
-        const change = Number(document.getElementById("colChangeAmount") ? document.getElementById("colChangeAmount").value : 0) || 0;
+        const parseColVal = (id) => {
+          const el = document.getElementById(id);
+          if (!el) return 0;
+          const s = String(el.value || "").replace(/,/g, "").trim();
+          const n = Number(s);
+          return isNaN(n) ? 0 : n;
+        };
+        const contract = parseColVal("colContractAmount");
+        const change = parseColVal("colChangeAmount");
         const total = contract + change;
 
-        const down = Number(document.getElementById("colDownPayment") ? document.getElementById("colDownPayment").value : 0) || 0;
-        const start = Number(document.getElementById("colStartPayment") ? document.getElementById("colStartPayment").value : 0) || 0;
-        const m1 = Number(document.getElementById("colMidPayment1") ? document.getElementById("colMidPayment1").value : 0) || 0;
-        const m2 = Number(document.getElementById("colMidPayment2") ? document.getElementById("colMidPayment2").value : 0) || 0;
-        const m3 = Number(document.getElementById("colMidPayment3") ? document.getElementById("colMidPayment3").value : 0) || 0;
-        const fin = Number(document.getElementById("colFinalPayment") ? document.getElementById("colFinalPayment").value : 0) || 0;
+        const down = parseColVal("colDownPayment");
+        const start = parseColVal("colStartPayment");
+        const m1 = parseColVal("colMidPayment1");
+        const m2 = parseColVal("colMidPayment2");
+        const m3 = parseColVal("colMidPayment3");
+        const fin = parseColVal("colFinalPayment");
 
         const collected = down + start + m1 + m2 + m3 + fin;
         const uncollected = total - collected;
@@ -6040,12 +6133,12 @@
             <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:10px;">
               <div>
                 <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:3px;color:#475569;">계약금액(원)</label>
-                <input type="number" id="colContractAmount" value="${rData.contractAmount || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                <input type="text" inputmode="numeric" id="colContractAmount" value="${rData.contractAmount ? Number(rData.contractAmount).toLocaleString('ko-KR') : ''}" placeholder="0" oninput="window.onCollectionAmountInput(this)"
                   style="width:100%;height:34px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;font-weight:700;text-align:right;" />
               </div>
               <div>
                 <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:3px;color:#475569;">증감액(+ -)</label>
-                <input type="number" id="colChangeAmount" value="${rData.changeAmount || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                <input type="text" inputmode="numeric" id="colChangeAmount" value="${rData.changeAmount ? Number(rData.changeAmount).toLocaleString('ko-KR') : ''}" placeholder="0" oninput="window.onCollectionAmountInput(this, true)"
                   style="width:100%;height:34px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;font-weight:700;text-align:right;" />
               </div>
               <div>
@@ -6061,32 +6154,32 @@
             <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:8px;">
               <div>
                 <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#64748b;">1. 계약금</label>
-                <input type="number" id="colDownPayment" value="${rData.downPayment || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                <input type="text" inputmode="numeric" id="colDownPayment" value="${rData.downPayment ? Number(rData.downPayment).toLocaleString('ko-KR') : ''}" placeholder="0" oninput="window.onCollectionAmountInput(this)"
                   style="width:100%;height:32px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;text-align:right;" />
               </div>
               <div>
                 <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#64748b;">2. 착수금</label>
-                <input type="number" id="colStartPayment" value="${rData.startPayment || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                <input type="text" inputmode="numeric" id="colStartPayment" value="${rData.startPayment ? Number(rData.startPayment).toLocaleString('ko-KR') : ''}" placeholder="0" oninput="window.onCollectionAmountInput(this)"
                   style="width:100%;height:32px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;text-align:right;" />
               </div>
               <div>
                 <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#64748b;">3. 중도금 1차</label>
-                <input type="number" id="colMidPayment1" value="${rData.midPayment1 || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                <input type="text" inputmode="numeric" id="colMidPayment1" value="${rData.midPayment1 ? Number(rData.midPayment1).toLocaleString('ko-KR') : ''}" placeholder="0" oninput="window.onCollectionAmountInput(this)"
                   style="width:100%;height:32px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;text-align:right;" />
               </div>
               <div>
                 <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#64748b;">4. 중도금 2차</label>
-                <input type="number" id="colMidPayment2" value="${rData.midPayment2 || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                <input type="text" inputmode="numeric" id="colMidPayment2" value="${rData.midPayment2 ? Number(rData.midPayment2).toLocaleString('ko-KR') : ''}" placeholder="0" oninput="window.onCollectionAmountInput(this)"
                   style="width:100%;height:32px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;text-align:right;" />
               </div>
               <div>
                 <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#64748b;">5. 중도금 3차</label>
-                <input type="number" id="colMidPayment3" value="${rData.midPayment3 || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                <input type="text" inputmode="numeric" id="colMidPayment3" value="${rData.midPayment3 ? Number(rData.midPayment3).toLocaleString('ko-KR') : ''}" placeholder="0" oninput="window.onCollectionAmountInput(this)"
                   style="width:100%;height:32px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;text-align:right;" />
               </div>
               <div>
                 <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#64748b;">6. 잔금</label>
-                <input type="number" id="colFinalPayment" value="${rData.finalPayment || ""}" placeholder="0" oninput="window.calcCollectionModalTotals()"
+                <input type="text" inputmode="numeric" id="colFinalPayment" value="${rData.finalPayment ? Number(rData.finalPayment).toLocaleString('ko-KR') : ''}" placeholder="0" oninput="window.onCollectionAmountInput(this)"
                   style="width:100%;height:32px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;text-align:right;" />
               </div>
             </div>
@@ -6172,16 +6265,23 @@
         const status = (document.getElementById("colStatus") ? document.getElementById("colStatus").value : "진행중").trim();
         const period = (document.getElementById("colPeriod") ? document.getElementById("colPeriod").value : "").trim();
 
-        const contractAmount = Number(document.getElementById("colContractAmount") ? document.getElementById("colContractAmount").value : 0) || 0;
-        const changeAmount = Number(document.getElementById("colChangeAmount") ? document.getElementById("colChangeAmount").value : 0) || 0;
+        const parseColVal = (id) => {
+          const el = document.getElementById(id);
+          if (!el) return 0;
+          const s = String(el.value || "").replace(/,/g, "").trim();
+          const n = Number(s);
+          return isNaN(n) ? 0 : n;
+        };
+        const contractAmount = parseColVal("colContractAmount");
+        const changeAmount = parseColVal("colChangeAmount");
         const changeDesc = (document.getElementById("colChangeDesc") ? document.getElementById("colChangeDesc").value : "").trim();
 
-        const downPayment = Number(document.getElementById("colDownPayment") ? document.getElementById("colDownPayment").value : 0) || 0;
-        const startPayment = Number(document.getElementById("colStartPayment") ? document.getElementById("colStartPayment").value : 0) || 0;
-        const midPayment1 = Number(document.getElementById("colMidPayment1") ? document.getElementById("colMidPayment1").value : 0) || 0;
-        const midPayment2 = Number(document.getElementById("colMidPayment2") ? document.getElementById("colMidPayment2").value : 0) || 0;
-        const midPayment3 = Number(document.getElementById("colMidPayment3") ? document.getElementById("colMidPayment3").value : 0) || 0;
-        const finalPayment = Number(document.getElementById("colFinalPayment") ? document.getElementById("colFinalPayment").value : 0) || 0;
+        const downPayment = parseColVal("colDownPayment");
+        const startPayment = parseColVal("colStartPayment");
+        const midPayment1 = parseColVal("colMidPayment1");
+        const midPayment2 = parseColVal("colMidPayment2");
+        const midPayment3 = parseColVal("colMidPayment3");
+        const finalPayment = parseColVal("colFinalPayment");
 
         const taxInvoice = (document.getElementById("colTaxInvoice") ? document.getElementById("colTaxInvoice").value : "미발행").trim();
         const note = (document.getElementById("colNote") ? document.getElementById("colNote").value : "").trim();
@@ -6503,14 +6603,14 @@
             <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
               <div>
                 <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">청구금액 (원) <span style="color:#ef4444;">*</span></label>
-                <input type="number" id="expClaimAmount" value="${rData.claimAmount || 0}" min="0" step="1000"
-                  oninput="window.calcExpenseModalBalance()"
+                <input type="text" inputmode="numeric" id="expClaimAmount" value="${(Number(rData.claimAmount) || 0).toLocaleString('ko-KR')}" placeholder="0"
+                  oninput="window.onExpenseAmountInput(this)"
                   style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:14px;font-weight:700;text-align:right;" />
               </div>
               <div>
                 <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#15803d;">지급금액 (원)</label>
-                <input type="number" id="expPaidAmount" value="${rData.paidAmount || 0}" min="0" step="1000"
-                  oninput="window.calcExpenseModalBalance()"
+                <input type="text" inputmode="numeric" id="expPaidAmount" value="${(Number(rData.paidAmount) || 0).toLocaleString('ko-KR')}" placeholder="0"
+                  oninput="window.onExpenseAmountInput(this)"
                   style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:14px;font-weight:700;color:#15803d;text-align:right;" />
               </div>
               <div>
@@ -6564,9 +6664,14 @@
         closeModal("expenseModal");
       };
 
+      window.onExpenseAmountInput = function(inputEl) {
+        formatNumberInputWithCommas(inputEl);
+        calcExpenseModalBalance();
+      };
+
       window.calcExpenseModalBalance = function() {
-        const claim = Number(document.getElementById("expClaimAmount")?.value) || 0;
-        const paid = Number(document.getElementById("expPaidAmount")?.value) || 0;
+        const claim = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
+        const paid = Number(String(document.getElementById("expPaidAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const bal = claim - paid;
         const balEl = document.getElementById("expBalanceDisplay");
         if (balEl) {
@@ -6577,13 +6682,14 @@
       };
 
       window.setExpenseFullPaid = function() {
-        const claim = Number(document.getElementById("expClaimAmount")?.value) || 0;
+        const claim = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const paidEl = document.getElementById("expPaidAmount");
-        if (paidEl) paidEl.value = claim;
+        if (paidEl) paidEl.value = claim > 0 ? claim.toLocaleString("ko-KR") : "0";
         const dateEl = document.getElementById("expPayDate");
         if (dateEl && !dateEl.value) dateEl.value = getTodayYmd();
         calcExpenseModalBalance();
       };
+      window.matchExpenseFullPaid = window.setExpenseFullPaid;
 
       window.onExpenseVendorChange = function(vendorVal, isUserAction) {
         if (!vendorVal) return;
@@ -6625,8 +6731,8 @@
         const category = (document.getElementById("expCategory")?.value || "").trim();
         const siteName = (document.getElementById("expSiteName")?.value || "공통").trim();
         const category2 = (document.getElementById("expCategory2")?.value || "").trim();
-        const claimAmount = Number(document.getElementById("expClaimAmount")?.value) || 0;
-        const paidAmount = Number(document.getElementById("expPaidAmount")?.value) || 0;
+        const claimAmount = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
+        const paidAmount = Number(String(document.getElementById("expPaidAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const balance = claimAmount - paidAmount;
         const payDate = (document.getElementById("expPayDate")?.value || "").trim();
         const note = (document.getElementById("expNote")?.value || "").trim();
@@ -6930,11 +7036,13 @@
                       ${!item.accountInfo && !item.partnerPhone ? "<span>-</span>" : ""}
                     </td>
                     <td>
-                      <input type="number" id="pImpClaim_${idx}" value="0" min="0" step="10000"
+                      <input type="text" inputmode="numeric" id="pImpClaim_${idx}" value="0" placeholder="0"
+                        oninput="window.formatNumberInputWithCommas(this)"
                         style="width:100%;height:30px;padding:0 6px;border-radius:4px;border:1px solid #cbd5e1;font-size:12px;font-weight:700;text-align:right;" />
                     </td>
                     <td>
-                      <input type="number" id="pImpPaid_${idx}" value="0" min="0" step="10000"
+                      <input type="text" inputmode="numeric" id="pImpPaid_${idx}" value="0" placeholder="0"
+                        oninput="window.formatNumberInputWithCommas(this)"
                         style="width:100%;height:30px;padding:0 6px;border-radius:4px;border:1px solid #cbd5e1;font-size:12px;font-weight:700;color:#15803d;text-align:right;" />
                     </td>
                     <td>
@@ -6990,8 +7098,8 @@
           const item = rawList[idx];
           if (!item) return;
 
-          const claim = Number(document.getElementById(`pImpClaim_${idx}`)?.value) || 0;
-          const paid = Number(document.getElementById(`pImpPaid_${idx}`)?.value) || 0;
+          const claim = Number(String(document.getElementById(`pImpClaim_${idx}`)?.value || "").replace(/,/g, "").trim()) || 0;
+          const paid = Number(String(document.getElementById(`pImpPaid_${idx}`)?.value || "").replace(/,/g, "").trim()) || 0;
           const note = (document.getElementById(`pImpNote_${idx}`)?.value || "").trim();
 
           rows.push({
@@ -7206,7 +7314,7 @@
               <table class="clean-table" style="font-size:12px;min-width:720px;">
                 <thead>
                   <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
-                    <th style="width:70px;">정산월</th>
+                    <th style="width:70px;white-space:nowrap;">정산월</th>
                     <th style="width:60px;">항목</th>
                     <th style="width:90px;">구분</th>
                     <th style="width:120px;">업체명</th>
@@ -7225,7 +7333,7 @@
                     const bal = claim - paid;
                     return `
                       <tr>
-                        <td>${escHtml(e.settleMonth)}</td>
+                        <td style="white-space:nowrap;font-weight:700;color:#475569;">${escHtml(formatShortSettleMonth(e.settleMonth))}</td>
                         <td><span style="padding:1px 5px;border-radius:3px;font-size:10.5px;background:#f1f5f9;color:#334155;font-weight:700;">${escHtml(e.item)}</span></td>
                         <td>${escHtml(e.category)}</td>
                         <td><strong>${escHtml(e.vendor)}</strong></td>
@@ -7433,7 +7541,7 @@
 
             return `
               <tr style="${bal > 0 ? "background:#fffbfb;" : ""}">
-                <td><span style="font-weight:700;color:#475569;">${escHtml(e.settleMonth)}</span></td>
+                <td style="white-space:nowrap;"><span style="font-weight:700;color:#475569;white-space:nowrap;">${escHtml(formatShortSettleMonth(e.settleMonth))}</span></td>
                 <td>
                   <span style="padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;background:${itemBadgeBg};color:${itemBadgeColor};">
                     ${escHtml(e.item)}
@@ -7495,7 +7603,7 @@
               <table class="clean-table" style="min-width:1100px;font-size:12.5px;">
                 <thead>
                   <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;text-align:left;">
-                    <th style="padding:10px 10px;width:80px;">정산월</th>
+                    <th style="padding:10px 10px;width:80px;white-space:nowrap;">정산월</th>
                     <th style="padding:10px 8px;width:70px;">항목</th>
                     <th style="padding:10px 10px;width:110px;">구분</th>
                     <th style="padding:10px 12px;width:140px;">업체명</th>
@@ -9387,7 +9495,7 @@
                       <span style="font-size:14px;font-weight:800;color:#1e293b;">${escHtml(e.vendor)}</span>
                     </div>
                     <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px;">
-                      ${escHtml(e.settleMonth)} · ${escHtml(e.category)}
+                      <span style="white-space:nowrap;font-weight:700;color:#475569;">${escHtml(formatShortSettleMonth(e.settleMonth))}</span> · ${escHtml(e.category)}
                       ${e.siteName && e.siteName !== "공통" ? ` · <span style="color:#2563eb;font-weight:700;cursor:pointer;text-decoration:underline;" onclick="window.openSiteFinanceDetailModal('${escJs(e.siteName)}')">${escHtml(e.siteName)}</span>` : " · 공통"}
                     </div>
                   </div>
