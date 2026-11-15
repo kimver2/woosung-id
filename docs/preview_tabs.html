@@ -5909,7 +5909,22 @@
         state.financeSubTab = subTab;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
+        state._needFinanceScrollTop = true;
+        if (typeof resetFinanceScrollTop === "function") {
+          resetFinanceScrollTop();
+        }
         renderActiveViews();
+        if (typeof resetFinanceScrollTop === "function") {
+          resetFinanceScrollTop();
+        }
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(() => {
+            if (typeof resetFinanceScrollTop === "function") resetFinanceScrollTop();
+            requestAnimationFrame(() => {
+              if (typeof resetFinanceScrollTop === "function") resetFinanceScrollTop();
+            });
+          });
+        }
         ensureFinanceDbDataLoaded(true);
       };
 
@@ -8375,6 +8390,18 @@
           return;
         }
 
+        function checkAndResetFinanceScroll() {
+          if (state._needFinanceScrollTop) {
+            state._needFinanceScrollTop = false;
+            if (typeof resetFinanceScrollTop === "function") resetFinanceScrollTop();
+            if (typeof requestAnimationFrame === "function") {
+              requestAnimationFrame(() => {
+                if (typeof resetFinanceScrollTop === "function") resetFinanceScrollTop();
+              });
+            }
+          }
+        }
+
         ensureFinanceDbDataLoaded();
 
         if (state.financeLoading && (!state.financeDbData || !Array.isArray(state.financeDbData.collection))) {
@@ -8623,6 +8650,7 @@
             ${actionFilterBarHtml}
             ${tableHtml}
           `;
+          checkAndResetFinanceScroll();
           return;
         }
 
@@ -8631,6 +8659,7 @@
             ${subTabsHtml}
             ${buildFinanceMonthlyDashboardHtml(false)}
           `;
+          checkAndResetFinanceScroll();
           return;
         }
 
@@ -8770,6 +8799,7 @@
             ${fixedActionBarHtml}
             ${fixedTableHtml}
           `;
+          checkAndResetFinanceScroll();
           return;
         }
 
@@ -8943,6 +8973,7 @@
           ${filterBarHtml}
           ${tableHtml}
         `;
+        checkAndResetFinanceScroll();
       }
 
       // ================= [거래처 마스터 조회 & 필터 헬퍼 (PC & 모바일 공용)] =================
@@ -10469,6 +10500,18 @@
           return;
         }
 
+        function checkAndResetMobileFinanceScroll() {
+          if (state._needFinanceScrollTop) {
+            state._needFinanceScrollTop = false;
+            if (typeof resetFinanceScrollTop === "function") resetFinanceScrollTop();
+            if (typeof requestAnimationFrame === "function") {
+              requestAnimationFrame(() => {
+                if (typeof resetFinanceScrollTop === "function") resetFinanceScrollTop();
+              });
+            }
+          }
+        }
+
         ensureFinanceDbDataLoaded();
 
         if (state.financeLoading && (!state.financeDbData || !Array.isArray(state.financeDbData.collection))) {
@@ -10693,6 +10736,7 @@
             ${actionFilterBarHtml}
             ${cardsHtml}
           `;
+          checkAndResetMobileFinanceScroll();
           return;
         }
 
@@ -10703,6 +10747,7 @@
               ${subTabsHtml}
               ${buildFinanceMonthlyDashboardHtml(true)}
             `;
+            checkAndResetMobileFinanceScroll();
           }
           return;
         }
@@ -10813,6 +10858,7 @@
               ${mActionBarHtml}
               ${mCardsHtml}
             `;
+            checkAndResetMobileFinanceScroll();
           }
           return;
         }
@@ -10965,6 +11011,7 @@
           ${filterBarHtml}
           ${cardsHtml}
         `;
+        checkAndResetMobileFinanceScroll();
       }
 
       function renderActiveViews() {
@@ -14710,12 +14757,112 @@
         renderActiveViews();
       };
 
+      function resetPcScrollTop(tabKey) {
+        try {
+          if (typeof window.scrollTo === "function") {
+            window.scrollTo(0, 0);
+          }
+          if (document.documentElement) document.documentElement.scrollTop = 0;
+          if (document.body) document.body.scrollTop = 0;
+          const scrollSelectors = [
+            ".device-viewport-wrapper",
+            "#pcViewFrame",
+            ".pc-app-frame",
+            ".app-workspace",
+            ".page-container",
+            ".page-container.active",
+            "#page-finance",
+            "#pcFinanceMain",
+            "#page-partners",
+            "#pcPartnersMain",
+            "#page-home",
+            "#pcHomeMain",
+            ".home-workspace",
+            "#page-todo",
+            "#pcTodoMain",
+            ".todo-workspace-view",
+            "#page-calendar",
+            "#pcCalMain",
+            ".calendar-workspace-view",
+            "#page-sites",
+            "#pcSiteMain",
+            "#page-quote",
+            "#pcQuoteMain",
+            ".site-list-workspace-view",
+            ".standard-page-view"
+          ];
+          if (tabKey) {
+            scrollSelectors.push("#page-" + tabKey);
+          }
+          scrollSelectors.forEach((sel) => {
+            document.querySelectorAll(sel).forEach((el) => {
+              if (el && el.scrollTop > 0) el.scrollTop = 0;
+            });
+          });
+        } catch (_) {}
+      }
+      window.resetPcScrollTop = resetPcScrollTop;
+
+      function resetMobileScrollTop() {
+        try {
+          if (typeof window.scrollTo === "function") {
+            window.scrollTo(0, 0);
+          }
+          if (document.documentElement) document.documentElement.scrollTop = 0;
+          if (document.body) document.body.scrollTop = 0;
+          const scrollSelectors = [
+            "#mobileScreenInner",
+            ".mobile-screen-inner",
+            "#mAppBody",
+            ".m-app-body",
+            ".m-body",
+            ".mobile-body",
+            "#mobilePhoneFrame",
+            ".device-viewport-wrapper",
+            ".m-page-pane",
+            ".m-page-pane.active",
+            "#m-page-finance",
+            "#mobileFinanceMain",
+            "#m-page-home",
+            "#m-page-todo",
+            "#m-page-calendar",
+            "#m-page-sites",
+            "#m-page-quote",
+            "#m-page-partners"
+          ];
+          scrollSelectors.forEach((sel) => {
+            document.querySelectorAll(sel).forEach((el) => {
+              if (el && el.scrollTop > 0) el.scrollTop = 0;
+            });
+          });
+        } catch (_) {}
+      }
+      window.resetMobileScrollTop = resetMobileScrollTop;
+
+      function resetFinanceScrollTop() {
+        try {
+          resetPcScrollTop("finance");
+          resetMobileScrollTop();
+          const finPc = document.getElementById("pcFinanceMain");
+          if (finPc && finPc.scrollTop > 0) finPc.scrollTop = 0;
+          const finMob = document.getElementById("m-page-finance");
+          if (finMob && finMob.scrollTop > 0) finMob.scrollTop = 0;
+          const mBody = document.getElementById("mAppBody") || document.querySelector(".m-app-body");
+          if (mBody && mBody.scrollTop > 0) mBody.scrollTop = 0;
+          if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
+          if (document.documentElement) document.documentElement.scrollTop = 0;
+          if (document.body) document.body.scrollTop = 0;
+        } catch (_) {}
+      }
+      window.resetFinanceScrollTop = resetFinanceScrollTop;
+
       window.switchMainTab = function (tabKey, opts) {
         opts = opts || {};
         if (tabKey === "finance" && !canViewFinance()) {
           tabKey = "partners";
         }
         if (tabKey === "finance") {
+          state._needFinanceScrollTop = true;
           ensureFinanceDbDataLoaded(true);
         }
         if (state.device === "mobile" && IS_PREVIEW_MODE && !opts.keepDevice) window.switchDeviceMode("pc");
@@ -14746,35 +14893,16 @@
         document.querySelectorAll(".page-container").forEach((page) => page.classList.remove("active"));
         const target = document.getElementById("page-" + tabKey);
         if (target) target.classList.add("active");
+        resetPcScrollTop(tabKey);
         renderActiveViews();
-      };
-
-      function resetMobileScrollTop() {
-        try {
-          if (typeof window.scrollTo === "function") {
-            window.scrollTo(0, 0);
-          }
-          if (document.documentElement) document.documentElement.scrollTop = 0;
-          if (document.body) document.body.scrollTop = 0;
-          const scrollSelectors = [
-            "#mobileScreenInner",
-            ".mobile-screen-inner",
-            ".m-app-body",
-            ".m-body",
-            ".mobile-body",
-            "#mobilePhoneFrame",
-            ".device-viewport-wrapper",
-            ".m-page-pane",
-            ".m-page-pane.active"
-          ];
-          scrollSelectors.forEach((sel) => {
-            document.querySelectorAll(sel).forEach((el) => {
-              if (el && el.scrollTop > 0) el.scrollTop = 0;
-            });
+        resetPcScrollTop(tabKey);
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(() => {
+            resetPcScrollTop(tabKey);
+            requestAnimationFrame(() => resetPcScrollTop(tabKey));
           });
-        } catch (_) {}
-      }
-      window.resetMobileScrollTop = resetMobileScrollTop;
+        }
+      };
 
       window.switchMobileTab = function (tabKey, opts) {
         opts = opts || {};
@@ -14782,6 +14910,7 @@
           tabKey = "partners";
         }
         if (tabKey === "finance") {
+          state._needFinanceScrollTop = true;
           ensureFinanceDbDataLoaded(true);
         }
         const prevTab = state.mobileTab;
@@ -14848,6 +14977,7 @@
 
         resetMobileScrollTop();
         renderActiveViews();
+        resetMobileScrollTop();
         if (typeof requestAnimationFrame === "function") {
           requestAnimationFrame(() => {
             resetMobileScrollTop();
