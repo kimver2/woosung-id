@@ -2679,7 +2679,8 @@
       }
       function formatShortSettleMonth(val) {
         if (!val) return "";
-        const s = String(val).trim();
+        const norm = (typeof normalizeMonthStr === "function") ? normalizeMonthStr(val) : String(val).trim();
+        const s = String(norm || "").trim();
         const m = s.match(/^(?:20)?(\d{2})[-./](\d{1,2})/);
         if (m) {
           return `${m[1]}.${m[2].padStart(2, "0")}`;
@@ -6430,8 +6431,17 @@
         const s = String(m).trim();
         if (/^\d{4}-\d{2}$/.test(s)) return s;
 
-        if (s.includes("GMT") || s.includes("T") || s.includes("한국") || s.includes("Standard Time")) {
-          const d = new Date(s);
+        if (s.includes("GMT") || s.includes("T") || s.includes("한국") || s.includes("Standard Time") || /[a-zA-Z]{3}/.test(s)) {
+          // 1) "Sun Nov 01 2026 ..." 형태 문자열에서 직접 추출 (클라이언트 타임존 오차 방지)
+          const enMonthMatch = s.match(/(?:[A-Za-z]{3}\s+)?([A-Za-z]{3})\s+\d{1,2}\s+(\d{4})/);
+          if (enMonthMatch) {
+            const mNames = { Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06", Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12" };
+            const mCode = mNames[enMonthMatch[1]];
+            if (mCode) return `${enMonthMatch[2]}-${mCode}`;
+          }
+          // 2) 일반 Date 문자열 파싱 (괄호 안 한글/영문 타임존 (한국 표준시) 등 제거 후 new Date 파싱)
+          const cleanDateStr = s.replace(/\s*\([^)]*\)/g, "").trim();
+          const d = new Date(cleanDateStr);
           if (!isNaN(d.getTime())) {
             const dy = d.getFullYear();
             const dm = ("0" + (d.getMonth() + 1)).slice(-2);
@@ -6442,6 +6452,10 @@
         const match = s.match(/(\d{4})[.\-\/](\d{1,2})/);
         if (match) {
           return `${match[1]}-${("0" + match[2]).slice(-2)}`;
+        }
+        const match2 = s.match(/^(?:20)?(\d{2})[-./](\d{1,2})/);
+        if (match2) {
+          return `20${match2[1]}-${("0" + match2[2]).slice(-2)}`;
         }
         return s;
       }
@@ -6813,46 +6827,89 @@
           note: note
         };
 
-        const btn = document.getElementById("btnSaveExpenseRow");
-        if (btn) {
-          btn.disabled = true;
-          btn.textContent = "저장 중...";
+        const ds = window.WSDataService;
+        if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+        if (!Array.isArray(state.financeDbData.expense)) state.financeDbData.expense = [];
+
+        // 1) 롤백용 스냅샷 저장
+        const prevExpense = JSON.parse(JSON.stringify(state.financeDbData.expense));
+
+        // 2) 즉시 메모리 상태 업데이트 (체감 0ms 낙관적 업데이트)
+        let tempExpId = "";
+        if (id) {
+          const idx = state.financeDbData.expense.findIndex(e => e.id === id);
+          if (idx !== -1) {
+            state.financeDbData.expense[idx] = Object.assign({}, state.financeDbData.expense[idx], payload);
+          } else {
+            state.financeDbData.expense.unshift(payload);
+          }
+        } else {
+          tempExpId = "temp_exp_" + Date.now();
+          payload.id = tempExpId;
+          state.financeDbData.expense.unshift(payload);
         }
 
-        WSDataService.saveExpenseRow(payload, state.authUser).then(res => {
+        // 3) 캐시 저장, 모달 즉시 닫기, UI 갱신, 토스트 표시 즉시 실행
+        if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+        closeExpenseModal();
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+
+        if (window.currentDetailSiteName) {
+          window.openSiteFinanceDetailModal(window.currentDetailSiteName, window.currentDetailColId);
+        }
+        showToast("✅ 비용마감 항목이 성공적으로 저장되었습니다.");
+
+        // 4) 백그라운드 비동기 통신 및 조용한 ID 동기화
+        const sendPayload = Object.assign({}, payload, { id: id || "" });
+        if (!ds || typeof ds.saveExpenseRow !== "function") return;
+
+        ds.saveExpenseRow(sendPayload, state.authUser).then(res => {
           if (res && res.success) {
-            const saved = res.row || payload;
+            const saved = res.row || sendPayload;
             if (!saved.id && res.id) saved.id = res.id;
-
-            if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
-            if (!Array.isArray(state.financeDbData.expense)) state.financeDbData.expense = [];
-
-            const idx = state.financeDbData.expense.findIndex(e => e.id === saved.id);
-            if (idx !== -1) {
-              state.financeDbData.expense[idx] = saved;
-            } else {
-              state.financeDbData.expense.unshift(saved);
+            const targetId = saved.id || res.id;
+            if (targetId && tempExpId) {
+              const curIdx = state.financeDbData.expense.findIndex(e => e.id === tempExpId);
+              if (curIdx !== -1) {
+                state.financeDbData.expense[curIdx] = Object.assign({}, state.financeDbData.expense[curIdx], saved, { id: targetId });
+              }
+            } else if (saved.id) {
+              const curIdx = state.financeDbData.expense.findIndex(e => e.id === saved.id);
+              if (curIdx !== -1) {
+                state.financeDbData.expense[curIdx] = Object.assign({}, state.financeDbData.expense[curIdx], saved);
+              }
             }
-
-            closeExpenseModal();
+            if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
             state.dirtyPcTabs.finance = true;
             state.dirtyMobileTabs.finance = true;
             renderActiveViews();
-
-            // 현장 정산 상세 모달이 열려있다면 해당 모달 실시간 갱신
             if (window.currentDetailSiteName) {
               window.openSiteFinanceDetailModal(window.currentDetailSiteName, window.currentDetailColId);
             }
-
-            showToast("✅ 비용마감 항목이 성공적으로 저장되었습니다.");
           } else {
-            alert("비용마감 저장 실패: " + (res && res.error ? res.error : "알 수 없는 오류"));
-            if (btn) { btn.disabled = false; btn.textContent = "저장하기"; }
+            state.financeDbData.expense = prevExpense;
+            if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+            state.dirtyPcTabs.finance = true;
+            state.dirtyMobileTabs.finance = true;
+            renderActiveViews();
+            if (window.currentDetailSiteName) {
+              window.openSiteFinanceDetailModal(window.currentDetailSiteName, window.currentDetailColId);
+            }
+            alert("비용마감 저장 실패: " + ((res && res.error) || "알 수 없는 오류"));
           }
         }).catch(err => {
           console.error("saveExpenseRow error:", err);
+          state.financeDbData.expense = prevExpense;
+          if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+          state.dirtyPcTabs.finance = true;
+          state.dirtyMobileTabs.finance = true;
+          renderActiveViews();
+          if (window.currentDetailSiteName) {
+            window.openSiteFinanceDetailModal(window.currentDetailSiteName, window.currentDetailColId);
+          }
           alert("저장 통신 오류: " + (err.message || String(err)));
-          if (btn) { btn.disabled = false; btn.textContent = "저장하기"; }
         });
       };
 
@@ -6860,26 +6917,53 @@
         if (!id) return;
         if (!confirm("해당 비용마감 항목을 삭제하시겠습니까?")) return;
 
-        WSDataService.deleteExpenseRow(id, state.authUser).then(res => {
+        const ds = window.WSDataService;
+        if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+        if (!Array.isArray(state.financeDbData.expense)) state.financeDbData.expense = [];
+
+        // 1) 롤백용 스냅샷 저장
+        const prevExpense = JSON.parse(JSON.stringify(state.financeDbData.expense));
+
+        // 2) 즉시 메모리 상태 업데이트 및 UI 반영 (체감 0ms)
+        state.financeDbData.expense = state.financeDbData.expense.filter(e => e.id !== id);
+        if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+        closeExpenseModal();
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+
+        if (window.currentDetailSiteName) {
+          window.openSiteFinanceDetailModal(window.currentDetailSiteName, window.currentDetailColId);
+        }
+        showToast("🗑️ 비용마감 항목이 삭제되었습니다.");
+
+        // 3) 백그라운드 비동기 통신
+        if (!ds || typeof ds.deleteExpenseRow !== "function") return;
+
+        ds.deleteExpenseRow(id, state.authUser).then(res => {
           if (res && res.success) {
-            if (state.financeDbData && Array.isArray(state.financeDbData.expense)) {
-              state.financeDbData.expense = state.financeDbData.expense.filter(e => e.id !== id);
-            }
-            closeExpenseModal();
+            // 삭제 완료 확인
+          } else {
+            state.financeDbData.expense = prevExpense;
+            if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
             state.dirtyPcTabs.finance = true;
             state.dirtyMobileTabs.finance = true;
             renderActiveViews();
-
             if (window.currentDetailSiteName) {
               window.openSiteFinanceDetailModal(window.currentDetailSiteName, window.currentDetailColId);
             }
-
-            showToast("🗑️ 비용마감 항목이 삭제되었습니다.");
-          } else {
-            alert("삭제 실패: " + (res && res.error ? res.error : "알 수 없는 오류"));
+            alert("삭제 실패: " + ((res && res.error) || "알 수 없는 오류"));
           }
         }).catch(err => {
           console.error("deleteExpenseRow error:", err);
+          state.financeDbData.expense = prevExpense;
+          if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+          state.dirtyPcTabs.finance = true;
+          state.dirtyMobileTabs.finance = true;
+          renderActiveViews();
+          if (window.currentDetailSiteName) {
+            window.openSiteFinanceDetailModal(window.currentDetailSiteName, window.currentDetailColId);
+          }
           alert("삭제 통신 오류: " + (err.message || String(err)));
         });
       };
@@ -7170,28 +7254,70 @@
           note: note
         };
 
-        const btn = document.getElementById("btnSaveFixedMaster");
-        if (btn) { btn.disabled = true; btn.textContent = "저장 중..."; }
+        const ds = window.WSDataService;
+        if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+        if (!Array.isArray(state.financeDbData.fixedMaster)) state.financeDbData.fixedMaster = [];
 
-        WSDataService.saveFixedMasterRow(payload, state.authUser).then(res => {
+        // 1) 롤백용 백업 저장
+        const prevFixedMaster = JSON.parse(JSON.stringify(state.financeDbData.fixedMaster));
+
+        // 2) 즉시 메모리 상태 업데이트 (체감 0ms 낙관적 업데이트)
+        let tempId = "";
+        if (id) {
+          const exIdx = state.financeDbData.fixedMaster.findIndex(f => f.id === id);
+          if (exIdx >= 0) {
+            state.financeDbData.fixedMaster[exIdx] = Object.assign({}, state.financeDbData.fixedMaster[exIdx], payload);
+          } else {
+            state.financeDbData.fixedMaster.unshift(payload);
+          }
+        } else {
+          tempId = "temp_fm_" + Date.now();
+          payload.id = tempId;
+          state.financeDbData.fixedMaster.unshift(payload);
+        }
+
+        // 3) 캐시 저장, 모달 즉시 닫기, UI 갱신, 토스트 표시 즉시 실행
+        if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+        closeFixedMasterModal();
+        showToast("✅ 고정비 마스터 항목이 저장되었습니다.");
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+
+        // 4) 백그라운드 비동기 통신 및 조용한 ID 동기화 (실패 시 롤백)
+        const sendPayload = Object.assign({}, payload, { id: id || "" });
+        if (!ds || typeof ds.saveFixedMasterRow !== "function") return;
+
+        ds.saveFixedMasterRow(sendPayload, state.authUser).then(res => {
           if (res && res.success) {
             if (res.fixedMaster && Array.isArray(res.fixedMaster)) {
-              if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
               state.financeDbData.fixedMaster = res.fixedMaster;
+            } else if (res.id && tempId) {
+              const curIdx = state.financeDbData.fixedMaster.findIndex(f => f.id === tempId);
+              if (curIdx >= 0) {
+                state.financeDbData.fixedMaster[curIdx].id = res.id;
+              }
             }
-            closeFixedMasterModal();
-            showToast("✅ 고정비 마스터 항목이 저장되었습니다.");
+            if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
             state.dirtyPcTabs.finance = true;
             state.dirtyMobileTabs.finance = true;
             renderActiveViews();
           } else {
+            state.financeDbData.fixedMaster = prevFixedMaster;
+            if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+            state.dirtyPcTabs.finance = true;
+            state.dirtyMobileTabs.finance = true;
+            renderActiveViews();
             alert("고정비 저장 실패: " + ((res && res.error) || "알 수 없는 오류"));
-            if (btn) { btn.disabled = false; btn.textContent = "저장"; }
           }
         }).catch(err => {
           console.error("saveFixedMaster error:", err);
+          state.financeDbData.fixedMaster = prevFixedMaster;
+          if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+          state.dirtyPcTabs.finance = true;
+          state.dirtyMobileTabs.finance = true;
+          renderActiveViews();
           alert("고정비 저장 통신 오류: " + (err.message || String(err)));
-          if (btn) { btn.disabled = false; btn.textContent = "저장"; }
         });
       };
 
@@ -7201,59 +7327,97 @@
           return;
         }
 
-        WSDataService.deleteFixedMasterRow(id, state.authUser).then(res => {
+        const ds = window.WSDataService;
+        if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+        if (!Array.isArray(state.financeDbData.fixedMaster)) state.financeDbData.fixedMaster = [];
+
+        // 1) 롤백용 백업 저장
+        const prevFixedMaster = JSON.parse(JSON.stringify(state.financeDbData.fixedMaster));
+
+        // 2) 즉시 메모리 상태 업데이트 및 캐시 반영 (체감 0ms)
+        state.financeDbData.fixedMaster = state.financeDbData.fixedMaster.filter(f => f.id !== id);
+        if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+        closeFixedMasterModal();
+        showToast("🗑️ 고정비 마스터 항목이 삭제되었습니다.");
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+
+        // 3) 백그라운드 비동기 통신 (실패 시 롤백)
+        if (!ds || typeof ds.deleteFixedMasterRow !== "function") return;
+
+        ds.deleteFixedMasterRow(id, state.authUser).then(res => {
           if (res && res.success) {
             if (res.fixedMaster && Array.isArray(res.fixedMaster)) {
-              if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
               state.financeDbData.fixedMaster = res.fixedMaster;
-            } else if (state.financeDbData && Array.isArray(state.financeDbData.fixedMaster)) {
-              state.financeDbData.fixedMaster = state.financeDbData.fixedMaster.filter(f => f.id !== id);
+              if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+              state.dirtyPcTabs.finance = true;
+              state.dirtyMobileTabs.finance = true;
+              renderActiveViews();
             }
-            closeFixedMasterModal();
-            showToast("🗑️ 고정비 마스터 항목이 삭제되었습니다.");
+          } else {
+            state.financeDbData.fixedMaster = prevFixedMaster;
+            if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
             state.dirtyPcTabs.finance = true;
             state.dirtyMobileTabs.finance = true;
             renderActiveViews();
-          } else {
             alert("고정비 삭제 실패: " + ((res && res.error) || "알 수 없는 오류"));
           }
         }).catch(err => {
           console.error("deleteFixedMaster error:", err);
+          state.financeDbData.fixedMaster = prevFixedMaster;
+          if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+          state.dirtyPcTabs.finance = true;
+          state.dirtyMobileTabs.finance = true;
+          renderActiveViews();
           alert("고정비 삭제 통신 오류: " + (err.message || String(err)));
         });
       };
 
       window.onToggleFixedMasterActive = function(id, currentActive) {
-        const fmList = (state.financeDbData && Array.isArray(state.financeDbData.fixedMaster)) ? state.financeDbData.fixedMaster : [];
+        if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+        if (!Array.isArray(state.financeDbData.fixedMaster)) state.financeDbData.fixedMaster = [];
+
+        const fmList = state.financeDbData.fixedMaster;
         const item = fmList.find(f => f.id === id);
         if (!item) return;
 
+        const ds = window.WSDataService;
+        const prevActive = item.active;
         const nextActive = (currentActive === "Y") ? "N" : "Y";
         const updated = Object.assign({}, item, { active: nextActive });
 
+        // 1) 즉시 메모리 및 UI 반영 (체감 0ms)
         item.active = nextActive;
+        if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
+        showToast(nextActive === "Y" ? `🟢 [${item.vendor || item.category}] 활성화되었습니다.` : `⚪ [${item.vendor || item.category}] 비활성화되었습니다.`);
 
-        WSDataService.saveFixedMasterRow(updated, state.authUser).then(res => {
+        // 2) 백그라운드 비동기 통신 (실패 시 롤백)
+        if (!ds || typeof ds.saveFixedMasterRow !== "function") return;
+
+        ds.saveFixedMasterRow(updated, state.authUser).then(res => {
           if (res && res.success) {
             if (res.fixedMaster && Array.isArray(res.fixedMaster)) {
               state.financeDbData.fixedMaster = res.fixedMaster;
+              if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
               state.dirtyPcTabs.finance = true;
               state.dirtyMobileTabs.finance = true;
               renderActiveViews();
             }
-            showToast(nextActive === "Y" ? `🟢 [${item.vendor || item.category}] 활성화되었습니다.` : `⚪ [${item.vendor || item.category}] 비활성화되었습니다.`);
           } else {
-            item.active = currentActive;
+            item.active = prevActive;
+            if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
             state.dirtyPcTabs.finance = true;
             state.dirtyMobileTabs.finance = true;
             renderActiveViews();
             alert("상태 변경 실패: " + ((res && res.error) || "알 수 없는 오류"));
           }
         }).catch(err => {
-          item.active = currentActive;
+          item.active = prevActive;
+          if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
           state.dirtyPcTabs.finance = true;
           state.dirtyMobileTabs.finance = true;
           renderActiveViews();
