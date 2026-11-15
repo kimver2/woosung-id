@@ -1908,8 +1908,7 @@ assertTest('Step 194-2: 클라이언트-서버 비밀번호 해시 토큰 100% �
 // 194-3: 구 GAS 배포 ID(AKfycbxRcw...) 완전 제거 및 신규 배포 ID(AKfycbwJTNq...) + woosung-id URL 적용 검증
 assertTest('Step 194-3: 구 GAS 배포 URL 완전 교체 및 woosung-id 신규 URL 적용 검증',
   !indexHtml194.includes('AKfycbxRcwYEilQ8wxRyMHxmPXUmLJjZ9qL2oclioJ7iQIYXdENmgjgWemu9D3T2m-FXHVvg') &&
-  /AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg\/exec\?v=(19[6-9]|2[0-9]{2})/.test(indexHtml194) &&
-  indexHtml194.includes('credentialless') &&
+  indexHtml194.includes('AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA2Y_ApMz-H-GpaYqf3EKh3ffh6ULz-bU9n24dfTbg') &&
   code194.includes('https://kimver2.github.io/woosung-id/')
 );
 
@@ -1941,13 +1940,13 @@ assertTest('Step 194-5: 구성원 이름 + 공용 비밀번호(0112) 인증, 미
   validAuthTokens194.indexOf(clientUserFn('외부인', '0112')) === -1
 );
 
-// 194-6: 모바일/PC 중첩 iframe(userCodeAppPanel -> script.google.com -> github.io) 간 window.top.postMessage 브릿지, 365일 퍼스트파티 쿠키 및 서버 사전 인증(authTok) 검증
+// 194-6: v2 메인 전환 및 365일 퍼스트파티 쿠키 백업(AUTH_COOKIE_NAME: ws_dashboard_auth_token_v2) 및 서버 사전 인증 검증
 const preAuthedHtml194 = sandbox.buildSidebarDashboardHtml('mobile', clientUserFn('조항만', '0112'), '조항만');
-assertTest('Step 194-6: 모바일/PC 중첩 iframe 간 window.top.postMessage 브릿지, 365일 쿠키 백업 및 서버 사전 인증(display:none) 검증',
+assertTest('Step 194-6: v2 메인 인증 시스템, 365일 쿠키 백업 및 서버 사전 인증(display:none) 검증',
   code194.includes('window.top.postMessage({ type: "WS_AUTH_INIT" }, "*")') &&
   code194.includes('window.top.postMessage(authMsg, "*")') &&
-  indexHtml194.includes("setTopSavedCookie('ws_dashboard_auth_token_v2'") &&
-  indexHtml194.includes('authTok=') &&
+  indexHtml194.includes("setTopSavedCookie(AUTH_COOKIE_NAME") &&
+  indexHtml194.includes('ws_dashboard_auth_token_v2') &&
   preAuthedHtml194.includes('id="wsAccessLockOverlay" style="display:none;')
 );
 
@@ -2090,7 +2089,18 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
 
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
-  assertTest('index.html 내 exec?v=252 최신 캐시 버스팅 파라미터 적용 검증', idxRootHtml.includes('exec?v=252'));
+  assertTest('index.html, docs/index.html, v2.html, docs/v2.html, preview_tabs.html, docs/preview_tabs.html 6개 파일 100% 동일 동기화 검증',
+    idxRootHtml === idxDocsHtml &&
+    idxRootHtml === v2RootHtml &&
+    v2RootHtml === previewHtml &&
+    v2RootHtml === v2DocsHtml &&
+    v2RootHtml === previewDocsHtml
+  );
+  assertTest('메인 index.html 내 v2 독립 웹앱 구조 및 data/dashboard_data.js 탑재 검증',
+    idxRootHtml.includes('src="data/dashboard_data.js"') &&
+    idxRootHtml.includes('우성아이디') &&
+    !idxRootHtml.includes('<iframe')
+  );
   assertTest('v2.html 내 담당자1 단일 추출 및 공사진행률 현장명 인라인 뱃지 표시 검증',
     v2RootHtml.includes('extractFirstManager') &&
     v2RootHtml.includes('extractFirstManager(r.manager')

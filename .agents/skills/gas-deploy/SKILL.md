@@ -19,17 +19,17 @@ description: Standard runbook for deploying Google Apps Script Web App (v2 proje
 - **GitHub Pages 저장소**:
   - 원격 저장소: `https://github.com/kimver2/woosung-id.git` (`main` 브랜치)
   - 서비스 URL: `https://kimver2.github.io/woosung-id/`
-  - 진입점 파일: 루트 `index.html` 및 `docs/index.html` (두 파일은 항상 100% 동일한 내용 유지 필수)
+  - 진입점 파일: 루트 `index.html`, `docs/index.html` (메인 v2), `v2.html`, `docs/v2.html`, `preview_tabs.html`, `docs/preview_tabs.html` (6개 파일 항상 100% 동일한 내용 유지 필수)
 
 ---
 
 ## 🚀 표준 배포 4단계 절차
 
-### Step 1. 캐시 버스팅 버전 번호 동기화 (`index.html` & `docs/index.html`)
-프론트엔드/대시보드 변경 시 브라우저 캐시 갱신을 위해 `index.html`과 `docs/index.html` 내 `exec?v=NNN` 파라미터 숫자를 1 증가시키고 두 파일을 동일하게 유지합니다.
+### Step 1. v2 메인 파일 100% 동기화 (`index.html`, `v2.html`, `preview_tabs.html` 및 `docs/` 내 대응 파일)
+프론트엔드/대시보드 수정 시 `index.html`, `docs/index.html`, `v2.html`, `docs/v2.html`, `preview_tabs.html`, `docs/preview_tabs.html` 6개 파일을 항상 100% 동일하게 동기화합니다.
 
 ### Step 2. 구문 검사 및 핵심 QA 스위트 검증
-배포 전 반드시 아래 명령으로 서버/클라이언트 문법 및 `index.html === docs/index.html` 일치 여부를 검증합니다:
+배포 전 반드시 아래 명령으로 서버/클라이언트 문법 및 6개 HTML 파일 일치 여부를 검증합니다:
 ```zsh
 node -c 현장서식.js && node scripts/run_qa_tests.js
 ```
@@ -42,5 +42,5 @@ npx clasp push --force && npx clasp deploy -i AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA
 
 ### Step 4. Git 커밋 및 원격 저장소 푸시
 ```zsh
-git add 현장서식.js index.html docs/index.html && git commit -m "커밋 메시지" && git push origin main
+git add 현장서식.js index.html docs/index.html v2.html docs/v2.html preview_tabs.html docs/preview_tabs.html manifest.json docs/manifest.json && git commit -m "커밋 메시지" && git push origin main
 ```
