@@ -5582,24 +5582,29 @@
                   const siteYear = getSiteStartYear(site);
                   if (siteYear) {
                     year = siteYear;
-                    startYmd = `${year}-${String(sm).padStart(2, "0")}-${String(sd).padStart(2, "0")}`;
-                    if (mmDdMatches.length > 1) {
-                      const endParts = mmDdMatches[1].match(/(\d{1,2})[.\-\/](\d{1,2})/);
-                      if (endParts) {
-                        const em = parseInt(endParts[1], 10);
-                        const ed = parseInt(endParts[2], 10);
-                        endYmd = `${year}-${String(em).padStart(2, "0")}-${String(ed).padStart(2, "0")}`;
-                      } else {
-                        endYmd = startYmd;
-                      }
+                  } else {
+                    // 매칭된 site가 없거나 시작 연도 미정일 때:
+                    // 1) row.id가 COL-0177 이하이거나 과거 작성 데이터는 2025년으로 기본 분류
+                    const idNumMatch = String(row && row.id ? row.id : "").match(/COL-(\d+)/);
+                    const colNum = idNumMatch ? parseInt(idNumMatch[1], 10) : 0;
+                    if (colNum > 0 && colNum < 178) {
+                      year = "2025";
+                    } else {
+                      year = "2025";
+                    }
+                  }
+                  startYmd = `${year}-${String(sm).padStart(2, "0")}-${String(sd).padStart(2, "0")}`;
+                  if (mmDdMatches.length > 1) {
+                    const endParts = mmDdMatches[1].match(/(\d{1,2})[.\-\/](\d{1,2})/);
+                    if (endParts) {
+                      const em = parseInt(endParts[1], 10);
+                      const ed = parseInt(endParts[2], 10);
+                      endYmd = `${year}-${String(em).padStart(2, "0")}-${String(ed).padStart(2, "0")}`;
                     } else {
                       endYmd = startYmd;
                     }
                   } else {
-                    // 매칭된 site가 없거나 시작 연도 미정이면 year = "" (미정 상태 유지)
-                    year = "";
-                    startYmd = "";
-                    endYmd = "";
+                    endYmd = startYmd;
                   }
                 }
               }
@@ -5710,15 +5715,16 @@
 
       function getCollectionYears(list) {
         const yearsSet = new Set();
-        const curY = new Date().getFullYear();
-        yearsSet.add(curY);
-        yearsSet.add(curY - 1);
         (list || []).forEach((r) => {
-          const info = getCollectionPeriodInfo(r);
+          const matchedSite = findMatchedSiteInfo(r.siteName);
+          const info = getCollectionPeriodInfo(r, matchedSite);
           if (info.year && /^\d{4}$/.test(info.year)) {
             yearsSet.add(parseInt(info.year, 10));
           }
         });
+        const curY = new Date().getFullYear();
+        yearsSet.add(curY);
+        yearsSet.add(curY - 1);
         return Array.from(yearsSet).sort((a, b) => b - a);
       }
 
@@ -5737,10 +5743,15 @@
         }
 
         (list || []).forEach((r) => {
-          const info = getCollectionPeriodInfo(r);
+          const matchedSite = findMatchedSiteInfo(r.siteName);
+          const info = getCollectionPeriodInfo(r, matchedSite);
           if (!info.month || info.month < 1 || info.month > 12) return;
-          if (selectedYear !== "all" && selectedYear !== "undetermined") {
-            if (info.year !== String(selectedYear)) return;
+          if (selectedYear !== "all") {
+            if (selectedYear === "undetermined") {
+              if (info.year) return;
+            } else {
+              if (info.year !== String(selectedYear)) return;
+            }
           }
 
           const mIdx = info.month - 1;
@@ -7969,7 +7980,8 @@
         // 1. 기준 연도 목록 추출
         const yearsSet = new Set();
         allCollection.forEach(r => {
-          const pInfo = getCollectionPeriodInfo(r);
+          const matchedSite = findMatchedSiteInfo(r.siteName);
+          const pInfo = getCollectionPeriodInfo(r, matchedSite);
           if (pInfo && pInfo.year && /^\d{4}$/.test(pInfo.year)) {
             yearsSet.add(pInfo.year);
           }
@@ -7989,7 +8001,8 @@
         // 2. 선택 연도 기준 수금 / 지출 필터링
         const filteredCol = allCollection.filter(r => {
           if (selectedYear === "all") return true;
-          const pInfo = getCollectionPeriodInfo(r);
+          const matchedSite = findMatchedSiteInfo(r.siteName);
+          const pInfo = getCollectionPeriodInfo(r, matchedSite);
           return pInfo && pInfo.year === selectedYear;
         });
 
@@ -8026,7 +8039,8 @@
         const monthlyRows = [];
         for (let m = 1; m <= 12; m++) {
           const mCols = filteredCol.filter(r => {
-            const pInfo = getCollectionPeriodInfo(r);
+            const matchedSite = findMatchedSiteInfo(r.siteName);
+            const pInfo = getCollectionPeriodInfo(r, matchedSite);
             return pInfo && pInfo.month === m;
           });
           const mCollected = mCols.reduce((acc, r) => acc + getCollectionRowFinancials(r).collected, 0);
