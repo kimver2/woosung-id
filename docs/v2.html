@@ -2523,6 +2523,9 @@
         expenseSearchQuery: "",
         expenseItemFilter: "all",
         expenseStatusFilter: "all",
+        financeMonthlyYear: _initTodayYmd.slice(0, 4),
+        monthlySiteSearch: "",
+        monthlySiteSort: "marginDesc",
         settingsData: null,
         device: "pc",
         pcTab: "home",
@@ -7374,6 +7377,444 @@
         closeModal("siteFinanceDetailModal");
       };
 
+      function isFixedExpenseRow(e, fixedMasterList) {
+        if (!e) return false;
+        const cat = String(e.category || "").trim();
+        const item = String(e.item || "").trim();
+        if (cat === "고정비" || item === "고정비") return true;
+        if (Array.isArray(fixedMasterList) && fixedMasterList.length > 0) {
+          const v = String(e.vendor || "").trim().toLowerCase();
+          const it = item.toLowerCase();
+          const match = fixedMasterList.some(fm => {
+            const fmIt = String(fm.item || "").trim().toLowerCase();
+            const fmV = String(fm.vendor || "").trim().toLowerCase();
+            return (fmIt && fmIt === it) && (!fmV || fmV === v);
+          });
+          if (match) return true;
+        }
+        const site = String(e.siteName || "").trim();
+        if (site === "공통" && (cat.includes("고정") || item.includes("고정") || cat.includes("관리비") || cat.includes("임대") || cat.includes("통신") || cat.includes("보험"))) {
+          return true;
+        }
+        return false;
+      }
+
+      window.isFixedExpenseRow = isFixedExpenseRow;
+
+      window.setMonthlyReportYear = function(year) {
+        state.financeMonthlyYear = year;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.setMonthlySiteSort = function(sortKey) {
+        state.monthlySiteSort = sortKey;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.onMonthlySiteSearch = function(query) {
+        state.monthlySiteSearch = query;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      function buildFinanceMonthlyDashboardHtml(isMobile) {
+        const allCollection = (state.financeDbData && Array.isArray(state.financeDbData.collection)) ? state.financeDbData.collection : [];
+        const allExpense = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
+        const fixedMaster = (state.financeDbData && Array.isArray(state.financeDbData.fixedMaster)) ? state.financeDbData.fixedMaster : [];
+
+        // 1. 기준 연도 목록 추출
+        const yearsSet = new Set();
+        allCollection.forEach(r => {
+          const pInfo = getCollectionPeriodInfo(r);
+          if (pInfo && pInfo.year && /^\d{4}$/.test(pInfo.year)) {
+            yearsSet.add(pInfo.year);
+          }
+        });
+        allExpense.forEach(e => {
+          if (e.settleMonth && /^\d{4}/.test(e.settleMonth)) {
+            yearsSet.add(e.settleMonth.slice(0, 4));
+          }
+        });
+        const currentYear = getTodayYmd().slice(0, 4);
+        yearsSet.add(currentYear);
+        yearsSet.add(String(Number(currentYear) - 1));
+        const availableYears = Array.from(yearsSet).sort().reverse();
+
+        const selectedYear = state.financeMonthlyYear || currentYear;
+
+        // 2. 선택 연도 기준 수금 / 지출 필터링
+        const filteredCol = allCollection.filter(r => {
+          if (selectedYear === "all") return true;
+          const pInfo = getCollectionPeriodInfo(r);
+          return pInfo && pInfo.year === selectedYear;
+        });
+
+        const filteredExp = allExpense.filter(e => {
+          if (selectedYear === "all") return true;
+          return e.settleMonth && e.settleMonth.startsWith(selectedYear);
+        });
+
+        // 3. 4대 핵심 KPI 계산
+        const totalContract = filteredCol.reduce((acc, r) => acc + (Number(r.totalAmount) || 0), 0);
+        const totalCollected = filteredCol.reduce((acc, r) => acc + getCollectionRowFinancials(r).collected, 0);
+        const collectionRate = totalContract > 0 ? Math.round((totalCollected / totalContract) * 100) : 0;
+
+        let totalVariable = 0;
+        let totalFixed = 0;
+        filteredExp.forEach(e => {
+          const claim = Number(e.claimAmount) || 0;
+          if (isFixedExpenseRow(e, fixedMaster)) {
+            totalFixed += claim;
+          } else {
+            totalVariable += claim;
+          }
+        });
+        const totalExpense = totalVariable + totalFixed;
+
+        const netProfit = totalCollected - totalExpense;
+        const profitRate = totalCollected > 0 ? Math.round((netProfit / totalCollected) * 100) : 0;
+
+        const totalUncollected = filteredCol.reduce((acc, r) => acc + getCollectionRowFinancials(r).uncollected, 0);
+        const totalUnpaidExpense = filteredExp.reduce((acc, e) => acc + (Number(e.balance) || 0), 0);
+        const netCashDiff = totalUncollected - totalUnpaidExpense;
+
+        // 4. 월별 손익 요약표 (1월 ~ 12월)
+        const monthlyRows = [];
+        for (let m = 1; m <= 12; m++) {
+          const mCols = filteredCol.filter(r => {
+            const pInfo = getCollectionPeriodInfo(r);
+            return pInfo && pInfo.month === m;
+          });
+          const mCollected = mCols.reduce((acc, r) => acc + getCollectionRowFinancials(r).collected, 0);
+
+          let mVar = 0;
+          let mFix = 0;
+          filteredExp.forEach(e => {
+            let em = 0;
+            if (e.settleMonth) {
+              const parts = e.settleMonth.split(/[-.]/);
+              if (parts.length >= 2) em = parseInt(parts[1], 10) || 0;
+            }
+            if (em === m) {
+              const claim = Number(e.claimAmount) || 0;
+              if (isFixedExpenseRow(e, fixedMaster)) {
+                mFix += claim;
+              } else {
+                mVar += claim;
+              }
+            }
+          });
+
+          const mTotExp = mVar + mFix;
+          const mProfit = mCollected - mTotExp;
+          const mRate = mCollected > 0 ? Math.round((mProfit / mCollected) * 100) : 0;
+
+          monthlyRows.push({
+            month: m,
+            monthLabel: m + "월",
+            collected: mCollected,
+            variable: mVar,
+            fixed: mFix,
+            totalExpense: mTotExp,
+            netProfit: mProfit,
+            profitRate: mRate
+          });
+        }
+
+        const sumMonthCollected = monthlyRows.reduce((acc, r) => acc + r.collected, 0);
+        const sumMonthVar = monthlyRows.reduce((acc, r) => acc + r.variable, 0);
+        const sumMonthFix = monthlyRows.reduce((acc, r) => acc + r.fixed, 0);
+        const sumMonthTotExp = sumMonthVar + sumMonthFix;
+        const sumMonthNetProfit = sumMonthCollected - sumMonthTotExp;
+        const sumMonthProfitRate = sumMonthCollected > 0 ? Math.round((sumMonthNetProfit / sumMonthCollected) * 100) : 0;
+
+        // 5. 현장별 수익성 & 마진율 집계
+        const siteMap = new Map();
+
+        filteredCol.forEach(r => {
+          const sName = String(r.siteName || "").trim();
+          if (!sName) return;
+          if (!siteMap.has(sName)) {
+            siteMap.set(sName, {
+              siteName: sName,
+              colRow: r,
+              contractAmount: Number(r.totalAmount) || Number(r.contractAmount) || 0,
+              collected: getCollectionRowFinancials(r).collected,
+              uncollected: getCollectionRowFinancials(r).uncollected,
+              expenseClaim: 0,
+              expensePaid: 0,
+              expenseBalance: 0
+            });
+          }
+        });
+
+        filteredExp.forEach(e => {
+          const sName = String(e.siteName || "").trim();
+          if (!sName || sName === "공통") return;
+          if (!siteMap.has(sName)) {
+            const matchedCol = allCollection.find(c => c.siteName === sName);
+            siteMap.set(sName, {
+              siteName: sName,
+              colRow: matchedCol || null,
+              contractAmount: matchedCol ? (Number(matchedCol.totalAmount) || 0) : 0,
+              collected: matchedCol ? getCollectionRowFinancials(matchedCol).collected : 0,
+              uncollected: matchedCol ? getCollectionRowFinancials(matchedCol).uncollected : 0,
+              expenseClaim: 0,
+              expensePaid: 0,
+              expenseBalance: 0
+            });
+          }
+          const sObj = siteMap.get(sName);
+          sObj.expenseClaim += (Number(e.claimAmount) || 0);
+          sObj.expensePaid += (Number(e.paidAmount) || 0);
+          sObj.expenseBalance += (Number(e.balance) || 0);
+        });
+
+        const siteList = Array.from(siteMap.values()).map(s => {
+          const profit = s.contractAmount - s.expenseClaim;
+          const marginRate = s.contractAmount > 0 ? Math.round((profit / s.contractAmount) * 100) : (s.expenseClaim > 0 ? -100 : 0);
+          return {
+            siteName: s.siteName,
+            colRow: s.colRow,
+            contractAmount: s.contractAmount,
+            collected: s.collected,
+            uncollected: s.uncollected,
+            expenseClaim: s.expenseClaim,
+            expensePaid: s.expensePaid,
+            expenseBalance: s.expenseBalance,
+            netProfit: profit,
+            marginRate: marginRate
+          };
+        });
+
+        const searchQuery = String(state.monthlySiteSearch || "").trim().toLowerCase();
+        let displaySites = siteList;
+        if (searchQuery) {
+          displaySites = displaySites.filter(s => s.siteName.toLowerCase().includes(searchQuery));
+        }
+
+        const sortKey = state.monthlySiteSort || "marginDesc";
+        displaySites.sort((a, b) => {
+          if (sortKey === "marginDesc") return b.marginRate - a.marginRate || b.contractAmount - a.contractAmount;
+          if (sortKey === "marginAsc") return a.marginRate - b.marginRate || a.contractAmount - b.contractAmount;
+          if (sortKey === "contractDesc") return b.contractAmount - a.contractAmount;
+          if (sortKey === "profitDesc") return b.netProfit - a.netProfit;
+          if (sortKey === "uncollectedDesc") return b.uncollected - a.uncollected;
+          if (sortKey === "nameAsc") return a.siteName.localeCompare(b.siteName, "ko");
+          return b.marginRate - a.marginRate;
+        });
+
+        return `
+          <!-- 1. 연도 선택 필터 & 공정 리포트 트리거 바 -->
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;">
+              <span style="font-size:13px;font-weight:800;color:#334155;">📅 기준 연도:</span>
+              <div style="display:flex;gap:4px;background:#f1f5f9;padding:3px;border-radius:8px;">
+                ${availableYears.map(y => `
+                  <button type="button" class="btn-tool-tag ${selectedYear === y ? "active" : ""}" style="height:28px;padding:0 12px;font-size:12px;border-radius:6px;${selectedYear === y ? "background:#2563eb;color:#ffffff;font-weight:800;" : "background:transparent;color:#475569;"}" onclick="window.setMonthlyReportYear('${y}')">${y}년</button>
+                `).join("")}
+                <button type="button" class="btn-tool-tag ${selectedYear === "all" ? "active" : ""}" style="height:28px;padding:0 12px;font-size:12px;border-radius:6px;${selectedYear === "all" ? "background:#2563eb;color:#ffffff;font-weight:800;" : "background:transparent;color:#475569;"}" onclick="window.setMonthlyReportYear('all')">전체</button>
+              </div>
+              <span style="font-size:12px;color:#64748b;margin-left:4px;">(수금 ${filteredCol.length}건 / 비용 ${filteredExp.length}건)</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button type="button" class="btn-act-blue" style="height:34px;padding:0 14px;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;border-radius:8px;" onclick="openMonthlyReportModal()">
+                📊 월간 공정·업체 리포트 창 열기
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. 핵심 KPI 요약 카드 4개 -->
+          <div style="display:grid;grid-template-columns:repeat(${isMobile ? "2" : "4"}, 1fr);gap:${isMobile ? "8px" : "12px"};margin-bottom:16px;">
+            <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #10b981;background:#ffffff;">
+              <div style="font-size:${isMobile ? "11px" : "12px"};color:var(--text-muted);font-weight:700;">💰 총 수금액</div>
+              <div style="font-size:${isMobile ? "16px" : "20px"};font-weight:900;color:#10b981;margin-top:4px;">${formatKrw(totalCollected)}</div>
+              <div style="font-size:${isMobile ? "10.5px" : "11.5px"};color:#64748b;margin-top:4px;">
+                수금률 <strong style="color:#10b981;">${collectionRate}%</strong> (계약 ${formatKrw(totalContract)})
+              </div>
+            </div>
+            <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #f59e0b;background:#ffffff;">
+              <div style="font-size:${isMobile ? "11px" : "12px"};color:var(--text-muted);font-weight:700;">🧾 총 지출액 (청구마감)</div>
+              <div style="font-size:${isMobile ? "16px" : "20px"};font-weight:900;color:#d97706;margin-top:4px;">${formatKrw(totalExpense)}</div>
+              <div style="font-size:${isMobile ? "10.5px" : "11.5px"};color:#64748b;margin-top:4px;">
+                변동 <strong style="color:#2563eb;">${formatKrw(totalVariable)}</strong> · 고정 <strong style="color:#d97706;">${formatKrw(totalFixed)}</strong>
+              </div>
+            </div>
+            <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid ${netProfit >= 0 ? "#2563eb" : "#ef4444"};background:#ffffff;">
+              <div style="font-size:${isMobile ? "11px" : "12px"};color:var(--text-muted);font-weight:700;">📈 예상 순이익 & 이익률</div>
+              <div style="font-size:${isMobile ? "16px" : "20px"};font-weight:900;color:${netProfit >= 0 ? "#16a34a" : "#dc2626"};margin-top:4px;">
+                ${(netProfit >= 0 ? "+" : "") + formatKrw(netProfit)}
+              </div>
+              <div style="font-size:${isMobile ? "10.5px" : "11.5px"};color:#64748b;margin-top:4px;">
+                순이익률 <strong style="color:${netProfit >= 0 ? "#16a34a" : "#dc2626"};">${profitRate}%</strong> (수금액 대비)
+              </div>
+            </div>
+            <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #8b5cf6;background:#ffffff;">
+              <div style="font-size:${isMobile ? "11px" : "12px"};color:var(--text-muted);font-weight:700;">⚖️ 미수금 vs 외상(미지급)</div>
+              <div style="font-size:${isMobile ? "16px" : "20px"};font-weight:900;color:#dc2626;margin-top:4px;">
+                ${formatKrw(totalUncollected)}
+              </div>
+              <div style="font-size:${isMobile ? "10.5px" : "11.5px"};color:#64748b;margin-top:4px;">
+                외상잔금 <strong style="color:#b45309;">${formatKrw(totalUnpaidExpense)}</strong> · 차액 <strong style="color:#475569;">${formatKrw(netCashDiff)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. 월별 손익 요약표 (1월 ~ 12월 + 합계 행) -->
+          <div class="standard-card" style="padding:${isMobile ? "12px" : "18px 20px"};margin-bottom:18px;background:#ffffff;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+              <div>
+                <h3 style="font-size:${isMobile ? "14px" : "16px"};font-weight:800;color:#1e293b;margin:0;">
+                  📅 ${selectedYear === "all" ? "전체 연도" : selectedYear + "년"} 월별 손익 요약표 (1월 ~ 12월)
+                </h3>
+                <div style="font-size:11.5px;color:#64748b;margin-top:2px;">
+                  수금액(현장 기간 기준)과 지출액(변동비+고정비)을 월별로 집계하여 월별 순이익과 마진율을 나타냅니다.
+                </div>
+              </div>
+            </div>
+            <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+              <table class="finance-table" style="width:100%;min-width:680px;border-collapse:collapse;font-size:12.5px;">
+                <thead>
+                  <tr style="background:#f8fafc;border-bottom:1.5px solid #cbd5e1;color:#475569;font-weight:700;height:36px;text-align:right;">
+                    <th style="padding:8px 12px;text-align:center;width:60px;">월</th>
+                    <th style="padding:8px 12px;">수금액</th>
+                    <th style="padding:8px 12px;">변동비 (현장/일반)</th>
+                    <th style="padding:8px 12px;">고정비</th>
+                    <th style="padding:8px 12px;">총 지출</th>
+                    <th style="padding:8px 12px;">순이익</th>
+                    <th style="padding:8px 12px;text-align:center;width:75px;">이익률</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${monthlyRows.map(mr => {
+                    const hasActivity = mr.collected > 0 || mr.totalExpense > 0;
+                    const profitColor = mr.netProfit > 0 ? "#16a34a" : (mr.netProfit < 0 ? "#dc2626" : "#64748b");
+                    return `
+                      <tr style="border-bottom:1px solid #f1f5f9;height:38px;text-align:right;${hasActivity ? "background:#ffffff;" : "background:#fafafa;color:#94a3b8;"}">
+                        <td style="padding:8px 12px;text-align:center;font-weight:800;color:#334155;">${mr.monthLabel}</td>
+                        <td style="padding:8px 12px;font-weight:700;color:${mr.collected > 0 ? "#10b981" : "inherit"};">${formatKrw(mr.collected)}</td>
+                        <td style="padding:8px 12px;color:${mr.variable > 0 ? "#2563eb" : "inherit"};">${formatKrw(mr.variable)}</td>
+                        <td style="padding:8px 12px;color:${mr.fixed > 0 ? "#d97706" : "inherit"};">${formatKrw(mr.fixed)}</td>
+                        <td style="padding:8px 12px;font-weight:700;color:${mr.totalExpense > 0 ? "#1e293b" : "inherit"};">${formatKrw(mr.totalExpense)}</td>
+                        <td style="padding:8px 12px;font-weight:800;color:${profitColor};">${(mr.netProfit > 0 ? "+" : "") + formatKrw(mr.netProfit)}</td>
+                        <td style="padding:8px 12px;text-align:center;">
+                          <span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:800;background:${mr.profitRate > 0 ? "#dcfce7" : (mr.profitRate < 0 ? "#fee2e2" : "#f1f5f9")};color:${mr.profitRate > 0 ? "#15803d" : (mr.profitRate < 0 ? "#b91c1c" : "#64748b")};">
+                            ${mr.profitRate}%
+                          </span>
+                        </td>
+                      </tr>
+                    `;
+                  }).join("")}
+                  <tr style="background:#f1f5f9;border-top:2px solid #cbd5e1;font-weight:900;height:42px;text-align:right;color:#0f172a;">
+                    <td style="padding:8px 12px;text-align:center;color:#1e293b;font-weight:900;">합계</td>
+                    <td style="padding:8px 12px;color:#10b981;">${formatKrw(sumMonthCollected)}</td>
+                    <td style="padding:8px 12px;color:#2563eb;">${formatKrw(sumMonthVar)}</td>
+                    <td style="padding:8px 12px;color:#d97706;">${formatKrw(sumMonthFix)}</td>
+                    <td style="padding:8px 12px;color:#0f172a;">${formatKrw(sumMonthTotExp)}</td>
+                    <td style="padding:8px 12px;color:${sumMonthNetProfit >= 0 ? "#16a34a" : "#dc2626"};">${(sumMonthNetProfit >= 0 ? "+" : "") + formatKrw(sumMonthNetProfit)}</td>
+                    <td style="padding:8px 12px;text-align:center;">
+                      <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11.5px;font-weight:900;background:${sumMonthProfitRate >= 0 ? "#10b981" : "#ef4444"};color:#ffffff;">
+                        ${sumMonthProfitRate}%
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 4. 현장별 수익성 & 마진율 현황 -->
+          <div class="standard-card" style="padding:${isMobile ? "12px" : "18px 20px"};background:#ffffff;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+              <div>
+                <h3 style="font-size:${isMobile ? "14px" : "16px"};font-weight:800;color:#1e293b;margin:0;">
+                  🏢 현장별 수익성 & 마진율 현황 (${displaySites.length}개 현장)
+                </h3>
+                <div style="font-size:11.5px;color:#64748b;margin-top:2px;">
+                  현장명을 클릭하면 세부 공정별 비용마감 및 수금 정산 상세 모달이 열립니다.
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <input type="text" placeholder="🔍 현장명 검색..." value="${escHtml(state.monthlySiteSearch || "")}" oninput="window.onMonthlySiteSearch(this.value)" class="sheet-filter-select" style="min-width:${isMobile ? "140px" : "180px"};height:34px;padding:0 12px;font-size:12.5px;border-radius:8px;">
+                <select class="sheet-filter-select" style="height:34px;padding:0 10px;font-size:12.5px;border-radius:8px;" onchange="window.setMonthlySiteSort(this.value)">
+                  <option value="marginDesc" ${sortKey === "marginDesc" ? "selected" : ""}>마진율 높은순</option>
+                  <option value="marginAsc" ${sortKey === "marginAsc" ? "selected" : ""}>마진율 낮은순</option>
+                  <option value="contractDesc" ${sortKey === "contractDesc" ? "selected" : ""}>계약금액 높은순</option>
+                  <option value="profitDesc" ${sortKey === "profitDesc" ? "selected" : ""}>순이익 높은순</option>
+                  <option value="uncollectedDesc" ${sortKey === "uncollectedDesc" ? "selected" : ""}>미수금 많은순</option>
+                  <option value="nameAsc" ${sortKey === "nameAsc" ? "selected" : ""}>현장명 가나다순</option>
+                </select>
+              </div>
+            </div>
+            <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+              <table class="finance-table" style="width:100%;min-width:760px;border-collapse:collapse;font-size:12.5px;">
+                <thead>
+                  <tr style="background:#f8fafc;border-bottom:1.5px solid #cbd5e1;color:#475569;font-weight:700;height:36px;text-align:right;">
+                    <th style="padding:8px 12px;text-align:left;">현장명</th>
+                    <th style="padding:8px 12px;">최종 계약금액</th>
+                    <th style="padding:8px 12px;">누적 수금액</th>
+                    <th style="padding:8px 12px;">총 지출 (비용마감)</th>
+                    <th style="padding:8px 12px;">예상 순이익</th>
+                    <th style="padding:8px 12px;text-align:center;width:75px;">마진율</th>
+                    <th style="padding:8px 12px;">미수금 / 외상</th>
+                    <th style="padding:8px 12px;text-align:center;width:60px;">상세</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${displaySites.length === 0 ? `
+                    <tr><td colspan="8" style="padding:32px 16px;text-align:center;color:#64748b;font-size:13px;">해당 조건의 현장 정산 데이터가 없습니다.</td></tr>
+                  ` : displaySites.map(s => {
+                    const profitColor = s.netProfit > 0 ? "#16a34a" : (s.netProfit < 0 ? "#dc2626" : "#64748b");
+                    let marginBadgeBg = "#f1f5f9";
+                    let marginBadgeColor = "#475569";
+                    if (s.marginRate >= 30) { marginBadgeBg = "#dcfce7"; marginBadgeColor = "#15803d"; }
+                    else if (s.marginRate >= 15) { marginBadgeBg = "#e0f2fe"; marginBadgeColor = "#0369a1"; }
+                    else if (s.marginRate >= 0) { marginBadgeBg = "#fef3c7"; marginBadgeColor = "#b45309"; }
+                    else { marginBadgeBg = "#fee2e2"; marginBadgeColor = "#b91c1c"; }
+
+                    return `
+                      <tr style="border-bottom:1px solid #f1f5f9;height:40px;text-align:right;background:#ffffff;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#ffffff'">
+                        <td style="padding:8px 12px;text-align:left;">
+                          <span style="font-weight:800;color:#2563eb;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="window.openSiteFinanceDetailModal('${escJs(s.siteName)}')">
+                            ${escHtml(s.siteName)} 🔍
+                          </span>
+                          ${s.colRow && s.colRow.clientName ? `<span style="font-size:11px;color:#64748b;display:block;">${escHtml(s.colRow.clientName)}</span>` : ""}
+                        </td>
+                        <td style="padding:8px 12px;font-weight:700;color:#1e293b;">${formatKrw(s.contractAmount)}</td>
+                        <td style="padding:8px 12px;color:#10b981;font-weight:700;">${formatKrw(s.collected)}</td>
+                        <td style="padding:8px 12px;color:#d97706;font-weight:700;">${formatKrw(s.expenseClaim)}</td>
+                        <td style="padding:8px 12px;font-weight:800;color:${profitColor};">${(s.netProfit > 0 ? "+" : "") + formatKrw(s.netProfit)}</td>
+                        <td style="padding:8px 12px;text-align:center;">
+                          <span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:800;background:${marginBadgeBg};color:${marginBadgeColor};">
+                            ${s.marginRate}%
+                          </span>
+                        </td>
+                        <td style="padding:8px 12px;font-size:11.5px;">
+                          <span style="color:${s.uncollected > 0 ? "#dc2626" : "#16a34a"};font-weight:700;">미수 ${formatKrw(s.uncollected)}</span><br>
+                          <span style="color:${s.expenseBalance > 0 ? "#b45309" : "#64748b"};">외상 ${formatKrw(s.expenseBalance)}</span>
+                        </td>
+                        <td style="padding:8px 12px;text-align:center;">
+                          <button type="button" class="btn-act-blue" style="height:26px;padding:0 8px;font-size:11px;border-radius:6px;" onclick="window.openSiteFinanceDetailModal('${escJs(s.siteName)}')">
+                            상세
+                          </button>
+                        </td>
+                      </tr>
+                    `;
+                  }).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      window.buildFinanceMonthlyDashboardHtml = buildFinanceMonthlyDashboardHtml;
+
       function renderPcFinanceTab() {
         if (!canViewFinance()) {
           const el = document.getElementById("pcFinanceMain");
@@ -7633,16 +8074,7 @@
         if (subTab === "monthly") {
           document.getElementById("pcFinanceMain").innerHTML = `
             ${subTabsHtml}
-            <div class="standard-card" style="padding:32px 24px;text-align:center;">
-              <div style="font-size:32px;margin-bottom:10px;">📊</div>
-              <h3 style="font-size:18px;font-weight:800;color:#1e293b;margin-bottom:6px;">월간 공정·업체 집계 리포트</h3>
-              <p style="font-size:13px;color:#64748b;margin-bottom:18px;">
-                월별 현장 공정 일정 및 협력업체별 투입 집계 리포트를 모달 창에서 상세하게 확인하고 인쇄할 수 있습니다.
-              </p>
-              <button type="button" class="btn-act-blue" style="height:38px;padding:0 20px;font-size:13.5px;" onclick="openMonthlyReportModal()">
-                📊 월간집계 리포트 창 열기
-              </button>
-            </div>
+            ${buildFinanceMonthlyDashboardHtml(false)}
           `;
           return;
         }
@@ -9569,14 +10001,13 @@
         }
 
         if (subTab === "monthly") {
-          document.getElementById("m-page-finance").innerHTML = `
-            ${subTabsHtml}
-            <div class="m-card-box" style="text-align:center;padding:24px 16px;">
-              <div style="font-size:24px;margin-bottom:6px;">📊</div>
-              <div style="font-size:15px;font-weight:800;color:#1e293b;">월간 공정·업체 집계 리포트</div>
-              <button type="button" class="btn-primary" style="margin-top:12px;padding:8px 16px;font-size:13px;" onclick="openMonthlyReportModal()">리포트 열기</button>
-            </div>
-          `;
+          const mTarget = document.getElementById("mobileFinanceMain") || document.getElementById("m-page-finance");
+          if (mTarget) {
+            mTarget.innerHTML = `
+              ${subTabsHtml}
+              ${buildFinanceMonthlyDashboardHtml(true)}
+            `;
+          }
           return;
         }
 
@@ -12367,6 +12798,13 @@
                 </div>
                 <div id="pmModalSchedulePreviewBox" style="background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;padding:10px;max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;"></div>
               </div>
+              <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#166534;font-size:12.5px;">
+                  <input type="checkbox" id="pmModalAutoCollection" checked style="width:16px;height:16px;accent-color:#16a34a;cursor:pointer;">
+                  재무DB [수금현황] 시트에도 현장 자동 등록
+                </label>
+                <span style="font-size:11px;color:#15803d;font-weight:600;">(계약금액 자동 연동)</span>
+              </div>
             </div>
           `;
         }
@@ -12433,6 +12871,8 @@
         const startDate = dateEl ? dateEl.value : (ed.expectedDate || getTodayYmd());
         const autoCb = document.getElementById("pmModalAutoTasks");
         const generateTasks = autoCb ? autoCb.checked : true;
+        const autoColCb = document.getElementById("pmModalAutoCollection");
+        const autoCreateCollection = autoColCb ? autoColCb.checked : true;
         const manager = ed.manager || "조항만";
 
         const computedTasks = generateTasks ? getDefaultProcessSchedule(scope, startDate, manager) : [{
@@ -12444,6 +12884,7 @@
           scope: scope,
           startDate: startDate,
           generateTasks: generateTasks,
+          autoCreateCollection: autoCreateCollection,
           manager: manager,
           clientName: ed.clientName || "",
           clientPhone: ed.clientPhone || "",
@@ -12461,7 +12902,24 @@
         const onSuccess = function (res) {
           closePromoteEstimateModal();
           if (res && res.success) {
-            showToast("🎉 [" + siteName + "] 현장이 진행 현장으로 승격되었습니다!");
+            let toastMsg = "🎉 [" + siteName + "] 현장이 진행 현장으로 승격되었습니다!";
+            if (res.collectionCreated) {
+              toastMsg += " (재무 수금현황 자동 등록 완료)";
+            } else if (res.collectionSkippedReason) {
+              toastMsg += " (" + res.collectionSkippedReason + ")";
+            }
+            showToast(toastMsg);
+
+            // Local optimistic state update for financeDbData.collection
+            if (res.collectionRow && state.financeDbData && Array.isArray(state.financeDbData.collection)) {
+              const alreadyHas = state.financeDbData.collection.some(c => (c.id && c.id === res.collectionRow.id) || (c.siteName && c.siteName.trim() === res.collectionRow.siteName.trim()));
+              if (!alreadyHas) {
+                state.financeDbData.collection.unshift(res.collectionRow);
+                state.dirtyPcTabs.finance = true;
+                state.dirtyMobileTabs.finance = true;
+              }
+            }
+
             // Local optimistic state update
             const newSiteKey = "SITE::" + siteName;
             let existingSite = getAllSites().find(s => s.siteName === siteName && (s.scope || "site") !== "newSite");

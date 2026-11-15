@@ -2246,6 +2246,51 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     v2RootHtml.includes('window.matchExpenseFullPaid') &&
     v2RootHtml.includes('replace(/,/g, "")')
   );
+  assertTest('현장서식.js 내 parseAmountStringToNumber 금액 파싱 엔진 및 단위 변환(억/만/원) 검증',
+    typeof sandbox.parseAmountStringToNumber === 'function' &&
+    sandbox.parseAmountStringToNumber('8,500만원') === 85000000 &&
+    sandbox.parseAmountStringToNumber('85,000,000') === 85000000 &&
+    sandbox.parseAmountStringToNumber('1.2억') === 120000000 &&
+    sandbox.parseAmountStringToNumber('1억 5000만') === 150000000 &&
+    sandbox.parseAmountStringToNumber('') === 0
+  );
+  assertTest('현장서식.js 내 promoteEstimateToSite 수금현황 자동 생성(autoCreateCollection) 및 중복 방어 연동 검증',
+    code.includes('parseAmountStringToNumber') &&
+    code.includes('autoCreateCollection = (data.autoCreateCollection !== false') &&
+    code.includes('collectionCreated = false') &&
+    code.includes('collectionRow = null') &&
+    code.includes('collectionSkippedReason =') &&
+    code.includes('collectionCreated: collectionCreated') &&
+    code.includes('collectionRow: collectionRow')
+  );
+  assertTest('v2.html 내 신규견적 승격 모달 재무DB [수금현황] 자동 등록 체크박스(pmModalAutoCollection) 및 캐시 즉시 반영 검증',
+    v2RootHtml.includes('id="pmModalAutoCollection"') &&
+    v2RootHtml.includes('재무DB [수금현황] 시트에도 현장 자동 등록') &&
+    v2RootHtml.includes('autoCreateCollection = autoColCb ? autoColCb.checked : true') &&
+    v2RootHtml.includes('autoCreateCollection: autoCreateCollection') &&
+    v2RootHtml.includes('res.collectionCreated') &&
+    v2RootHtml.includes('state.financeDbData.collection.unshift(res.collectionRow)')
+  );
+  assertTest('v2.html 내 Step 4 월간집계 대시보드(buildFinanceMonthlyDashboardHtml, 4대 KPI, 1~12월 손익표, 현장별 마진율) 검증',
+    v2RootHtml.includes('function buildFinanceMonthlyDashboardHtml') &&
+    v2RootHtml.includes('window.buildFinanceMonthlyDashboardHtml = buildFinanceMonthlyDashboardHtml') &&
+    v2RootHtml.includes('window.setMonthlyReportYear = function') &&
+    v2RootHtml.includes('window.setMonthlySiteSort = function') &&
+    v2RootHtml.includes('window.onMonthlySiteSearch = function') &&
+    v2RootHtml.includes('window.isFixedExpenseRow = isFixedExpenseRow') &&
+    v2RootHtml.includes('총 수금액') &&
+    v2RootHtml.includes('총 지출액 (청구마감)') &&
+    v2RootHtml.includes('예상 순이익 & 이익률') &&
+    v2RootHtml.includes('미수금 vs 외상(미지급)') &&
+    v2RootHtml.includes('월별 손익 요약표 (1월 ~ 12월') &&
+    v2RootHtml.includes('현장별 수익성 & 마진율 현황') &&
+    v2RootHtml.includes('window.openSiteFinanceDetailModal')
+  );
+  assertTest('v2.html 내 PC 및 모바일 월간집계 탭(financeSubTab === "monthly") 대시보드 렌더링 및 모달 버튼 유지 검증',
+    v2RootHtml.includes('buildFinanceMonthlyDashboardHtml(false)') &&
+    v2RootHtml.includes('buildFinanceMonthlyDashboardHtml(true)') &&
+    v2RootHtml.includes('openMonthlyReportModal()')
+  );
 }
 console.log('\n========================================================');
 console.log(`📊 [QA 검증 최종 결과]: 총 ${passCount + failCount}개 항목 중 ${passCount}개 통과, ${failCount}개 실패`);

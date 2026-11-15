@@ -10856,6 +10856,42 @@ function isSitePromotedAlready(ss, siteName) {
 }
 
 /**
+ * 금액 문자열 숫자 파싱 헬퍼 (예: '8,500만원' -> 85000000, '85,000,000' -> 85000000, '1.2억' -> 120000000)
+ * @param {string|number} val
+ * @return {number}
+ */
+function parseAmountStringToNumber(val) {
+  if (val === null || val === undefined || val === "") return 0;
+  if (typeof val === "number") return isNaN(val) ? 0 : val;
+  var str = String(val).trim().replace(/,/g, "").replace(/\s+/g, "");
+  if (!str) return 0;
+  var hasEok = str.indexOf("억") !== -1;
+  var hasMan = str.indexOf("만") !== -1;
+  if (hasEok || hasMan) {
+    var total = 0;
+    var rem = str.replace(/원/g, "");
+    if (hasEok) {
+      var eokParts = rem.split("억");
+      var eokVal = parseFloat(eokParts[0]) || 0;
+      total += Math.round(eokVal * 100000000);
+      rem = eokParts[1] || "";
+    }
+    if (hasMan && rem) {
+      var manParts = rem.split("만");
+      var manVal = parseFloat(manParts[0]) || 0;
+      total += Math.round(manVal * 10000);
+    } else if (rem) {
+      var numOnly = parseFloat(rem.replace(/[^\d.-]/g, "")) || 0;
+      total += Math.round(numOnly);
+    }
+    return total;
+  }
+  var cleanNum = str.replace(/[^\d.-]/g, "");
+  var num = parseFloat(cleanNum);
+  return isNaN(num) ? 0 : num;
+}
+
+/**
  * [신규 기능] 계약 완료 신규현장 -> 진행 현장(Convert Lead to Project) 승격 실행
  * 1) 중복 등록 방어 (현장데이터 및 완료현장 시트 검사)
  * 2) 신규견적 시트 상태를 \x27계약 완료\x27로 확정
@@ -11043,13 +11079,114 @@ function promoteEstimateToSite(data) {
       invalidateDashboardServerCache();
     } catch(eInv) {}
 
-    return {
+    // 5) 재무DB [수금현황] 시트 자동 등록 (p.autoCreateCollection !== false)
+    var collectionCreated = false;
+    var collectionRow = null;
+    var collectionSkippedReason = "";
+    var autoCreateCollection = (data.autoCreateCollection !== false && String(data.autoCreateCollection) !== "false");
+
+    if (autoCreateCollection) {
+      try {
+        var financeSs = null;
+        try {
+          financeSs = SpreadsheetApp.openById(FINANCE_DB_SPREADSHEET_ID);
+        } catch (eFOp) {
+          Logger.log("openById(FINANCE_DB_SPREADSHEET_ID) in promote error: " + eFOp.toString());
+        }
+        if (financeSs) {
+          var colSheet = financeSs.getSheetByName("수금현황");
+          if (!colSheet) {
+            colSheet = getOrCreateSheet_(financeSs, "수금현황");
+          }
+          var alreadyInCollection = false;
+          var cLastRow = colSheet.getLastRow();
+          var cleanSiteTarget = siteName.replace(/\s+/g, "").toLowerCase();
+
+          if (cLastRow >= 2) {
+            var colSiteVals = colSheet.getRange(2, 2, cLastRow - 1, 1).getValues();
+            for (var ci = 0; ci < colSiteVals.length; ci++) {
+              var sVal = String(colSiteVals[ci][0] || "").trim().replace(/\s+/g, "").toLowerCase();
+              if (sVal && sVal === cleanSiteTarget) {
+                alreadyInCollection = true;
+                break;
+              }
+            }
+          }
+
+          if (alreadyInCollection) {
+            collectionSkippedReason = "이미 수금현황 시트에 존재하는 현장명입니다: " + siteName;
+          } else {
+            // 기간 계산: data.period 우선, 없으면 taskList dates, 없으면 startDate
+            var periodStr = "";
+            if (data.period) {
+              periodStr = String(data.period).trim();
+            } else if (taskList && taskList.length > 0) {
+              var validDates = [];
+              for (var tIdx = 0; tIdx < taskList.length; tIdx++) {
+                var dRaw = taskList[tIdx].date || taskList[tIdx].dateStr;
+                if (dRaw) {
+                  var dNorm = "";
+                  try { dNorm = normalizeDateStringToYYYYMMDD(String(dRaw).trim()); } catch (eD) {}
+                  if (dNorm) validDates.push(dNorm);
+                }
+              }
+              if (validDates.length > 0) {
+                validDates.sort();
+                var minD = validDates[0];
+                var maxD = validDates[validDates.length - 1];
+                periodStr = (minD === maxD) ? minD : (minD + " ~ " + maxD);
+              }
+            }
+            if (!periodStr) periodStr = startDate;
+
+            var parsedAmt = parseAmountStringToNumber(contractAmount || expectedAmount || "");
+
+            var colPayload = {
+              authUser: data.authUser || "조항만",
+              spreadsheetId: FINANCE_DB_SPREADSHEET_ID,
+              row: {
+                siteName: siteName,
+                clientName: clientName,
+                manager: m1 || manager,
+                category: scope || data.category || "전체공사",
+                period: periodStr,
+                contractAmount: parsedAmt,
+                status: "진행중"
+              }
+            };
+
+            var saveRes = saveCollectionRow(colPayload);
+            if (saveRes && saveRes.success) {
+              collectionCreated = true;
+              collectionRow = saveRes.row;
+            } else {
+              collectionSkippedReason = (saveRes && saveRes.error) ? saveRes.error : "수금현황 행 생성 실패";
+            }
+          }
+        } else {
+          collectionSkippedReason = "재무 DB 스프레드시트를 열 수 없습니다.";
+        }
+      } catch (eCol) {
+        Logger.log("promoteEstimateToSite collection auto-create error: " + eCol.toString());
+        collectionSkippedReason = eCol.message || String(eCol);
+      }
+    } else {
+      collectionSkippedReason = "수금현황 자동 등록 옵션 미선택";
+    }
+
+    var result = {
       success: true,
       siteName: siteName,
       siteKey: siteName,
       tasksCount: newRows.length,
+      collectionCreated: collectionCreated,
+      collectionRow: collectionRow,
       message: "\x27" + siteName + "\x27 현장이 진행 현장으로 성공적으로 승격되었습니다."
     };
+    if (collectionSkippedReason) {
+      result.collectionSkippedReason = collectionSkippedReason;
+    }
+    return result;
   } catch (err) {
     Logger.log("promoteEstimateToSite error: " + err.toString());
     return { success: false, error: err.message || String(err) };
@@ -27540,6 +27677,13 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '          </div>';
   html += '          <div id="pmModalSchedulePreviewBox" style="background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;padding:10px;max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;"></div>';
   html += '        </div>';
+  html += '        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">';
+  html += '          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#166534;font-size:12.5px;">';
+  html += '            <input type="checkbox" id="pmModalAutoCollection" checked style="width:16px;height:16px;accent-color:#16a34a;cursor:pointer;">';
+  html += '            재무DB [수금현황] 시트에도 현장 자동 등록';
+  html += '          </label>';
+  html += '          <span style="font-size:11px;color:#15803d;font-weight:600;">(계약금액 자동 연동)</span>';
+  html += '        </div>';
   html += '      </div>';
   html += '    `;';
   html += '  }';
@@ -27603,12 +27747,14 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '  const startDate = dateEl ? dateEl.value : (ed.expectedDate || (new Date().toISOString().slice(0, 10)));';
   html += '  const autoCb = document.getElementById("pmModalAutoTasks");';
   html += '  const generateTasks = autoCb ? autoCb.checked : true;';
+  html += '  const autoColCb = document.getElementById("pmModalAutoCollection");';
+  html += '  const autoCreateCollection = autoColCb ? autoColCb.checked : true;';
   html += '  const manager = ed.manager || "조항만";';
   html += '  const computedTasks = generateTasks ? getDefaultProcessSchedule(scope, startDate, manager) : [{';
   html += '    taskName: "상담", date: startDate, manager: manager, partner: "", status: "예정", isShared: true, memo: ed.memo ? "견적 메모: " + ed.memo : ""';
   html += '  }];';
   html += '  const payload = {';
-  html += '    siteName: siteName, scope: scope, startDate: startDate, generateTasks: generateTasks, manager: manager,';
+  html += '    siteName: siteName, scope: scope, startDate: startDate, generateTasks: generateTasks, autoCreateCollection: autoCreateCollection, manager: manager,';
   html += '    clientName: ed.clientName || "", clientPhone: ed.clientPhone || "", address: ed.address || "",';
   html += '    contractAmount: ed.contractAmount || "", expectedAmount: ed.expectedAmount || "", memo: ed.memo || "",';
   html += '    estimateFile: ed.estimateFile || "", tasks: computedTasks';
@@ -27620,7 +27766,10 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      .withSuccessHandler(function(res) {';
   html += '        closePromoteEstimateModal();';
   html += '        if (res && res.success) {';
-  html += '          showToast("🎉 [" + siteName + "] 현장이 진행 현장으로 승격되었습니다!");';
+  html += '          let toastMsg = "🎉 [" + siteName + "] 현장이 진행 현장으로 승격되었습니다!";';
+  html += '          if (res.collectionCreated) { toastMsg += " (재무 수금현황 자동 등록 완료)"; }';
+  html += '          else if (res.collectionSkippedReason) { toastMsg += " (" + res.collectionSkippedReason + ")"; }';
+  html += '          showToast(toastMsg);';
   html += '          loadDataSilently();';
   html += '          setTimeout(function() { if (isMobile) selectMobileSite(siteName); else selectPcSite(siteName); }, 600);';
   html += '        } else {';
@@ -27642,7 +27791,10 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '      .then(res => {';
   html += '        closePromoteEstimateModal();';
   html += '        if (res && res.success) {';
-  html += '          showToast("🎉 [" + siteName + "] 현장이 진행 현장으로 승격되었습니다!");';
+  html += '          let toastMsg = "🎉 [" + siteName + "] 현장이 진행 현장으로 승격되었습니다!";';
+  html += '          if (res.collectionCreated) { toastMsg += " (재무 수금현황 자동 등록 완료)"; }';
+  html += '          else if (res.collectionSkippedReason) { toastMsg += " (" + res.collectionSkippedReason + ")"; }';
+  html += '          showToast(toastMsg);';
   html += '          loadDataSilently();';
   html += '          setTimeout(function() { if (isMobile) selectMobileSite(siteName); else selectPcSite(siteName); }, 600);';
   html += '        } else {';
