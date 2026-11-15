@@ -7853,11 +7853,11 @@
                 </div>
               ` : `<span style="color:#94a3b8;">-</span>`}
             </td>
-            <td style="white-space:nowrap;">
+            <td style="white-space:nowrap;min-width:260px;">
               ${p.bankAccount ? `
                 <div style="display:inline-flex;align-items:center;gap:6px;">
-                  <span style="font-size:12px;color:#0f766e;font-weight:700;">🏦 ${escHtml(p.bankAccount)}</span>
-                  <button type="button" onclick="copyText('${escJs(p.bankAccount)}')" style="border:1px solid #cbd5e1;background:#f8fafc;color:#475569;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;cursor:pointer;" title="계좌번호 복사">복사</button>
+                  <span style="font-size:12px;color:#0f766e;font-weight:700;">${escHtml(p.bankAccount)}</span>
+                  <button type="button" onclick="copyText('${escJs(p.bankAccount)}')" style="border:1px solid #cbd5e1;background:#f8fafc;color:#475569;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;cursor:pointer;flex-shrink:0;" title="계좌번호 복사">복사</button>
                 </div>
               ` : `<span style="color:#94a3b8;">-</span>`}
             </td>
@@ -7903,7 +7903,7 @@
             ${p.feature ? `<div style="font-size:11px;color:#1e3a8a;background:#f0fdf4;padding:4px 8px;border-radius:6px;margin-top:6px;border:1px solid #bbf7d0;">🎯 <strong>주력:</strong> ${escHtml(p.feature)}</div>` : ""}
             ${p.bankAccount ? `
               <div style="font-size:11px;color:#0f766e;background:#f0fdfa;padding:5px 8px;border-radius:6px;margin-top:6px;border:1px solid #99f6e4;display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🏦 <strong>계좌:</strong> ${escHtml(p.bankAccount)}</span>
+                <span style="font-weight:700;word-break:break-all;overflow:visible;line-height:1.4;"><strong>계좌:</strong> ${escHtml(p.bankAccount)}</span>
                 <button type="button" onclick="copyText('${escJs(p.bankAccount)}')" style="border:1px solid #99f6e4;background:#ffffff;color:#0f766e;font-size:10.5px;font-weight:700;padding:2px 6px;border-radius:4px;cursor:pointer;flex-shrink:0;">복사</button>
               </div>
             ` : ""}
@@ -8073,7 +8073,7 @@
           </div>
 
           <div class="table-container">
-            <table class="clean-table">
+            <table class="clean-table" style="min-width:1380px;width:100%;">
               <thead>
                 <tr>
                   <th style="width:40px;text-align:center;">No.</th>
@@ -8083,7 +8083,7 @@
                   <th style="text-align:center;">우선순위</th>
                   <th>담당자/직책</th>
                   <th>연락처 (원터치/복사)</th>
-                  <th>계좌번호 (복사)</th>
+                  <th style="min-width:260px;white-space:nowrap;">계좌번호 (복사)</th>
                   <th style="text-align:center;">관리상태</th>
                   <th>발주방식</th>
                   <th>주력분야 및 특징</th>
@@ -12761,8 +12761,13 @@
               ${p.phone ? `<a href="tel:${escHtml(p.phone)}" style="color:#2563eb;text-decoration:none;font-weight:600;font-size:11.5px;white-space:nowrap;">📞 ${escHtml(p.phone)}</a>` : `<span style="color:#94a3b8;">-</span>`}
             </td>
             <td style="text-align:center;white-space:nowrap;"><span style="padding:2px 7px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};white-space:nowrap;">${escHtml(p.status || "운영 중")}</span></td>
-            <td style="white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(p.bankAccount || "")}">
-              ${p.bankAccount ? `<span style="color:#0f766e;font-weight:700;font-size:11.5px;">🏦 ${escHtml(p.bankAccount)}</span>` : `<span style="color:#94a3b8;">-</span>`}
+            <td style="white-space:nowrap;min-width:260px;" title="${escHtml(p.bankAccount || "")}">
+              ${p.bankAccount ? `
+                <div style="display:inline-flex;align-items:center;gap:6px;">
+                  <span style="color:#0f766e;font-weight:700;font-size:11.5px;">${escHtml(p.bankAccount)}</span>
+                  <button type="button" onclick="copyText('${escJs(p.bankAccount)}')" style="border:1px solid #cbd5e1;background:#f8fafc;color:#475569;font-size:10.5px;font-weight:700;padding:1px 5px;border-radius:4px;cursor:pointer;flex-shrink:0;" title="계좌번호 복사">복사</button>
+                </div>
+              ` : `<span style="color:#94a3b8;">-</span>`}
             </td>
             <td style="font-size:11.5px;color:#475569;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.feature || "")}">${escHtml(p.feature || "-")}</td>
             <td style="font-size:11.5px;color:#64748b;white-space:nowrap;">${escHtml(p.orderMethod || "-")}</td>
@@ -13046,7 +13051,7 @@
             </div>
 
             <div class="table-container" style="flex:1;min-height:0;overflow-y:auto;overflow-x:auto;">
-              <table class="clean-table" style="min-width:1380px;width:100%;border-collapse:separate;border-spacing:0;">
+              <table class="clean-table" style="min-width:1480px;width:100%;border-collapse:separate;border-spacing:0;">
                 <thead>
                   <tr style="position:sticky;top:0;background:#ffffff;z-index:2;box-shadow:0 1px 2px rgba(0,0,0,0.05);">
                     <th style="width:45px;text-align:center;white-space:nowrap;">순서</th>
@@ -13058,7 +13063,7 @@
                     <th style="width:100px;min-width:100px;text-align:left;white-space:nowrap;">담당 / 직책</th>
                     <th style="width:130px;min-width:130px;text-align:left;white-space:nowrap;">연락처</th>
                     <th style="width:85px;min-width:85px;text-align:center;white-space:nowrap;">관리상태</th>
-                    <th style="width:170px;min-width:170px;text-align:left;white-space:nowrap;">계좌번호</th>
+                    <th style="width:260px;min-width:260px;text-align:left;white-space:nowrap;">계좌번호</th>
                     <th style="width:180px;min-width:180px;text-align:left;white-space:nowrap;">주력분야 및 특징</th>
                     <th style="width:115px;min-width:115px;text-align:left;white-space:nowrap;">발주 / 접수방식</th>
                     <th style="min-width:140px;text-align:left;white-space:nowrap;">비고 / 메모</th>
