@@ -666,6 +666,43 @@ function ensurePartnerDropdownFormulaColumn(ss, partnerSheet) {
 }
 
 /**
+ * '02_거래처' 시트 12열(L열)에 "계좌번호" 열 준비
+ * - K열(선택목록 ARRAYFORMULA 수식 열) 바로 다음 열에 위치하여 수식 및 기존 드롭다운 연동을 100% 안전하게 보존
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} [partnerSheet]
+ * @return {GoogleAppsScript.Spreadsheet.Range|null} L2:L 범위
+ */
+function ensurePartnerBankAccountColumn(ss, partnerSheet) {
+  var pSheet = partnerSheet || findPartnersSheet(ss);
+  if (!pSheet) return null;
+
+  // 11열(K열) 수식 열 무결성 먼저 보장
+  ensurePartnerDropdownFormulaColumn(ss, pSheet);
+
+  var maxCols = Math.max((typeof pSheet.getMaxColumns === "function" ? pSheet.getMaxColumns() : 11), 11);
+  if (maxCols < 12 && typeof pSheet.insertColumnAfter === "function") {
+    pSheet.insertColumnAfter(maxCols);
+  }
+
+  // 1행 12열(L열) 헤더 설정
+  var headerCell = pSheet.getRange(1, 12);
+  var curHeader = String(headerCell.getValue() || "").trim();
+  if (curHeader !== "계좌번호") {
+    headerCell.setValue("계좌번호")
+      .setBackground("#1e293b")
+      .setFontColor("#ffffff")
+      .setFontWeight("bold")
+      .setHorizontalAlignment("center")
+      .setVerticalAlignment("middle");
+    pSheet.setRowHeight(1, 36);
+    try { pSheet.setColumnWidth(12, 220); } catch(eW) {}
+  }
+
+  var maxRows = Math.max((typeof pSheet.getMaxRows === "function" ? pSheet.getMaxRows() : 100), 100);
+  return pSheet.getRange("L2:L" + maxRows);
+}
+
+/**
  * '02_거래처' 시트에서 유효한 "대표 공종_업체명" 전체 목록 반환
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss]
  * @return {string[]}
@@ -791,6 +828,58 @@ function getPartnerPhoneMap(ss, preloadedRows) {
     Logger.log("getPartnerPhoneMap 예외: " + ePhoneMap.toString());
   }
   return phoneMap;
+}
+
+/**
+ * '02_거래처' 시트에서 협력업체별 계좌번호(12열, L열) 매핑 테이블 생성
+ * - 표준 결합명("공종_업체명") 및 업체명 단독("업체명") 모두 매핑 지원
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss]
+ * @param {Array} [preloadedRows]
+ * @return {object} { "도배_이충호 반장 (개인)": "국민 123-456-7890 홍길동", ... }
+ */
+function getPartnerBankAccountMap(ss, preloadedRows) {
+  var bankMap = {};
+  try {
+    var pData = null;
+    if (Array.isArray(preloadedRows) && preloadedRows.length > 0) {
+      pData = preloadedRows;
+    } else {
+      var pSheet = findPartnersSheet(ss);
+      if (pSheet && pSheet.getLastRow() >= 2) {
+        var lastR = pSheet.getLastRow();
+        var maxCols = Math.max((typeof pSheet.getLastColumn === "function" ? pSheet.getLastColumn() : 12), 12);
+        pData = pSheet.getRange(2, 1, lastR - 1, maxCols).getValues();
+      }
+    }
+    if (pData && pData.length > 0) {
+      for (var i = 0; i < pData.length; i++) {
+        var aName = String(pData[i][0] || "").trim();
+        var bBiz = String(pData[i][1] || "").trim();
+        var kVal = (pData[i].length >= 11) ? String(pData[i][10] || "").trim() : "";
+        var bankVal = (pData[i].length >= 12) ? String(pData[i][11] || "").trim() : "";
+
+        if (!bankVal) continue;
+
+        var stdVal = kVal || (bBiz ? (bBiz + "_" + aName) : aName);
+        if (stdVal) {
+          bankMap[stdVal] = bankVal;
+          bankMap[stdVal.toLowerCase()] = bankVal;
+        }
+        if (aName) {
+          bankMap[aName] = bankVal;
+          bankMap[aName.toLowerCase()] = bankVal;
+          var cleanName = aName.split("(")[0].trim();
+          if (cleanName) {
+            bankMap[cleanName] = bankVal;
+            bankMap[cleanName.toLowerCase()] = bankVal;
+          }
+        }
+      }
+    }
+  } catch(eBankMap) {
+    Logger.log("getPartnerBankAccountMap 오류: " + eBankMap.toString());
+  }
+  return bankMap;
 }
 
 /**
@@ -8772,9 +8861,9 @@ function getSettingsManagementData() {
     var pSheet = findPartnersSheet(ss);
     var partners = [];
     if (pSheet && pSheet.getLastRow() >= 2) {
-      ensurePartnerDropdownFormulaColumn(ss, pSheet);
+      ensurePartnerBankAccountColumn(ss, pSheet);
       var pLastR = pSheet.getLastRow();
-      var pLastC = Math.max((typeof pSheet.getLastColumn === "function" ? pSheet.getLastColumn() : 11), 11);
+      var pLastC = Math.max((typeof pSheet.getLastColumn === "function" ? pSheet.getLastColumn() : 12), 12);
       var pHeaders = pSheet.getRange(1, 1, 1, pLastC).getValues()[0].map(function (h) {
         return String(h || "").replace(/\s+/g, "").trim();
       });
@@ -8795,10 +8884,11 @@ function getSettingsManagementData() {
       var cMgr = findColIdx(["담당자/직책", "담당자", "대표자", "직책", "담당"], 4);
       var cPhone = findColIdx(["연락처", "전화번호", "휴대폰"], 5);
       var cStatus = findColIdx(["관리상태", "상태", "운영상태"], 6);
-      var cFeature = findColIdx(["주력분야및특징", "주력분야", "특징", "계좌", "계좌번호"], 7);
+      var cFeature = findColIdx(["주력분야및특징", "주력분야", "특징"], 7);
       var cOrder = findColIdx(["발주/접수방식", "발주방식", "접수방식", "발주"], 8);
       var cNote = findColIdx(["비고", "메모", "비고및특이사항", "카톡방"], 9);
       var cDropdown = findColIdx(["선택목록(공종_업체)", "드롭다운", "선택용", "표시명", "검색용"], 10);
+      var cBankAccount = findColIdx(["계좌번호", "계좌", "입금계좌", "은행계좌"], 11);
 
       var pData = pSheet.getRange(2, 1, pLastR - 1, pLastC).getValues();
       for (var pi = 0; pi < pData.length; pi++) {
@@ -8815,6 +8905,7 @@ function getSettingsManagementData() {
         var pOrder = String((cOrder >= 0 && pRowVals[cOrder]) || "").trim();
         var pNote = String((cNote >= 0 && pRowVals[cNote]) || "").trim();
         var pDropdown = String((cDropdown >= 0 && pRowVals[cDropdown]) || (pRowVals.length >= 11 ? pRowVals[10] : "") || "").trim() || (pBiz ? (pBiz + "_" + pName) : pName);
+        var pBankAccount = String((cBankAccount >= 0 && pRowVals[cBankAccount]) || (pRowVals.length >= 12 ? pRowVals[11] : "") || "").trim();
         partners.push({
           row: pi + 2,
           name: pName,
@@ -8825,6 +8916,7 @@ function getSettingsManagementData() {
           phone: pPhone,
           status: pStatus,
           feature: pFeature,
+          bankAccount: pBankAccount,
           orderMethod: pOrder,
           note: pNote,
           dropdownVal: pDropdown
@@ -8892,6 +8984,7 @@ function getSettingsManagementData() {
       availableTasks: getAvailableTasks(null),
       availableManagers: getAvailableManagers(ss),
       partnerPhoneMap: getPartnerPhoneMap(ss),
+      partnerBankAccountMap: getPartnerBankAccountMap(ss),
       memberPhoneMap: getMemberPhoneMap(ss),
       siteSuperintendents: getSiteSuperintendents(ss)
     };
@@ -8920,7 +9013,7 @@ function addPartnerItemFromWeb(partnerData) {
       pSheet.getRange(1, 1, 1, 11).setValues(headers).setBackground("#1e293b").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
     }
 
-    ensurePartnerDropdownFormulaColumn(ss, pSheet);
+    ensurePartnerBankAccountColumn(ss, pSheet);
 
     var cleanPhone = String(data.phone || "").trim().replace(/\s+/g, "");
     if (/^010\d{8}$/.test(cleanPhone)) {
@@ -8943,6 +9036,12 @@ function addPartnerItemFromWeb(partnerData) {
     ];
 
     pSheet.appendRow(newRow);
+    var bankAccount = String(data.bankAccount !== undefined ? data.bankAccount : (data.account || "")).trim();
+    if (bankAccount) {
+      try {
+        pSheet.getRange(pSheet.getLastRow(), 12).setValue(bankAccount);
+      } catch(eB) {}
+    }
     SpreadsheetApp.flush();
     invalidateDashboardServerCache();
 
@@ -9075,6 +9174,11 @@ function updatePartnerItemFromWeb(row, partnerData) {
     ];
 
     pSheet.getRange(targetRow, 1, 1, 10).setValues([updateVals]);
+    if (data.bankAccount !== undefined || data.account !== undefined) {
+      var bankAccount = String(data.bankAccount !== undefined ? data.bankAccount : (data.account || "")).trim();
+      ensurePartnerBankAccountColumn(ss, pSheet);
+      pSheet.getRange(targetRow, 12).setValue(bankAccount);
+    }
     SpreadsheetApp.flush();
     invalidateDashboardServerCache();
 
@@ -9620,6 +9724,7 @@ function saveAllSettingsBatchFromWeb(batchPayload) {
       var pLastRow = pSheet.getLastRow();
       var oldPCount = Math.max(0, pLastRow - 1);
       var pRows = [];
+      var pBankRows = [];
       for (var pi = 0; pi < partnersList.length; pi++) {
         var pItem = partnersList[pi] || {};
         var pName = String(pItem.name || pItem.fullName || "").trim();
@@ -9636,6 +9741,7 @@ function saveAllSettingsBatchFromWeb(batchPayload) {
           String(pItem.orderMethod || "").trim(),
           String(pItem.note || pItem.memo || "").trim()
         ]);
+        pBankRows.push([String(pItem.bankAccount !== undefined ? pItem.bankAccount : (pItem.account || "")).trim()]);
       }
 
       if (pRows.length > 0) {
@@ -9643,12 +9749,16 @@ function saveAllSettingsBatchFromWeb(batchPayload) {
         if (pMaxR < pRows.length + 1) {
           pSheet.insertRowsAfter(pMaxR, (pRows.length + 1) - pMaxR);
         }
+        ensurePartnerBankAccountColumn(ss, pSheet);
         pSheet.getRange(2, 1, pRows.length, 10).setValues(pRows);
+        pSheet.getRange(2, 12, pBankRows.length, 1).setValues(pBankRows);
         if (oldPCount > pRows.length) {
           pSheet.getRange(2 + pRows.length, 1, oldPCount - pRows.length, 10).clearContent();
+          pSheet.getRange(2 + pRows.length, 12, oldPCount - pRows.length, 1).clearContent();
         }
       } else if (oldPCount > 0) {
         pSheet.getRange(2, 1, oldPCount, 10).clearContent();
+        pSheet.getRange(2, 12, oldPCount, 1).clearContent();
       }
       ensurePartnerDropdownFormulaColumn(ss, pSheet);
     }
@@ -11935,6 +12045,326 @@ function saveExpenseBatchRows(p) {
 }
 
 /**
+ * [마스터 설정] 거래처 데이터 단독 조회 API
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss]
+ * @return {{success: boolean, partners: Array, availablePartners: Array}}
+ */
+function getPartnersData(ss) {
+  var sData = getSettingsManagementData();
+  return {
+    success: true,
+    partners: sData.partners || [],
+    availablePartners: sData.availablePartners || []
+  };
+}
+
+/**
+ * [재무 DB -> 02_거래처] 재무DB(비용마감, 비용마감_고정)의 업체별 계좌번호 정보를 추출해 02_거래처 시트 L열(계좌번호)로 일괄 매핑
+ * @param {object} [p]
+ * @return {{success: boolean, matchedCount: number, updatedCount: number, preservedCount: number, totalPartnersCount: number, samples: Array, unmatchedVendors: Array, message: string}}
+ */
+function mapPartnerBankAccountsFromFinanceDb(p) {
+  try {
+    p = p || {};
+    var financeSsId = (p && p.spreadsheetId) || FINANCE_DB_SPREADSHEET_ID;
+    var fss = SpreadsheetApp.openById(financeSsId);
+    if (!fss) {
+      return { success: false, error: "재무 DB 스프레드시트를 열 수 없습니다: " + financeSsId };
+    }
+
+    var ss = getAppSpreadsheet();
+    if (!ss) {
+      return { success: false, error: "메인 스프레드시트를 찾을 수 없습니다." };
+    }
+
+    var pSheet = findPartnersSheet(ss);
+    if (!pSheet) {
+      return { success: false, error: "02_거래처 시트를 찾을 수 없습니다." };
+    }
+
+    // 12열(L열) 계좌번호 헤더 준비 (K열 ARRAYFORMULA 절대 보존)
+    ensurePartnerBankAccountColumn(ss, pSheet);
+
+    var pLastR = pSheet.getLastRow();
+    if (pLastR < 2) {
+      return {
+        success: true,
+        matchedCount: 0,
+        updatedCount: 0,
+        preservedCount: 0,
+        totalPartnersCount: 0,
+        samples: [],
+        unmatchedVendors: [],
+        message: "02_거래처 시트에 데이터가 없습니다."
+      };
+    }
+
+    var pMaxCols = Math.max((typeof pSheet.getLastColumn === "function" ? pSheet.getLastColumn() : 12), 12);
+    var pData = pSheet.getRange(2, 1, pLastR - 1, pMaxCols).getValues();
+
+    // 02_거래처 파트너 파싱
+    var partnerRecords = [];
+    for (var pi = 0; pi < pData.length; pi++) {
+      var rVals = pData[pi];
+      var pName = String(rVals[0] || "").trim();
+      if (!pName) continue;
+      var pBiz = String(rVals[1] || "").trim();
+      var pMgr = String(rVals[4] || "").trim();
+      var pKVal = (rVals.length >= 11) ? String(rVals[10] || "").trim() : "";
+      var pExistingBank = (rVals.length >= 12) ? String(rVals[11] || "").trim() : "";
+
+      partnerRecords.push({
+        row: pi + 2,
+        name: pName,
+        biz: pBiz,
+        manager: pMgr,
+        dropdownVal: pKVal || (pBiz ? (pBiz + "_" + pName) : pName),
+        existingBank: pExistingBank,
+        newBank: "",
+        normName: normalizePartnerNameForMatching_(pName),
+        normBiz: normalizePartnerNameForMatching_(pBiz),
+        normMgr: normalizePartnerNameForMatching_(pMgr)
+      });
+    }
+
+    // 재무DB 시트(비용마감, 비용마감_고정, 원본_비용마감)에서 계좌정보 추출
+    var financeItemsMap = {}; // vendorKey -> { rawVendor, cleanVendor, bankInfo, category }
+
+    function ingestRow(vStr, c2Str, noteStr, catStr) {
+      var v = String(vStr || "").trim();
+      if (!v) return;
+      var extracted = extractBankAccountFromFinanceRow_(v, c2Str, noteStr, catStr);
+      if (extracted && extracted.bankInfo) {
+        var key = extracted.cleanVendor || v;
+        if (!financeItemsMap[key]) {
+          financeItemsMap[key] = extracted;
+        } else if (!financeItemsMap[key].bankInfo && extracted.bankInfo) {
+          financeItemsMap[key] = extracted;
+        }
+      }
+    }
+
+    // 1) 비용마감 시트
+    var sheetExp = fss.getSheetByName("비용마감");
+    if (sheetExp && sheetExp.getLastRow() >= 2) {
+      var expRows = sheetExp.getRange(2, 1, sheetExp.getLastRow() - 1, 12).getValues();
+      for (var ei = 0; ei < expRows.length; ei++) {
+        var er = expRows[ei];
+        ingestRow(er[4], er[5], er[11], er[3]);
+      }
+    }
+
+    // 2) 비용마감_고정 시트
+    var sheetFixed = fss.getSheetByName("비용마감_고정");
+    if (sheetFixed && sheetFixed.getLastRow() >= 2) {
+      var fixedRows = sheetFixed.getRange(2, 1, sheetFixed.getLastRow() - 1, 8).getValues();
+      for (var fi = 0; fi < fixedRows.length; fi++) {
+        var fr = fixedRows[fi];
+        ingestRow(fr[4], fr[5], fr[7], fr[3]);
+      }
+    }
+
+    // 3) 원본_비용마감 시트 (추가 보조 정보 확보)
+    var sheetRawExp = fss.getSheetByName("원본_비용마감");
+    if (sheetRawExp && sheetRawExp.getLastRow() >= 2) {
+      var rawCols = Math.min(sheetRawExp.getLastColumn(), 72);
+      var rawExpRows = sheetRawExp.getRange(2, 1, sheetRawExp.getLastRow() - 1, rawCols).getValues();
+      for (var ri = 0; ri < rawExpRows.length; ri++) {
+        var rr = rawExpRows[ri];
+        var rVend = rr[4];
+        var rCat2 = rr[5];
+        var rNote = (rr.length >= 71) ? rr[70] : "";
+        var rCat = rr[3];
+        ingestRow(rVend, rCat2, rNote, rCat);
+      }
+    }
+
+    // 거래처 매칭 및 계좌번호 매핑
+    var matchedCount = 0;
+    var updatedCount = 0;
+    var preservedCount = 0;
+    var samples = [];
+    var unmatchedVendors = [];
+
+    var financeKeys = Object.keys(financeItemsMap);
+
+    for (var fki = 0; fki < financeKeys.length; fki++) {
+      var fKey = financeKeys[fki];
+      var fItem = financeItemsMap[fKey];
+      var fNorm = normalizePartnerNameForMatching_(fItem.cleanVendor || fKey);
+      var fRaw = fItem.rawVendor;
+      var fBank = fItem.bankInfo;
+
+      var matchedPartner = null;
+
+      // 1순위: 완전 일치
+      for (var p1 = 0; p1 < partnerRecords.length; p1++) {
+        var rec1 = partnerRecords[p1];
+        if (rec1.name === fItem.cleanVendor || rec1.dropdownVal === fItem.cleanVendor || rec1.name === fRaw || rec1.dropdownVal === fRaw) {
+          matchedPartner = rec1;
+          break;
+        }
+      }
+
+      // 2순위: 정규화 이름 일치
+      if (!matchedPartner) {
+        for (var p2 = 0; p2 < partnerRecords.length; p2++) {
+          var rec2 = partnerRecords[p2];
+          if (rec2.normName && fNorm && rec2.normName === fNorm) {
+            matchedPartner = rec2;
+            break;
+          }
+        }
+      }
+
+      // 3순위: 담당자 일치 (예: 김동원, 박성안, 조한수, 이철상, 유기선 등)
+      if (!matchedPartner) {
+        for (var p3 = 0; p3 < partnerRecords.length; p3++) {
+          var rec3 = partnerRecords[p3];
+          if (rec3.normMgr && rec3.normMgr.length >= 2 && (fNorm.indexOf(rec3.normMgr) !== -1 || rec3.normMgr.indexOf(fNorm) !== -1)) {
+            matchedPartner = rec3;
+            break;
+          }
+        }
+      }
+
+      // 4순위: 부분 포함 일치 (길이 2자 이상)
+      if (!matchedPartner) {
+        for (var p4 = 0; p4 < partnerRecords.length; p4++) {
+          var rec4 = partnerRecords[p4];
+          if (rec4.normName && rec4.normName.length >= 2 && fNorm && fNorm.length >= 2) {
+            if (fNorm.indexOf(rec4.normName) !== -1 || rec4.normName.indexOf(fNorm) !== -1) {
+              matchedPartner = rec4;
+              break;
+            }
+          }
+        }
+      }
+
+      if (matchedPartner) {
+        matchedCount++;
+        if (matchedPartner.existingBank) {
+          preservedCount++;
+        } else if (!matchedPartner.newBank) {
+          matchedPartner.newBank = fBank;
+          updatedCount++;
+          if (samples.length < 30) {
+            samples.push({
+              partner: matchedPartner.name,
+              biz: matchedPartner.biz,
+              vendor: fRaw,
+              bankAccount: fBank
+            });
+          }
+        }
+      } else {
+        unmatchedVendors.push(fRaw || fKey);
+      }
+    }
+
+    // 02_거래처 시트 12열(L열)에 실제 쓰기
+    if (updatedCount > 0) {
+      for (var ui = 0; ui < partnerRecords.length; ui++) {
+        var uRec = partnerRecords[ui];
+        if (uRec.newBank && !uRec.existingBank) {
+          pSheet.getRange(uRec.row, 12).setValue(uRec.newBank);
+        }
+      }
+      SpreadsheetApp.flush();
+      invalidateDashboardServerCache();
+    }
+
+    return {
+      success: true,
+      matchedCount: matchedCount,
+      updatedCount: updatedCount,
+      preservedCount: preservedCount,
+      totalPartnersCount: partnerRecords.length,
+      samples: samples,
+      unmatchedVendors: unmatchedVendors,
+      message: "재무DB에서 총 " + matchedCount + "건의 거래처 계좌정보 매핑 완료 (신규 업데이트: " + updatedCount + "건, 기존 유지: " + preservedCount + "건)"
+    };
+  } catch (err) {
+    Logger.log("mapPartnerBankAccountsFromFinanceDb 오류: " + err.toString());
+    return {
+      success: false,
+      error: "mapPartnerBankAccountsFromFinanceDb 실행 실패: " + (err.message || String(err))
+    };
+  }
+}
+
+/**
+ * [재무 DB] 행에서 은행명/계좌번호/예금주 및 정규화된 업체명 추출 헬퍼
+ */
+function extractBankAccountFromFinanceRow_(vendorStr, cat2Str, noteStr, catStr) {
+  var v = String(vendorStr || "").trim();
+  var c2 = String(cat2Str || "").trim();
+  var note = String(noteStr || "").trim();
+
+  var bankInfo = "";
+  var cleanVendor = v;
+
+  // 1) cat2에 계좌정보가 있는 경우 (결제코드/상태값 제외)
+  var isCodeOnly = /^(A|B|C|AA|AB|AC|BA|BB|BC|CA|CB|CC|SS|Y|N|O|X|공통|미지정|거래중지)$/i.test(c2);
+  var hasBankWord = /(은행|국민|신한|우리|하나|기업|농협|카카오|카뱅|토스|케이|우체국|새마을|신협|수협|씨티|SC|대구|부산|광주|제주|전북|경남|산업|IBK|KB|NH)/i.test(c2);
+  var hasAccountPattern = /\d{3,}[-\s]?\d{2,}/.test(c2) || /\d{8,}/.test(c2);
+
+  if (c2 && (!isCodeOnly || hasBankWord || hasAccountPattern)) {
+    bankInfo = c2;
+  }
+
+  // 2) note(비고)에 계좌정보가 있는 경우
+  if (!bankInfo && note) {
+    if (/(은행|국민|신한|우리|하나|기업|농협|카카오|카뱅|토스|케이|우체국|새마을|신협|수협|씨티|SC|대구|부산|광주|제주|전북|경남|산업|IBK|KB|NH)/i.test(note) || /\d{3,}[-\s]?\d{2,}/.test(note)) {
+      bankInfo = note;
+    }
+  }
+
+  // 3) vendor(업체명)에 괄호나 접두사로 은행/계좌정보가 포함된 경우
+  var vBankMatch = v.match(/\((?:국민|신한|우리|하나|기업|농협|카카오|카뱅|토스|우체국|새마을|신협|수협|씨티|SC|대구|부산|광주|제주|전북|경남|케이|은행)[^)]*\)/i);
+  if (vBankMatch) {
+    var rawVBank = vBankMatch[0].replace(/[()]/g, "").trim();
+    if (!bankInfo) bankInfo = rawVBank;
+    cleanVendor = cleanVendor.replace(vBankMatch[0], "").trim();
+  }
+
+  if (!bankInfo && /^(?:농협|국민|신한|우리|하나|기업|카카오|카뱅|토스|우체국|새마을|신협|수협|씨티|SC)\s+[가-힣A-Za-z0-9]+/i.test(v)) {
+    bankInfo = v;
+    cleanVendor = v.replace(/^(?:농협|국민|신한|우리|하나|기업|카카오|카뱅|토스|우체국|새마을|신협|수협|씨티|SC)\s+/i, "").trim();
+  }
+
+  if (!bankInfo && v.indexOf("신한") !== -1 && v.indexOf("카카") !== -1) {
+    bankInfo = v;
+  }
+
+  return {
+    rawVendor: v,
+    cleanVendor: cleanVendor,
+    bankInfo: bankInfo,
+    category: catStr || ""
+  };
+}
+
+/**
+ * [거래처 매칭] 업체명 비교용 정규화 헬퍼 (공종 접두사, 직책, 괄호, 특수기호 제거)
+ */
+function normalizePartnerNameForMatching_(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/\s+/g, "")
+    .replace(/욕실|주방|거실/g, "")
+    .replace(/\(개인\)|\(영웅\)|\(우드케이스\)|\(보경팀\)|\(EIS가구\)|\(참우드소개\)|\(사모님\)|\(아드님\)/g, "")
+    .replace(/\([^)]*은행[^)]*\)|\([^)]*농협[^)]*\)|\([^)]*국민[^)]*\)|\([^)]*신한[^)]*\)/g, "")
+    .replace(/^(시공|자재|외주|가구|설비|철거|단품|도배|목공|전기|타일|필름|마루|도장|방수|금속|새시|창호|조명|준공청소|철거|에어컨|싱크대|가스)_/g, "")
+    .replace(/^(도배|목공|전기|타일|필름|마루|도장|방수|금속|새시|창호|조명|청소|에어컨|가스|농협)\s*/g, "")
+    .replace(/(반장님|반장|대표님|대표|팀장님|팀장|실장님|실장|소장님|소장|사원|과장|대리|고문|사장님|사장|주임|P|님)$/g, "")
+    .replace(/[()_·\/-]/g, "")
+    .replace(/씽크/g, "싱크")
+    .toLowerCase()
+    .trim();
+}
+
+/**
  * 모바일 웹 드롭다운 상태 변경 화면 (doGet)
  */
 function doGet(e) {
@@ -12058,6 +12488,17 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  // 0-0-0-Finance-MapBank) 재무DB 계좌정보 -> 02_거래처 L열 일괄 매핑 (action=mapPartnerBankAccounts)
+  if (action === "mapPartnerBankAccounts") {
+    var pMapBank = p;
+    if (typeof p.data === "string") {
+      try { pMapBank = Object.assign({}, p, JSON.parse(p.data)); } catch (eMb) {}
+    }
+    var mapBankRes = mapPartnerBankAccountsFromFinanceDb(pMapBank);
+    return ContentService.createTextOutput(JSON.stringify(mapBankRes))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // 0-0-0-Promote) 신규견적 -> 진행 현장 승격 요청 (action=promoteEstimateToSite)
   if (action === "promoteEstimateToSite") {
     var pPromote = {};
@@ -12162,6 +12603,10 @@ function doGet(e) {
   }
 
   // 0-0-0-Settings) 마스터 설정 (거래처 · 공종 · 구성원 관리) 액션 라우팅
+  if (action === "getPartnersData") {
+    var pPartnersRes = getPartnersData(ss);
+    return ContentService.createTextOutput(JSON.stringify(pPartnersRes)).setMimeType(ContentService.MimeType.JSON);
+  }
   if (action === "getSettingsData") {
     var sData = getSettingsManagementData();
     return ContentService.createTextOutput(JSON.stringify(sData)).setMimeType(ContentService.MimeType.JSON);
@@ -12985,6 +13430,17 @@ function doPost(e) {
       }
       var batchExpRes = saveExpenseBatchRows(pBatchExp);
       return ContentService.createTextOutput(JSON.stringify(batchExpRes))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 재무DB 계좌정보 -> 02_거래처 L열 일괄 매핑
+    if (action === "mapPartnerBankAccounts") {
+      var pMapBank = p;
+      if (typeof p.data === "string") {
+        try { pMapBank = Object.assign({}, p, JSON.parse(p.data)); } catch (eMb) {}
+      }
+      var mapBankRes = mapPartnerBankAccountsFromFinanceDb(pMapBank);
+      return ContentService.createTextOutput(JSON.stringify(mapBankRes))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -15279,7 +15735,7 @@ function getSidebarDashboardData(forceRefresh) {
       var pSheetOnce = findPartnersSheet(ss);
       if (pSheetOnce && pSheetOnce.getLastRow() >= 2) {
         var pLastR = pSheetOnce.getLastRow();
-        var pMaxCols = Math.max((typeof pSheetOnce.getLastColumn === "function" ? pSheetOnce.getLastColumn() : 11), 11);
+        var pMaxCols = Math.max((typeof pSheetOnce.getLastColumn === "function" ? pSheetOnce.getLastColumn() : 12), 12);
         sharedPartnerRows = pSheetOnce.getRange(2, 1, pLastR - 1, pMaxCols).getValues();
       }
     } catch(ePOnce) {}
@@ -15323,6 +15779,7 @@ function getSidebarDashboardData(forceRefresh) {
       tasks: getAvailableTasks(sheet),
       partners: getAvailablePartners(ss, true, sharedPartnerRows),
       partnerPhoneMap: getPartnerPhoneMap(ss, sharedPartnerRows),
+      partnerBankAccountMap: getPartnerBankAccountMap(ss, sharedPartnerRows),
       memberPhoneMap: getMemberPhoneMap(ss),
       siteSuperintendents: getSiteSuperintendents(ss),
       holidays: getKoreanHolidaysMap(ss),

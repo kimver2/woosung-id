@@ -6431,6 +6431,15 @@
         ].filter(Boolean)));
 
         const partnerList = getPartnersListForTab();
+        if (!rData.category2 && rData.vendor) {
+          const vNorm = rData.vendor.toLowerCase().trim();
+          const p = partnerList.find(p =>
+            (p.fullName && p.fullName.toLowerCase() === vNorm) ||
+            (p.name && p.name.toLowerCase() === vNorm) ||
+            (p.dropdownVal && p.dropdownVal.toLowerCase().includes(vNorm))
+          );
+          if (p && p.bankAccount) rData.category2 = p.bankAccount;
+        }
         const vendorOptions = Array.from(new Set([
           ...partnerList.map(p => p.fullName || p.name),
           ...expList.map(e => e.vendor)
@@ -6465,7 +6474,7 @@
             <div>
               <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">업체명 <span style="color:#ef4444;">*</span></label>
               <input type="text" id="expVendor" list="expenseVendorDatalist" value="${escHtml(rData.vendor)}" placeholder="거래처명 입력 또는 선택"
-                onchange="window.onExpenseVendorChange(this.value)"
+                onchange="window.onExpenseVendorChange(this.value, true)"
                 style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
               <div id="expVendorHint" style="font-size:11px;color:#2563eb;margin-top:3px;font-weight:600;"></div>
             </div>
@@ -6483,8 +6492,8 @@
                 style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
             </div>
             <div>
-              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">구분2 (계좌/대표자/보조정보)</label>
-              <input type="text" id="expCategory2" value="${escHtml(rData.category2)}" placeholder="은행/계좌번호 또는 대표자"
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">계좌번호 (구분2)</label>
+              <input type="text" id="expCategory2" value="${escHtml(rData.category2)}" placeholder="은행 / 계좌번호 (예금주)"
                 style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
             </div>
           </div>
@@ -6547,7 +6556,7 @@
         }
 
         calcExpenseModalBalance();
-        if (rData.vendor) onExpenseVendorChange(rData.vendor);
+        if (rData.vendor) onExpenseVendorChange(rData.vendor, false);
         openModal("expenseModal");
       };
 
@@ -6576,7 +6585,7 @@
         calcExpenseModalBalance();
       };
 
-      window.onExpenseVendorChange = function(vendorVal) {
+      window.onExpenseVendorChange = function(vendorVal, isUserAction) {
         if (!vendorVal) return;
         const partners = getPartnersListForTab();
         const vNorm = vendorVal.toLowerCase().trim();
@@ -6589,13 +6598,20 @@
         const cat2El = document.getElementById("expCategory2");
         const catEl = document.getElementById("expCategory");
         if (found) {
-          const info = [found.feature, found.phone, found.manager].filter(Boolean).join(" · ");
+          const bankDisp = found.bankAccount ? `계좌: ${found.bankAccount}` : "";
+          const info = [bankDisp, found.feature, found.phone, found.manager].filter(Boolean).join(" · ");
           if (hintEl) hintEl.textContent = info ? `💡 거래처 정보: ${info}` : "";
-          if (cat2El && !cat2El.value && found.feature) {
-            cat2El.value = found.feature;
+          if (cat2El) {
+            if (isUserAction) {
+              cat2El.value = found.bankAccount || "";
+            } else if (!cat2El.value && found.bankAccount) {
+              cat2El.value = found.bankAccount;
+            }
           }
-          if (catEl && !catEl.value && found.biz) {
-            catEl.value = found.biz;
+          if (catEl && (!catEl.value || isUserAction) && (found.biz || found.category)) {
+            if (!catEl.value || isUserAction) {
+              catEl.value = found.biz || found.category;
+            }
           }
         } else {
           if (hintEl) hintEl.textContent = "";
@@ -6834,7 +6850,8 @@
                 siteName: s.siteName,
                 category: t.taskName,
                 vendor: pName,
-                accountInfo: matchedP ? (matchedP.feature || matchedP.phone || "") : "",
+                accountInfo: matchedP ? (matchedP.bankAccount || matchedP.feature || matchedP.phone || "") : "",
+                partnerBankAccount: matchedP ? (matchedP.bankAccount || "") : "",
                 partnerBiz: matchedP ? (matchedP.biz || "") : "",
                 partnerPhone: matchedP ? (matchedP.phone || "") : "",
                 isAlreadySaved: isAlreadySaved,
@@ -6982,7 +6999,7 @@
             item: "외주",
             category: item.category,
             vendor: item.vendor,
-            category2: item.accountInfo || "",
+            category2: item.partnerBankAccount || "",
             siteName: item.siteName,
             claimAmount: claim,
             paidAmount: paid,
@@ -7708,6 +7725,7 @@
         // Fallback from snapshot
         const snapList = (state.dashData && state.dashData.partners) || [];
         const pMap = (state.dashData && state.dashData.partnerPhoneMap) || {};
+        const bMap = (state.dashData && state.dashData.partnerBankAccountMap) || {};
         const fallback = snapList.map((full, i) => {
           const idx = full.indexOf("_");
           const cat = idx > -1 ? full.slice(0, idx) : "미지정";
@@ -7719,6 +7737,7 @@
             name: name,
             fullName: full,
             phone: pMap[full] || pMap[name] || "",
+            bankAccount: bMap[full] || bMap[name] || "",
             priority: "일반",
             manager: "",
             status: "운영 중",
@@ -7748,7 +7767,7 @@
               p.phone, p.tel, p.contact,
               p.priority, p.team,
               p.status, p.stat,
-              p.feature, p.account, p.bank,
+              p.feature, p.account, p.bank, p.bankAccount,
               p.orderMethod, p.order,
               p.note, p.memo
             ];
@@ -7834,6 +7853,14 @@
                 </div>
               ` : `<span style="color:#94a3b8;">-</span>`}
             </td>
+            <td style="white-space:nowrap;">
+              ${p.bankAccount ? `
+                <div style="display:inline-flex;align-items:center;gap:6px;">
+                  <span style="font-size:12px;color:#0f766e;font-weight:700;">🏦 ${escHtml(p.bankAccount)}</span>
+                  <button type="button" onclick="copyText('${escJs(p.bankAccount)}')" style="border:1px solid #cbd5e1;background:#f8fafc;color:#475569;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;cursor:pointer;" title="계좌번호 복사">복사</button>
+                </div>
+              ` : `<span style="color:#94a3b8;">-</span>`}
+            </td>
             <td style="text-align:center;white-space:nowrap;">
               <span style="padding:2px 7px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};white-space:nowrap;">${escHtml(p.status || "운영 중")}</span>
             </td>
@@ -7874,6 +7901,12 @@
               <span style="padding:2px 7px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};flex-shrink:0;">${escHtml(p.status || "운영 중")}</span>
             </div>
             ${p.feature ? `<div style="font-size:11px;color:#1e3a8a;background:#f0fdf4;padding:4px 8px;border-radius:6px;margin-top:6px;border:1px solid #bbf7d0;">🎯 <strong>주력:</strong> ${escHtml(p.feature)}</div>` : ""}
+            ${p.bankAccount ? `
+              <div style="font-size:11px;color:#0f766e;background:#f0fdfa;padding:5px 8px;border-radius:6px;margin-top:6px;border:1px solid #99f6e4;display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🏦 <strong>계좌:</strong> ${escHtml(p.bankAccount)}</span>
+                <button type="button" onclick="copyText('${escJs(p.bankAccount)}')" style="border:1px solid #99f6e4;background:#ffffff;color:#0f766e;font-size:10.5px;font-weight:700;padding:2px 6px;border-radius:4px;cursor:pointer;flex-shrink:0;">복사</button>
+              </div>
+            ` : ""}
             ${(p.note || p.memo) ? `<div style="font-size:11px;color:#64748b;margin-top:5px;">📝 ${escHtml(p.note || p.memo)}</div>` : ""}
             <div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed #e2e8f0;">
               ${rawPhone ? `
@@ -7946,7 +7979,7 @@
           if (filtered.length) {
             pcTbody.innerHTML = filtered.map((p, idx) => renderPcPartnerRowHtml(p, idx)).join("");
           } else {
-            pcTbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:48px 16px;color:#94a3b8;font-weight:700;">일치하는 거래처 정보가 없습니다.</td></tr>`;
+            pcTbody.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:48px 16px;color:#94a3b8;font-weight:700;">일치하는 거래처 정보가 없습니다.</td></tr>`;
           }
         }
         const mList = document.getElementById("mPartnersListWrap");
@@ -8050,6 +8083,7 @@
                   <th style="text-align:center;">우선순위</th>
                   <th>담당자/직책</th>
                   <th>연락처 (원터치/복사)</th>
+                  <th>계좌번호 (복사)</th>
                   <th style="text-align:center;">관리상태</th>
                   <th>발주방식</th>
                   <th>주력분야 및 특징</th>
@@ -8057,7 +8091,7 @@
                 </tr>
               </thead>
               <tbody id="pcPartnersTbody">
-                ${filtered.length ? filtered.map((p, idx) => renderPcPartnerRowHtml(p, idx)).join("") : `<tr><td colspan="11" style="text-align:center;padding:48px 16px;color:#94a3b8;font-weight:700;">일치하는 거래처 정보가 없습니다.</td></tr>`}
+                ${filtered.length ? filtered.map((p, idx) => renderPcPartnerRowHtml(p, idx)).join("") : `<tr><td colspan="12" style="text-align:center;padding:48px 16px;color:#94a3b8;font-weight:700;">일치하는 거래처 정보가 없습니다.</td></tr>`}
               </tbody>
             </table>
           </div>
@@ -12672,6 +12706,7 @@
         const status = ((document.getElementById("stPStatus") || {}).value || "운영 중").trim();
         const orderMethod = ((document.getElementById("stPOrder") || {}).value || "").trim();
         const feature = ((document.getElementById("stPFeature") || {}).value || "").trim();
+        const bankAccount = ((document.getElementById("stPBankAccount") || {}).value || "").trim();
         const note = ((document.getElementById("stPNote") || {}).value || "").trim();
         const fullName = biz ? `${biz}_${name}` : (category ? `${category}_${name}` : name);
 
@@ -12684,6 +12719,7 @@
           phone,
           status,
           feature,
+          bankAccount,
           orderMethod,
           note,
           memo: note,
@@ -12725,6 +12761,9 @@
               ${p.phone ? `<a href="tel:${escHtml(p.phone)}" style="color:#2563eb;text-decoration:none;font-weight:600;font-size:11.5px;white-space:nowrap;">📞 ${escHtml(p.phone)}</a>` : `<span style="color:#94a3b8;">-</span>`}
             </td>
             <td style="text-align:center;white-space:nowrap;"><span style="padding:2px 7px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};white-space:nowrap;">${escHtml(p.status || "운영 중")}</span></td>
+            <td style="white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(p.bankAccount || "")}">
+              ${p.bankAccount ? `<span style="color:#0f766e;font-weight:700;font-size:11.5px;">🏦 ${escHtml(p.bankAccount)}</span>` : `<span style="color:#94a3b8;">-</span>`}
+            </td>
             <td style="font-size:11.5px;color:#475569;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.feature || "")}">${escHtml(p.feature || "-")}</td>
             <td style="font-size:11.5px;color:#64748b;white-space:nowrap;">${escHtml(p.orderMethod || "-")}</td>
             <td style="font-size:11.5px;color:#64748b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.note || p.memo || "")}">${escHtml(p.note || p.memo || "-")}</td>
@@ -12751,7 +12790,7 @@
               p.phone, p.tel, p.contact,
               p.priority, p.team,
               p.status, p.stat,
-              p.feature, p.account, p.bank,
+              p.feature, p.account, p.bank, p.bankAccount,
               p.orderMethod, p.order,
               p.note, p.memo
             ];
@@ -12792,7 +12831,7 @@
           if (filtered.length) {
             tbody.innerHTML = filtered.map(({ p, originalIdx }, idx) => window.renderPartnerTableRow(p, originalIdx, idx)).join("");
           } else {
-            tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:36px;color:#94a3b8;font-weight:600;">조건에 일치하는 거래처가 없습니다.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="14" style="text-align:center;padding:36px;color:#94a3b8;font-weight:600;">조건에 일치하는 거래처가 없습니다.</td></tr>`;
           }
         }
         const hasActiveFilters = !!(state.partnerSearchQuery || state.partnerBizFilter || state.partnerCatFilter || state.partnerPrioFilter || state.partnerStatusFilter);
@@ -12941,10 +12980,14 @@
                   <input class="ws-input" id="stPOrder" value="${escHtml((editItem && editItem.orderMethod) || "")}" placeholder="예: 카톡, 문자, 전화">
                 </div>
               </div>
-              <div style="display:grid;grid-template-columns:1.5fr 1.5fr auto;gap:8px;align-items:end;">
+              <div style="display:grid;grid-template-columns:1.2fr 1.2fr 1.2fr auto;gap:8px;align-items:end;">
                 <div>
-                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">주력분야 / 특징 / 계좌번호</label>
-                  <input class="ws-input" id="stPFeature" value="${escHtml((editItem && editItem.feature) || "")}" placeholder="예: 국민 123-456-7890 홍길동 / 30평형 전문">
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">계좌번호 (은행 계좌 예금주)</label>
+                  <input class="ws-input" id="stPBankAccount" value="${escHtml((editItem && (editItem.bankAccount || editItem.account)) || "")}" placeholder="예: 국민 123-456-7890 홍길동">
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">주력분야 및 특징</label>
+                  <input class="ws-input" id="stPFeature" value="${escHtml((editItem && editItem.feature) || "")}" placeholder="예: 30평형 전문 / 마감 디테일 우수">
                 </div>
                 <div>
                   <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">비고 / 메모</label>
@@ -13015,14 +13058,15 @@
                     <th style="width:100px;min-width:100px;text-align:left;white-space:nowrap;">담당 / 직책</th>
                     <th style="width:130px;min-width:130px;text-align:left;white-space:nowrap;">연락처</th>
                     <th style="width:85px;min-width:85px;text-align:center;white-space:nowrap;">관리상태</th>
-                    <th style="width:200px;min-width:200px;text-align:left;white-space:nowrap;">주력분야 및 특징 (계좌)</th>
+                    <th style="width:170px;min-width:170px;text-align:left;white-space:nowrap;">계좌번호</th>
+                    <th style="width:180px;min-width:180px;text-align:left;white-space:nowrap;">주력분야 및 특징</th>
                     <th style="width:115px;min-width:115px;text-align:left;white-space:nowrap;">발주 / 접수방식</th>
                     <th style="min-width:140px;text-align:left;white-space:nowrap;">비고 / 메모</th>
                     <th style="width:75px;text-align:center;white-space:nowrap;">관리</th>
                   </tr>
                 </thead>
                 <tbody id="stPartnersTbody">
-                  ${filteredPartners.length ? filteredPartners.map(({ p, originalIdx }, idx) => window.renderPartnerTableRow(p, originalIdx, idx)).join("") : `<tr><td colspan="13" style="text-align:center;padding:36px;color:#94a3b8;font-weight:600;">조건에 일치하는 거래처가 없습니다.</td></tr>`}
+                  ${filteredPartners.length ? filteredPartners.map(({ p, originalIdx }, idx) => window.renderPartnerTableRow(p, originalIdx, idx)).join("") : `<tr><td colspan="14" style="text-align:center;padding:36px;color:#94a3b8;font-weight:600;">조건에 일치하는 거래처가 없습니다.</td></tr>`}
                 </tbody>
               </table>
             </div>`;

@@ -217,6 +217,7 @@
           status: "운영 중",
           feature: "",
           orderMethod: "",
+          bankAccount: "",
           note: ""
         };
       });
@@ -493,6 +494,18 @@
         });
       }
       return this.callGasPost("saveExpenseBatchRows", { rows: rows, authUser: user });
+    },
+
+    mapPartnerBankAccounts: function () {
+      if (typeof google !== "undefined" && google.script && google.script.run) {
+        return new Promise(function (resolve, reject) {
+          google.script.run
+            .withSuccessHandler(function (res) { resolve(res || { success: true }); })
+            .withFailureHandler(function (err) { reject(err); })
+            .mapPartnerBankAccountsFromFinanceDb();
+        });
+      }
+      return this.callGasPost("mapPartnerBankAccounts", {});
     }
   };
 })(typeof window !== "undefined" ? window : globalThis);
