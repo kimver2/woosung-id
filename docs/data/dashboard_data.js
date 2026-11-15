@@ -86,24 +86,35 @@
       return safeReadStorage(CACHE_KEYS.syncMeta) || { source: "snapshot", updatedAt: "2026-11-13 15:40" };
     },
 
-    syncLiveFromGAS: function (onUpdated) {
+    syncLiveFromGAS: function (optsOrCb, onUpdated) {
       if (typeof fetch !== "function") {
         return Promise.resolve({ skipped: true });
       }
-      var dashReq = fetch(GAS_API_URL + "?action=getDashboardData", { method: "GET", mode: "cors" })
+      var opts = (typeof optsOrCb === "object" && optsOrCb !== null) ? optsOrCb : {};
+      var cb = (typeof optsOrCb === "function") ? optsOrCb : onUpdated;
+      var t = Date.now();
+      var dashReq = fetch(GAS_API_URL + "?action=getDashboardData&_t=" + t, { method: "GET", mode: "cors" })
         .then(function (r) { return r.json(); })
         .catch(function () { return null; });
-      var todoReq = fetch(GAS_API_URL + "?action=getTodoList", { method: "GET", mode: "cors" })
+      var todoReq = fetch(GAS_API_URL + "?action=getTodoList&_t=" + t, { method: "GET", mode: "cors" })
         .then(function (r) { return r.json(); })
         .catch(function () { return null; });
-      var settingsReq = fetch(GAS_API_URL + "?action=getSettingsData&format=json", { method: "GET", mode: "cors" })
+      var settingsReq = fetch(GAS_API_URL + "?action=getSettingsData&format=json&_t=" + t, { method: "GET", mode: "cors" })
         .then(function (r) { return r.json(); })
         .catch(function () { return null; });
 
-      return Promise.all([dashReq, todoReq, settingsReq]).then(function (results) {
+      var promises = [dashReq, todoReq, settingsReq];
+      var syncFinance = !!opts.syncFinance && !!opts.authUser;
+      if (syncFinance) {
+        promises.push(this.getFinanceDbData(opts.authUser));
+      }
+
+      var self = this;
+      return Promise.all(promises).then(function (results) {
         var liveDash = results[0];
         var liveTodo = results[1];
         var liveSettings = results[2];
+        var liveFinance = syncFinance ? results[3] : null;
         var normalizedSettings = null;
         var changed = false;
         if (liveDash && Array.isArray(liveDash.sites) && liveDash.sites.length > 0) {
@@ -130,21 +141,33 @@
           safeWriteStorage(CACHE_KEYS.settings, normalizedSettings);
           changed = true;
         }
+        if (liveFinance && liveFinance.success) {
+          var cleanFinance = {
+            collection: Array.isArray(liveFinance.collection) ? liveFinance.collection : [],
+            expense: Array.isArray(liveFinance.expense) ? liveFinance.expense : [],
+            fixedMaster: Array.isArray(liveFinance.fixedMaster) ? liveFinance.fixedMaster : [],
+            updatedAt: liveFinance.updatedAt || ""
+          };
+          self.saveFinanceCache(cleanFinance);
+          changed = true;
+        }
         var now = new Date();
         var hh = String(now.getHours()).padStart(2, "0");
         var mm = String(now.getMinutes()).padStart(2, "0");
         var ss = String(now.getSeconds()).padStart(2, "0");
         var meta = { source: changed ? "live_gas" : "snapshot", updatedAt: hh + ":" + mm + ":" + ss };
         safeWriteStorage(CACHE_KEYS.syncMeta, meta);
-        if (typeof onUpdated === "function") {
-          onUpdated({
-            dashData: liveDash && Array.isArray(liveDash.sites) ? liveDash : null,
-            todoData: liveTodo && Array.isArray(liveTodo.list) ? liveTodo : null,
-            settingsData: normalizedSettings,
-            meta: meta
-          });
+        var resObj = {
+          dashData: liveDash && Array.isArray(liveDash.sites) ? liveDash : null,
+          todoData: liveTodo && Array.isArray(liveTodo.list) ? liveTodo : null,
+          settingsData: normalizedSettings,
+          financeData: (liveFinance && liveFinance.success) ? liveFinance : null,
+          meta: meta
+        };
+        if (typeof cb === "function") {
+          cb(resObj);
         }
-        return { dashData: liveDash, todoData: liveTodo, settingsData: normalizedSettings, meta: meta };
+        return resObj;
       });
     },
 
@@ -153,13 +176,18 @@
         return Promise.resolve({ skipped: true, ok: true, offline: true });
       }
       var query = ["action=" + encodeURIComponent(action)];
+      var hasTimestamp = false;
       if (params && typeof params === "object") {
         Object.keys(params).forEach(function (k) {
           var v = params[k];
+          if (k === "_t") hasTimestamp = true;
           if (v !== undefined && v !== null) {
             query.push(encodeURIComponent(k) + "=" + encodeURIComponent(typeof v === "object" ? JSON.stringify(v) : String(v)));
           }
         });
+      }
+      if (!hasTimestamp) {
+        query.push("_t=" + Date.now());
       }
       var url = GAS_API_URL + "?" + query.join("&");
       return fetch(url, { method: "GET", mode: "cors", redirect: "follow" })

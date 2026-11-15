@@ -233,6 +233,7 @@ function createTasksSheetMenu() {
       var siteSheet = findSiteScheduleSheet(ss);
       if (siteSheet) applySiteScheduleValidations(siteSheet);
       invalidateDashboardServerCache();
+      invalidateTodoServerCache();
     } catch(eSync) {}
     SpreadsheetApp.getUi().alert(
       "🏷️ '04_공종' 마스터 시트 준비 완료",
@@ -2201,6 +2202,7 @@ function runDailyAutoSortTrigger() {
 
     if (sortedCount > 0) {
       invalidateDashboardServerCache();
+      invalidateTodoServerCache();
     }
   } catch (err) {
     Logger.log("새벽 자동 정렬 에러: " + err.toString());
@@ -2413,6 +2415,7 @@ function consolidateSplitSiteRows(sheet) {
     if (movedCount > 0) {
       SpreadsheetApp.flush();
       invalidateDashboardServerCache();
+      invalidateTodoServerCache();
     }
     return movedCount;
   }
@@ -2846,6 +2849,7 @@ function onEdit(e) {
         applySiteScheduleValidations(siteSheet);
       }
       invalidateDashboardServerCache();
+      invalidateTodoServerCache();
     } catch (eMem) {
       Logger.log("구성원 시트 편집 시 담당자 드롭다운 갱신 예외: " + eMem.toString());
     }
@@ -2860,6 +2864,7 @@ function onEdit(e) {
         applySiteScheduleValidations(siteSheet2);
       }
       invalidateDashboardServerCache();
+      invalidateTodoServerCache();
     } catch (eTask) {
       Logger.log("공종 시트 편집 시 드롭다운 갱신 예외: " + eTask.toString());
     }
@@ -2891,6 +2896,7 @@ function onEdit(e) {
         e.range.setNumberFormat("@");
       }
       invalidateDashboardServerCache();
+      invalidateTodoServerCache();
     } catch (eInfoEdit) {
       Logger.log("현장정보 시트 편집 감지 예외: " + eInfoEdit.toString());
     }
@@ -3074,6 +3080,7 @@ function onEdit(e) {
 
   // 캐시 무효화 (무음 실행, 팝업/딜레이 0%)
   invalidateDashboardServerCache();
+  invalidateTodoServerCache();
 }
 
 
@@ -4769,6 +4776,7 @@ function moveCompletedCategorySiteToCompletedSheet(ss, srcSheet, siteName) {
       } catch(eGrp) {}
 
       invalidateDashboardServerCache();
+      invalidateTodoServerCache();
 
       return {
         success: true,
@@ -7921,6 +7929,7 @@ function updateScheduleStatusFromWeb(row, newStatus, newShared, newMemo, newDate
       var catMoveRes = moveCompletedCategorySiteToCompletedSheet(ss, sheet, siteName);
       if (catMoveRes && catMoveRes.moved) {
         invalidateDashboardServerCache();
+      invalidateTodoServerCache();
         return {
           success: true,
           row: rowNum,
@@ -10201,6 +10210,7 @@ function cascadeShiftSiteTasksFromWeb(siteName, targetSheetName, shiftsPayload) 
     if (shiftedCount > 0) {
       SpreadsheetApp.flush();
       invalidateDashboardServerCache();
+      invalidateTodoServerCache();
     }
     return {
       success: true,
@@ -11077,6 +11087,7 @@ function promoteEstimateToSite(data) {
     // 서버 캐시 갱신
     try {
       invalidateDashboardServerCache();
+      invalidateTodoServerCache();
     } catch(eInv) {}
 
     // 5) 재무DB [수금현황] 시트 자동 등록 (p.autoCreateCollection !== false)
@@ -12732,6 +12743,7 @@ function mapPartnerBankAccountsFromFinanceDb(p) {
       }
       SpreadsheetApp.flush();
       invalidateDashboardServerCache();
+      invalidateTodoServerCache();
     }
 
     return {
@@ -13560,6 +13572,7 @@ function doGet(e) {
       tCount = Math.max(0, tSheet.getLastRow() - 1);
       if (sheet) applySiteScheduleValidations(sheet);
       invalidateDashboardServerCache();
+      invalidateTodoServerCache();
     }
     return ContentService.createTextOutput(JSON.stringify({
       success: !!tSheet,
@@ -16395,6 +16408,7 @@ function focusSheetRow(rowNumber, isArchived, siteName, taskName, dateStr) {
       if (actualRow >= 2) {
         if (actualRow !== parseInt(rowNumber, 10)) {
           invalidateDashboardServerCache();
+      invalidateTodoServerCache();
         }
         if (typeof ss.setActiveSheet === "function") ss.setActiveSheet(sheet);
         var range = sheet.getRange(actualRow, 1, 1, 10);
