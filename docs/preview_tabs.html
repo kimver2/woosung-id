@@ -2544,6 +2544,21 @@
       const _initCalYear = Number(_initTodayYmd.slice(0, 4));
       const _initCalMonth = Number(_initTodayYmd.slice(5, 7));
 
+      // ========================================================
+      // 🎯 재무·원장 확장 기능 중앙 플래그 (Feature Flags)
+      // 특정 기능을 즉시 비활성화(원복)하려면 해당 속성을 false 로 변경
+      // ========================================================
+      const FINANCE_EXT_FLAGS = window.FINANCE_EXT_FLAGS = {
+        kpiClickFilter: true,          // [1-1] KPI 카드(미수금/미지급금) 클릭 즉시 필터링
+        transferExport: true,          // [1-2] 월별 비용마감 이체목록 클립보드 복사 & CSV 다운로드
+        taxProofBadge: false,         // [1-3] 세금계산서/현금영수증/카드/무증빙 구분 배지 및 필터
+        extraContractAmount: false,   // [1-4] 추가 공사금액(최초계약+추가공사) 기록 및 표시
+        siteDetailShortcut: false,    // [2-1] 현장 상세 화면 내 [💰 현장 정산 보기] 바로가기 버튼
+        lowMarginAlert: false,        // [2-2] 월간집계 저마진(15% 미만) 경보 배지 및 클릭 시 정산 상세 오픈
+        reportCapturePrint: false,    // [3-1] 월간집계/비용마감 이미지 캡처 및 인쇄(PDF) 버튼
+        mobileFinanceCardUx: false    // [3-2] 모바일 재무·원장 카드형 요약/터치 UX 보강
+      };
+
       const state = window.state = {
         dashData: null,
         todoData: null,
@@ -5959,6 +5974,169 @@
         if (mInput) mInput.value = "";
       };
 
+      // [1-1] KPI 카드 클릭 시 필터 토글 함수
+      window.toggleFinanceUncollectedFilter = function () {
+        if (!window.FINANCE_EXT_FLAGS || !window.FINANCE_EXT_FLAGS.kpiClickFilter) return;
+        const cur = state.financeStatusFilter || "all";
+        const next = (cur === "uncollected") ? "all" : "uncollected";
+        window.setFinanceStatusFilter(next);
+      };
+
+      window.toggleExpenseUnpaidFilter = function () {
+        if (!window.FINANCE_EXT_FLAGS || !window.FINANCE_EXT_FLAGS.kpiClickFilter) return;
+        const cur = state.expenseStatusFilter || "all";
+        const next = (cur === "unpaid") ? "all" : "unpaid";
+        window.setExpenseStatusFilter(next);
+      };
+
+      // [1-2] 미지급 이체목록 복사 및 CSV 다운로드 함수
+      window.copyUnpaidTransferList = async function () {
+        if (!window.FINANCE_EXT_FLAGS || !window.FINANCE_EXT_FLAGS.transferExport) return;
+        const allExpenses = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
+        const selMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
+        const allMonths = !!state.expenseAllMonths;
+        const fixedMaster = (state.financeDbData && Array.isArray(state.financeDbData.fixedMaster)) ? state.financeDbData.fixedMaster : [];
+
+        const unpaidList = allExpenses.filter(e => {
+          if (!allMonths && selMonth) {
+            if (normalizeMonthStr(e.settleMonth) !== selMonth) return false;
+          }
+          const claim = Number(e.claimAmount) || 0;
+          const paid = Number(e.paidAmount) || 0;
+          const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
+          return bal > 0;
+        });
+
+        if (unpaidList.length === 0) {
+          if (typeof showToast === "function") showToast("현재 조회 기간에 미지급 항목이 없습니다. (0건)");
+          return;
+        }
+
+        const totalUnpaid = unpaidList.reduce((acc, e) => {
+          const claim = Number(e.claimAmount) || 0;
+          const paid = Number(e.paidAmount) || 0;
+          const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
+          return acc + bal;
+        }, 0);
+
+        const monthLabel = allMonths ? "전체 기간" : `${selMonth}월`;
+        const lines = [
+          `[우성아이디 비용마감 미지급 이체 목록 (${monthLabel})]`,
+          `총 건수: ${unpaidList.length}건 | 미지급 총액: ${totalUnpaid.toLocaleString("ko-KR")}원`,
+          `--------------------------------------------------`
+        ];
+
+        unpaidList.forEach((e, idx) => {
+          const claim = Number(e.claimAmount) || 0;
+          const paid = Number(e.paidAmount) || 0;
+          const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
+
+          const matchedFixed = fixedMaster.find(f => f.vendor === e.vendor);
+          let accountInfo = (e.category2 || "").trim();
+          if (!accountInfo && matchedFixed && matchedFixed.bankAccount) {
+            accountInfo = matchedFixed.bankAccount;
+          }
+          if (!accountInfo) accountInfo = "계좌 미등록";
+
+          const sitePart = e.siteName ? (e.siteName !== "공통" ? `${e.siteName} 현장` : "공통") : "공통";
+          const catPart = e.category ? `(${e.category})` : "";
+
+          lines.push(`${idx + 1}. ${e.vendor || "미등록"} | ${accountInfo} | ${bal.toLocaleString("ko-KR")}원 | ${sitePart}${catPart}`);
+        });
+
+        const fullText = lines.join("\n");
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(fullText);
+          } else {
+            const ta = document.createElement("textarea");
+            ta.value = fullText;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+          }
+          if (typeof showToast === "function") {
+            showToast(`📋 미지급 이체목록 ${unpaidList.length}건이 클립보드에 복사되었습니다!`);
+          }
+        } catch (err) {
+          console.error("이체목록 복사 실패:", err);
+          alert(`미지급 이체목록 복사 결과:\n\n${fullText}`);
+        }
+      };
+
+      window.exportFinanceCsv = function (type) {
+        if (!window.FINANCE_EXT_FLAGS || !window.FINANCE_EXT_FLAGS.transferExport) return;
+        const todayStr = getTodayYmd().replace(/-/g, "");
+
+        function downloadBlobCsv(filename, rows) {
+          const csvStr = rows.map(r => r.map(cell => {
+            const s = String(cell === null || cell === undefined ? "" : cell).replace(/"/g, '""');
+            return `"${s}"`;
+          }).join(",")).join("\r\n");
+
+          const blob = new Blob(["\uFEFF" + csvStr], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          if (typeof showToast === "function") showToast(`📥 ${filename} 다운로드 완료`);
+        }
+
+        if (type === "expense") {
+          const filtered = (typeof getFilteredExpenseList === "function") ? getFilteredExpenseList() : [];
+          const selMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
+          const header = ["정산월", "항목", "구분", "업체명/지급처", "세부구분/계좌", "현장명", "청구금액", "지급금액", "미지급잔액", "지급일", "비고"];
+          const rows = [header];
+          filtered.forEach(e => {
+            const claim = Number(e.claimAmount) || 0;
+            const paid = Number(e.paidAmount) || 0;
+            const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
+            rows.push([
+              e.settleMonth || "",
+              e.item || "",
+              e.category || "",
+              e.vendor || "",
+              e.category2 || "",
+              e.siteName || "",
+              claim,
+              paid,
+              bal,
+              e.payDate || "",
+              e.note || ""
+            ]);
+          });
+          downloadBlobCsv(`우성아이디_비용마감_${state.expenseAllMonths ? "전체" : selMonth}_${todayStr}.csv`, rows);
+        } else if (type === "collection") {
+          const filtered = (typeof getFilteredCollectionList === "function") ? getFilteredCollectionList() : [];
+          const header = ["현장명", "계약자", "최종계약금액", "누적수금액", "미수금", "수금률", "세금계산서", "담당자", "상태", "공사기간", "비고"];
+          const rows = [header];
+          filtered.forEach(r => {
+            const fin = getCollectionRowFinancials(r);
+            const mSite = findMatchedSiteInfo(r.siteName);
+            const pInfo = getCollectionPeriodInfo(r, mSite);
+            rows.push([
+              r.siteName || "",
+              r.clientName || "",
+              Number(r.totalAmount) || 0,
+              fin.collected,
+              fin.uncollected,
+              fin.rate + "%",
+              r.taxInvoice || "미발행",
+              r.manager || "",
+              r.status || "진행중",
+              pInfo.periodDisplay || "",
+              r.note || ""
+            ]);
+          });
+          downloadBlobCsv(`우성아이디_수금현황_${todayStr}.csv`, rows);
+        }
+      };
+
       window.setFinanceStatusFilter = function(filterVal) {
         state.financeStatusFilter = filterVal;
         state.dirtyPcTabs.finance = true;
@@ -8563,8 +8741,11 @@
                 <div style="font-size:20px;font-weight:800;color:#10b981;margin-top:4px;">${formatKrw(totalPaid)}</div>
                 <div style="font-size:11.5px;color:#16a34a;margin-top:4px;font-weight:700;">지급 완료율 ${totalClaim > 0 ? Math.round((totalPaid / totalClaim) * 100) : 0}%</div>
               </div>
-              <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #dc2626;background:#fff5f5;">
-                <div style="font-size:12px;color:#991b1b;font-weight:700;">남은 미지급 잔금 (외상)</div>
+              <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #dc2626;background:${stFilter === "unpaid" ? "#fee2e2" : "#fff5f5"};${FINANCE_EXT_FLAGS.kpiClickFilter ? "cursor:pointer;transition:all 0.15s ease;" : ""}${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "unpaid" ? "outline:2px solid #dc2626;box-shadow:0 0 0 3px rgba(220,38,38,0.25);" : ""}" onclick="${FINANCE_EXT_FLAGS.kpiClickFilter ? "window.toggleExpenseUnpaidFilter()" : ""}" title="${FINANCE_EXT_FLAGS.kpiClickFilter ? "클릭 시 미지급 항목 즉시 필터링/해제" : ""}">
+                <div style="font-size:12px;color:#991b1b;font-weight:700;display:flex;align-items:center;justify-content:space-between;">
+                  <span>남은 미지급 잔금 (외상)</span>
+                  ${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "unpaid" ? `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:800;background:#dc2626;color:#ffffff;">✕ 필터중</span>` : (FINANCE_EXT_FLAGS.kpiClickFilter ? `<span style="font-size:10.5px;color:#dc2626;font-weight:600;">(클릭 필터)</span>` : "")}
+                </div>
                 <div style="font-size:22px;font-weight:900;color:#dc2626;margin-top:4px;">${formatKrw(totalBal)}</div>
                 <div style="font-size:11.5px;color:#b91c1c;margin-top:4px;font-weight:700;">미지급 건수: ${unpaidCount}건</div>
               </div>
@@ -8599,6 +8780,14 @@
                 </div>
               </div>
               <div style="display:flex;gap:8px;align-items:center;">
+                ${FINANCE_EXT_FLAGS.transferExport ? `
+                  <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;" onclick="window.copyUnpaidTransferList()" title="현재 월 미지급 항목 계좌/금액 복사">
+                    📋 이체목록 복사
+                  </button>
+                  <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;" onclick="window.exportFinanceCsv('expense')" title="현재 비용마감 목록 CSV 다운로드">
+                    📥 CSV
+                  </button>
+                ` : ""}
                 <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.onLoadFixedExpenses()">
                   📌 이번 달 고정비 불러오기
                 </button>
@@ -8879,8 +9068,11 @@
               <div style="font-size:20px;font-weight:800;color:#10b981;margin-top:4px;">${formatKrw(totalCollected)}</div>
               <div style="font-size:11.5px;color:#16a34a;margin-top:4px;font-weight:700;">수금률 ${collectionRate}% 달성</div>
             </div>
-            <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #dc2626;background:#fff5f5;">
-              <div style="font-size:12px;color:#991b1b;font-weight:700;">총 미수금 (미회수 잔액)</div>
+            <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #dc2626;background:${stFilter === "uncollected" ? "#fee2e2" : "#fff5f5"};${FINANCE_EXT_FLAGS.kpiClickFilter ? "cursor:pointer;transition:all 0.15s ease;" : ""}${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "uncollected" ? "outline:2px solid #dc2626;box-shadow:0 0 0 3px rgba(220,38,38,0.25);" : ""}" onclick="${FINANCE_EXT_FLAGS.kpiClickFilter ? "window.toggleFinanceUncollectedFilter()" : ""}" title="${FINANCE_EXT_FLAGS.kpiClickFilter ? "클릭 시 미수 현장 즉시 필터링/해제" : ""}">
+              <div style="font-size:12px;color:#991b1b;font-weight:700;display:flex;align-items:center;justify-content:space-between;">
+                <span>총 미수금 (미회수 잔액)</span>
+                ${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "uncollected" ? `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:800;background:#dc2626;color:#ffffff;">✕ 필터중</span>` : (FINANCE_EXT_FLAGS.kpiClickFilter ? `<span style="font-size:10.5px;color:#dc2626;font-weight:600;">(클릭 필터)</span>` : "")}
+              </div>
               <div style="font-size:22px;font-weight:900;color:#dc2626;margin-top:4px;">${formatKrw(totalUncollected)}</div>
               <div style="font-size:11.5px;color:#b91c1c;margin-top:4px;font-weight:600;">미수 현장 ${uncollectedSitesCount}개소</div>
             </div>
@@ -8921,7 +9113,12 @@
               </select>
             </div>
 
-            <div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              ${FINANCE_EXT_FLAGS.transferExport ? `
+                <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;" onclick="window.exportFinanceCsv('collection')" title="현재 수금현황 목록 CSV 다운로드">
+                  📥 CSV
+                </button>
+              ` : ""}
               <button type="button" class="btn-act-blue" onclick="window.openCollectionModal(null)" style="height:34px;padding:0 14px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:6px;">
                 + 수금 현장 등록
               </button>
@@ -10662,8 +10859,11 @@
                 <div style="font-size:15px;font-weight:800;color:#10b981;margin-top:2px;">${formatKrw(totalPaid)}</div>
                 <div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700;">지급 완료</div>
               </div>
-              <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #dc2626;background:#fff8f8;">
-                <div style="font-size:10.5px;color:#991b1b;font-weight:700;">남은 미지급 잔금</div>
+              <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #dc2626;background:${stFilter === "unpaid" ? "#fee2e2" : "#fff8f8"};${FINANCE_EXT_FLAGS.kpiClickFilter ? "cursor:pointer;" : ""}${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "unpaid" ? "outline:2px solid #dc2626;" : ""}" onclick="${FINANCE_EXT_FLAGS.kpiClickFilter ? "window.toggleExpenseUnpaidFilter()" : ""}">
+                <div style="font-size:10.5px;color:#991b1b;font-weight:700;display:flex;align-items:center;justify-content:space-between;">
+                  <span>남은 미지급 잔금</span>
+                  ${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "unpaid" ? `<span style="font-size:9.5px;padding:1px 5px;border-radius:4px;background:#dc2626;color:#fff;font-weight:800;">✕ 필터중</span>` : (FINANCE_EXT_FLAGS.kpiClickFilter ? `<span style="font-size:9.5px;color:#dc2626;">(터치 필터)</span>` : "")}
+                </div>
                 <div style="font-size:15px;font-weight:900;color:#dc2626;margin-top:2px;">${formatKrw(totalBal)}</div>
                 <div style="font-size:10px;color:#b91c1c;margin-top:2px;font-weight:700;">${unpaidCount}건 미지급</div>
               </div>
@@ -10690,6 +10890,14 @@
             </div>
 
             <div style="display:flex;gap:6px;margin-bottom:8px;overflow-x:auto;">
+              ${FINANCE_EXT_FLAGS.transferExport ? `
+                <button type="button" class="btn-sub-xs" style="padding:4px 8px;font-size:11px;white-space:nowrap;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;font-weight:700;" onclick="window.copyUnpaidTransferList()">
+                  📋 이체목록 복사
+                </button>
+                <button type="button" class="btn-sub-xs" style="padding:4px 8px;font-size:11px;white-space:nowrap;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;font-weight:700;" onclick="window.exportFinanceCsv('expense')">
+                  📥 CSV
+                </button>
+              ` : ""}
               <button type="button" class="btn-sub-xs" style="padding:4px 8px;font-size:11px;white-space:nowrap;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.onLoadFixedExpenses()">
                 📌 고정비 불러오기
               </button>
@@ -10939,8 +11147,11 @@
               <div style="font-size:15px;font-weight:800;color:#10b981;margin-top:2px;">${formatKrw(totalCollected)}</div>
               <div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700;">회수 완료</div>
             </div>
-            <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #dc2626;background:#fff8f8;">
-              <div style="font-size:10.5px;color:#991b1b;font-weight:700;">총 미수금</div>
+            <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #dc2626;background:${stFilter === "uncollected" ? "#fee2e2" : "#fff8f8"};${FINANCE_EXT_FLAGS.kpiClickFilter ? "cursor:pointer;" : ""}${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "uncollected" ? "outline:2px solid #dc2626;" : ""}" onclick="${FINANCE_EXT_FLAGS.kpiClickFilter ? "window.toggleFinanceUncollectedFilter()" : ""}">
+              <div style="font-size:10.5px;color:#991b1b;font-weight:700;display:flex;align-items:center;justify-content:space-between;">
+                <span>총 미수금</span>
+                ${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "uncollected" ? `<span style="font-size:9.5px;padding:1px 5px;border-radius:4px;background:#dc2626;color:#fff;font-weight:800;">✕ 필터중</span>` : (FINANCE_EXT_FLAGS.kpiClickFilter ? `<span style="font-size:9.5px;color:#dc2626;">(터치 필터)</span>` : "")}
+              </div>
               <div style="font-size:15px;font-weight:900;color:#dc2626;margin-top:2px;">${formatKrw(totalUncollected)}</div>
               <div style="font-size:10px;color:#b91c1c;margin-top:2px;font-weight:600;">${uncollectedSitesCount}개 현장 미수</div>
             </div>
@@ -10963,6 +11174,11 @@
                 style="width:100%;height:34px;padding:0 26px 0 9px;border-radius:6px;border:1px solid var(--border-dark);font-size:12px;outline:none;" />
               ${state.financeSearchQuery ? `<button type="button" onclick="window.clearFinanceSearch()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:bold;line-height:1;">✕</button>` : ""}
             </div>
+            ${FINANCE_EXT_FLAGS.transferExport ? `
+              <button type="button" onclick="window.exportFinanceCsv('collection')" style="height:34px;padding:0 10px;font-size:12px;font-weight:700;border-radius:6px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;cursor:pointer;white-space:nowrap;">
+                📥 CSV
+              </button>
+            ` : ""}
             <button type="button" onclick="window.openCollectionModal(null)" style="height:34px;padding:0 10px;font-size:12px;font-weight:700;border-radius:6px;background:#2563eb;color:#fff;border:none;cursor:pointer;white-space:nowrap;">
               + 등록
             </button>
