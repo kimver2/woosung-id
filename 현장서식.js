@@ -16320,7 +16320,8 @@ function getSidebarDashboardData(forceRefresh) {
       holidays: getKoreanHolidaysMap(ss),
       sites: sitesList,
       siteInfoMap: siteInfoMap,
-      estimateOptions: estDropdownOptions || getEstimateDropdownOptions(ss, null)
+      estimateOptions: estDropdownOptions || getEstimateDropdownOptions(ss, null),
+      spreadsheetUrl: (ss && typeof ss.getUrl === "function" ? ss.getUrl() : "https://docs.google.com/spreadsheets/d/1V6Nb5ZB8gOfwDFsN8svMDZQYWXIJjGa9tuUYrVu0JhY/edit")
     };
 
     try {

@@ -1843,6 +1843,17 @@
       justify-content: space-between; gap: 10px; background: #ffffff; flex-shrink: 0;
     }
     .ws-modal-title { font-size: 15.5px; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 7px; }
+    .btn-sheet-badge {
+      display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px;
+      font-size: 12px; font-weight: 700; color: #047857; background: #ecfdf5;
+      border: 1px solid #a7f3d0; border-radius: 6px; text-decoration: none;
+      cursor: pointer; transition: all 0.15s ease; line-height: 1.3; white-space: nowrap;
+    }
+    .btn-sheet-badge:hover {
+      background: #d1fae5; border-color: #6ee7b7; color: #065f46;
+      box-shadow: 0 1px 3px rgba(16, 185, 129, 0.2); transform: translateY(-1px);
+    }
+    .btn-sheet-badge:active { transform: translateY(0); }
     .ws-modal-close {
       width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border); background: #f8fafc;
       color: var(--text-sub); font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center;
@@ -2520,7 +2531,12 @@
   <div class="ws-modal-backdrop" id="settingsModal" onclick="if(event.target===this) closeModal('settingsModal')">
     <div class="ws-modal-card wide">
       <div class="ws-modal-header">
-        <div class="ws-modal-title">⚙️ 마스터 기준정보 설정</div>
+        <div style="display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div class="ws-modal-title">⚙️ 마스터 기준정보 설정</div>
+          <a href="https://docs.google.com/spreadsheets/d/1V6Nb5ZB8gOfwDFsN8svMDZQYWXIJjGa9tuUYrVu0JhY/edit?gid=244837509#gid=244837509" target="_blank" rel="noopener noreferrer" class="btn-sheet-badge" onclick="event.stopPropagation(); if(typeof openMainScheduleSheet==='function'){ openMainScheduleSheet(); return false; }" title="구글 스프레드시트 메인 현장데이터 시트 열기 (새 창)">
+            📊 현장 데이터 시트 열기 ↗
+          </a>
+        </div>
         <button type="button" class="ws-modal-close" onclick="closeModal('settingsModal')">✕</button>
       </div>
       <div class="ws-modal-body" id="settingsModalBody"></div>
@@ -5112,6 +5128,13 @@
 
       window.openSpreadsheetEstimateSheet = function () {
         window.open("https://docs.google.com/spreadsheets/d/1V6Nb5ZB8gOfwDFsN8svMDZQYWXIJjGa9tuUYrVu0JhY/edit?gid=760414857#gid=760414857", "_blank", "noopener");
+      };
+
+      window.openMainScheduleSheet = function () {
+        const url = (state.dashData && state.dashData.spreadsheetUrl)
+          ? (state.dashData.spreadsheetUrl.indexOf("gid=") === -1 ? state.dashData.spreadsheetUrl + "?gid=244837509#gid=244837509" : state.dashData.spreadsheetUrl)
+          : "https://docs.google.com/spreadsheets/d/1V6Nb5ZB8gOfwDFsN8svMDZQYWXIJjGa9tuUYrVu0JhY/edit?gid=244837509#gid=244837509";
+        window.open(url, "_blank", "noopener,noreferrer");
       };
 
       function getSortedQuotesForTab(statusMode) {
