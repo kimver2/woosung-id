@@ -6743,7 +6743,7 @@ function collapseAllSites() {
 }
 
 /**
- * 상단(1행과 2행 사이)에 신규 현장 4개 행 추가 & 아코디언 설정 (작성일/작성자 자동 기록)
+ * 상단(1행과 2행 사이)에 신규 현장 1개 행 추가 & 유효성 검사/서식 설정 (작성일/작성자 자동 기록)
  */
 function addNewSiteAtTop() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -6767,41 +6767,37 @@ function addNewSiteAtTop() {
     sheet.setRowGroupControlPosition(SpreadsheetApp.GroupControlTogglePosition.BEFORE);
   } catch(e) {}
 
-  sheet.insertRowsBefore(2, 4);
+  sheet.insertRowsBefore(2, 1);
 
-  var defaultTasks = ["상담", "철거", "목공", "마감"];
-  var newRows = [];
   var now = new Date();
   var nowMs = now.getTime();
 
-  // 10개 열 채우기
+  // 10개 열 채우기 (단일 공정만 등록)
   // 1:현장, 2:날짜, 3:공종, 4:협력업체, 5:공유, 6:비고, 7:담당자, 8:진행상태, 9:캘린더ID, 10:타임스탬프
-  for (var i = 0; i < defaultTasks.length; i++) {
-    newRows.push([
-      siteName, "", defaultTasks[i], "", false, "", "", "예정",
-      "", nowMs
-    ]);
-  }
+  var newRows = [[
+    siteName, "", "상담", "", false, "", "", "예정",
+    "", nowMs
+  ]];
 
-  sheet.getRange(2, 1, 4, 10).setValues(newRows);
-  sheet.getRange(2, 1, 4, 10).setVerticalAlignment("middle");
-  sheet.getRange(2, 5, 4, 1).insertCheckboxes();
+  sheet.getRange(2, 1, 1, 10).setValues(newRows);
+  sheet.getRange(2, 1, 1, 10).setVerticalAlignment("middle");
+  sheet.getRange(2, 5, 1, 1).insertCheckboxes();
 
   [1, 2, 3, 5, 7, 8].forEach(function(col) {
-    sheet.getRange(2, col, 4, 1).setHorizontalAlignment("center");
+    sheet.getRange(2, col, 1, 1).setHorizontalAlignment("center");
   });
   [4, 6].forEach(function(col) {
-    sheet.getRange(2, col, 4, 1).setHorizontalAlignment("left");
+    sheet.getRange(2, col, 1, 1).setHorizontalAlignment("left");
   });
 
   // C열(공종), G열(담당자), H열(진행상태) 드롭다운 유효성 검사 일괄 적용
   try {
-    applySiteScheduleValidations(sheet, 2, 4);
+    applySiteScheduleValidations(sheet, 2, 1);
   } catch(e) {}
 
   // 격자 테두리(Border) 깔끔하게 적용
   try {
-    sheet.getRange(2, 1, 4, 8).setBorder(true, true, true, true, true, true, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
+    sheet.getRange(2, 1, 1, 8).setBorder(true, true, true, true, true, true, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
   } catch(e) {}
 
   // 조건부 서식(진행상태 색상 등) 전수 갱신 보장
@@ -6809,17 +6805,13 @@ function addNewSiteAtTop() {
     setupSiteSheetConditionalFormatting(sheet);
   } catch(e) {}
 
-  try {
-    sheet.getRange("3:5").shiftRowGroupDepth(1);
-  } catch(e) {}
-
-  sheet.showRows(2, 4);
+  sheet.showRows(2, 1);
   try {
     sheet.hideColumns(9, 2);
   } catch(e) {}
 
   sheet.setActiveRange(sheet.getRange("A2"));
-  ss.toast("'" + siteName + "' 4개 행이 상단에 추가되었습니다.", "추가 완료", 3);
+  ss.toast("'" + siteName + "' 1개 행이 상단에 추가되었습니다.", "추가 완료", 3);
 }
 
 /**

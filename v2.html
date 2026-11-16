@@ -12256,13 +12256,7 @@
               </div>
             </div>
             ${ctx.siteName === "__NEW__" ? `
-              <div class="fg"><label>새 현장명 입력</label><input class="ws-input" value="${escHtml(ctx.newSiteName || "")}" placeholder="예: 보라매우성 101동 502호" oninput="state_sheetUpdate('newSiteName', this.value)"></div>
-              <div class="fg" style="margin-top:4px;">
-                <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#1e3a8a;cursor:pointer;">
-                  <input type="checkbox" id="tsCreateDefaultTasks" ${ctx.createDefaultTasks !== false ? "checked" : ""} onchange="state_sheetUpdate('createDefaultTasks', this.checked)">
-                  기본 공정(상담·철거·목공·마감) 함께 생성
-                </label>
-              </div>` : ""}
+              <div class="fg"><label>새 현장명 입력</label><input class="ws-input" value="${escHtml(ctx.newSiteName || "")}" placeholder="예: 보라매우성 101동 502호" oninput="state_sheetUpdate('newSiteName', this.value)"></div>` : ""}
           ` : `
             <div class="fg" style="position:relative;">
               <label>공종명 (검색/선택)</label>
@@ -13066,45 +13060,6 @@
             }
           }
 
-          const isBrandNewSite = (ctx.siteName === "__NEW__") || !getAllSites().some((s) => s !== site && s.siteName === finalSiteName);
-          if (isBrandNewSite && ctx.createDefaultTasks !== false) {
-            const defaultTaskNames = ["상담", "철거", "목공", "마감"];
-            defaultTaskNames.forEach((defName) => {
-              if (defName === ctx.taskName.trim()) return;
-              const defId = "task_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
-              const defTask = {
-                id: defId, taskId: defId, row: "", taskName: defName,
-                dateDisplay: dateDisp, dateMs: new Date(ctx.startYmd + "T00:00:00").getTime(),
-                timeStr: "", time: "", hasTime: false,
-                startTime: "", endTime: "",
-                startDateStr: ctx.startYmd, endDateStr: ctx.isRange ? ctx.endYmd : ctx.startYmd,
-                partner: "", manager: managerCombined, manager1: ctx.manager1, manager2: ctx.manager2,
-                status: "예정", isShared: ctx.isShared, memo: "",
-                updatedAtMs: nowMs, memoUpdatedAtMs: 0,
-                isToday: ctx.startYmd === todayYmd, isDelayed: false,
-                hasCal: true, scope: ctx.scope, sheetName: targetSheetName, isArchived: false
-              };
-              site.tasks.push(defTask);
-              if (window.WSDataService) {
-                const defReq = window.WSDataService.saveTask(false, {
-                  site: finalSiteName, task: defName, date: dateParam, manager: managerCombined,
-                  status: "예정", shared: ctx.isShared, memo: "", partner: "",
-                  category: ctx.scope, partnerPhone: ""
-                }, state.dashData);
-                if (defReq && typeof defReq.then === "function") {
-                  defReq.then((res) => {
-                    if (res) {
-                      const sId = res.taskId || res.id || res.eventId;
-                      if (sId) { defTask.id = sId; defTask.taskId = sId; }
-                      if (res.row) { defTask.row = Number(res.row); }
-                      window.WSDataService.saveDashboardCache(state.dashData);
-                    }
-                  });
-                }
-              }
-            });
-            recalcSiteStats(site);
-          }
           showToast("✅ 새 일정이 등록되었습니다.");
         }
 
