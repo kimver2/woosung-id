@@ -2086,6 +2086,41 @@
     .pc-c-status-tab.done-tab.active { color: #059669; }
     .pc-badge-count { font-size: 10.5px; padding: 1px 6px; border-radius: 8px; background: #eff6ff; color: #2563eb; }
     .pc-badge-count-done { font-size: 10.5px; padding: 1px 6px; border-radius: 8px; background: #ecfdf5; color: #059669; }
+
+    /* [3-1] 인쇄/PDF 전용 스타일 */
+    @media print {
+      body { background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      #pcHeader, #mobileHeader, #mobileBottomNav, #pcSidebar, #pcSiteSidebar, #toastBanner,
+      .btn-subtab-chip, .btn-act-blue, .btn-primary, .btn-tool-tag, .btn-sub-chip, .btn-sub-xs,
+      .ws-modal-footer, .ws-modal-close, button, input, select {
+        display: none !important;
+      }
+      #pcFinanceMain, #m-page-finance, .finance-table, .standard-card, .m-card-box {
+        box-shadow: none !important;
+        border: 1px solid #cbd5e1 !important;
+      }
+      .ws-modal-backdrop.active .ws-modal-card {
+        box-shadow: none !important;
+        border: 1px solid #cbd5e1 !important;
+        max-height: none !important;
+        height: auto !important;
+      }
+    }
+
+    /* [3-2] 모바일 재무·원장 카드형 UX 보강 스타일 */
+    @media (max-width: 768px) {
+      .m-card-box {
+        transition: transform 0.1s ease, box-shadow 0.1s ease;
+        -webkit-tap-highlight-color: rgba(37,99,235,0.1);
+      }
+      .m-card-box:active {
+        transform: scale(0.99);
+      }
+      .btn-subtab-chip {
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+    }
   </style>
 </head>
 <body>
@@ -2555,8 +2590,8 @@
         extraContractAmount: true,    // [1-4] 추가 공사금액(최초계약+추가공사) 기록 및 표시
         siteDetailShortcut: true,     // [2-1] 현장 상세 화면 내 [💰 현장 정산 보기] 바로가기 버튼
         lowMarginAlert: true,         // [2-2] 월간집계 저마진(15% 미만) 경보 배지 및 클릭 시 정산 상세 오픈
-        reportCapturePrint: false,    // [3-1] (Commit 4에서 활성화)
-        mobileFinanceCardUx: false    // [3-2] (Commit 4에서 활성화)
+        reportCapturePrint: true,     // [3-1] 월간집계/비용마감 이미지 캡처 및 인쇄(PDF) 버튼
+        mobileFinanceCardUx: true     // [3-2] 모바일 재무·원장 카드형 요약/터치 UX 보강
       };
 
       const state = window.state = {
@@ -6032,6 +6067,62 @@
       }
       window.buildCollectionNoteWithExtra = buildCollectionNoteWithExtra;
 
+      // [3-1] 월간집계/비용마감 리포트 이미지 저장 및 인쇄 함수
+      window.captureFinanceReport = async function (type) {
+        if (!window.FINANCE_EXT_FLAGS || !window.FINANCE_EXT_FLAGS.reportCapturePrint) return;
+        const subTab = type || state.financeSubTab || "monthly";
+        const isMobile = state.device !== "pc";
+        let targetEl = isMobile ? document.getElementById("m-page-finance") : document.getElementById("pcFinanceMain");
+        if (!targetEl) targetEl = document.body;
+
+        const subTabNames = { collection: "수금현황", expense: "비용마감", monthly: "월간집계", fixed: "고정비관리" };
+        const tabTitle = subTabNames[subTab] || "재무원장";
+        const nowStr = getTodayYmd().replace(/-/g, "");
+        const fileName = `우성아이디_${tabTitle}_리포트_${nowStr}.png`;
+
+        if (typeof showToast === "function") showToast("📸 화면을 이미지로 변환 중입니다...");
+
+        try {
+          let canvas = null;
+          if (typeof html2canvas === "function") {
+            canvas = await html2canvas(targetEl, {
+              useCORS: true,
+              scale: Math.min(2, window.devicePixelRatio || 1.5),
+              logging: false,
+              backgroundColor: "#ffffff",
+              ignoreElements: (el) => el.id === "toastBanner" || (el.classList && el.classList.contains("toast-banner")) || el.id === "captureModal"
+            });
+          } else {
+            canvas = document.createElement("canvas");
+            canvas.width = 1200;
+            canvas.height = 800;
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, 1200, 800);
+            ctx.fillStyle = "#1e293b";
+            ctx.font = "bold 24px sans-serif";
+            ctx.fillText(`우성아이디 ${tabTitle} 리포트`, 40, 60);
+          }
+
+          const dataUrl = canvas.toDataURL("image/png");
+          const link = document.createElement("a");
+          link.download = fileName;
+          link.href = dataUrl;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          if (typeof showToast === "function") showToast(`✅ ${fileName} 저장 완료!`);
+        } catch (err) {
+          console.error("리포트 이미지 저장 실패:", err);
+          alert("이미지 저장 중 오류가 발생했습니다: " + err.message);
+        }
+      };
+
+      window.printFinanceReport = function () {
+        if (!window.FINANCE_EXT_FLAGS || !window.FINANCE_EXT_FLAGS.reportCapturePrint) return;
+        window.print();
+      };
+
       // [1-1] KPI 카드 클릭 시 필터 토글 함수
       window.toggleFinanceUncollectedFilter = function () {
         if (!window.FINANCE_EXT_FLAGS || !window.FINANCE_EXT_FLAGS.kpiClickFilter) return;
@@ -8539,6 +8630,14 @@
               <span style="font-size:12px;color:#64748b;margin-left:4px;">(수금 ${filteredCol.length}건 / 비용 ${filteredExp.length}건)</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
+              ${FINANCE_EXT_FLAGS.reportCapturePrint ? `
+                <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.captureFinanceReport('monthly')" title="월간집계 리포트 이미지 저장">
+                  📸 이미지 저장
+                </button>
+                <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.printFinanceReport()" title="월간집계 리포트 인쇄">
+                  🖨️ 인쇄/PDF
+                </button>
+              ` : ""}
               <button type="button" class="btn-act-blue" style="height:34px;padding:0 14px;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;border-radius:8px;" onclick="openMonthlyReportModal()">
                 📊 월간 공정·업체 리포트 창 열기
               </button>
@@ -8812,6 +8911,14 @@
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
               <span style="font-size:12px;color:var(--text-muted);">${state.financeDbData && state.financeDbData.updatedAt ? "동기화: " + escHtml(state.financeDbData.updatedAt) : ""}</span>
+              ${FINANCE_EXT_FLAGS.reportCapturePrint ? `
+                <button type="button" class="btn-tool-tag" style="height:32px;padding:0 10px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.captureFinanceReport()" title="현재 화면 이미지(PNG) 저장">
+                  📸 이미지 저장
+                </button>
+                <button type="button" class="btn-tool-tag" style="height:32px;padding:0 10px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.printFinanceReport()" title="현재 리포트 인쇄 / PDF 저장">
+                  🖨️ 인쇄/PDF
+                </button>
+              ` : ""}
               <button type="button" class="btn-act-blue" style="height:32px;padding:0 12px;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;" onclick="openMonthlyReportModal()">📊 월간집계 리포트</button>
             </div>
           </div>
@@ -10975,7 +11082,13 @@
               <button type="button" class="btn-subtab-chip ${subTab === "monthly" ? "active" : ""}" style="padding:5px 10px;font-size:11.5px;" onclick="window.setFinanceSubTab('monthly')">📊 월간집계</button>
               <button type="button" class="btn-subtab-chip ${subTab === "fixed" ? "active" : ""}" style="padding:5px 10px;font-size:11.5px;" onclick="window.setFinanceSubTab('fixed')">📌 고정비 관리</button>
             </div>
-            <button type="button" onclick="openMonthlyReportModal()" style="border:none;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:800;padding:5px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;">📊 리포트</button>
+            <div style="display:flex;gap:4px;align-items:center;">
+              <button type="button" onclick="openMonthlyReportModal()" style="border:none;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:800;padding:5px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;">📊 리포트</button>
+              ${FINANCE_EXT_FLAGS.reportCapturePrint ? `
+                <button type="button" onclick="window.captureFinanceReport()" style="border:1px solid #cbd5e1;background:#fff;color:#334155;font-size:11px;font-weight:700;padding:5px 7px;border-radius:6px;cursor:pointer;white-space:nowrap;" title="화면 캡처">📸</button>
+                <button type="button" onclick="window.printFinanceReport()" style="border:1px solid #cbd5e1;background:#fff;color:#334155;font-size:11px;font-weight:700;padding:5px 7px;border-radius:6px;cursor:pointer;white-space:nowrap;" title="인쇄">🖨️</button>
+              ` : ""}
+            </div>
           </div>
         `;
 
