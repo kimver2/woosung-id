@@ -2551,12 +2551,12 @@
       const FINANCE_EXT_FLAGS = window.FINANCE_EXT_FLAGS = {
         kpiClickFilter: true,          // [1-1] KPI 카드(미수금/미지급금) 클릭 즉시 필터링
         transferExport: true,          // [1-2] 월별 비용마감 이체목록 클립보드 복사 & CSV 다운로드
-        taxProofBadge: false,         // [1-3] 세금계산서/현금영수증/카드/무증빙 구분 배지 및 필터
-        extraContractAmount: false,   // [1-4] 추가 공사금액(최초계약+추가공사) 기록 및 표시
-        siteDetailShortcut: false,    // [2-1] 현장 상세 화면 내 [💰 현장 정산 보기] 바로가기 버튼
-        lowMarginAlert: false,        // [2-2] 월간집계 저마진(15% 미만) 경보 배지 및 클릭 시 정산 상세 오픈
-        reportCapturePrint: false,    // [3-1] 월간집계/비용마감 이미지 캡처 및 인쇄(PDF) 버튼
-        mobileFinanceCardUx: false    // [3-2] 모바일 재무·원장 카드형 요약/터치 UX 보강
+        taxProofBadge: true,          // [1-3] 세금계산서/현금영수증/카드/무증빙 구분 배지 및 필터
+        extraContractAmount: true,    // [1-4] 추가 공사금액(최초계약+추가공사) 기록 및 표시
+        siteDetailShortcut: false,    // [2-1] (Commit 3에서 활성화)
+        lowMarginAlert: false,        // [2-2] (Commit 3에서 활성화)
+        reportCapturePrint: false,    // [3-1] (Commit 4에서 활성화)
+        mobileFinanceCardUx: false    // [3-2] (Commit 4에서 활성화)
       };
 
       const state = window.state = {
@@ -2571,6 +2571,7 @@
         financeSearchQuery: "",
         financeStatusFilter: "all",
         financeManagerFilter: "all",
+        financeTaxFilter: "all",
         financeYearFilter: "all",
         financeMonthFilter: 0,
         expenseSelectedMonth: _initTodayYmd.slice(0, 7),
@@ -2578,6 +2579,7 @@
         expenseSearchQuery: "",
         expenseItemFilter: "all",
         expenseStatusFilter: "all",
+        expenseTaxFilter: "all",
         fixedSearchQuery: "",
         fixedActiveFilter: "all",
         financeMonthlyYear: _initTodayYmd.slice(0, 4),
@@ -5892,6 +5894,18 @@
             if (status !== "완료" && uncollected > 0) return false;
           }
 
+          if (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) {
+            const taxFilter = state.financeTaxFilter || "all";
+            if (taxFilter !== "all") {
+              const tInv = String(r.taxInvoice || "미발행").trim();
+              if (taxFilter === "미발행") {
+                if (tInv !== "미발행" && tInv !== "") return false;
+              } else if (tInv !== taxFilter) {
+                return false;
+              }
+            }
+          }
+
           const pInfo = getCollectionPeriodInfo(r, matchedSite);
           if (yearFilter !== "all") {
             if (yearFilter === "undetermined") {
@@ -5973,6 +5987,45 @@
         const mInput = document.getElementById("mFinanceSearchInput");
         if (mInput) mInput.value = "";
       };
+
+      // [1-3] 증빙 구분 파싱 및 태그 헬퍼
+      function parseExpenseTaxProof(note) {
+        const m = String(note || "").match(/\[증빙:(세금계산서|현금영수증|카드|무증빙)\]/);
+        return m ? m[1] : "";
+      }
+      window.parseExpenseTaxProof = parseExpenseTaxProof;
+
+      function stripExpenseTaxProof(note) {
+        return String(note || "").replace(/\[증빙:(세금계산서|현금영수증|카드|무증빙)\]/g, "").trim();
+      }
+      window.stripExpenseTaxProof = stripExpenseTaxProof;
+
+      function buildExpenseNoteWithTaxProof(rawNote, proof) {
+        const base = stripExpenseTaxProof(rawNote);
+        if (!proof || proof === "none" || proof === "미선택") return base;
+        return base ? `${base} [증빙:${proof}]` : `[증빙:${proof}]`;
+      }
+      window.buildExpenseNoteWithTaxProof = buildExpenseNoteWithTaxProof;
+
+      // [1-4] 추가 공사금액 파싱 및 태그 헬퍼
+      function parseExtraAmountFromNote(note) {
+        const m = String(note || "").match(/\[추가공사:([+-]?\d+)\]/);
+        return m ? Number(m[1]) : 0;
+      }
+      window.parseExtraAmountFromNote = parseExtraAmountFromNote;
+
+      function stripExtraAmountFromNote(note) {
+        return String(note || "").replace(/\[추가공사:[+-]?\d+\]/g, "").trim();
+      }
+      window.stripExtraAmountFromNote = stripExtraAmountFromNote;
+
+      function buildCollectionNoteWithExtra(rawNote, extraAmt) {
+        const base = stripExtraAmountFromNote(rawNote);
+        const num = Number(extraAmt) || 0;
+        if (num === 0) return base;
+        return base ? `${base} [추가공사:${num}]` : `[추가공사:${num}]`;
+      }
+      window.buildCollectionNoteWithExtra = buildCollectionNoteWithExtra;
 
       // [1-1] KPI 카드 클릭 시 필터 토글 함수
       window.toggleFinanceUncollectedFilter = function () {
@@ -6146,6 +6199,13 @@
 
       window.setFinanceManagerFilter = function(mgr) {
         state.financeManagerFilter = mgr;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.setFinanceTaxFilter = function(taxVal) {
+        state.financeTaxFilter = taxVal;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
@@ -6392,13 +6452,13 @@
             <div style="font-size:12.5px;font-weight:800;margin-bottom:8px;color:#1e293b;">💵 계약 금액 및 정산</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:10px;">
               <div>
-                <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:3px;color:#475569;">계약금액(원)</label>
+                <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:3px;color:#475569;">최초 계약금액(원)</label>
                 <input type="text" inputmode="numeric" id="colContractAmount" value="${rData.contractAmount ? Number(rData.contractAmount).toLocaleString('ko-KR') : ''}" placeholder="0" oninput="window.onCollectionAmountInput(this)"
                   style="width:100%;height:34px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;font-weight:700;text-align:right;" />
               </div>
               <div>
-                <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:3px;color:#475569;">증감액(+ -)</label>
-                <input type="text" inputmode="numeric" id="colChangeAmount" value="${rData.changeAmount ? Number(rData.changeAmount).toLocaleString('ko-KR') : ''}" placeholder="0" oninput="window.onCollectionAmountInput(this, true)"
+                <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:3px;color:#475569;">추가공사 (증감액)</label>
+                <input type="text" inputmode="numeric" id="colChangeAmount" value="${(rData.changeAmount !== undefined && rData.changeAmount !== null && rData.changeAmount !== '') ? Number(rData.changeAmount).toLocaleString('ko-KR') : (parseExtraAmountFromNote(rData.note) ? Number(parseExtraAmountFromNote(rData.note)).toLocaleString('ko-KR') : '')}" placeholder="0" oninput="window.onCollectionAmountInput(this, true)"
                   style="width:100%;height:34px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;font-weight:700;text-align:right;" />
               </div>
               <div>
@@ -6470,11 +6530,13 @@
 
           <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
             <div>
-              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">세금계산서 발행</label>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">세금계산서 발행 / 증빙</label>
               <select id="colTaxInvoice" style="width:100%;height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;">
                 <option value="미발행" ${rData.taxInvoice === "미발행" ? "selected" : ""}>미발행</option>
                 <option value="세금계산서" ${rData.taxInvoice === "세금계산서" ? "selected" : ""}>세금계산서</option>
                 <option value="현금영수증" ${rData.taxInvoice === "현금영수증" ? "selected" : ""}>현금영수증</option>
+                <option value="카드" ${rData.taxInvoice === "카드" ? "selected" : ""}>카드</option>
+                <option value="무증빙" ${rData.taxInvoice === "무증빙" ? "selected" : ""}>무증빙</option>
                 <option value="발행완료" ${rData.taxInvoice === "발행완료" ? "selected" : ""}>발행완료</option>
               </select>
             </div>
@@ -6544,7 +6606,10 @@
         const finalPayment = parseColVal("colFinalPayment");
 
         const taxInvoice = (document.getElementById("colTaxInvoice") ? document.getElementById("colTaxInvoice").value : "미발행").trim();
-        const note = (document.getElementById("colNote") ? document.getElementById("colNote").value : "").trim();
+        let note = (document.getElementById("colNote") ? document.getElementById("colNote").value : "").trim();
+        if (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.extraContractAmount) {
+          note = buildCollectionNoteWithExtra(note, changeAmount);
+        }
 
         const payload = {
           id: id || "",
@@ -6739,6 +6804,19 @@
           if (stFilter === "unpaid" && bal <= 0) return false;
           if (stFilter === "paid" && bal > 0) return false;
 
+          // 3.5 증빙 필터
+          if (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) {
+            const expTaxFilter = state.expenseTaxFilter || "all";
+            if (expTaxFilter !== "all") {
+              const proof = parseExpenseTaxProof(e.note);
+              if (expTaxFilter === "무증빙") {
+                if (proof !== "무증빙" && proof !== "") return false;
+              } else if (proof !== expTaxFilter) {
+                return false;
+              }
+            }
+          }
+
           // 4. 검색어 필터
           if (qWords.length > 0) {
             const hay = [e.vendor, e.category, e.category2, e.siteName, e.item, e.note, e.payDate].join(" ").toLowerCase();
@@ -6780,6 +6858,13 @@
 
       window.setExpenseStatusFilter = function(filter) {
         state.expenseStatusFilter = filter;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+      };
+
+      window.setExpenseTaxFilter = function(filter) {
+        state.expenseTaxFilter = filter;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
@@ -6930,15 +7015,25 @@
             </div>
           </div>
 
-          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:12px;">
             <div>
               <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">지급일</label>
               <input type="date" id="expPayDate" value="${escHtml(rData.payDate)}"
                 style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
             </div>
             <div>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">증빙 구분</label>
+              <select id="expTaxProof" style="width:100%;height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;">
+                <option value="" ${!parseExpenseTaxProof(rData.note) ? "selected" : ""}>미선택</option>
+                <option value="세금계산서" ${parseExpenseTaxProof(rData.note) === "세금계산서" ? "selected" : ""}>🧾 세금계산서</option>
+                <option value="현금영수증" ${parseExpenseTaxProof(rData.note) === "현금영수증" ? "selected" : ""}>🧾 현금영수증</option>
+                <option value="카드" ${parseExpenseTaxProof(rData.note) === "카드" ? "selected" : ""}>💳 카드</option>
+                <option value="무증빙" ${parseExpenseTaxProof(rData.note) === "무증빙" ? "selected" : ""}>⚠️ 무증빙</option>
+              </select>
+            </div>
+            <div>
               <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">특이사항 / 비고</label>
-              <input type="text" id="expNote" value="${escHtml(rData.note)}" placeholder="세금계산서 발행 여부, 특이사항 등"
+              <input type="text" id="expNote" value="${escHtml(stripExpenseTaxProof(rData.note))}" placeholder="특이사항 등"
                 style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
             </div>
           </div>
@@ -7042,7 +7137,9 @@
         const paidAmount = Number(String(document.getElementById("expPaidAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const balance = claimAmount - paidAmount;
         const payDate = (document.getElementById("expPayDate")?.value || "").trim();
-        const note = (document.getElementById("expNote")?.value || "").trim();
+        const expTaxProof = (document.getElementById("expTaxProof")?.value || "").trim();
+        let rawNote = (document.getElementById("expNote")?.value || "").trim();
+        const note = (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) ? buildExpenseNoteWithTaxProof(rawNote, expTaxProof) : rawNote;
 
         if (!settleMonth) {
           alert("정산월(YYYY-MM)을 입력해 주세요.");
@@ -7989,6 +8086,8 @@
 
         // 손익 요약 계산
         const contractAmount = Number(colRow.totalAmount) || 0;
+        const extraAmt = (Number(colRow.changeAmount) || 0) || parseExtraAmountFromNote(colRow.note);
+        const baseContract = colRow.contractAmount ? Number(colRow.contractAmount) : (contractAmount - extraAmt);
         const colFin = getCollectionRowFinancials(colRow);
         const collected = colFin.collected;
         const uncollected = colFin.uncollected;
@@ -8009,6 +8108,9 @@
             <div class="standard-card" style="margin-bottom:0;padding:12px 14px;border-left:4px solid #3b82f6;">
               <div style="font-size:11.5px;color:var(--text-muted);font-weight:700;">최종 계약금액</div>
               <div style="font-size:18px;font-weight:800;color:#1e293b;margin-top:2px;">${formatKrw(contractAmount)}</div>
+              ${(FINANCE_EXT_FLAGS.extraContractAmount && extraAmt !== 0) ? `
+                <div style="font-size:11px;color:#2563eb;font-weight:700;margin-top:2px;">(최초 ${formatKrw(baseContract)} ${extraAmt > 0 ? "+" : ""}${formatKrw(extraAmt)})</div>
+              ` : ""}
               <div style="font-size:11px;color:#64748b;margin-top:2px;">
                 ${escHtml(colRow.clientName || "-")} · ${escHtml(extractFirstManager(colRow.manager, "-"))}
               </div>
@@ -8778,6 +8880,15 @@
                   <button type="button" class="btn-sub-chip ${stFilter === "unpaid" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;${stFilter === "unpaid" ? "background:#fee2e2;color:#dc2626;border-color:#fca5a5;" : ""}" onclick="window.setExpenseStatusFilter('unpaid')">미지급만 (${allExp.filter(e => (Number(e.balance) || 0) > 0).length})</button>
                   <button type="button" class="btn-sub-chip ${stFilter === "paid" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;" onclick="window.setExpenseStatusFilter('paid')">지급완료</button>
                 </div>
+                ${FINANCE_EXT_FLAGS.taxProofBadge ? `
+                  <select onchange="window.setExpenseTaxFilter(this.value)" style="height:34px;padding:0 8px;border-radius:6px;border:1px solid var(--border-dark);font-size:12px;font-weight:600;">
+                    <option value="all" ${state.expenseTaxFilter === "all" ? "selected" : ""}>전체 증빙</option>
+                    <option value="세금계산서" ${state.expenseTaxFilter === "세금계산서" ? "selected" : ""}>🧾 세금계산서</option>
+                    <option value="현금영수증" ${state.expenseTaxFilter === "현금영수증" ? "selected" : ""}>🧾 현금영수증</option>
+                    <option value="카드" ${state.expenseTaxFilter === "카드" ? "selected" : ""}>💳 카드</option>
+                    <option value="무증빙" ${state.expenseTaxFilter === "무증빙" ? "selected" : ""}>⚠️ 무증빙</option>
+                  </select>
+                ` : ""}
               </div>
               <div style="display:flex;gap:8px;align-items:center;">
                 ${FINANCE_EXT_FLAGS.transferExport ? `
@@ -8814,6 +8925,14 @@
             else if (e.item === "외주") { itemBadgeBg = "#fffbeb"; itemBadgeColor = "#d97706"; }
             else if (e.item === "고정비") { itemBadgeBg = "#fef3c7"; itemBadgeColor = "#b45309"; }
 
+            const proof = (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) ? parseExpenseTaxProof(e.note) : "";
+            let proofBadge = "";
+            if (proof === "세금계산서") proofBadge = '<span style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#f0f9ff;color:#0284c7;border:1px solid #bae6fd;margin-right:4px;">🧾 계산서</span>';
+            else if (proof === "현금영수증") proofBadge = '<span style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;margin-right:4px;">🧾 영수증</span>';
+            else if (proof === "카드") proofBadge = '<span style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;margin-right:4px;">💳 카드</span>';
+            else if (proof === "무증빙") proofBadge = '<span style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#fef3c7;color:#b45309;border:1px solid #fde68a;margin-right:4px;">⚠️ 무증빙</span>';
+            const cleanNote = (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) ? stripExpenseTaxProof(e.note) : (e.note || "");
+
             return `
               <tr style="${bal > 0 ? "background:#fffbfb;" : ""}">
                 <td style="white-space:nowrap;"><span style="font-weight:700;color:#475569;white-space:nowrap;">${escHtml(formatShortSettleMonth(e.settleMonth))}</span></td>
@@ -8844,8 +8963,8 @@
                   `}
                 </td>
                 <td style="font-size:11.5px;color:var(--text-sub);">${escHtml(e.payDate || "-")}</td>
-                <td style="font-size:11.5px;color:var(--text-sub);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(e.note || "")}">
-                  ${escHtml(e.note || "-")}
+                <td style="font-size:11.5px;color:var(--text-sub);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(cleanNote || "")}">
+                  ${proofBadge}${escHtml(cleanNote || "-")}
                 </td>
                 <td style="text-align:center;">
                   <div style="display:inline-flex;gap:4px;align-items:center;">
@@ -9111,6 +9230,17 @@
                 <option value="all" ${mgrFilter === "all" ? "selected" : ""}>전체 담당자</option>
                 ${managers.map(m => `<option value="${escHtml(m)}" ${mgrFilter === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}
               </select>
+
+              ${FINANCE_EXT_FLAGS.taxProofBadge ? `
+                <select onchange="window.setFinanceTaxFilter(this.value)" style="height:34px;padding:0 10px;border-radius:6px;border:1px solid var(--border-dark);font-size:12.5px;font-weight:600;">
+                  <option value="all" ${state.financeTaxFilter === "all" ? "selected" : ""}>전체 증빙</option>
+                  <option value="세금계산서" ${state.financeTaxFilter === "세금계산서" ? "selected" : ""}>세금계산서</option>
+                  <option value="현금영수증" ${state.financeTaxFilter === "현금영수증" ? "selected" : ""}>현금영수증</option>
+                  <option value="카드" ${state.financeTaxFilter === "카드" ? "selected" : ""}>카드</option>
+                  <option value="무증빙" ${state.financeTaxFilter === "무증빙" ? "selected" : ""}>무증빙</option>
+                  <option value="미발행" ${state.financeTaxFilter === "미발행" ? "selected" : ""}>미발행</option>
+                </select>
+              ` : ""}
             </div>
 
             <div style="display:flex;align-items:center;gap:8px;">
@@ -9145,8 +9275,13 @@
 
           let taxBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;">미발행</span>`;
           if (r.taxInvoice === "세금계산서") taxBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#f0f9ff;color:#0284c7;border:1px solid #bae6fd;">세금계산서</span>`;
-          else if (r.taxInvoice === "현금영수증") taxBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;">현금영수증</span>`;
+          else if (r.taxInvoice === "현금영수증") taxBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;">현금영수증</span>`;
+          else if (r.taxInvoice === "카드") taxBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;">카드</span>`;
+          else if (r.taxInvoice === "무증빙") taxBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#fef3c7;color:#b45309;border:1px solid #fde68a;">무증빙</span>`;
           else if (r.taxInvoice === "발행완료") taxBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;">발행완료</span>`;
+
+          const extraAmt = (Number(r.changeAmount) || 0) || parseExtraAmountFromNote(r.note);
+          const baseContract = r.contractAmount ? Number(r.contractAmount) : (Number(r.totalAmount || 0) - extraAmt);
 
           return `
             <tr style="cursor:pointer;${isDoneUncollected ? "background:#fff5f5;" : (uncollected > 0 ? "background:#fffbfb;" : "")}" onclick="window.openCollectionModal('${escJs(r.id)}')">
@@ -9174,7 +9309,9 @@
               </td>
               <td style="text-align:right;">
                 <div style="font-weight:800;color:#1e293b;">${Number(r.totalAmount || 0).toLocaleString("ko-KR")}원</div>
-                ${r.changeAmount ? `<div style="font-size:11px;color:${r.changeAmount > 0 ? "#2563eb" : "#dc2626"};">${r.changeAmount > 0 ? "+" : ""}${Number(r.changeAmount).toLocaleString("ko-KR")}</div>` : ""}
+                ${(FINANCE_EXT_FLAGS.extraContractAmount && extraAmt !== 0) ? `
+                  <div style="font-size:11px;color:#64748b;font-weight:600;">(최초 ${formatKrw(baseContract)} ${extraAmt > 0 ? "+" : ""}${formatKrw(extraAmt)})</div>
+                ` : (r.changeAmount ? `<div style="font-size:11px;color:${r.changeAmount > 0 ? "#2563eb" : "#dc2626"};">${r.changeAmount > 0 ? "+" : ""}${Number(r.changeAmount).toLocaleString("ko-KR")}</div>` : "")}
               </td>
               <td style="text-align:right;">
                 <div style="font-weight:700;color:#15803d;">${Number(collected).toLocaleString("ko-KR")}원</div>
@@ -10911,6 +11048,15 @@
                 <button type="button" class="btn-sub-chip ${itemFilter === k ? "active" : ""}" style="padding:3px 7px;font-size:11px;" onclick="window.setExpenseItemFilter('${k}')">${label}</button>
               `).join("")}
               <button type="button" class="btn-sub-chip ${stFilter === "unpaid" ? "active" : ""}" style="padding:3px 7px;font-size:11px;${stFilter === "unpaid" ? "background:#fee2e2;color:#dc2626;border-color:#fca5a5;" : ""}" onclick="window.setExpenseStatusFilter('${stFilter === "unpaid" ? "all" : "unpaid"}')">미지급만</button>
+              ${FINANCE_EXT_FLAGS.taxProofBadge ? `
+                <select onchange="window.setExpenseTaxFilter(this.value)" style="height:26px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;font-weight:700;">
+                  <option value="all" ${state.expenseTaxFilter === "all" ? "selected" : ""}>증빙전체</option>
+                  <option value="세금계산서" ${state.expenseTaxFilter === "세금계산서" ? "selected" : ""}>계산서</option>
+                  <option value="현금영수증" ${state.expenseTaxFilter === "현금영수증" ? "selected" : ""}>영수증</option>
+                  <option value="카드" ${state.expenseTaxFilter === "카드" ? "selected" : ""}>카드</option>
+                  <option value="무증빙" ${state.expenseTaxFilter === "무증빙" ? "selected" : ""}>무증빙</option>
+                </select>
+              ` : ""}
             </div>
           `;
 
@@ -10926,6 +11072,14 @@
             else if (e.item === "외주") { itemBadgeBg = "#fffbeb"; itemBadgeColor = "#d97706"; }
             else if (e.item === "고정비") { itemBadgeBg = "#fef3c7"; itemBadgeColor = "#b45309"; }
 
+            const proof = (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) ? parseExpenseTaxProof(e.note) : "";
+            let proofBadge = "";
+            if (proof === "세금계산서") proofBadge = '<span style="padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:700;background:#f0f9ff;color:#0284c7;border:1px solid #bae6fd;">🧾 계산서</span>';
+            else if (proof === "현금영수증") proofBadge = '<span style="padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:700;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;">🧾 영수증</span>';
+            else if (proof === "카드") proofBadge = '<span style="padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:700;background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;">💳 카드</span>';
+            else if (proof === "무증빙") proofBadge = '<span style="padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:700;background:#fef3c7;color:#b45309;border:1px solid #fde68a;">⚠️ 무증빙</span>';
+            const cleanNote = (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) ? stripExpenseTaxProof(e.note) : (e.note || "");
+
             return `
               <div class="m-card-box" style="margin-bottom:10px;padding:12px;border-left:3px solid ${bal > 0 ? "#dc2626" : "#10b981"};${bal > 0 ? "background:#fffdfd;" : ""}">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
@@ -10934,6 +11088,7 @@
                       <span style="padding:1px 6px;border-radius:3px;font-size:10.5px;font-weight:700;background:${itemBadgeBg};color:${itemBadgeColor};">
                         ${escHtml(e.item)}
                       </span>
+                      ${proofBadge}
                       <span style="font-size:14px;font-weight:800;color:#1e293b;">${escHtml(e.vendor)}</span>
                     </div>
                     <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px;">
@@ -10986,9 +11141,9 @@
                   </div>
                 </div>
 
-                ${e.note ? `
+                ${cleanNote ? `
                   <div style="font-size:11px;color:var(--text-sub);margin-top:6px;border-top:1px dashed #e2e8f0;padding-top:4px;">
-                    📝 ${escHtml(e.note)}
+                    📝 ${escHtml(cleanNote)}
                   </div>
                 ` : ""}
               </div>
@@ -11189,6 +11344,16 @@
             <button type="button" class="btn-sub-chip ${stFilter === "doneUncollected" ? "active" : ""}" style="padding:4px 8px;font-size:11px;${stFilter === "doneUncollected" ? "background:#fee2e2;color:#dc2626;border-color:#f87171;" : "color:#b91c1c;"}" onclick="window.setFinanceStatusFilter('doneUncollected')">공사완료 미수 ⚠️ (${doneUncollectedCount})</button>
             <button type="button" class="btn-sub-chip ${stFilter === "closing" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('closing')">마감중 (${allCollection.filter(r => r.status === "마감중").length})</button>
             <button type="button" class="btn-sub-chip ${stFilter === "completed" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('completed')">완료 (${allCollection.filter(r => r.status === "완료" || getCollectionRowFinancials(r).uncollected <= 0).length})</button>
+            ${FINANCE_EXT_FLAGS.taxProofBadge ? `
+              <select onchange="window.setFinanceTaxFilter(this.value)" style="height:26px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;font-weight:700;">
+                <option value="all" ${state.financeTaxFilter === "all" ? "selected" : ""}>증빙전체</option>
+                <option value="세금계산서" ${state.financeTaxFilter === "세금계산서" ? "selected" : ""}>계산서</option>
+                <option value="현금영수증" ${state.financeTaxFilter === "현금영수증" ? "selected" : ""}>영수증</option>
+                <option value="카드" ${state.financeTaxFilter === "카드" ? "selected" : ""}>카드</option>
+                <option value="무증빙" ${state.financeTaxFilter === "무증빙" ? "selected" : ""}>무증빙</option>
+                <option value="미발행" ${state.financeTaxFilter === "미발행" ? "selected" : ""}>미발행</option>
+              </select>
+            ` : ""}
           </div>
         `;
 
@@ -11212,8 +11377,13 @@
 
           let taxBadge = `<span style="padding:2px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#fef2f2;color:#dc2626;">미발행</span>`;
           if (r.taxInvoice === "세금계산서") taxBadge = `<span style="padding:2px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#f0f9ff;color:#0284c7;">세금계산서</span>`;
-          else if (r.taxInvoice === "현금영수증") taxBadge = `<span style="padding:2px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#f5f3ff;color:#7c3aed;">현금영수증</span>`;
+          else if (r.taxInvoice === "현금영수증") taxBadge = `<span style="padding:2px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#ecfdf5;color:#059669;">현금영수증</span>`;
+          else if (r.taxInvoice === "카드") taxBadge = `<span style="padding:2px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#f5f3ff;color:#7c3aed;">카드</span>`;
+          else if (r.taxInvoice === "무증빙") taxBadge = `<span style="padding:2px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#fef3c7;color:#b45309;">무증빙</span>`;
           else if (r.taxInvoice === "발행완료") taxBadge = `<span style="padding:2px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#ecfdf5;color:#059669;">발행완료</span>`;
+
+          const extraAmt = (Number(r.changeAmount) || 0) || parseExtraAmountFromNote(r.note);
+          const baseContract = r.contractAmount ? Number(r.contractAmount) : (Number(r.totalAmount || 0) - extraAmt);
 
           return `
             <div class="m-card-box" style="cursor:pointer;margin-bottom:10px;padding:12px;border-left:3px solid ${isDoneUncollected ? "#dc2626" : (uncollected > 0 ? "#f59e0b" : "#10b981")};${isDoneUncollected ? "background:#fff8f8;" : ""}" onclick="window.openCollectionModal('${escJs(r.id)}')">
@@ -11251,6 +11421,9 @@
                 <div>
                   <div style="font-size:10px;color:var(--text-muted);">최종 계약액</div>
                   <div style="font-size:12.5px;font-weight:800;color:#1e293b;margin-top:2px;">${formatKrw(r.totalAmount)}</div>
+                  ${(FINANCE_EXT_FLAGS.extraContractAmount && extraAmt !== 0) ? `
+                    <div style="font-size:9.5px;color:#64748b;font-weight:600;margin-top:1px;">(최초 ${formatKrw(baseContract)} ${extraAmt > 0 ? "+" : ""}${formatKrw(extraAmt)})</div>
+                  ` : ""}
                 </div>
                 <div>
                   <div style="font-size:10px;color:var(--text-muted);">수금액 (${rRate}%)</div>
