@@ -2553,8 +2553,8 @@
         transferExport: true,          // [1-2] 월별 비용마감 이체목록 클립보드 복사 & CSV 다운로드
         taxProofBadge: true,          // [1-3] 세금계산서/현금영수증/카드/무증빙 구분 배지 및 필터
         extraContractAmount: true,    // [1-4] 추가 공사금액(최초계약+추가공사) 기록 및 표시
-        siteDetailShortcut: false,    // [2-1] (Commit 3에서 활성화)
-        lowMarginAlert: false,        // [2-2] (Commit 3에서 활성화)
+        siteDetailShortcut: true,     // [2-1] 현장 상세 화면 내 [💰 현장 정산 보기] 바로가기 버튼
+        lowMarginAlert: true,         // [2-2] 월간집계 저마진(15% 미만) 경보 배지 및 클릭 시 정산 상세 오픈
         reportCapturePrint: false,    // [3-1] (Commit 4에서 활성화)
         mobileFinanceCardUx: false    // [3-2] (Commit 4에서 활성화)
       };
@@ -4563,6 +4563,11 @@
                   <div class="dcp-meta-text">담당자: <strong>${escHtml(mgrs)}</strong> &nbsp;•&nbsp; 공정 기간: <strong>${escHtml(periodStr)}</strong></div>
                 </div>
                 <div class="dcp-actions">
+                  ${(FINANCE_EXT_FLAGS.siteDetailShortcut && canViewFinance()) ? `
+                    <button type="button" class="btn-act-blue" style="background:#059669;color:#ffffff;font-weight:700;display:inline-flex;align-items:center;gap:4px;" onclick="window.openSiteFinanceDetailModal('${escJs(selectedSite.siteName)}')">
+                      💰 현장 정산 보기
+                    </button>
+                  ` : ""}
                   <button type="button" class="btn-act-blue" onclick="openNewTaskModal('${escJs(selectedSite.siteName)}', state.selectedDayStr)">➕ 새 공정 추가</button>
                   <button type="button" class="btn-act-danger" onclick="openDeleteConfirm('site', '${escJs(selectedSite.siteKey)}')">현장 삭제</button>
                   <button type="button" class="btn-act-white" onclick="focusSiteOnCalendar('${escJs(selectedSite.siteKey)}')">📅 현장 캘린더 보기</button>
@@ -8688,10 +8693,19 @@
                     else if (s.marginRate >= 0) { marginBadgeBg = "#fef3c7"; marginBadgeColor = "#b45309"; }
                     else { marginBadgeBg = "#fee2e2"; marginBadgeColor = "#b91c1c"; }
 
+                    let alertBadge = "";
+                    if (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.lowMarginAlert) {
+                      if (s.marginRate < 0) {
+                        alertBadge = `<span style="display:inline-block;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:800;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;margin-left:4px;">🚨 적자</span>`;
+                      } else if (s.marginRate < 15) {
+                        alertBadge = `<span style="display:inline-block;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:800;background:#fef3c7;color:#b45309;border:1px solid #fde68a;margin-left:4px;">⚠️ 저마진</span>`;
+                      }
+                    }
+
                     return `
-                      <tr style="border-bottom:1px solid #f1f5f9;height:40px;text-align:right;background:#ffffff;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#ffffff'">
+                      <tr style="border-bottom:1px solid #f1f5f9;height:40px;text-align:right;background:#ffffff;${(window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.lowMarginAlert) ? "cursor:pointer;" : ""}" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#ffffff'" onclick="window.openSiteFinanceDetailModal('${escJs(s.siteName)}')">
                         <td style="padding:8px 12px;text-align:left;">
-                          <span style="font-weight:800;color:#2563eb;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="window.openSiteFinanceDetailModal('${escJs(s.siteName)}')">
+                          <span style="font-weight:800;color:#2563eb;cursor:pointer;text-decoration:underline;text-underline-offset:2px;" onclick="event.stopPropagation(); window.openSiteFinanceDetailModal('${escJs(s.siteName)}')">
                             ${escHtml(s.siteName)} 🔍
                           </span>
                           ${s.colRow && s.colRow.clientName ? `<span style="font-size:11px;color:#64748b;display:block;">${escHtml(s.colRow.clientName)}</span>` : ""}
@@ -8701,16 +8715,19 @@
                         <td style="padding:8px 12px;color:#d97706;font-weight:700;">${formatKrw(s.expenseClaim)}</td>
                         <td style="padding:8px 12px;font-weight:800;color:${profitColor};">${(s.netProfit > 0 ? "+" : "") + formatKrw(s.netProfit)}</td>
                         <td style="padding:8px 12px;text-align:center;">
-                          <span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:800;background:${marginBadgeBg};color:${marginBadgeColor};">
-                            ${s.marginRate}%
-                          </span>
+                          <div style="display:inline-flex;align-items:center;justify-content:center;">
+                            <span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:800;background:${marginBadgeBg};color:${marginBadgeColor};">
+                              ${s.marginRate}%
+                            </span>
+                            ${alertBadge}
+                          </div>
                         </td>
                         <td style="padding:8px 12px;font-size:11.5px;">
                           <span style="color:${s.uncollected > 0 ? "#dc2626" : "#16a34a"};font-weight:700;">미수 ${formatKrw(s.uncollected)}</span><br>
                           <span style="color:${s.expenseBalance > 0 ? "#b45309" : "#64748b"};">외상 ${formatKrw(s.expenseBalance)}</span>
                         </td>
                         <td style="padding:8px 12px;text-align:center;">
-                          <button type="button" class="btn-act-blue" style="height:26px;padding:0 8px;font-size:11px;border-radius:6px;" onclick="window.openSiteFinanceDetailModal('${escJs(s.siteName)}')">
+                          <button type="button" class="btn-act-blue" style="height:26px;padding:0 8px;font-size:11px;border-radius:6px;" onclick="event.stopPropagation(); window.openSiteFinanceDetailModal('${escJs(s.siteName)}')">
                             상세
                           </button>
                         </td>
@@ -10474,6 +10491,11 @@
             bodyHtml = `
               <div class="m-site-acc-body">
                 <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">
+                  ${(FINANCE_EXT_FLAGS.siteDetailShortcut && canViewFinance()) ? `
+                    <button type="button" class="btn-tool-tag" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;font-weight:800;" onclick="window.openSiteFinanceDetailModal('${escJs(s.siteName)}')">
+                      💰 현장 정산 보기
+                    </button>
+                  ` : ""}
                   <button type="button" class="btn-tool-tag" onclick="openPartnerGuideForSite('${escJs(s.siteKey)}')">📋 안내문 확인</button>
                   <button type="button" class="btn-tool-tag" onclick="focusSiteOnCalendar('${escJs(s.siteKey)}', true)">📅 캘린더 보기</button>
                   <button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(s.siteName)}')">✏️ 정보 수정</button>
