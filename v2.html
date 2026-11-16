@@ -2177,8 +2177,8 @@
       <button type="button" class="pg-jump-btn" onclick="switchMainTab('sites')">현장</button>
       <button type="button" class="pg-jump-btn" onclick="switchMainTab('todo')">To-Do</button>
       <button type="button" class="pg-jump-btn" onclick="switchMainTab('quote')">신규</button>
+      <button type="button" class="pg-jump-btn" onclick="switchMainTab('partners')">거래처</button>
       <button type="button" class="pg-jump-btn" onclick="switchMainTab('finance')">재무</button>
-      <button type="button" class="pg-jump-btn" onclick="switchMainTab('partners')" style="display:none;">거래처</button>
     </div>
   </div>
 
@@ -2203,8 +2203,8 @@
             <button type="button" class="nav-tab-item" data-tab="quote" onclick="switchMainTab('quote')">
               📋 신규 현장 <span class="badge-count badge-green" id="pcQuoteBadge">0</span>
             </button>
+            <button type="button" class="nav-tab-item" data-tab="partners" onclick="switchMainTab('partners')">🤝 거래처</button>
             <button type="button" class="nav-tab-item" data-tab="finance" onclick="switchMainTab('finance')">💰 재무·원장</button>
-            <button type="button" class="nav-tab-item" data-tab="partners" onclick="switchMainTab('partners')" style="display:none;">🤝 거래처</button>
           </nav>
         </div>
 
@@ -2918,12 +2918,16 @@
         const authU = String(getActualAuthUser() || "").trim().toLowerCase();
         return authU === "조항만" || authU === "admin" || authU === "chohangman";
       }
+      function canManageSharedPassword() {
+        return canViewFinance();
+      }
+      window.canManageSharedPassword = canManageSharedPassword;
       function syncFinanceNavVisibility() {
         const canView = canViewFinance();
         const pcNavBtn = document.querySelector('.header-nav-tabs .nav-tab-item[data-tab="finance"]');
         if (pcNavBtn) pcNavBtn.style.display = canView ? "" : "none";
         const pcPartnerBtn = document.querySelector('.header-nav-tabs .nav-tab-item[data-tab="partners"]');
-        if (pcPartnerBtn) pcPartnerBtn.style.display = canView ? "none" : "";
+        if (pcPartnerBtn) pcPartnerBtn.style.display = "";
 
         const mobNavBtn = document.querySelector('.m-bottom-nav .m-bottom-btn[data-mtab="finance"]');
         if (mobNavBtn) mobNavBtn.style.display = canView ? "" : "none";
@@ -2933,7 +2937,7 @@
         const jumpBtn = document.querySelector('.preview-global-bar .pg-jump-btn[onclick*="finance"]');
         if (jumpBtn) jumpBtn.style.display = canView ? "" : "none";
         const jumpPartnerBtn = document.querySelector('.preview-global-bar .pg-jump-btn[onclick*="partners"]');
-        if (jumpPartnerBtn) jumpPartnerBtn.style.display = canView ? "none" : "";
+        if (jumpPartnerBtn) jumpPartnerBtn.style.display = "";
 
         if (!canView) {
           if (state.pcTab === "finance") {
@@ -2941,6 +2945,10 @@
           }
           if (state.mobileTab === "finance") {
             window.switchMobileTab("partners");
+          }
+        } else {
+          if (state.mobileTab === "partners") {
+            window.switchMobileTab("finance");
           }
         }
       }
@@ -4415,6 +4423,10 @@
           const phone = hasPartner ? lookupPartnerPhone(t.partner) : "";
           const badgeStyle = isDone ? "background:#dcfce7;color:#15803d;" : isDelay ? "background:#fee2e2;color:#dc2626;" : "background:#dbeafe;color:#1e40af;";
           const badgeLabel = isDone ? "✓ 완료" : isDelay ? "⚠️ 지연" : escHtml(t.status || "예정");
+          const mgrParts = String(t.manager || "").split(",").map((m) => m.trim()).filter(Boolean);
+          const mgrCellHtml = mgrParts.length > 1
+            ? mgrParts.map((m) => `<div style="white-space:nowrap;line-height:1.45;">👤 ${escHtml(m)}</div>`).join("")
+            : `<span style="white-space:nowrap;">👤 ${escHtml(mgrParts[0] || "-")}</span>`;
           return `
             <tr style="cursor:pointer;" onclick="openTaskEditModal('${escJs(tid)}')">
               <td onclick="event.stopPropagation();"><input type="checkbox" ${isRowChecked ? "checked" : ""} onchange="toggleSiteTableRowCheck('${escJs(tid)}', this.checked)" style="width:15px;height:15px;accent-color:#1e40af;cursor:pointer;"></td>
@@ -4426,7 +4438,7 @@
                 </span>
               </td>
               <td>${escHtml(parseYmdFromTask(t) || t.dateDisplay || "-")}</td>
-              <td>👤 ${escHtml(t.manager || "-")}</td>
+              <td style="white-space:nowrap;">${mgrCellHtml}</td>
               <td>${escHtml(hasPartner ? t.partner : "미등록")}${hasPartner && phone ? ` <a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="color:#10b981;font-weight:700;text-decoration:none;margin-left:4px;">📞</a>` : ""}</td>
               <td style="color:var(--text-sub);max-width:240px;">${escHtml(t.memo || "-")}</td>
               <td onclick="event.stopPropagation();" style="white-space:nowrap;">
@@ -15156,6 +15168,20 @@
                 </div>
                 <button type="button" class="btn-act-blue" onclick="executeSystemAction('archiveCompletedSites')">아카이브 실행</button>
               </div>
+              ${canManageSharedPassword() ? `
+              <div style="background:#f8fafc;padding:14px;border-radius:10px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:220px;">
+                  <div style="font-weight:800;font-size:13.5px;color:#0f172a;">🔐 공용 비밀번호 변경</div>
+                  <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">대시보드 접속 시 사용하는 전사 공용 비밀번호를 변경합니다. (조항만 · admin 전용)</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <input type="password" id="newSharedPinInput" class="ws-input" placeholder="새 비밀번호 (4자리 이상)" style="width:165px;height:34px;font-size:12.5px;" onkeydown="if(event.key==='Enter')submitChangeSharedPassword()">
+                  <input type="password" id="newSharedPinConfirmInput" class="ws-input" placeholder="비밀번호 확인" style="width:140px;height:34px;font-size:12.5px;" onkeydown="if(event.key==='Enter')submitChangeSharedPassword()">
+                  <button type="button" class="btn-tool-tag" id="btnToggleSharedPinVis" onclick="toggleSharedPinVisibility()" style="height:34px;padding:0 10px;white-space:nowrap;">👁️ 보기</button>
+                  <button type="button" class="btn-act-blue" id="btnSubmitSharedPin" onclick="submitChangeSharedPassword()" style="height:34px;white-space:nowrap;">비밀번호 변경</button>
+                </div>
+              </div>
+              ` : ""}
             </div>`;
         }
 
@@ -15200,6 +15226,65 @@
           }).catch((err) => {
             showToast("⚠️ 오류: " + (err.message || String(err)));
           });
+        }
+      };
+      window.toggleSharedPinVisibility = function () {
+        const inp1 = document.getElementById("newSharedPinInput");
+        const inp2 = document.getElementById("newSharedPinConfirmInput");
+        const btn = document.getElementById("btnToggleSharedPinVis");
+        if (!inp1) return;
+        const isPw = inp1.type === "password";
+        inp1.type = isPw ? "text" : "password";
+        if (inp2) inp2.type = isPw ? "text" : "password";
+        if (btn) btn.textContent = isPw ? "🙈 숨기기" : "👁️ 보기";
+      };
+      window.submitChangeSharedPassword = async function () {
+        if (!canManageSharedPassword()) {
+          return showToast("⚠️ 공용 비밀번호 변경 권한이 없습니다. (조항만 · admin 전용)");
+        }
+        const inp1 = document.getElementById("newSharedPinInput");
+        const inp2 = document.getElementById("newSharedPinConfirmInput");
+        const btn = document.getElementById("btnSubmitSharedPin");
+        const newPin = inp1 ? inp1.value.trim() : "";
+        const confirmPin = inp2 ? inp2.value.trim() : "";
+        if (!newPin || newPin.length < 4) {
+          if (inp1) inp1.focus();
+          return showToast("⚠️ 새 공용 비밀번호는 최소 4자리 이상 입력해 주세요.");
+        }
+        if (newPin !== confirmPin) {
+          if (inp2) inp2.focus();
+          return showToast("⚠️ 새 비밀번호와 비밀번호 확인이 일치하지 않습니다.");
+        }
+        if (btn && btn.disabled) return;
+        if (btn) { btn.disabled = true; btn.textContent = "변경 중..."; }
+        const reqUser = getActualAuthUser() || state.authUser || state.currentUser || "조항만";
+        try {
+          let res = null;
+          if (location.protocol.startsWith("http")) {
+            const url = `${GAS_AUTH_API_URL}?action=changeSharedPassword&newPin=${encodeURIComponent(newPin)}&authUser=${encodeURIComponent(reqUser)}&_t=${Date.now()}`;
+            const resp = await fetch(url, { method: "GET", redirect: "follow" });
+            if (resp.ok) res = await resp.json();
+          } else if (window.WSDataService && typeof window.WSDataService.changeSharedPassword === "function") {
+            res = await window.WSDataService.changeSharedPassword(newPin, reqUser);
+          } else {
+            res = { success: true, pin: newPin };
+          }
+          if (res && res.success) {
+            try { localStorage.setItem("ws_dashboard_custom_pin_v2", newPin); } catch (e) {}
+            if (String(reqUser).toLowerCase() !== "admin") {
+              const newTok = res.token || computeDashboardUserToken(reqUser, newPin);
+              saveTopAuthData(newTok, reqUser, true);
+            }
+            if (inp1) inp1.value = "";
+            if (inp2) inp2.value = "";
+            showToast("✅ " + (res.message || "공용 비밀번호가 성공적으로 변경되었습니다."));
+          } else {
+            showToast("⚠️ " + ((res && res.error) || "비밀번호 변경에 실패했습니다."));
+          }
+        } catch (err) {
+          showToast("⚠️ 통신 오류: " + (err.message || String(err)));
+        } finally {
+          if (btn) { btn.disabled = false; btn.textContent = "비밀번호 변경"; }
         }
       };
       window.addSettingItem = function (kind) {
@@ -16397,12 +16482,14 @@
         }
         // 로컬 file:// 환경 또는 오프라인 fallback 검증 (동일 토큰 공식 적용)
         if (!data) {
+          let customFallbackPin = DEFAULT_PIN_FALLBACK;
+          try { customFallbackPin = localStorage.getItem("ws_dashboard_custom_pin_v2") || DEFAULT_PIN_FALLBACK; } catch (e) {}
           const isAdmin = valName.toLowerCase() === ADMIN_USER_FALLBACK && valPin === ADMIN_PIN_FALLBACK;
           const members = getMembersList();
           const matchedMember = members.find((m) => m.toLowerCase() === valName.toLowerCase());
           if (isAdmin) {
             data = { success: true, user: ADMIN_USER_FALLBACK, isAdmin: true, token: computeDashboardUserToken(ADMIN_USER_FALLBACK, ADMIN_PIN_FALLBACK) };
-          } else if (matchedMember && valPin === DEFAULT_PIN_FALLBACK) {
+          } else if (matchedMember && valPin === customFallbackPin) {
             data = { success: true, user: matchedMember, isAdmin: false, token: computeDashboardUserToken(matchedMember, valPin) };
           } else if (!matchedMember) {
             data = { success: false, error: "등록되지 않은 사용자입니다. (시트 환경설정 멤버 확인)" };
