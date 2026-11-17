@@ -6560,6 +6560,10 @@ end $$;`;
 
       window.onFinanceSearchInput = function(val) {
         state.financeSearchQuery = val;
+        if (String(val || "").trim()) {
+          state.financeYearFilter = "all";
+          state.financeMonthFilter = 0;
+        }
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
@@ -6849,6 +6853,8 @@ end $$;`;
 
       window.setFinanceStatusFilter = function(filterVal) {
         state.financeStatusFilter = filterVal;
+        state.financeYearFilter = "all";
+        state.financeMonthFilter = 0;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
@@ -6856,6 +6862,8 @@ end $$;`;
 
       window.setFinanceManagerFilter = function(mgr) {
         state.financeManagerFilter = mgr;
+        state.financeYearFilter = "all";
+        state.financeMonthFilter = 0;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
@@ -6863,6 +6871,8 @@ end $$;`;
 
       window.setFinanceTaxFilter = function(taxVal) {
         state.financeTaxFilter = taxVal;
+        state.financeYearFilter = "all";
+        state.financeMonthFilter = 0;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
