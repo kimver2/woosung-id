@@ -5304,8 +5304,74 @@ end $$;`;
         `;
       }
 
+      function parseTodoCompletedMs(t) {
+        if (!t) return NaN;
+        const raw = t.completedAt || t.updatedAt || t.dueDate || t.createdAt || "";
+        if (!raw) return NaN;
+        const s = String(raw).trim();
+        if (/^\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}/.test(s)) {
+          const norm = s.replace(/\./g, "-").replace(/^(\d{4}-\d{1,2}-\d{1,2}).*$/, "$1") + "T00:00:00";
+          const ms = Date.parse(norm);
+          if (!isNaN(ms)) return ms;
+        }
+        const ms = Date.parse(s);
+        return isNaN(ms) ? NaN : ms;
+      }
+
+      function getActiveTodosWithRetention() {
+        const rawList = (state.todoData && Array.isArray(state.todoData.list)) ? state.todoData.list : [];
+        const nowMs = Date.now();
+        const DAY_MS = 86400000;
+        const HIDE_MS = 14 * DAY_MS;
+        const PURGE_MS = 90 * DAY_MS;
+        const kept = [];
+        let purgedCount = 0;
+
+        rawList.forEach((t) => {
+          if (!t) return;
+          if (t.status === "완료") {
+            const doneMs = parseTodoCompletedMs(t);
+            if (!isNaN(doneMs) && (nowMs - doneMs) >= PURGE_MS) {
+              purgedCount++;
+              return;
+            }
+          }
+          kept.push(t);
+        });
+
+        if (purgedCount > 0 && state.todoData) {
+          state.todoData.list = kept;
+          if (window.WSDataService && typeof window.WSDataService.saveTodoCache === "function") {
+            window.WSDataService.saveTodoCache(state.todoData);
+          }
+          if (window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive && window.WSSupabaseV3.isSupabaseActive() && !state._todo90dPurgeRunning) {
+            state._todo90dPurgeRunning = true;
+            Promise.resolve(window.WSDataService.deleteTodo && window.WSSupabaseV3.persistSnapshot ? window.WSSupabaseV3.persistSnapshot("todo_main", state.todoData) : null)
+              .catch(() => {})
+              .finally(() => { state._todo90dPurgeRunning = false; });
+          }
+        }
+
+        const visible = [];
+        let hiddenDoneCount = 0;
+        kept.forEach((t) => {
+          if (t.status === "완료") {
+            const doneMs = parseTodoCompletedMs(t);
+            if (!isNaN(doneMs) && (nowMs - doneMs) >= HIDE_MS) {
+              hiddenDoneCount++;
+              return;
+            }
+          }
+          visible.push(t);
+        });
+
+        return { list: visible, allList: kept, hiddenDoneCount };
+      }
+
       function renderPcTodoTab() {
-        const list = (state.todoData && state.todoData.list) || [];
+        const retention = getActiveTodosWithRetention();
+        const list = retention.list;
+        const hiddenDoneCount = retention.hiddenDoneCount;
         const q = state.searchQuery.trim();
         const todayYmd = getTodayYmd();
         const activeMemberFilter = state.todoMemberFilter || "all";
@@ -5460,10 +5526,13 @@ end $$;`;
         `;
 
         document.getElementById("pcTodoMain").innerHTML = `
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <div style="display:flex;align-items:baseline;gap:8px;">
-              <h2 style="font-size:19px;font-weight:900;color:var(--text);margin:0;">To-Do List</h2>
-              <span style="font-size:12.5px;color:var(--text-muted);font-weight:700;">미완료 ${pendingCnt}건 / 전체 ${filteredList.length}건</span>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
+            <div>
+              <div style="display:flex;align-items:baseline;gap:8px;">
+                <h2 style="font-size:19px;font-weight:900;color:var(--text);margin:0;">To-Do List</h2>
+                <span style="font-size:12.5px;color:var(--text-muted);font-weight:700;">미완료 ${pendingCnt}건 / 표시 ${filteredList.length}건${hiddenDoneCount > 0 ? ` (14일 경과 완료 ${hiddenDoneCount}건 숨김)` : ""}</span>
+              </div>
+              <div style="font-size:11px;color:#94a3b8;margin-top:3px;">ℹ️ 완료된 항목은 14일 후 화면에서 숨김 처리되며, 90일 경과 시 자동 삭제됩니다.</div>
             </div>
             <button type="button" class="btn-act-blue" onclick="openTodoModal(null)">+ 상세 To-Do 등록</button>
           </div>
@@ -11219,7 +11288,9 @@ end $$;`;
 
       // [모바일 탭 2: To-Do (스마트 그룹핑 & 빠른 추가 & 빠른 액션)]
       function renderMobileTodoTab() {
-        const list = (state.todoData && state.todoData.list) || [];
+        const retention = getActiveTodosWithRetention();
+        const list = retention.list;
+        const hiddenDoneCount = retention.hiddenDoneCount;
         const q = state.searchQuery.trim();
         const activeMemberFilter = state.todoMemberFilter || "all";
         const displayMembers = getMembersList();
@@ -11368,12 +11439,15 @@ end $$;`;
         `;
 
         document.getElementById("m-page-todo").innerHTML = `
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <div>
-              <span style="font-size:15px;font-weight:800;">To-Do 업무</span>
-              <span style="font-size:11.5px;color:var(--text-muted);font-weight:700;margin-left:4px;">(${pendingCnt}건 남음)</span>
+          <div style="margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <span style="font-size:15px;font-weight:800;">To-Do 업무</span>
+                <span style="font-size:11.5px;color:var(--text-muted);font-weight:700;margin-left:4px;">(${pendingCnt}건 남음)</span>
+              </div>
+              <button type="button" class="btn-act-blue" style="height:26px;padding:0 9px;font-size:11.5px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;" onclick="openTodoModal(null)">+ 상세</button>
             </div>
-            <button type="button" class="btn-act-blue" style="height:26px;padding:0 9px;font-size:11.5px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;" onclick="openTodoModal(null)">+ 상세</button>
+            <div style="font-size:10.5px;color:#94a3b8;margin-top:3px;">ℹ️ 완료 14일 후 화면 숨김 · 90일 후 자동 삭제${hiddenDoneCount > 0 ? ` (${hiddenDoneCount}건 숨김 중)` : ""}</div>
           </div>
 
           ${chipsHtml}
@@ -14911,8 +14985,10 @@ end $$;`;
       window.toggleTodoItem = function (id) {
         const item = ((state.todoData && state.todoData.list) || []).find((t) => t.id === id);
         if (!item) return;
-        item.status = item.status === "완료" ? (item.isImportant ? "중요" : "미완료") : "완료";
-        if (window.WSDataService) window.WSDataService.toggleTodoStatus({ id: item.id, status: item.status, manager: item.manager || "", isImportant: !!item.isImportant }, state.todoData);
+        const willComplete = item.status !== "완료";
+        item.status = willComplete ? "완료" : (item.isImportant ? "중요" : "미완료");
+        item.completedAt = willComplete ? new Date().toISOString() : "";
+        if (window.WSDataService) window.WSDataService.toggleTodoStatus({ id: item.id, status: item.status, completedAt: item.completedAt, manager: item.manager || "", isImportant: !!item.isImportant }, state.todoData);
         state.dirtyPcTabs.todo = true; state.dirtyPcTabs.home = true;
         state.dirtyMobileTabs.todo = true; state.dirtyMobileTabs.home = true;
         renderActiveViews();
@@ -18184,6 +18260,7 @@ end $$;`;
           resetLocalConfig,
           isConfigured,
           isSupabaseActive,
+          persistSnapshot: persistDomainSnapshot,
           getDualWriteEnabled,
           getStatusInfo,
           updateHeaderBadges,

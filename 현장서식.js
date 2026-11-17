@@ -29937,18 +29937,55 @@ function backupSupabaseToSheetsDaily(silent) {
       }
     }
 
-    // 2. To-Do (05_ToDo)
+    // 2. To-Do (05_ToDo) — 완료 후 90일 경과 항목 자동 삭제 후 백업
     var todo = store["todo_main"];
-    if (todo && Array.isArray(todo.list) && todo.list.length > 0 && typeof findOrCreateTodoSheet === "function") {
-      var todoSheet = findOrCreateTodoSheet(ss);
-      var todoRows = todo.list.map(function (td) {
-        return [
-          td.id || "", td.dueDate || "", td.status || "미완료", td.manager || "",
-          td.title || "", td.tag || "", td.detail || "", td.siteName || "",
-          Boolean(td.isImportant), td.createdAt || "", td.completedAt || ""
-        ];
+    if (todo && Array.isArray(todo.list) && typeof findOrCreateTodoSheet === "function") {
+      var nowMs = Date.now();
+      var purgeMs = 90 * 86400000;
+      var purgedCnt = 0;
+      var keptTodos = todo.list.filter(function (td) {
+        if (!td || td.status !== "완료") return Boolean(td);
+        var rawDt = td.completedAt || td.updatedAt || td.dueDate || td.createdAt || "";
+        if (!rawDt) return true;
+        var normDt = String(rawDt).trim().replace(/\./g, "-");
+        var dtMs = Date.parse(/^\d{4}-\d{1,2}-\d{1,2}$/.test(normDt) ? (normDt + "T00:00:00") : normDt);
+        if (!isNaN(dtMs) && (nowMs - dtMs) >= purgeMs) {
+          purgedCnt++;
+          return false;
+        }
+        return true;
       });
-      summary.backedUp.todos = overwriteSheetDataRowsSafely_(todoSheet, todoRows, 11);
+      if (purgedCnt > 0) {
+        todo.list = keptTodos;
+        try {
+          UrlFetchApp.fetch(SUPABASE_V3_BACKUP_URL + "/rest/v1/ws_state_store?on_conflict=key", {
+            method: "post",
+            contentType: "application/json",
+            headers: {
+              "apikey": SUPABASE_V3_BACKUP_KEY,
+              "Authorization": "Bearer " + SUPABASE_V3_BACKUP_KEY,
+              "Prefer": "resolution=merge-duplicates,return=minimal"
+            },
+            payload: JSON.stringify([{ key: "todo_main", payload: todo, updated_at: new Date().toISOString(), updated_by: "daily_retention" }]),
+            muteHttpExceptions: true
+          });
+        } catch (ePurge) {}
+      }
+      var todoSheet = findOrCreateTodoSheet(ss);
+      if (keptTodos.length > 0) {
+        var todoRows = keptTodos.map(function (td) {
+          return [
+            td.id || "", td.dueDate || "", td.status || "미완료", td.manager || "",
+            td.title || "", td.tag || "", td.detail || "", td.siteName || "",
+            Boolean(td.isImportant), td.createdAt || "", td.completedAt || ""
+          ];
+        });
+        summary.backedUp.todos = overwriteSheetDataRowsSafely_(todoSheet, todoRows, 11);
+      } else if (todoSheet && todoSheet.getLastRow() >= 2) {
+        todoSheet.getRange(2, 1, todoSheet.getLastRow() - 1, 11).clearContent();
+        summary.backedUp.todos = 0;
+      }
+      summary.backedUp.todosPurged90d = purgedCnt;
     }
 
     // 3. 재무 DB (수금현황, 비용마감, 비용마감_고정)
