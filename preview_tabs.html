@@ -969,8 +969,12 @@
     }
     .hk-sub-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    .home-main-split { display: grid; grid-template-columns: 1fr 345px; gap: 18px; align-items: start; }
-    .home-left-top-split { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: 16px; align-items: stretch; margin-bottom: 16px; }
+    .home-main-split { display: grid; grid-template-columns: 1fr 345px; gap: 16px 18px; align-items: start; }
+    .home-top-right-col { display: flex; flex-direction: column; height: 640px; min-width: 0; }
+    .home-top-right-col .home-panel-box:first-child { flex-shrink: 0; }
+    .home-top-right-col #homeSecQuotes { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-bottom: 0; }
+    .home-top-right-col #homeSecQuotes .home-quotes-list { flex: 1; min-height: 0; overflow-y: auto; padding-right: 2px; }
+    .home-left-top-split { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: 16px; align-items: stretch; margin-bottom: 0; }
     .home-left-top-col { min-width: 0; display: flex; flex-direction: column; height: 640px; }
     .home-left-top-col #homeSecTodo { flex-shrink: 0; }
     .home-left-top-col #homeSecTodo .home-todo-grid { max-height: 220px; overflow-y: auto; padding-right: 2px; }
@@ -982,9 +986,10 @@
     .home-left-top-split .home-task-grid { grid-template-columns: 1fr; }
     @media (max-width: 1180px) {
       .home-left-top-split { grid-template-columns: 1fr; }
-      .home-left-top-col { height: auto; }
+      .home-left-top-col, .home-top-right-col { height: auto; }
       .home-left-top-col #homeSecTasks .home-task-grid,
-      .home-left-top-col #homeSecMemos .home-memo-list { max-height: 460px; }
+      .home-left-top-col #homeSecMemos .home-memo-list,
+      .home-top-right-col #homeSecQuotes .home-quotes-list { max-height: 460px; }
     }
     .home-panel-box {
       background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
@@ -4709,55 +4714,44 @@ end $$;`;
             </div>
 
             <div class="home-main-split">
-              <div class="home-left-col">
-                <div class="home-left-top-split">
-                  <div class="home-left-top-col">
-                    <!-- 1순위: To-Do 카드 그리드 -->
-                    <div class="home-panel-box" id="homeSecTodo">
-                      <div class="hp-header">
-                        <span class="hp-title">✅ 나에게 할당된 To-Do (${myPendingTodos.length}건 남음)</span>
-                        <div style="display:flex;gap:10px;align-items:center;">
-                          <button type="button" class="btn-tool-tag" onclick="openTodoModal(null)">+ 추가</button>
-                          <a class="hp-link" onclick="switchMainTab('todo')">To-Do 전체보기 ➔</a>
-                        </div>
+              <div class="home-left-top-split">
+                <div class="home-left-top-col">
+                  <!-- 1순위: To-Do 카드 그리드 -->
+                  <div class="home-panel-box" id="homeSecTodo">
+                    <div class="hp-header">
+                      <span class="hp-title">✅ 나에게 할당된 To-Do (${myPendingTodos.length}건 남음)</span>
+                      <div style="display:flex;gap:10px;align-items:center;">
+                        <button type="button" class="btn-tool-tag" onclick="openTodoModal(null)">+ 추가</button>
+                        <a class="hp-link" onclick="switchMainTab('todo')">To-Do 전체보기 ➔</a>
                       </div>
-                      <div class="home-todo-grid">${todoItemsHtml}</div>
                     </div>
-
-                    <!-- 2순위: 주요 현장 공정 카드 그리드 -->
-                    <div class="home-panel-box" id="homeSecTasks">
-                      <div class="hp-header">
-                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                          <span class="hp-title">🔨 ${escHtml(user)}님 주요 현장 공정 (${filteredHomeTasks.length}건)</span>
-                          ${taskFilterGroupHtml}
-                        </div>
-                        <a class="hp-link" onclick="switchMainTab('calendar')">캘린더 전체보기 ➔</a>
-                      </div>
-                      <div class="home-task-grid">${scheduleItemsHtml}</div>
-                    </div>
+                    <div class="home-todo-grid">${todoItemsHtml}</div>
                   </div>
 
-                  <div class="home-left-top-col">
-                    <div class="home-panel-box home-memo-panel" id="homeSecMemos">
-                      <div class="hp-header"><span class="hp-title">📌 최근 현장 메모 브리핑</span></div>
-                      <div class="home-memo-list" style="display:flex;flex-direction:column;gap:8px;">
-                        ${renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), false)}
+                  <!-- 2순위: 주요 현장 공정 카드 그리드 -->
+                  <div class="home-panel-box" id="homeSecTasks">
+                    <div class="hp-header">
+                      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                        <span class="hp-title">🔨 ${escHtml(user)}님 주요 현장 공정 (${filteredHomeTasks.length}건)</span>
+                        ${taskFilterGroupHtml}
                       </div>
+                      <a class="hp-link" onclick="switchMainTab('calendar')">캘린더 전체보기 ➔</a>
                     </div>
+                    <div class="home-task-grid">${scheduleItemsHtml}</div>
                   </div>
                 </div>
 
-                <!-- 3순위: 담당 진행 현장 카드 요약 -->
-                <div class="home-panel-box" id="homeSecSites">
-                  <div class="hp-header">
-                    <span class="hp-title">🏢 내 담당 진행 현장 (${mySites.length}개소)</span>
-                    <a class="hp-link" onclick="switchMainTab('sites')">현장 전체보기 ➔</a>
+                <div class="home-left-top-col">
+                  <div class="home-panel-box home-memo-panel" id="homeSecMemos">
+                    <div class="hp-header"><span class="hp-title">📌 최근 현장 메모 브리핑</span></div>
+                    <div class="home-memo-list" style="display:flex;flex-direction:column;gap:8px;">
+                      ${renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), false)}
+                    </div>
                   </div>
-                  <div class="home-sites-mini-grid">${mySitesCardsHtml || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;">진행 중인 현장이 없습니다.</div>`}</div>
                 </div>
               </div>
 
-              <div class="home-right-col">
+              <div class="home-top-right-col">
                 <div class="home-panel-box">
                   <div class="hp-header">
                     <span class="hp-title">📅 ${year}.${String(month).padStart(2, "0")}</span>
@@ -4771,35 +4765,44 @@ end $$;`;
                     <span class="hp-title">📋 신규 견적 (${activeNewQuotes.length}건)</span>
                     <a class="hp-link" onclick="switchMainTab('quote')">전체보기 ➔</a>
                   </div>
-                  <div style="display:flex;flex-direction:column;gap:8px;">${quotePreviewHtml}</div>
+                  <div class="home-quotes-list" style="display:flex;flex-direction:column;gap:8px;">${quotePreviewHtml}</div>
                 </div>
-
-                ${homeColSummary ? `
-                <div class="home-panel-box" id="homeSecFinanceCol">
-                  <div class="hp-header">
-                    <span class="hp-title">💰 수금 예정 · 미수 (${homeColSummary.items.length}건)</span>
-                    <a class="hp-link" onclick="state.financeSubTab='collection'; state.financeStatusFilter='uncollected'; switchMainTab('finance');">수금현황 ➔</a>
-                  </div>
-                  <div style="display:flex;justify-content:space-between;align-items:center;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 10px;margin-bottom:8px;">
-                    <span style="font-size:11.5px;font-weight:700;color:#166534;">총 미수 잔금${homeColSummary.soonCount > 0 ? ` · 7일내 ${homeColSummary.soonCount}건` : ""}</span>
-                    <strong style="font-size:13.5px;color:#15803d;">${formatKrw(homeColSummary.totalUncollected)}</strong>
-                  </div>
-                  <div style="display:flex;flex-direction:column;gap:6px;">
-                    ${homeColSummary.items.slice(0, 4).map((c) => `
-                      <div class="home-quote-mini-card" onclick="window.openCollectionModal('${escJs(c.id)}')" style="padding:8px 10px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-                          <strong style="font-size:12px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.siteName)}</strong>
-                          <strong style="font-size:12px;color:#dc2626;white-space:nowrap;">${formatKrw(c.uncollected)}</strong>
-                        </div>
-                        <div style="display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--text-muted);margin-top:2px;">
-                          <span>${c.isSoon ? `<span style="color:#b45309;font-weight:800;">📅 ${escHtml(c.dueYmd)} 예정</span>` : (c.dueYmd ? escHtml(c.dueYmd) : "수금대기")} · ${escHtml(c.clientName || "계약자")}</span>
-                          <span>계산서 ${escHtml(c.taxInvoice)}</span>
-                        </div>
-                      </div>
-                    `).join("") || `<div style="font-size:12px;color:var(--text-muted);">미수 현장이 없습니다. 🎉</div>`}
-                  </div>
-                </div>` : ""}
               </div>
+
+              <!-- 하단 행: 좌측 담당 진행 현장 / 우측 수금 예정·미수 (윗선 정렬) -->
+              <div class="home-panel-box" id="homeSecSites" style="${homeColSummary ? "margin-bottom:0;" : "grid-column:1/-1;margin-bottom:0;"}">
+                <div class="hp-header">
+                  <span class="hp-title">🏢 내 담당 진행 현장 (${mySites.length}개소)</span>
+                  <a class="hp-link" onclick="switchMainTab('sites')">현장 전체보기 ➔</a>
+                </div>
+                <div class="home-sites-mini-grid">${mySitesCardsHtml || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;">진행 중인 현장이 없습니다.</div>`}</div>
+              </div>
+
+              ${homeColSummary ? `
+              <div class="home-panel-box" id="homeSecFinanceCol" style="margin-bottom:0;">
+                <div class="hp-header">
+                  <span class="hp-title">💰 수금 예정 · 미수 (${homeColSummary.items.length}건)</span>
+                  <a class="hp-link" onclick="state.financeSubTab='collection'; state.financeStatusFilter='uncollected'; switchMainTab('finance');">수금현황 ➔</a>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 10px;margin-bottom:8px;">
+                  <span style="font-size:11.5px;font-weight:700;color:#166534;">총 미수 잔금${homeColSummary.soonCount > 0 ? ` · 7일내 ${homeColSummary.soonCount}건` : ""}</span>
+                  <strong style="font-size:13.5px;color:#15803d;">${formatKrw(homeColSummary.totalUncollected)}</strong>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  ${homeColSummary.items.slice(0, 4).map((c) => `
+                    <div class="home-quote-mini-card" onclick="window.openCollectionModal('${escJs(c.id)}')" style="padding:8px 10px;">
+                      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                        <strong style="font-size:12px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.siteName)}</strong>
+                        <strong style="font-size:12px;color:#dc2626;white-space:nowrap;">${formatKrw(c.uncollected)}</strong>
+                      </div>
+                      <div style="display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--text-muted);margin-top:2px;">
+                        <span>${c.isSoon ? `<span style="color:#b45309;font-weight:800;">📅 ${escHtml(c.dueYmd)} 예정</span>` : (c.dueYmd ? escHtml(c.dueYmd) : "수금대기")} · ${escHtml(c.clientName || "계약자")}</span>
+                        <span>계산서 ${escHtml(c.taxInvoice)}</span>
+                      </div>
+                    </div>
+                  `).join("") || `<div style="font-size:12px;color:var(--text-muted);">미수 현장이 없습니다. 🎉</div>`}
+                </div>
+              </div>` : ""}
             </div>
           </div>
         `;
