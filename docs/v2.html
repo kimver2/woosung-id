@@ -20120,7 +20120,16 @@ end $$;`;
 
           ds.saveCollectionRow = function (row, authUser) {
             if (typeof window.recordAuditLog === "function" && row) {
-              window.recordAuditLog("재무", row.id ? "수금 수정" : "수금 등록", row.siteName || "", `계약 ${formatKrw(row.contractAmount)} · ${row.status || ""}`);
+              const prevCol = (row.id && state.financeDbData && Array.isArray(state.financeDbData.collection))
+                ? state.financeDbData.collection.find(c => c && c.id === row.id)
+                : null;
+              window.recordAuditLog(
+                "재무",
+                row.id ? "수금 수정" : "수금 등록",
+                row.siteName || "",
+                `계약 ${formatKrw(row.contractAmount)} · ${row.status || ""}`,
+                prevCol ? { type: "collection", id: prevCol.id, beforeData: JSON.parse(JSON.stringify(prevCol)) } : null
+              );
             }
             if (!isSupabaseActive()) return orig.saveCollectionRow.call(ds, row, authUser);
             bgDualWrite("saveCollectionRow", () => orig.saveCollectionRow.call(ds, row, authUser));
@@ -20187,17 +20196,18 @@ end $$;`;
           };
 
           ds.saveExpenseRow = function (row, authUser) {
-            if (typeof window.recordAuditLog === "function" && row) {
-              window.recordAuditLog("재무", row.id ? "비용 수정" : "비용 등록", `${row.vendor || row.item || ""} (${row.siteName || "공통"})`, `청구 ${formatKrw(row.claimAmount)} / 지급 ${formatKrw(row.paidAmount)}`);
+            if (typeof window.recordAuditLog === "function" && row && !row.id) {
+              window.recordAuditLog("재무", "비용 등록", `${row.vendor || row.item || ""} (${row.siteName || "공통"})`, `청구 ${formatKrw(row.claimAmount)} / 지급 ${formatKrw(row.paidAmount)}`);
             }
             if (!isSupabaseActive()) return orig.saveExpenseRow.call(ds, row, authUser);
             bgDualWrite("saveExpenseRow", () => orig.saveExpenseRow.call(ds, row, authUser));
             return enqueueKeyWrite("finance_db", async () => {
               const fb = await ensureFinanceInMemory();
               const savedId = (row && row.id) ? String(row.id) : ("EXP-" + Date.now() + "_" + Math.random().toString(36).slice(2, 5).toUpperCase());
-              const claim = Number(row.claimAmount) || 0;
-              const paid = Number(row.paidAmount) || 0;
-              const saved = Object.assign({}, row, { id: savedId, balance: claim - paid });
+              const computedBal = (row && row.balance !== undefined && row.balance !== null && row.balance !== "")
+                ? Number(row.balance)
+                : getExpenseRowBalance(row);
+              const saved = Object.assign({}, row, { id: savedId, balance: computedBal });
               // state.financeDbData.expense 내 임시 ID(temp_exp_...)를 실제 ID로 치환한 사본으로 저장
               const cleanList = (fb.expense || []).filter(e => e && !String(e.id || "").startsWith("temp_exp_"));
               const idx = cleanList.findIndex(e => e.id === savedId);
