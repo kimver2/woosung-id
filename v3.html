@@ -2699,7 +2699,7 @@
 
   <!-- 8.5. 현장 수금 등록 및 수정 모달 -->
   <div class="ws-modal-backdrop" id="collectionModal">
-    <div class="ws-modal-card wide" style="max-width: 920px; width: 96%;">
+    <div class="ws-modal-card wide" style="max-width: 1060px; width: 96%;">
       <div class="ws-modal-header">
         <div class="ws-modal-title" id="collectionModalTitle">💰 수금 현장 상세 및 정산 등록</div>
         <button type="button" class="ws-modal-close" onclick="closeCollectionModal()">✕</button>
@@ -7487,21 +7487,20 @@ end $$;`;
               style="height:32px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;flex:1;min-width:170px;" />
           </div>
 
-          <!-- 2단 카드: 좌(계약금액 + 총 도급액) / 우(수금 일정표) -->
-          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:12px;align-items:start;">
-            <!-- 좌측: 계약금액 & 요약 -->
-            <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;display:flex;flex-direction:column;gap:10px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-                <div style="font-size:13px;font-weight:800;color:#1e293b;">💵 계약금액</div>
-                <div style="display:inline-flex;border:1px solid #cbd5e1;border-radius:6px;overflow:hidden;">
-                  <button type="button" id="btnColVatIncl" onclick="window.toggleCollectionVatMode('incl')"
-                    style="border:none;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;background:${isIncl ? "#1e293b" : "#fff"};color:${isIncl ? "#fff" : "#475569"};">부가세 포함</button>
-                  <button type="button" id="btnColVatExcl" onclick="window.toggleCollectionVatMode('excl')"
-                    style="border:none;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;background:${!isIncl ? "#1e293b" : "#fff"};color:${!isIncl ? "#fff" : "#475569"};">면세/별도</button>
-                </div>
+          <!-- 계약금액 + 총 도급액 (전체 폭 1행) -->
+          <div style="background:#f8fafc;padding:12px 14px;border-radius:8px;border:1px solid #e2e8f0;display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+              <div style="font-size:13px;font-weight:800;color:#1e293b;">💵 계약금액</div>
+              <div style="display:inline-flex;border:1px solid #cbd5e1;border-radius:6px;overflow:hidden;">
+                <button type="button" id="btnColVatIncl" onclick="window.toggleCollectionVatMode('incl')"
+                  style="border:none;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;background:${isIncl ? "#1e293b" : "#fff"};color:${isIncl ? "#fff" : "#475569"};">부가세 포함</button>
+                <button type="button" id="btnColVatExcl" onclick="window.toggleCollectionVatMode('excl')"
+                  style="border:none;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;background:${!isIncl ? "#1e293b" : "#fff"};color:${!isIncl ? "#fff" : "#475569"};">면세/별도</button>
               </div>
+            </div>
 
-              <div style="background:#fff;border:1px solid #cbd5e1;border-radius:8px;overflow:hidden;">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:10px;align-items:stretch;">
+              <div style="background:#fff;border:1px solid #cbd5e1;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;">
                 <div style="padding:8px 10px;border-bottom:1px solid #e2e8f0;">
                   <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:4px;">계약 금액 (총액)</div>
                   <input type="text" inputmode="numeric" id="colContractAmount" value="${rData.contractAmount ? Number(rData.contractAmount).toLocaleString('ko-KR') : ''}" placeholder="0" oninput="window.onCollectionAmountInput(this)"
@@ -7519,76 +7518,77 @@ end $$;`;
                 </div>
               </div>
 
-              <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:8px;">
-                <div>
-                  <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">추가공사 (증감액)</label>
-                  <input type="text" inputmode="numeric" id="colChangeAmount" value="${(rData.changeAmount !== undefined && rData.changeAmount !== null && rData.changeAmount !== '') ? Number(rData.changeAmount).toLocaleString('ko-KR') : (parseExtraAmountFromNote(rData.note) ? Number(parseExtraAmountFromNote(rData.note)).toLocaleString('ko-KR') : '')}" placeholder="0" oninput="window.onCollectionAmountInput(this, true)"
-                    style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;font-weight:700;text-align:right;background:#fff;" />
-                </div>
-                <div>
-                  <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">증감 사유</label>
-                  <input type="text" id="colChangeDesc" value="${escHtml(rData.changeDesc)}" placeholder="공정 추가 등"
-                    style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;background:#fff;" />
-                </div>
-              </div>
-
-              <!-- 총 도급액 요약 박스 -->
-              <div style="background:#1e293b;color:#f8fafc;padding:10px 12px;border-radius:8px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #334155;padding-bottom:6px;margin-bottom:6px;">
-                  <span style="font-size:11.5px;color:#94a3b8;">총 도급액 (계약 + 추가비)</span>
-                  <span id="colTotalAmountDisplay" style="font-size:15px;font-weight:900;color:#38bdf8;">0원</span>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr 0.7fr;gap:6px;text-align:center;">
+              <div style="display:flex;flex-direction:column;gap:8px;justify-content:space-between;">
+                <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:8px;">
                   <div>
-                    <div style="font-size:10.5px;color:#94a3b8;">받음</div>
-                    <div id="colCollectedDisplay" style="font-size:13px;font-weight:800;color:#4ade80;">0원</div>
+                    <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">추가공사 (증감액)</label>
+                    <input type="text" inputmode="numeric" id="colChangeAmount" value="${(rData.changeAmount !== undefined && rData.changeAmount !== null && rData.changeAmount !== '') ? Number(rData.changeAmount).toLocaleString('ko-KR') : (parseExtraAmountFromNote(rData.note) ? Number(parseExtraAmountFromNote(rData.note)).toLocaleString('ko-KR') : '')}" placeholder="0" oninput="window.onCollectionAmountInput(this, true)"
+                      style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;font-weight:700;text-align:right;background:#fff;" />
                   </div>
                   <div>
-                    <div style="font-size:10.5px;color:#94a3b8;">남음</div>
-                    <div id="colUncollectedDisplay" style="font-size:13px;font-weight:800;color:#f87171;">0원</div>
-                  </div>
-                  <div>
-                    <div style="font-size:10.5px;color:#94a3b8;">수금률</div>
-                    <div id="colRateDisplay" style="font-size:13px;font-weight:800;color:#facc15;">0%</div>
+                    <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">증감 사유</label>
+                    <input type="text" id="colChangeDesc" value="${escHtml(rData.changeDesc)}" placeholder="공정 추가 등"
+                      style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;background:#fff;" />
                   </div>
                 </div>
-                <div style="background:#334155;height:5px;border-radius:3px;overflow:hidden;margin-top:7px;">
-                  <div id="colRateBar" style="background:#4ade80;height:100%;width:0%;transition:width 0.3s ease;"></div>
+                <!-- 총 도급액 요약 박스 -->
+                <div style="background:#1e293b;color:#f8fafc;padding:10px 14px;border-radius:8px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #334155;padding-bottom:6px;margin-bottom:6px;">
+                    <span style="font-size:11.5px;color:#94a3b8;">총 도급액 (계약 + 추가비)</span>
+                    <span id="colTotalAmountDisplay" style="font-size:15px;font-weight:900;color:#38bdf8;">0원</span>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr 0.7fr;gap:6px;text-align:center;">
+                    <div>
+                      <div style="font-size:10.5px;color:#94a3b8;">받음</div>
+                      <div id="colCollectedDisplay" style="font-size:13px;font-weight:800;color:#4ade80;">0원</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10.5px;color:#94a3b8;">남음</div>
+                      <div id="colUncollectedDisplay" style="font-size:13px;font-weight:800;color:#f87171;">0원</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10.5px;color:#94a3b8;">수금률</div>
+                      <div id="colRateDisplay" style="font-size:13px;font-weight:800;color:#facc15;">0%</div>
+                    </div>
+                  </div>
+                  <div style="background:#334155;height:5px;border-radius:3px;overflow:hidden;margin-top:7px;">
+                    <div id="colRateBar" style="background:#4ade80;height:100%;width:0%;transition:width 0.3s ease;"></div>
+                  </div>
                 </div>
               </div>
             </div>
+          </div>
 
-            <!-- 우측: 수금 일정표 (계약금·착수금·중도금·잔금) -->
-            <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap;">
-                <div style="font-size:13px;font-weight:800;color:#1e293b;">📥 수금 일정 (착수금·중도금·잔금)</div>
-                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#1e293b;cursor:pointer;background:#fff;padding:3px 9px;border-radius:999px;border:1px solid #cbd5e1;">
+          <!-- 수금 일정표 (전체 폭 1행) -->
+          <div style="background:#f8fafc;padding:12px 14px;border-radius:8px;border:1px solid #e2e8f0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap;">
+              <div style="font-size:13px;font-weight:800;color:#1e293b;">📥 수금 일정 (착수금·중도금·잔금)</div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#1e293b;cursor:pointer;background:#fff;padding:4px 10px;border-radius:999px;border:1px solid #cbd5e1;">
                   <input type="checkbox" id="colPercentModeToggle" ${window._colModalState.percentMode ? "checked" : ""} onchange="window.toggleCollectionPercentMode(this.checked)" />
                   %로 입력
                 </label>
-              </div>
-              <div style="overflow-x:auto;border:1px solid #e2e8f0;border-radius:6px;background:#fff;">
-                <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
-                  <thead>
-                    <tr style="background:#f1f5f9;color:#475569;border-bottom:1px solid #cbd5e1;">
-                      <th style="padding:6px 4px;text-align:center;">입금</th>
-                      <th style="padding:6px 4px;text-align:left;">구분</th>
-                      <th style="padding:6px 4px;text-align:left;">예정일</th>
-                      <th style="padding:6px 4px;text-align:right;">비율</th>
-                      <th style="padding:6px 4px;text-align:right;">금액(원)</th>
-                      <th style="padding:6px 4px;text-align:left;">방식</th>
-                      <th style="padding:6px 4px;text-align:left;">증빙·발행</th>
-                    </tr>
-                  </thead>
-                  <tbody id="colStageScheduleBody"></tbody>
-                </table>
-              </div>
-              <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap;">
                 <button type="button" class="btn-tool-tag" onclick="window.openFinanceInvoiceDocModal('${escJs(rData.id || rData.siteName || "")}')"
-                  style="height:30px;padding:0 10px;font-size:11.5px;font-weight:700;background:#fff;border:1px solid #cbd5e1;">🖨️ 영수증·명세서 인쇄</button>
+                  style="height:28px;padding:0 10px;font-size:11.5px;font-weight:700;background:#fff;border:1px solid #cbd5e1;">🖨️ 영수증·명세서 인쇄</button>
                 <button type="button" class="btn-tool-tag" onclick="window.copyCollectionPaymentGuide()"
-                  style="height:30px;padding:0 10px;font-size:11.5px;font-weight:700;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;">📋 결제 문구 복사</button>
+                  style="height:28px;padding:0 10px;font-size:11.5px;font-weight:700;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;">📋 결제 문구 복사</button>
               </div>
+            </div>
+            <div style="overflow-x:auto;border:1px solid #e2e8f0;border-radius:6px;background:#fff;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:#f1f5f9;color:#475569;border-bottom:1px solid #cbd5e1;">
+                    <th style="padding:7px 6px;text-align:center;width:44px;">입금</th>
+                    <th style="padding:7px 8px;text-align:left;width:85px;">구분</th>
+                    <th style="padding:7px 8px;text-align:left;width:136px;">예정일</th>
+                    <th style="padding:7px 8px;text-align:right;width:82px;">비율</th>
+                    <th style="padding:7px 8px;text-align:right;width:130px;">금액(원)</th>
+                    <th style="padding:7px 8px;text-align:left;width:100px;">방식</th>
+                    <th style="padding:7px 8px;text-align:left;">증빙·발행</th>
+                  </tr>
+                </thead>
+                <tbody id="colStageScheduleBody"></tbody>
+              </table>
             </div>
           </div>
 
@@ -7807,9 +7807,17 @@ end $$;`;
           return;
         }
 
+        const targetRow = (state.financeDbData && Array.isArray(state.financeDbData.collection))
+          ? state.financeDbData.collection.find(r => r && r.id === id)
+          : null;
+        const beforeColSnap = targetRow ? JSON.parse(JSON.stringify(targetRow)) : null;
+
         ds.deleteCollectionRow(id, user).then((res) => {
           window._isDeletingCollection = false;
           if (res && res.success) {
+            if (beforeColSnap && typeof window.recordAuditLog === "function") {
+              window.recordAuditLog("재무", "수금 삭제", beforeColSnap.siteName || id, `계약 ${formatKrw(beforeColSnap.totalAmount || beforeColSnap.contractAmount)}`, { type: "collection", id: beforeColSnap.id, beforeData: beforeColSnap });
+            }
             if (state.financeDbData && Array.isArray(state.financeDbData.collection)) {
               state.financeDbData.collection = state.financeDbData.collection.filter(r => r.id !== id);
               if (ds.saveFinanceCache) ds.saveFinanceCache(state.financeDbData);
@@ -8345,6 +8353,10 @@ end $$;`;
 
         // 1) 롤백용 스냅샷 저장
         const prevExpense = JSON.parse(JSON.stringify(state.financeDbData.expense));
+        const beforeExpRow = id ? (prevExpense.find(e => e && e.id === id) || null) : null;
+        if (beforeExpRow && typeof window.recordAuditLog === "function") {
+          window.recordAuditLog("재무", "비용 수정", `${beforeExpRow.vendor || beforeExpRow.item || ""} (${beforeExpRow.siteName || "공통"})`, `청구 ${formatKrw(beforeExpRow.claimAmount)}`, { type: "expense", id: beforeExpRow.id, beforeData: beforeExpRow });
+        }
 
         // 2) 즉시 메모리 상태 업데이트 (체감 0ms 낙관적 업데이트)
         let tempExpId = "";
@@ -8445,6 +8457,10 @@ end $$;`;
 
         // 1) 롤백용 스냅샷 저장
         const prevExpense = JSON.parse(JSON.stringify(state.financeDbData.expense));
+        const deletedExpRow = prevExpense.find(e => e && e.id === id) || null;
+        if (deletedExpRow && typeof window.recordAuditLog === "function") {
+          window.recordAuditLog("재무", "비용 삭제", `${deletedExpRow.vendor || deletedExpRow.item || ""} (${deletedExpRow.siteName || "공통"})`, `청구 ${formatKrw(deletedExpRow.claimAmount)}`, { type: "expense", id: deletedExpRow.id, beforeData: deletedExpRow });
+        }
 
         // 2) 즉시 메모리 상태 업데이트 및 UI 반영 (체감 0ms)
         state.financeDbData.expense = state.financeDbData.expense.filter(e => e.id !== id);
@@ -17985,6 +18001,12 @@ end $$;`;
           });
           state.selectedQuoteKey = newKey;
         }
+        const beforeEstSnap = (ctx.isEdit && ctx.siteKey)
+          ? (() => {
+              const ex = getAllSites().find(x => x && x.siteKey === ctx.siteKey);
+              return (ex && ex.estimateData) ? JSON.parse(JSON.stringify(ex.estimateData)) : null;
+            })()
+          : null;
         if (window.WSDataService) {
           const estReq = window.WSDataService.saveEstimate(ctx.isEdit, ed, state.dashData);
           if (!ctx.isEdit && estReq && typeof estReq.then === "function") {
@@ -17995,6 +18017,9 @@ end $$;`;
               }
             });
           }
+        }
+        if (typeof window.recordAuditLog === "function") {
+          window.recordAuditLog("신규견적", ctx.isEdit ? "수정" : "등록", siteName, `${ed.status || ""}`, beforeEstSnap ? { type: "estimate", siteKey: ctx.siteKey, beforeData: beforeEstSnap } : null);
         }
         window.closeModal("estimateEditModal");
         markAllDirty();
@@ -18010,6 +18035,8 @@ end $$;`;
       window.markEstimateContractDone = function (siteKey) {
         const s = getAllSites().find(x => x && x.siteKey === siteKey);
         if (!s || !s.estimateData) return showToast("신규현장 정보를 찾을 수 없습니다.");
+        if (!confirm(`[${s.siteName}] 현장을 '계약 완료' 상태로 변경하시겠습니까?`)) return;
+        const beforeEst = JSON.parse(JSON.stringify(s.estimateData));
         const prevStatus = (s.estimateData.status && s.estimateData.status !== "계약 완료") ? s.estimateData.status : (s.estimateData.prevStatus || "1차상담 예정");
         const ed = Object.assign({}, s.estimateData, { prevStatus: prevStatus, status: "계약 완료" });
         s.estimateData = ed;
@@ -18018,6 +18045,9 @@ end $$;`;
         state.selectedQuoteKey = s.siteKey;
         if (window.WSDataService) {
           window.WSDataService.saveEstimate(true, ed, state.dashData);
+        }
+        if (typeof window.recordAuditLog === "function") {
+          window.recordAuditLog("신규견적", "계약 완료", s.siteName, `${prevStatus} → 계약 완료`, { type: "estimate", siteKey: s.siteKey, beforeData: beforeEst });
         }
         markAllDirty();
         renderActiveViews();
@@ -18032,6 +18062,7 @@ end $$;`;
       window.revertEstimateFromDone = function (siteKey) {
         const s = getAllSites().find(x => x && x.siteKey === siteKey);
         if (!s || !s.estimateData) return showToast("신규현장 정보를 찾을 수 없습니다.");
+        const beforeEst = JSON.parse(JSON.stringify(s.estimateData));
         const targetStatus = s.estimateData.prevStatus || "1차상담 예정";
         const ed = Object.assign({}, s.estimateData, { status: targetStatus });
         s.estimateData = ed;
@@ -18046,6 +18077,9 @@ end $$;`;
         state.selectedQuoteKey = s.siteKey;
         if (window.WSDataService) {
           window.WSDataService.saveEstimate(true, ed, state.dashData);
+        }
+        if (typeof window.recordAuditLog === "function") {
+          window.recordAuditLog("신규견적", "신규 복원", s.siteName, `계약 완료 → ${targetStatus}`, { type: "estimate", siteKey: s.siteKey, beforeData: beforeEst });
         }
         markAllDirty();
         renderActiveViews();
@@ -22075,18 +22109,20 @@ end $$;`;
 
       // ================= [1-2 변경이력(Audit Log) & 1-4 통합 검색(Ctrl+K)] =================
       const AUDIT_STORAGE_KEY = "ws_audit_logs_v1";
-      window.recordAuditLog = function (domain, action, targetName, detail) {
+      window.recordAuditLog = function (domain, action, targetName, detail, snapshotObj) {
         try {
           let logs = [];
           try { logs = JSON.parse(localStorage.getItem(AUDIT_STORAGE_KEY) || "[]"); } catch (_) {}
           if (!Array.isArray(logs)) logs = [];
           logs.unshift({
+            id: "AUD_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
             at: new Date().toISOString(),
             user: state.user || state.authUser || "사용자",
             domain: String(domain || "시스템"),
             action: String(action || "수정"),
             target: String(targetName || ""),
-            detail: String(detail || "")
+            detail: String(detail || ""),
+            snapshot: snapshotObj || null
           });
           if (logs.length > 250) logs = logs.slice(0, 250);
           localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(logs));
@@ -22094,6 +22130,84 @@ end $$;`;
             Promise.resolve(window.WSSupabaseV3.persistSnapshot("audit_logs", { list: logs })).catch(() => {});
           }
         } catch (_) {}
+      };
+
+      window.restoreAuditLogSnapshot = function (logId) {
+        let logs = [];
+        try { logs = JSON.parse(localStorage.getItem(AUDIT_STORAGE_KEY) || "[]"); } catch (_) {}
+        const entry = Array.isArray(logs) ? logs.find(l => l && l.id === logId) : null;
+        if (!entry || !entry.snapshot || !entry.snapshot.beforeData) {
+          return showToast("ℹ️ 이 변경 이력에는 복원 가능한 스냅샷이 없습니다.");
+        }
+        const snap = entry.snapshot;
+        const before = JSON.parse(JSON.stringify(snap.beforeData));
+        if (!confirm(`[${entry.domain}] '${entry.target || "-"}' 항목을 이 변경 직전 상태로 복원하시겠습니까?`)) return;
+
+        const user = state.authUser || state.currentUser || state.user || "조항만";
+        const ds = window.WSDataService;
+
+        if (snap.type === "estimate") {
+          const s = getAllSites().find(x => x && (x.siteKey === snap.siteKey || x.siteName === before.siteName));
+          if (!s) return showToast("⚠️ 대상 신규견적 현장을 찾을 수 없습니다.");
+          s.estimateData = before;
+          s.isArchived = before.status === "계약 완료" || before.status === "수주 실패" || before.status === "실패";
+          s.isAllCompleted = s.isArchived;
+          (s.tasks || []).forEach(t => {
+            if (t && t.scope === "newSite") {
+              t.status = before.status;
+              t.taskName = before.status;
+            }
+          });
+          if (ds && typeof ds.saveEstimate === "function") {
+            ds.saveEstimate(true, before, state.dashData);
+          }
+          window.recordAuditLog("신규견적", "이력 복원", s.siteName, `복원됨 → ${before.status || ""}`);
+          markAllDirty();
+          renderActiveViews();
+          showToast(`↩️ [${s.siteName}] '${before.status || ""}' 상태로 복원되었습니다.`);
+          openAuditLogModal();
+          return;
+        }
+
+        if (snap.type === "collection" && ds && typeof ds.saveCollectionRow === "function") {
+          ds.saveCollectionRow(before, user).then((res) => {
+            if (res && res.success) {
+              if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+              if (!Array.isArray(state.financeDbData.collection)) state.financeDbData.collection = [];
+              const idx = state.financeDbData.collection.findIndex(r => r && r.id === before.id);
+              if (idx >= 0) state.financeDbData.collection[idx] = before;
+              else state.financeDbData.collection.unshift(before);
+              if (ds.saveFinanceCache) ds.saveFinanceCache(state.financeDbData);
+              window.recordAuditLog("재무", "수금 복원", before.siteName || before.id, "변경 전 스냅샷 복원");
+              markAllDirty();
+              renderActiveViews();
+              showToast(`↩️ [${before.siteName || before.id}] 수금 내역이 복원되었습니다.`);
+              openAuditLogModal("재무");
+            }
+          });
+          return;
+        }
+
+        if (snap.type === "expense" && ds && typeof ds.saveExpenseRow === "function") {
+          ds.saveExpenseRow(before, user).then((res) => {
+            if (res && res.success) {
+              if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+              if (!Array.isArray(state.financeDbData.expense)) state.financeDbData.expense = [];
+              const idx = state.financeDbData.expense.findIndex(e => e && e.id === before.id);
+              if (idx >= 0) state.financeDbData.expense[idx] = before;
+              else state.financeDbData.expense.unshift(before);
+              if (ds.saveFinanceCache) ds.saveFinanceCache(state.financeDbData);
+              window.recordAuditLog("재무", "비용 복원", `${before.vendor || before.item || ""} (${before.siteName || "공통"})`, "변경 전 스냅샷 복원");
+              markAllDirty();
+              renderActiveViews();
+              showToast(`↩️ [${before.vendor || before.item || before.id}] 비용 내역이 복원되었습니다.`);
+              openAuditLogModal("재무");
+            }
+          });
+          return;
+        }
+
+        showToast("⚠️ 지원되지 않는 스냅샷 형식입니다.");
       };
 
       window.openAuditLogModal = function (filterDomain) {
@@ -22107,22 +22221,28 @@ end $$;`;
         if (!Array.isArray(logs)) logs = [];
         const dom = filterDomain || "all";
         const filtered = dom === "all" ? logs : logs.filter((l) => l && l.domain === dom);
-        tEl.textContent = "📜 변경이력(Audit Log) 타임라인";
+        tEl.textContent = "📜 변경이력(Audit Log) 타임라인 · 1클릭 복원";
         if (cEl) cEl.style.display = "inline-flex";
+        const modalCard = document.querySelector("#syncStatusModal .ws-modal-card");
+        if (modalCard) modalCard.style.maxWidth = "820px";
         bEl.innerHTML = `
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-            ${[["all", "전체"], ["공정", "현장·공정"], ["현장", "현장"], ["재무", "재무·원장"], ["To-Do", "To-Do"]].map(([k, lbl]) => `
+            ${[["all", "전체"], ["신규견적", "신규견적"], ["공정", "현장·공정"], ["현장", "현장"], ["재무", "재무·원장"], ["To-Do", "To-Do"]].map(([k, lbl]) => `
               <button type="button" class="btn-sub-chip ${dom === k ? "active" : ""}" style="padding:3px 9px;font-size:11.5px;" onclick="openAuditLogModal('${k}')">${lbl}</button>
             `).join("")}
           </div>
-          <div style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;text-align:left;">
-            ${filtered.slice(0, 80).map((l) => {
+          <div style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;text-align:left;" class="visible-scrollbar">
+            ${filtered.slice(0, 100).map((l) => {
               const dt = l.at ? new Date(l.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+              const canRestore = Boolean(l.id && l.snapshot && l.snapshot.beforeData);
               return `
                 <div style="padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafc;font-size:12px;">
-                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
                     <span><strong style="color:#1e3a8a;">[${escHtml(l.domain)}]</strong> <strong>${escHtml(l.target || "-")}</strong> · <span style="color:#059669;font-weight:700;">${escHtml(l.action)}</span></span>
-                    <span style="font-size:11px;color:#64748b;white-space:nowrap;">👤 ${escHtml(l.user)} · ${escHtml(dt)}</span>
+                    <div style="display:inline-flex;align-items:center;gap:8px;">
+                      <span style="font-size:11px;color:#64748b;white-space:nowrap;">👤 ${escHtml(l.user)} · ${escHtml(dt)}</span>
+                      ${canRestore ? `<button type="button" class="btn-sub-xs" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-weight:700;padding:2px 8px;" onclick="window.restoreAuditLogSnapshot('${escJs(l.id)}')">↩️ 복원</button>` : ""}
+                    </div>
                   </div>
                   ${l.detail ? `<div style="font-size:11px;color:#475569;margin-top:2px;">${escHtml(l.detail)}</div>` : ""}
                 </div>`;
