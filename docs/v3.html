@@ -4231,8 +4231,10 @@ end $$;`;
       function getHomeTaskCategory(task, ymd, todayYmd) {
         if (!task) return "";
         const endYmd = ymd ? parseEndYmdFromTask(task, ymd) : "";
-        const spansToday = Boolean(ymd && ymd <= todayYmd && (endYmd || ymd) >= todayYmd);
-        if (task.isToday || ymd === todayYmd || spansToday || String(task.status || "").includes("진행")) return "progress";
+        const effectiveEnd = endYmd || ymd;
+        const spansToday = Boolean(ymd && ymd <= todayYmd && effectiveEnd >= todayYmd);
+        const notExpired = !ymd || effectiveEnd >= todayYmd;
+        if (spansToday || ymd === todayYmd || (task.isToday && notExpired) || (String(task.status || "").includes("진행") && notExpired)) return "progress";
         if (task.isDelayed || (ymd && ymd < todayYmd)) return "delayed";
         const tomorrowYmd = addDaysYmd(todayYmd, 1);
         if (ymd && ymd === tomorrowYmd) return "tomorrow";
@@ -4558,12 +4560,14 @@ end $$;`;
           const stLabel = isDel ? "⚠️ 지연" : isToday ? "🔥 오늘 진행" : isTmr ? "📅 내일 예정" : escHtml(task.status || "예정");
           const effScope = site.scope || (/^\[단건\]/i.test(site.siteName) ? "single" : /^\[AS\]/i.test(site.siteName) ? "as" : "site");
           const cleanSiteName = String(site.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "");
+          const endYmd = ymd ? parseEndYmdFromTask(task, ymd) : "";
+          const dateLabel = (ymd && endYmd && endYmd !== ymd) ? `${ymd} ~ ${endYmd}` : (ymd || task.dateDisplay || "-");
           return `
             <div class="task-timeline-item ${cls}" onclick="openTaskEditModal('${escJs(task.id || task.taskId)}')">
               <div class="hti-top">
                 <span class="hti-status-pill" style="background:${stBg};color:${stFg};">${stLabel}</span>
                 <div style="display:flex;align-items:center;gap:6px;">
-                  <span style="font-size:11.5px;font-weight:700;color:${isDel ? "#dc2626" : "#475569"};">${escHtml(ymd || task.dateDisplay || "-")}</span>
+                  <span style="font-size:11.5px;font-weight:700;color:${isDel ? "#dc2626" : "#475569"};">${escHtml(dateLabel)}</span>
                   <button type="button" class="home-detail-chip-btn" onclick="event.stopPropagation(); openSiteDetail('${escJs(site.siteKey)}')" title="해당 현장 상세 보기">현장 상세 ➔</button>
                 </div>
               </div>
@@ -13309,6 +13313,8 @@ end $$;`;
                 const isTmr = (cat === "tomorrow");
                 const effScope = site.scope || (/^\[단건\]/i.test(site.siteName) ? "single" : /^\[AS\]/i.test(site.siteName) ? "as" : "site");
                 const cleanSiteName = String(site.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "");
+                const endYmd = ymd ? parseEndYmdFromTask(task, ymd) : "";
+                const dateLabel = (ymd && endYmd && endYmd !== ymd) ? `${ymd} ~ ${endYmd}` : (ymd || task.dateDisplay || "-");
                 return `
                   <div class="m-site-box ${isDel ? "danger" : ""}" style="border-radius:9px;" onclick="openTaskEditModal('${escJs(tid)}')">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
@@ -13317,7 +13323,7 @@ end $$;`;
                     </div>
                     <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px;">${escHtml(task.taskName)} · ${escHtml(task.partner || filterRegisteredManagers(task.manager).join(", ") || "-")}</div>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">
-                      <span style="font-size:10.5px;font-weight:700;color:${isDel ? "#dc2626" : isTmr ? "#5b21b6" : "#1e40af"};">${escHtml(ymd)} (${isDel ? "⚠️ 지연" : isTmr ? "📅 내일 예정" : escHtml(task.status || "예정")})</span>
+                      <span style="font-size:10.5px;font-weight:700;color:${isDel ? "#dc2626" : isTmr ? "#5b21b6" : "#1e40af"};">${escHtml(dateLabel)} (${isDel ? "⚠️ 지연" : isTmr ? "📅 내일 예정" : escHtml(task.status || "예정")})</span>
                       ${phone ? `<a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="font-size:11px;color:#166534;font-weight:700;text-decoration:none;">📞 통화</a>` : ""}
                     </div>
                   </div>`;
