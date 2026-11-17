@@ -2769,7 +2769,7 @@
       </div>
       <div class="ws-modal-body" id="siteFinanceDetailModalBody" style="display:flex;flex-direction:column;gap:16px;max-height:calc(85vh - 120px);overflow-y:auto;padding:18px;"></div>
       <div class="ws-modal-footer" id="siteFinanceDetailModalFooter" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-        <button type="button" class="btn-tool-tag" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-weight:700;height:34px;padding:0 12px;" onclick="window.openFinanceInvoiceDocModal(window.currentDetailColId || window.currentDetailSiteName)">📄 거래명세서 · 청구서 자동 생성</button>
+        <button type="button" class="btn-tool-tag" style="background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4;font-weight:700;height:34px;padding:0 12px;" onclick="window.openEstimatePdfModal(window.currentDetailSiteName)">📄 견적서</button>
         <button type="button" class="ws-btn ws-btn-secondary" onclick="closeSiteFinanceDetailModal()">닫기</button>
       </div>
     </div>
@@ -5082,6 +5082,7 @@ end $$;`;
                       💰 현장 정산 보기
                     </button>
                   ` : ""}
+                  <button type="button" class="btn-act-blue" style="background:#0f766e;" onclick="window.openEstimatePdfModal('${escJs(selectedSite.siteKey || selectedSite.siteName)}')" title="A4 견적서(갑지+세부내역서) 작성 및 PDF 출력">📄 견적서</button>
                   <button type="button" class="btn-act-blue" onclick="openNewTaskModal('${escJs(selectedSite.siteName)}', state.selectedDayStr)">➕ 새 공정 추가</button>
                   <button type="button" class="btn-act-danger" onclick="openDeleteConfirm('site', '${escJs(selectedSite.siteKey)}')">현장 삭제</button>
                   <button type="button" class="btn-act-white" onclick="focusSiteOnCalendar('${escJs(selectedSite.siteKey)}')">📅 현장 캘린더 보기</button>
@@ -8569,11 +8570,16 @@ end $$;`;
         return res;
       }
 
-      window.openEstimatePdfModal = function (siteKey) {
-        const site = getAllSites().find(s => s && s.siteKey === siteKey);
-        if (!site) return showToast("견적 정보를 찾을 수 없습니다.");
+      window.openEstimatePdfModal = function (siteKeyOrName) {
+        const allSites = getAllSites();
+        const site = allSites.find(s => s && (s.siteKey === siteKeyOrName || s.siteName === siteKeyOrName))
+          || (siteKeyOrName ? { siteKey: String(siteKeyOrName), siteName: String(siteKeyOrName), estimateData: {} } : null);
+        if (!site || !site.siteName) return showToast("현장 정보를 찾을 수 없습니다.");
         const ed = site.estimateData || {};
-        const storeKey = "ws_estimate_pdf_items_" + (site.siteName || siteKey);
+        const colRow = (state.financeDbData && Array.isArray(state.financeDbData.collection))
+          ? state.financeDbData.collection.find(c => c && c.siteName === site.siteName)
+          : null;
+        const storeKey = "ws_estimate_pdf_items_" + (site.siteName || site.siteKey);
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem(storeKey) || "null"); } catch (_) {}
         const defaultItems = [
@@ -8584,10 +8590,10 @@ end $$;`;
         ];
         const defaultTerms = "· 본 견적의 유효기간은 견적일로부터 14일입니다.\n· 본 견적서에 기재되지 않은 항목은 공사 범위에 포함되지 않습니다.";
         window._estPdfCtx = {
-          siteKey,
+          siteKey: site.siteKey,
           storeKey,
           siteName: (saved && saved.siteName !== undefined) ? saved.siteName : (ed.siteName || site.siteName || ""),
-          clientName: (saved && saved.clientName !== undefined) ? saved.clientName : (ed.clientName || ed.siteName || site.siteName || ""),
+          clientName: (saved && saved.clientName !== undefined) ? saved.clientName : (ed.clientName || (colRow && colRow.clientName) || ed.siteName || site.siteName || ""),
           issueDate: (saved && saved.issueDate) ? saved.issueDate : getTodayYmd(),
           introText: (saved && saved.introText !== undefined) ? saved.introText : "별첨 명세와 같이 견적합니다.",
           termsText: (saved && saved.termsText !== undefined) ? saved.termsText : defaultTerms,
@@ -13032,6 +13038,7 @@ end $$;`;
                       💰 현장 정산 보기
                     </button>
                   ` : ""}
+                  <button type="button" class="btn-tool-tag" style="background:#f0fdfa;color:#0f766e;border-color:#99f6e4;font-weight:700;" onclick="window.openEstimatePdfModal('${escJs(s.siteKey || s.siteName)}')">📄 견적서</button>
                   <button type="button" class="btn-tool-tag" onclick="openPartnerGuideForSite('${escJs(s.siteKey)}')">📋 안내문 확인</button>
                   <button type="button" class="btn-tool-tag" onclick="focusSiteOnCalendar('${escJs(s.siteKey)}', true)">📅 캘린더 보기</button>
                   <button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(s.siteName)}')">✏️ 정보 수정</button>
