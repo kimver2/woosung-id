@@ -970,6 +970,12 @@
     .hk-sub-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     .home-main-split { display: grid; grid-template-columns: 1fr 345px; gap: 18px; align-items: start; }
+    .home-left-top-split { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: 16px; align-items: start; }
+    .home-left-top-split .home-todo-grid,
+    .home-left-top-split .home-task-grid { grid-template-columns: 1fr; }
+    @media (max-width: 1180px) {
+      .home-left-top-split { grid-template-columns: 1fr; }
+    }
     .home-panel-box {
       background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
       box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04); margin-bottom: 16px;
@@ -4694,28 +4700,41 @@ end $$;`;
 
             <div class="home-main-split">
               <div class="home-left-col">
-                <!-- 1순위: To-Do 카드 그리드 -->
-                <div class="home-panel-box" id="homeSecTodo">
-                  <div class="hp-header">
-                    <span class="hp-title">✅ 나에게 할당된 To-Do (${myPendingTodos.length}건 남음)</span>
-                    <div style="display:flex;gap:10px;align-items:center;">
-                      <button type="button" class="btn-tool-tag" onclick="openTodoModal(null)">+ 추가</button>
-                      <a class="hp-link" onclick="switchMainTab('todo')">To-Do 전체보기 ➔</a>
+                <div class="home-left-top-split">
+                  <div style="min-width:0;">
+                    <!-- 1순위: To-Do 카드 그리드 -->
+                    <div class="home-panel-box" id="homeSecTodo">
+                      <div class="hp-header">
+                        <span class="hp-title">✅ 나에게 할당된 To-Do (${myPendingTodos.length}건 남음)</span>
+                        <div style="display:flex;gap:10px;align-items:center;">
+                          <button type="button" class="btn-tool-tag" onclick="openTodoModal(null)">+ 추가</button>
+                          <a class="hp-link" onclick="switchMainTab('todo')">To-Do 전체보기 ➔</a>
+                        </div>
+                      </div>
+                      <div class="home-todo-grid">${todoItemsHtml}</div>
                     </div>
-                  </div>
-                  <div class="home-todo-grid">${todoItemsHtml}</div>
-                </div>
 
-                <!-- 2순위: 주요 현장 공정 카드 그리드 -->
-                <div class="home-panel-box" id="homeSecTasks">
-                  <div class="hp-header">
-                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                      <span class="hp-title">🔨 ${escHtml(user)}님 주요 현장 공정 (${filteredHomeTasks.length}건)</span>
-                      ${taskFilterGroupHtml}
+                    <!-- 2순위: 주요 현장 공정 카드 그리드 -->
+                    <div class="home-panel-box" id="homeSecTasks">
+                      <div class="hp-header">
+                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                          <span class="hp-title">🔨 ${escHtml(user)}님 주요 현장 공정 (${filteredHomeTasks.length}건)</span>
+                          ${taskFilterGroupHtml}
+                        </div>
+                        <a class="hp-link" onclick="switchMainTab('calendar')">캘린더 전체보기 ➔</a>
+                      </div>
+                      <div class="home-task-grid" style="max-height:460px;overflow-y:auto;padding-right:2px;">${scheduleItemsHtml}</div>
                     </div>
-                    <a class="hp-link" onclick="switchMainTab('calendar')">캘린더 전체보기 ➔</a>
                   </div>
-                  <div class="home-task-grid" style="max-height:420px;overflow-y:auto;padding-right:2px;">${scheduleItemsHtml}</div>
+
+                  <div style="min-width:0;">
+                    <div class="home-panel-box home-memo-panel" id="homeSecMemos">
+                      <div class="hp-header"><span class="hp-title">📌 최근 현장 메모 브리핑</span></div>
+                      <div class="home-memo-list" style="display:flex;flex-direction:column;gap:8px;max-height:580px;overflow-y:auto;padding-right:2px;">
+                        ${renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), false)}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- 3순위: 담당 진행 현장 카드 요약 -->
@@ -4770,13 +4789,6 @@ end $$;`;
                     `).join("") || `<div style="font-size:12px;color:var(--text-muted);">미수 현장이 없습니다. 🎉</div>`}
                   </div>
                 </div>` : ""}
-
-                <div class="home-panel-box home-memo-panel">
-                  <div class="hp-header"><span class="hp-title">📌 최근 현장 메모 브리핑</span></div>
-                  <div class="home-memo-list" style="display:flex;flex-direction:column;gap:8px;">
-                    ${renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), false)}
-                  </div>
-                </div>
               </div>
             </div>
           </div>
