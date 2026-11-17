@@ -8766,7 +8766,7 @@ end $$;`;
         if (tasks.length === 0) return null;
         return tasks.map(t => ({
           name: (t && t.taskName) ? String(t.taskName) : "공종",
-          spec: [t && t.partner ? t.partner : "", t && t.memo ? t.memo : ""].filter(Boolean).join(" · ") || (t && (t.dateDisplay || t.dateStr) ? String(t.dateDisplay || t.dateStr) : ""),
+          spec: "",
           qty: 1,
           unit: "식",
           mat: 0,
@@ -8804,10 +8804,10 @@ end $$;`;
         try { saved = JSON.parse(localStorage.getItem(storeKey) || "null"); } catch (_) {}
         const taskItems = buildEstPdfItemsFromSiteTasks(site);
         const defaultItems = taskItems || [
-          { name: "철거", spec: "기존 시설물 철거 및 폐기물 반출", qty: 1, unit: "식", mat: 0, lab: 0, exp: 0 },
-          { name: "설비/방수", spec: "배관 및 방수 공사", qty: 1, unit: "식", mat: 0, lab: 0, exp: 0 },
-          { name: "목공/도어", spec: "천장·벽체·문틀 목공 작업", qty: 1, unit: "식", mat: 0, lab: 0, exp: 0 },
-          { name: "전기/조명", spec: "배선·조명·스위치 시공", qty: 1, unit: "식", mat: 0, lab: 0, exp: 0 }
+          { name: "철거", spec: "", qty: 1, unit: "식", mat: 0, lab: 0, exp: 0 },
+          { name: "설비/방수", spec: "", qty: 1, unit: "식", mat: 0, lab: 0, exp: 0 },
+          { name: "목공/도어", spec: "", qty: 1, unit: "식", mat: 0, lab: 0, exp: 0 },
+          { name: "전기/조명", spec: "", qty: 1, unit: "식", mat: 0, lab: 0, exp: 0 }
         ];
         const defaultTerms = "· 본 견적의 유효기간은 견적일로부터 14일입니다.\n· 본 견적서에 기재되지 않은 항목은 공사 범위에 포함되지 않습니다.";
         window._estPdfCtx = {
