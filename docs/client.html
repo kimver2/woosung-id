@@ -273,9 +273,122 @@
       margin-top: 16px;
       font-weight: 600;
     }
+    .cal-head-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .cal-nav-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .cal-nav-btn {
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #334155;
+      border-radius: 7px;
+      padding: 4px 9px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .cal-nav-btn:hover { background: #f8fafc; }
+    .cal-month-lbl {
+      font-size: 14.5px;
+      font-weight: 800;
+      color: #0f172a;
+      min-width: 92px;
+      text-align: center;
+    }
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      border-top: 1px solid #e2e8f0;
+      border-left: 1px solid #e2e8f0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .cal-dow {
+      background: #f8fafc;
+      border-right: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e2e8f0;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 6px 2px;
+      color: #475569;
+    }
+    .cal-cell {
+      min-height: 68px;
+      border-right: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 4px;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      cursor: pointer;
+    }
+    .cal-cell.is-other { background: #f8fafc; opacity: 0.45; cursor: default; }
+    .cal-cell.is-today { background: #eff6ff; }
+    .cal-cell.is-selected { outline: 2px solid #2563eb; outline-offset: -2px; }
+    .cal-day-num {
+      font-size: 11px;
+      font-weight: 800;
+      color: #334155;
+      line-height: 1.2;
+    }
+    .cal-cell.is-today .cal-day-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #2563eb;
+      color: #ffffff;
+    }
+    .cal-chip {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 4px;
+      border-radius: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+    }
+    .cal-chip.done { background: #dcfce7; color: #15803d; }
+    .cal-chip.prog { background: #dbeafe; color: #1d4ed8; }
+    .cal-chip.plan { background: #f1f5f9; color: #475569; }
+    .cal-day-detail {
+      margin-top: 10px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .more-btn {
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #1e293b;
+      font-size: 12.5px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .more-btn:hover { background: #f1f5f9; }
     @media (max-width: 520px) {
       .pay-summary { grid-template-columns: 1fr; }
       .site-title { font-size: 18px; }
+      .cal-cell { min-height: 56px; padding: 3px 2px; }
+      .cal-chip { font-size: 9px; padding: 1px 3px; }
     }
   </style>
 </head>
@@ -305,6 +418,14 @@
   <script>
     const SUPABASE_URL = "https://uyqvguzglviqegxmxqyn.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_f8JwxMgpgs6AVSEumSIV2g_KlK6o9GA";
+    const clientViewState = {
+      payload: null,
+      updatedAt: "",
+      calYear: new Date().getFullYear(),
+      calMonth: new Date().getMonth() + 1,
+      selectedYmd: "",
+      showAllTasks: false
+    };
 
     function esc(s) {
       return String(s == null ? "" : s)
@@ -367,11 +488,153 @@
           renderError("🔒", "공유가 종료되었거나 만료된 링크입니다.", "현장 담당자에게 최신 공유 링크를 요청해 주세요.");
           return;
         }
-        renderShareView(p, row.updated_at || p.updatedAt);
+        clientViewState.payload = p;
+        clientViewState.updatedAt = row.updated_at || p.updatedAt || "";
+        clientViewState.showAllTasks = false;
+        clientViewState.selectedYmd = "";
+        const now = new Date();
+        const curYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const tasks = Array.isArray(p.tasks) ? p.tasks : [];
+        const hasCurMonthTask = tasks.some((t) => String(t.date || "").startsWith(curYm));
+        if (hasCurMonthTask || !tasks.length) {
+          clientViewState.calYear = now.getFullYear();
+          clientViewState.calMonth = now.getMonth() + 1;
+        } else {
+          const dated = tasks.map((t) => String(t.date || "")).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+          const target = dated.length ? dated[dated.length - 1] : "";
+          if (target) {
+            clientViewState.calYear = Number(target.slice(0, 4));
+            clientViewState.calMonth = Number(target.slice(5, 7));
+          }
+        }
+        renderShareView(p, clientViewState.updatedAt);
       } catch (err) {
         console.error(err);
         renderError("⚠️", "현장 정보를 불러오지 못했습니다.", "잠시 후 다시 새로고침을 눌러 주세요.");
       }
+    }
+
+    function shiftClientCalMonth(delta) {
+      let y = clientViewState.calYear;
+      let m = clientViewState.calMonth + delta;
+      if (m < 1) { m = 12; y--; }
+      else if (m > 12) { m = 1; y++; }
+      clientViewState.calYear = y;
+      clientViewState.calMonth = m;
+      clientViewState.selectedYmd = "";
+      if (clientViewState.payload) renderShareView(clientViewState.payload, clientViewState.updatedAt);
+    }
+
+    function goClientCalToday() {
+      const now = new Date();
+      clientViewState.calYear = now.getFullYear();
+      clientViewState.calMonth = now.getMonth() + 1;
+      clientViewState.selectedYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      if (clientViewState.payload) renderShareView(clientViewState.payload, clientViewState.updatedAt);
+    }
+
+    function selectClientCalDay(ymd) {
+      clientViewState.selectedYmd = (clientViewState.selectedYmd === ymd) ? "" : ymd;
+      if (clientViewState.payload) renderShareView(clientViewState.payload, clientViewState.updatedAt);
+    }
+
+    function toggleClientShowAllTasks() {
+      clientViewState.showAllTasks = !clientViewState.showAllTasks;
+      if (clientViewState.payload) renderShareView(clientViewState.payload, clientViewState.updatedAt);
+    }
+
+    function expandClientCalendarMap(tasks, todayYmd) {
+      const map = {};
+      tasks.forEach((t) => {
+        const s = String(t.date || "").slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return;
+        const e = (t.endDate && /^\d{4}-\d{2}-\d{2}$/.test(String(t.endDate).slice(0, 10))) ? String(t.endDate).slice(0, 10) : s;
+        const startDt = new Date(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10)));
+        const endDt = new Date(Number(e.slice(0, 4)), Number(e.slice(5, 7)) - 1, Number(e.slice(8, 10)));
+        const cur = new Date(startDt);
+        let guard = 0;
+        while (cur <= endDt && guard < 90) {
+          const ymd = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+          if (!map[ymd]) map[ymd] = [];
+          map[ymd].push(t);
+          cur.setDate(cur.getDate() + 1);
+          guard++;
+        }
+      });
+      return map;
+    }
+
+    function buildClientCalendarCardHtml(tasks, todayYmd) {
+      const y = clientViewState.calYear;
+      const m = clientViewState.calMonth;
+      const firstDow = new Date(y, m - 1, 1).getDay();
+      const daysInMonth = new Date(y, m, 0).getDate();
+      const ymPrefix = `${y}-${String(m).padStart(2, "0")}`;
+      const evMap = expandClientCalendarMap(tasks, todayYmd);
+
+      const dows = ["일", "월", "화", "수", "목", "금", "토"];
+      let gridHtml = dows.map((d, idx) => `<div class="cal-dow" style="${idx === 0 ? "color:#dc2626;" : idx === 6 ? "color:#2563eb;" : ""}">${d}</div>`).join("");
+      for (let i = 0; i < firstDow; i++) {
+        gridHtml += `<div class="cal-cell is-other"></div>`;
+      }
+      for (let d = 1; d <= daysInMonth; d++) {
+        const ymd = `${ymPrefix}-${String(d).padStart(2, "0")}`;
+        const dayTasks = evMap[ymd] || [];
+        const isToday = ymd === todayYmd;
+        const isSel = clientViewState.selectedYmd === ymd;
+        const chips = dayTasks.slice(0, 3).map((t) => {
+          const isDone = t.status === "완료";
+          const isProg = !isDone && ((t.date && t.endDate && t.date <= todayYmd && t.endDate >= todayYmd) || t.date === todayYmd || String(t.status || "").includes("진행"));
+          const cls = isDone ? "done" : (isProg ? "prog" : "plan");
+          return `<div class="cal-chip ${cls}" title="${esc(t.taskName)}">${esc(t.taskName)}</div>`;
+        }).join("") + (dayTasks.length > 3 ? `<div style="font-size:9.5px;font-weight:800;color:#64748b;padding-left:2px;">+${dayTasks.length - 3}건</div>` : "");
+        const dow = (firstDow + d - 1) % 7;
+        gridHtml += `
+          <div class="cal-cell ${isToday ? "is-today" : ""} ${isSel ? "is-selected" : ""}" onclick="selectClientCalDay('${ymd}')">
+            <div class="cal-day-num" style="${!isToday && dow === 0 ? "color:#dc2626;" : !isToday && dow === 6 ? "color:#2563eb;" : ""}">${d}</div>
+            ${chips}
+          </div>`;
+      }
+      const totalCells = firstDow + daysInMonth;
+      const tail = (7 - (totalCells % 7)) % 7;
+      for (let i = 0; i < tail; i++) {
+        gridHtml += `<div class="cal-cell is-other"></div>`;
+      }
+
+      let dayDetailHtml = "";
+      if (clientViewState.selectedYmd) {
+        const selTasks = evMap[clientViewState.selectedYmd] || [];
+        dayDetailHtml = `
+          <div class="cal-day-detail">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <strong style="font-size:12.5px;color:#0f172a;">📅 ${esc(clientViewState.selectedYmd)} 일정 (${selTasks.length}건)</strong>
+              <button type="button" class="cal-nav-btn" style="padding:2px 7px;font-size:11px;" onclick="selectClientCalDay('${esc(clientViewState.selectedYmd)}')">닫기</button>
+            </div>
+            ${selTasks.length ? selTasks.map((t) => {
+              const isDone = t.status === "완료";
+              const isProg = !isDone && ((t.date && t.endDate && t.date <= todayYmd && t.endDate >= todayYmd) || t.date === todayYmd || String(t.status || "").includes("진행"));
+              const badgeCls = isDone ? "badge-done" : (isProg ? "badge-prog" : "badge-plan");
+              const badgeTxt = isDone ? "✅ 완료" : (isProg ? "🔨 진행 중" : "예정");
+              return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px dashed #cbd5e1;font-size:12px;"><span style="font-weight:700;color:#1e293b;">${esc(t.taskName)}</span><span class="badge ${badgeCls}">${badgeTxt}</span></div>`;
+            }).join("") : `<div style="font-size:12px;color:#64748b;">해당 날짜에 등록된 공정이 없습니다.</div>`}
+          </div>`;
+      }
+
+      return `
+        <div class="card">
+          <div class="cal-head-bar">
+            <div class="sec-title" style="margin:0;"><span>📅 월간 공정 캘린더</span></div>
+            <div class="cal-nav-group">
+              <button type="button" class="cal-nav-btn" onclick="shiftClientCalMonth(-1)">◀</button>
+              <span class="cal-month-lbl">${y}년 ${m}월</span>
+              <button type="button" class="cal-nav-btn" onclick="shiftClientCalMonth(1)">▶</button>
+              <button type="button" class="cal-nav-btn" onclick="goClientCalToday()">오늘</button>
+            </div>
+          </div>
+          <div class="cal-grid">${gridHtml}</div>
+          ${dayDetailHtml}
+        </div>
+      `;
     }
 
     function renderShareView(p, updatedAt) {
@@ -426,7 +689,10 @@
         `;
       }
 
-      const taskListHtml = tasks.length ? tasks.map((t) => {
+      const calHtml = buildClientCalendarCardHtml(tasks, todayYmd);
+      const visibleTasks = clientViewState.showAllTasks ? tasks : tasks.slice(0, 10);
+      const hiddenCount = Math.max(0, tasks.length - visibleTasks.length);
+      const taskListHtml = visibleTasks.length ? visibleTasks.map((t) => {
         const isDone = t.status === "완료";
         const isToday = !isDone && ((t.date && t.endDate && t.date <= todayYmd && t.endDate >= todayYmd) || t.date === todayYmd || String(t.status || "").includes("진행"));
         const badgeCls = isDone ? "badge-done" : (isToday ? "badge-prog" : "badge-plan");
@@ -442,6 +708,11 @@
           </div>
         `;
       }).join("") : `<div style="font-size:13px;color:#64748b;text-align:center;padding:16px 0;">등록된 공정 일정이 없습니다.</div>`;
+      const moreTasksBtnHtml = tasks.length > 10 ? `
+        <button type="button" class="more-btn" onclick="toggleClientShowAllTasks()">
+          ${clientViewState.showAllTasks ? "▲ 최근 10개만 보기 (접기)" : `▼ 나머지 ${hiddenCount}개 공정 더보기 (전체 ${tasks.length}건)`}
+        </button>
+      ` : "";
 
       document.getElementById("clientShareRoot").innerHTML = `
         <div class="card hero-card">
@@ -485,12 +756,15 @@
           </div>
         ` : ""}
 
+        ${calHtml}
+
         <div class="card">
           <div class="sec-title">
             <span>🛠️ 공정별 진행 일정</span>
             <span style="font-size:11.5px;color:#64748b;font-weight:700;">총 ${tasks.length}개 공정</span>
           </div>
           <div class="task-list">${taskListHtml}</div>
+          ${moreTasksBtnHtml}
         </div>
       `;
 
