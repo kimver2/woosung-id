@@ -189,8 +189,11 @@
       if (!hasTimestamp) {
         query.push("_t=" + Date.now());
       }
+      if (!/^get/i.test(String(action || ""))) {
+        try { global.localStorage.setItem("ws_last_mutation_start_ms", String(Date.now())); } catch (eM) {}
+      }
       var url = GAS_API_URL + "?" + query.join("&");
-      return fetch(url, { method: "GET", mode: "cors", redirect: "follow" })
+      return fetch(url, { method: "GET", mode: "cors", redirect: "follow", keepalive: true })
         .then(function (r) { return r.text(); })
         .then(function (txt) {
           try {
@@ -338,10 +341,12 @@
         return Promise.resolve({ success: true, offline: true });
       }
       var body = Object.assign({ action: action }, payload || {});
+      try { global.localStorage.setItem("ws_last_mutation_start_ms", String(Date.now())); } catch (eMp) {}
       return fetch(GAS_API_URL, {
         method: "POST",
         mode: "cors",
         redirect: "follow",
+        keepalive: true,
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(body)
       }).then(function (r) {

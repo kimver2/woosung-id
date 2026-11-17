@@ -17177,7 +17177,10 @@
         }
 
         if (location.protocol.startsWith("http")) {
-          setTimeout(() => window.triggerLiveSync(false), 120);
+          let lastMutMs = 0;
+          try { lastMutMs = Number(localStorage.getItem("ws_last_mutation_start_ms") || "0"); } catch (eLm) {}
+          const syncDelayMs = (Date.now() - lastMutMs < 4500) ? 1500 : 120;
+          setTimeout(() => window.triggerLiveSync(false), syncDelayMs);
           loadWeatherData();
         }
       }

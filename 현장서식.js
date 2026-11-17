@@ -15585,6 +15585,21 @@ function getSidebarDashboardData(forceRefresh) {
       } catch (eCacheRead) {}
     }
 
+    // [Read-After-Write 정합성 배리어]: 직전 쓰기(추가/수정/삭제/승격) 요청이 실행 중일 때 새로고침하면
+    // 쓰기 완료(flush) 직전 구버전 시트를 읽어 내려보내는 레이스 컨디션을 방지하기 위해 활성 쓰기 락 해제 대기
+    if (!__woosungWriteLockHeld_) {
+      try {
+        if (typeof LockService !== "undefined" && LockService && typeof LockService.getScriptLock === "function") {
+          var rLock = LockService.getScriptLock();
+          if (rLock && typeof rLock.tryLock === "function") {
+            if (rLock.tryLock(8000)) {
+              rLock.releaseLock();
+            }
+          }
+        }
+      } catch (eReadLk) {}
+    }
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) ss = getAppSpreadsheet();
     var sheet = findSiteScheduleSheet(ss);
