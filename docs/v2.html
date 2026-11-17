@@ -3508,10 +3508,14 @@ end $$;`;
         }
       }
       function getTasksMasterList() {
-        if (state.settingsData && Array.isArray(state.settingsData.tasks) && state.settingsData.tasks.length) {
-          return state.settingsData.tasks.map((t) => t.name);
-        }
-        return (state.dashData && state.dashData.tasks) || [];
+        const raw = (state.settingsData && Array.isArray(state.settingsData.tasks) && state.settingsData.tasks.length)
+          ? state.settingsData.tasks
+          : ((state.dashData && state.dashData.tasks) || []);
+        return raw.map((t) => {
+          if (typeof t === "string") return t.trim();
+          if (t && typeof t === "object") return String(t.name || t.taskName || t.title || t.label || "").trim();
+          return "";
+        }).filter(Boolean);
       }
       const getTasksList = getTasksMasterList;
       window.getTasksList = getTasksMasterList;
@@ -3715,6 +3719,20 @@ end $$;`;
       }
       window.autoScrollCarouselToActive = autoScrollCarouselToActive;
 
+      function getQuoteTypeOfSite(site) {
+        const qt = site && site.estimateData && site.estimateData.quoteType;
+        if (qt === "single" || qt === "as") return qt;
+        return "site";
+      }
+      function getQuoteCategoryCounts() {
+        const counts = { site: 0, single: 0, as: 0 };
+        getAllSites().forEach((s) => {
+          if (!s || s.scope !== "newSite" || isSiteCompleted(s)) return;
+          const qt = getQuoteTypeOfSite(s);
+          counts[qt] = (counts[qt] || 0) + 1;
+        });
+        return counts;
+      }
       function getScopeSites(includeArchived) {
         return getAllSites().filter((s) => {
           if (s.scope !== state.scope) return false;
@@ -3972,11 +3990,16 @@ end $$;`;
         const dash = state.dashData;
         const counts = (dash && dash.scopeCounts) || {};
         const qCat = state.quoteCategory || "site";
+        const qCounts = getQuoteCategoryCounts();
         if (mode === "quote") {
-          state.scope = (qCat === "site" ? "newSite" : qCat);
+          state.scope = "newSite";
         }
-        const activeSites = getActiveScopeSites();
-        const doneSites = getDoneScopeSites();
+        const activeSites = mode === "quote"
+          ? getActiveScopeSites().filter((s) => getQuoteTypeOfSite(s) === qCat)
+          : getActiveScopeSites();
+        const doneSites = mode === "quote"
+          ? getDoneScopeSites().filter((s) => getQuoteTypeOfSite(s) === qCat)
+          : getDoneScopeSites();
         ensureCheckedSitesInitialized();
 
         const todayYmd = getTodayYmd();
@@ -4009,10 +4032,10 @@ end $$;`;
           mcCells += `<span class="${cls.join(" ")}" onclick="selectCalDay('${ymd}'); if(state.pcTab!=='calendar') switchMainTab('calendar');">${d}</span>`;
         }
 
-        const scopeLabels = { site: "진행 현장", single: "단건 공정", as: "A/S 목록", newSite: "신규 견적" };
+        const scopeLabels = { site: "진행 현장", single: "단건 공정", as: "A/S 목록", newSite: (qCat === "single" ? "신규 단건" : qCat === "as" ? "신규 A/S" : "신규 견적") };
         let siteRows = activeSites.map((site) => {
           const isChecked = state.checkedSiteKeys && state.checkedSiteKeys.has(site.siteKey);
-          const isSelected = (mode === "sites" && state.selectedSiteKey === site.siteKey) || (mode === "quote" && (qCat === "site" ? state.selectedQuoteKey === site.siteKey : state.selectedSiteKey === site.siteKey));
+          const isSelected = (mode === "sites" && state.selectedSiteKey === site.siteKey) || (mode === "quote" && state.selectedQuoteKey === site.siteKey);
           const cnt = (site.tasks || []).filter((t) => !isTaskCompleted(t)).length;
           return `
             <div class="site-check-row ${isSelected ? "selected-site" : ""}" onclick="onSidebarSiteClick('${escJs(site.siteKey)}', event)">
@@ -4021,7 +4044,7 @@ end $$;`;
               <span class="site-lbl-name" title="${escHtml(site.siteName)}">${escHtml(site.siteName)}</span>
               <span class="site-lbl-count">${site.scope === "newSite" ? escHtml((site.estimateData && site.estimateData.status) || "신규") : `${cnt}건`}</span>
             </div>`;
-        }).join("") || `<div style="font-size:11.5px;color:var(--text-muted);padding:8px 4px;">진행 중인 현장이 없습니다.</div>`;
+        }).join("") || `<div style="font-size:11.5px;color:var(--text-muted);padding:8px 4px;">${mode === "quote" ? "등록된 미완료 건이 없습니다." : "진행 중인 현장이 없습니다."}</div>`;
 
         const memberOptions = getMembersList()
           .map((m) => `<option value="${escHtml(m)}" ${state.memberFilter === m ? "selected" : ""}>👤 ${escHtml(m)}</option>`)
@@ -4065,9 +4088,9 @@ end $$;`;
           <div class="sidebar-form-group">
             <span class="sidebar-form-label">현장 분류</span>
             <div class="sidebar-cat-grid">
-              <button type="button" class="cat-btn ${(mode === "quote" ? qCat === "site" : state.scope === "site") ? "active" : ""}" onclick="onCategoryClicked('site')">현장 ${mode === "quote" ? (counts.newSite || 0) : (counts.site || 0)}</button>
-              <button type="button" class="cat-btn ${(mode === "quote" ? qCat === "single" : state.scope === "single") ? "active" : ""}" onclick="onCategoryClicked('single')">단건 ${counts.single || 0}</button>
-              <button type="button" class="cat-btn ${(mode === "quote" ? qCat === "as" : state.scope === "as") ? "active" : ""}" onclick="onCategoryClicked('as')">AS ${counts.as || 0}</button>
+              <button type="button" class="cat-btn ${(mode === "quote" ? qCat === "site" : state.scope === "site") ? "active" : ""}" onclick="onCategoryClicked('site')">현장 ${mode === "quote" ? qCounts.site : (counts.site || 0)}</button>
+              <button type="button" class="cat-btn ${(mode === "quote" ? qCat === "single" : state.scope === "single") ? "active" : ""}" onclick="onCategoryClicked('single')">단건 ${mode === "quote" ? qCounts.single : (counts.single || 0)}</button>
+              <button type="button" class="cat-btn ${(mode === "quote" ? qCat === "as" : state.scope === "as") ? "active" : ""}" onclick="onCategoryClicked('as')">AS ${mode === "quote" ? qCounts.as : (counts.as || 0)}</button>
             </div>
           </div>
 
@@ -4085,7 +4108,7 @@ end $$;`;
               <span>${state.showArchivedSites ? "▲" : "▼"}</span>
             </button>
             ${state.showArchivedSites ? `<div class="site-checklist">${doneSites.slice(0, 12).map((s) => {
-              const isSelected = (mode === "sites" && state.selectedSiteKey === s.siteKey) || (mode === "quote" && (qCat === "site" ? state.selectedQuoteKey === s.siteKey : state.selectedSiteKey === s.siteKey));
+              const isSelected = (mode === "sites" && state.selectedSiteKey === s.siteKey) || (mode === "quote" && state.selectedQuoteKey === s.siteKey);
               const countLbl = s.scope === "newSite" ? escHtml((s.estimateData && s.estimateData.status) || "완료") : `${s.progressRate || 100}%`;
               return `
                 <div class="site-check-row ${isSelected ? "selected-site" : ""}" style="opacity:0.85;" onclick="openSiteDetail('${escJs(s.siteKey)}')">
@@ -5698,10 +5721,11 @@ end $$;`;
         window.open(url, "_blank", "noopener,noreferrer");
       };
 
-      function getSortedQuotesForTab(statusMode) {
+      function getSortedQuotesForTab(statusMode, quoteCat) {
         const q = state.searchQuery.trim();
         const m = state.memberFilter;
-        const allNewSites = getAllSites().filter((s) => s.scope === "newSite");
+        const targetCat = quoteCat || state.quoteCategory || "site";
+        const allNewSites = getAllSites().filter((s) => s.scope === "newSite" && getQuoteTypeOfSite(s) === targetCat);
         const activeQuotes = allNewSites.filter((s) => !s.isArchived && !s.isAllCompleted);
         const doneQuotes = allNewSites.filter((s) => s.isArchived || s.isAllCompleted);
         const pool = statusMode === "done" ? doneQuotes : activeQuotes;
@@ -5711,7 +5735,7 @@ end $$;`;
           const mgr = ed.manager || s.primaryManager || (s.tasks && s.tasks[0] && s.tasks[0].manager) || "";
           if (m && !mgr.includes(m)) return false;
           if (q) {
-            const hay = [s.siteName, ed.status, ed.priority, ed.scope, ed.source, ed.clientName, ed.clientPhone, mgr, ed.memo, ed.nextAction, ed.address].join(" ");
+            const hay = [s.siteName, ed.status, ed.priority, ed.scope, ed.taskName, ed.source, ed.clientName, ed.clientPhone, mgr, ed.memo, ed.nextAction, ed.address, ed.asSpace, ed.asSymptom].join(" ");
             if (!matchesQuery(hay, q)) return false;
           }
           return true;
@@ -5781,14 +5805,16 @@ end $$;`;
 
       function renderPcQuoteTab() {
         const qCat = state.quoteCategory || "site";
-        if (qCat === "single" || qCat === "as") {
-          state.scope = qCat;
-          renderPcSitesTab(true);
-          return;
-        }
         state.scope = "newSite";
         const isDoneView = state.quoteStatusFilter === "done";
-        const { activeQuotes, doneQuotes, filtered } = getSortedQuotesForTab(state.quoteStatusFilter);
+        const { activeQuotes, doneQuotes, filtered } = getSortedQuotesForTab(state.quoteStatusFilter, qCat);
+
+        const catMetaMap = {
+          site: { icon: "📋", activeTab: "📋 신규현장", doneTab: "🎉 계약 완료", emptyActive: "조건에 맞는 진행 신규현장이 없습니다.", emptyDone: "계약 완료된 신규현장이 없습니다.", addBtn: "+ 신규 견적 등록" },
+          single: { icon: "⚡", activeTab: "⚡ 신규 단건", doneTab: "🎉 계약·완료", emptyActive: "아직 정식 현장으로 등록되지 않은 신규 단건이 없습니다.", emptyDone: "완료된 신규 단건이 없습니다.", addBtn: "+ 신규 단건 등록" },
+          as: { icon: "🔧", activeTab: "🔧 신규 AS", doneTab: "🎉 처리·완료", emptyActive: "아직 정식 현장으로 등록되지 않은 신규 AS가 없습니다.", emptyDone: "완료된 신규 AS가 없습니다.", addBtn: "+ 신규 AS 등록" }
+        };
+        const cm = catMetaMap[qCat] || catMetaMap.site;
 
         let curSite = filtered.find((s) => s.siteKey === state.selectedQuoteKey) || filtered[0] || null;
         if (curSite) state.selectedQuoteKey = curSite.siteKey;
@@ -5825,9 +5851,9 @@ end $$;`;
         if (!curSite) {
           detailHtml = `
             <div class="detail-card-panel" style="padding:50px 20px;text-align:center;">
-              <div style="font-size:34px;margin-bottom:10px;">📋</div>
-              <p style="color:var(--text-muted);font-weight:700;margin-bottom:14px;">${isDoneView ? "계약 완료된 신규현장이 없습니다." : "조건에 맞는 진행 신규현장이 없습니다."}</p>
-              <button type="button" class="btn-act-blue" onclick="openEstimateModal(null)">+ 신규 견적 등록</button>
+              <div style="font-size:34px;margin-bottom:10px;">${cm.icon}</div>
+              <p style="color:var(--text-muted);font-weight:700;margin-bottom:14px;">${isDoneView ? cm.emptyDone : cm.emptyActive}</p>
+              <button type="button" class="btn-act-blue" onclick="openEstimateModal(null)">${cm.addBtn}</button>
             </div>`;
         } else {
           const est = curSite.estimateData || {};
@@ -5998,14 +6024,14 @@ end $$;`;
           <div class="site-carousel-controls">
             <div style="display:flex;align-items:center;gap:8px;">
               <div class="pc-est-status-tabs">
-                <button type="button" class="pc-c-status-tab ${!isDoneView ? "active" : ""}" onclick="setQuoteStatusFilter('active')">📋 신규현장 <span class="pc-badge-count">${activeQuotes.length}</span></button>
-                <button type="button" class="pc-c-status-tab done-tab ${isDoneView ? "active" : ""}" onclick="setQuoteStatusFilter('done')">🎉 계약 완료 <span class="pc-badge-count-done">${doneQuotes.length}</span></button>
+                <button type="button" class="pc-c-status-tab ${!isDoneView ? "active" : ""}" onclick="setQuoteStatusFilter('active')">${cm.activeTab} <span class="pc-badge-count">${activeQuotes.length}</span></button>
+                <button type="button" class="pc-c-status-tab done-tab ${isDoneView ? "active" : ""}" onclick="setQuoteStatusFilter('done')">${cm.doneTab} <span class="pc-badge-count-done">${doneQuotes.length}</span></button>
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
               <button type="button" class="st-pill ${state.quoteSortBy === "priority" ? "active" : ""}" onclick="setQuoteSort('priority')">우선순위순</button>
               <button type="button" class="st-pill ${state.quoteSortBy === "inquiry" ? "active" : ""}" onclick="setQuoteSort('inquiry')">문의일순</button>
-              <button type="button" class="btn-act-blue" style="height:29px;padding:0 11px;font-size:12px;" onclick="openEstimateModal(null)">+ 신규 견적 등록</button>
+              <button type="button" class="btn-act-blue" style="height:29px;padding:0 11px;font-size:12px;" onclick="openEstimateModal(null)">${cm.addBtn}</button>
             </div>
           </div>
           ${filtered.length ? `
@@ -13838,31 +13864,28 @@ end $$;`;
       // [모바일 탭 5: 신규 (기존 현장서식.js 동일 아코디언 카드)] & [모바일 탭 6: 재무]
       function renderMobileQuoteTab() {
         const qCat = state.quoteCategory || "site";
-        const counts = (state.dashData && state.dashData.scopeCounts) || {};
+        const qCounts = getQuoteCategoryCounts();
         const catSwitchHtml = `
           <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center;">
-            <button type="button" class="m-filter-chip-btn ${qCat === "site" ? "active" : ""}" style="flex:1;justify-content:center;" onclick="onMScopeClick('site')">🏗️ 현장 ${counts.newSite || 0}</button>
-            <button type="button" class="m-filter-chip-btn ${qCat === "single" ? "active" : ""}" style="flex:1;justify-content:center;" onclick="onMScopeClick('single')">⚡ 단건 ${counts.single || 0}</button>
-            <button type="button" class="m-filter-chip-btn ${qCat === "as" ? "active" : ""}" style="flex:1;justify-content:center;" onclick="onMScopeClick('as')">🔧 AS ${counts.as || 0}</button>
+            <button type="button" class="m-filter-chip-btn ${qCat === "site" ? "active" : ""}" style="flex:1;justify-content:center;" onclick="onMScopeClick('site')">🏗️ 현장 ${qCounts.site}</button>
+            <button type="button" class="m-filter-chip-btn ${qCat === "single" ? "active" : ""}" style="flex:1;justify-content:center;" onclick="onMScopeClick('single')">⚡ 단건 ${qCounts.single}</button>
+            <button type="button" class="m-filter-chip-btn ${qCat === "as" ? "active" : ""}" style="flex:1;justify-content:center;" onclick="onMScopeClick('as')">🔧 AS ${qCounts.as}</button>
             <button type="button" onclick="openEstimateModal(null)" style="padding:6px 10px;font-size:11.5px;font-weight:800;border:none;background:#2563eb;color:#ffffff;border-radius:7px;cursor:pointer;white-space:nowrap;">+ 등록</button>
           </div>`;
-        if (qCat === "single" || qCat === "as") {
-          state.scope = qCat;
-          renderMobileSitesTab("m-page-quote", catSwitchHtml);
-          return;
-        }
         state.scope = "newSite";
         const isDoneMode = state.quoteStatusFilter === "done";
-        const { activeQuotes, doneQuotes, filtered } = getSortedQuotesForTab(state.quoteStatusFilter);
+        const { activeQuotes, doneQuotes, filtered } = getSortedQuotesForTab(state.quoteStatusFilter, qCat);
+        const activeLabel = qCat === "single" ? "⚡ 신규 단건" : qCat === "as" ? "🔧 신규 AS" : "📋 신규현장";
+        const doneLabel = qCat === "single" ? "🎉 계약·완료" : qCat === "as" ? "🎉 처리·완료" : "🎉 계약 완료";
 
         const headBarHtml = catSwitchHtml + `
           <div class="mobile-est-head-bar" style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 0 10px;margin-bottom:8px;border-bottom:1px solid #e2e8f0;">
             <div style="display:flex;background:#f1f5f9;padding:2px;border-radius:8px;gap:2px;">
               <button type="button" onclick="setQuoteStatusFilter('active')" style="padding:5px 9px;font-size:11.5px;font-weight:700;border:none;border-radius:6px;cursor:pointer;background:${!isDoneMode ? "#ffffff" : "transparent"};color:${!isDoneMode ? "#2563eb" : "#64748b"};box-shadow:${!isDoneMode ? "0 1px 3px rgba(0,0,0,0.08)" : "none"};">
-                📋 신규현장 <span style="margin-left:2px;font-size:10px;padding:1px 5px;border-radius:8px;background:${!isDoneMode ? "#eff6ff" : "#e2e8f0"};color:${!isDoneMode ? "#2563eb" : "#64748b"};">${activeQuotes.length}</span>
+                ${activeLabel} <span style="margin-left:2px;font-size:10px;padding:1px 5px;border-radius:8px;background:${!isDoneMode ? "#eff6ff" : "#e2e8f0"};color:${!isDoneMode ? "#2563eb" : "#64748b"};">${activeQuotes.length}</span>
               </button>
               <button type="button" onclick="setQuoteStatusFilter('done')" style="padding:5px 9px;font-size:11.5px;font-weight:700;border:none;border-radius:6px;cursor:pointer;background:${isDoneMode ? "#ffffff" : "transparent"};color:${isDoneMode ? "#059669" : "#64748b"};box-shadow:${isDoneMode ? "0 1px 3px rgba(0,0,0,0.08)" : "none"};">
-                🎉 계약 완료 <span style="margin-left:2px;font-size:10px;padding:1px 5px;border-radius:8px;background:${isDoneMode ? "#ecfdf5" : "#e2e8f0"};color:${isDoneMode ? "#059669" : "#64748b"};">${doneQuotes.length}</span>
+                ${doneLabel} <span style="margin-left:2px;font-size:10px;padding:1px 5px;border-radius:8px;background:${isDoneMode ? "#ecfdf5" : "#e2e8f0"};color:${isDoneMode ? "#059669" : "#64748b"};">${doneQuotes.length}</span>
               </button>
             </div>
             <div style="display:flex;gap:4px;">
@@ -15053,56 +15076,63 @@ end $$;`;
         const taskModal = document.getElementById("taskSheetModal");
         const wasEstOpen = Boolean(estModal && estModal.classList.contains("open"));
         const wasTaskOpen = Boolean(taskModal && taskModal.classList.contains("open"));
+        const normQuoteType = (targetType === "single" || targetType === "as") ? targetType : "site";
 
-        if (targetType === "newSite") {
-          const draft = {};
+        if (wasEstOpen && state._estCtx) {
+          const ctx = state._estCtx;
+          const val = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : undefined; };
+          const curEd = Object.assign({}, ctx.ed);
+          if (val("esSite") !== undefined) curEd.siteName = val("esSite");
+          if (val("esStatus") !== undefined) curEd.status = val("esStatus");
+          if (val("esPrio") !== undefined) curEd.priority = val("esPrio");
+          if (val("esMgr") !== undefined) curEd.manager = val("esMgr");
+          if (val("esCName") !== undefined) curEd.clientName = val("esCName");
+          if (val("esCPhone") !== undefined) curEd.clientPhone = val("esCPhone");
+          if (val("esExpAmt") !== undefined) curEd.expectedAmount = Number(val("esExpAmt")) || "";
+          if (val("esConAmt") !== undefined) curEd.contractAmount = Number(val("esConAmt")) || "";
+          if (val("esCostAmt") !== undefined) curEd.costAmount = Number(val("esCostAmt")) || "";
+          if (val("esExpD") !== undefined) curEd.expectedDate = val("esExpD");
+          if (val("esAddr") !== undefined) curEd.address = val("esAddr");
+          if (val("esMemo") !== undefined) curEd.memo = val("esMemo");
+          if (val("esTaskName") !== undefined) curEd.taskName = val("esTaskName");
+          if (val("esPartner") !== undefined) curEd.partner = val("esPartner");
+          curEd.quoteType = normQuoteType;
+          ctx.quoteType = normQuoteType;
+          ctx.ed = curEd;
+          renderEstimateModal();
+          return;
+        }
+
+        if (targetType === "newSite" || wasTaskOpen) {
+          const draft = { quoteType: normQuoteType };
           if (wasTaskOpen && state.sheetCtx) {
             const sc = state.sheetCtx;
             draft.siteName = sc.siteName === "__NEW__" ? (sc.newSiteName || "") : (sc.siteName || "");
+            draft.taskName = sc.taskName || "";
+            draft.partner = sc.partner || "";
             draft.memo = sc.memo || "";
             draft.expectedDate = sc.startYmd || "";
             draft.manager = sc.manager1 || state.user || "조항만";
             if (sc.asMeta) {
               if (sc.asMeta.clientName) draft.clientName = sc.asMeta.clientName;
               if (sc.asMeta.chargeAmount) draft.contractAmount = sc.asMeta.chargeAmount;
+              if (sc.asMeta.costAmount) draft.costAmount = sc.asMeta.costAmount;
             }
           }
-          if (wasTaskOpen) window.closeModal("taskSheetModal");
-          window.openEstimateModal(null, "newSite", draft);
+          if (wasTaskOpen) window.closeModal("taskSheetModal", true);
+          window.openEstimateModal(null, normQuoteType, draft, { skipHistory: wasTaskOpen });
           return;
         }
 
-        const draftSiteName = wasEstOpen && document.getElementById("esSite") ? document.getElementById("esSite").value.trim() : "";
-        const draftMemo = wasEstOpen && document.getElementById("esMemo") ? document.getElementById("esMemo").value.trim() : "";
-        const draftCName = wasEstOpen && document.getElementById("esCName") ? document.getElementById("esCName").value.trim() : "";
-        const draftCPhone = wasEstOpen && document.getElementById("esCPhone") ? document.getElementById("esCPhone").value.trim() : "";
-        const draftConAmt = wasEstOpen && document.getElementById("esConAmt") ? (Number(document.getElementById("esConAmt").value) || 0) : 0;
-        const draftExpAmt = wasEstOpen && document.getElementById("esExpAmt") ? (Number(document.getElementById("esExpAmt").value) || 0) : 0;
-        const draftExpDate = wasEstOpen && document.getElementById("esExpD") ? document.getElementById("esExpD").value : "";
-        const draftMgr = wasEstOpen && document.getElementById("esMgr") ? document.getElementById("esMgr").value : (state.user || "조항만");
-
-        if (wasEstOpen) window.closeModal("estimateEditModal");
-        window.openNewTaskModal("", draftExpDate || state.selectedDayStr, targetType, {
-          fromEstimateModal: Boolean(wasEstOpen || isQuoteTabContext()),
-          newSiteName: draftSiteName,
-          memo: draftMemo,
-          manager1: draftMgr,
-          clientName: [draftCName, draftCPhone].filter(Boolean).join(" / "),
-          chargeAmount: draftConAmt || draftExpAmt || 0
-        });
+        window.openEstimateModal(null, normQuoteType);
       };
 
       window.openNewTaskModal = function (presetSiteName, presetDateYmd, forceScope, draftOpts) {
         const opts = draftOpts || {};
         const isQuote = isQuoteTabContext();
         if (isQuote && !presetSiteName && !forceScope) {
-          const qCat = state.quoteCategory || "site";
-          if (qCat === "single" || qCat === "as") {
-            forceScope = qCat;
-          } else {
-            openEstimateModal(null);
-            return;
-          }
+          openEstimateModal(null);
+          return;
         }
         const d = presetDateYmd || state.selectedDayStr || getTodayYmd();
         const matchedSiteForPreset = presetSiteName
@@ -18227,6 +18257,7 @@ end $$;`;
           `;
         }
 
+        state.promoteEditableTasks = null;
         window.updatePromoteSchedulePreview();
         openModal("promoteEstimateModal");
       };
@@ -18264,10 +18295,27 @@ end $$;`;
         const mgr = curPromoteEstimateData ? curPromoteEstimateData.manager : "조항만";
 
         if (!keepExistingEdits || !Array.isArray(state.promoteEditableTasks)) {
-          const baseTasks = getDefaultProcessSchedule(scope, startDate, mgr);
-          state.promoteEditableTasks = baseTasks.map((t) => Object.assign({ enabled: true }, t, {
-            date: String(t.date || startDate).replace(/\./g, "-")
-          }));
+          const qt = (curPromoteEstimateData && curPromoteEstimateData.quoteType) || "site";
+          if (qt === "single" || qt === "as") {
+            const tName = (curPromoteEstimateData && curPromoteEstimateData.taskName) || (qt === "as" ? "AS 보수" : "단건 시공");
+            const tPartner = (curPromoteEstimateData && curPromoteEstimateData.partner) || "";
+            const tMemo = (curPromoteEstimateData && curPromoteEstimateData.memo) || "";
+            state.promoteEditableTasks = [{
+              enabled: true,
+              taskName: tName,
+              date: String(startDate || getTodayYmd()).replace(/\./g, "-"),
+              manager: mgr,
+              partner: tPartner,
+              status: qt === "as" ? "AS" : "예정",
+              isShared: true,
+              memo: tMemo
+            }];
+          } else {
+            const baseTasks = getDefaultProcessSchedule(scope, startDate, mgr);
+            state.promoteEditableTasks = baseTasks.map((t) => Object.assign({ enabled: true }, t, {
+              date: String(t.date || startDate).replace(/\./g, "-")
+            }));
+          }
         }
 
         const tasks = state.promoteEditableTasks || [];
@@ -18400,21 +18448,23 @@ end $$;`;
           estSiteObj.isAllCompleted = true;
         }
         const todayYmd = getTodayYmd();
-        let existingSite = getAllSites().find((s) => s.siteName === siteName && (s.scope || "site") !== "newSite");
+        const qt = (ed.quoteType === "single" || ed.quoteType === "as") ? ed.quoteType : "site";
+        const targetSheetName = qt === "as" ? "AS" : (qt === "single" ? "단건" : "현장데이터");
+        let existingSite = getAllSites().find((s) => s.siteName === siteName && (s.scope || "site") === qt);
         if (!existingSite) {
           const nowTs = Date.now();
           const newSiteObj = {
-            siteKey: siteName,
+            siteKey: qt === "site" ? siteName : (qt.toUpperCase() + "::" + siteName),
             siteName: siteName,
             colorCode: "1",
-            colorHex: "#0284c7",
+            colorHex: qt === "as" ? "#dc2626" : (qt === "single" ? "#7c3aed" : "#0284c7"),
             tasks: computedTasks.map((t, idx) => {
               const normYmd = String(t.date || startDate || todayYmd).replace(/\./g, "-").trim().slice(0, 10);
               const dMs = new Date(normYmd + "T00:00:00").getTime() || nowTs;
               const rawMgr = String(t.manager || manager || "조항만").trim();
               const mgrParts = rawMgr.split(",").map((x) => x.trim()).filter(Boolean);
               const tMemo = String(t.memo || "").trim();
-              return {
+              const tObj = {
                 id: "task_" + nowTs + "_" + idx,
                 taskId: "task_" + nowTs + "_" + idx,
                 row: "",
@@ -18427,19 +18477,33 @@ end $$;`;
                 manager1: mgrParts[0] || "",
                 manager2: mgrParts[1] || "",
                 partner: t.partner || "",
-                status: t.status || "예정",
+                status: t.status || (qt === "as" ? "AS" : "예정"),
                 isShared: true,
                 memo: tMemo,
                 updatedAtMs: nowTs + idx,
                 memoUpdatedAtMs: tMemo ? (nowTs + idx) : 0,
                 isToday: normYmd === todayYmd,
                 isDelayed: Boolean(normYmd && normYmd < todayYmd),
-                scope: "site",
-                sheetName: "현장데이터",
+                scope: qt,
+                sheetName: targetSheetName,
                 isArchived: false
               };
+              if (qt === "as") {
+                tObj.asMeta = {
+                  billingType: ed.asBillingType || "free",
+                  faultType: ed.asFaultType || "",
+                  space: ed.asSpace || "",
+                  symptom: ed.asSymptom || "",
+                  costPayer: ed.asCostPayer || "협력업체 무상재시공",
+                  chargeAmount: Number(ed.contractAmount) || 0,
+                  costAmount: Number(ed.costAmount) || 0,
+                  autoSyncFinance: Boolean(autoCreateCollection),
+                  financeSynced: false
+                };
+              }
+              return tObj;
             }),
-            scope: "site",
+            scope: qt,
             isArchived: false,
             isAllCompleted: false,
             totalTasksCount: computedTasks.length,
@@ -18469,6 +18533,27 @@ end $$;`;
           };
         }
         recalcDashMeta();
+        if (autoCreateCollection) {
+          if (qt === "as") {
+            syncAsTaskToFinance(siteName, (computedTasks[0] && computedTasks[0].taskName) || ed.taskName || "AS", startDate, ed.partner || "", manager, {
+              billingType: ed.asBillingType || "free",
+              faultType: ed.asFaultType || "",
+              space: ed.asSpace || "",
+              symptom: ed.asSymptom || "",
+              costPayer: ed.asCostPayer || "협력업체 무상재시공",
+              chargeAmount: Number(ed.contractAmount) || 0,
+              costAmount: Number(ed.costAmount) || 0
+            });
+          } else if (qt === "single") {
+            syncSingleTaskToFinance(siteName, (computedTasks[0] && computedTasks[0].taskName) || ed.taskName || "단건시공", startDate, startDate, ed.partner || "", manager, {
+              clientName: [ed.clientName, ed.clientPhone].filter(Boolean).join(" / "),
+              chargeAmount: Number(ed.contractAmount) || Number(ed.expectedAmount) || 0,
+              costAmount: Number(ed.costAmount) || 0
+            }, "single");
+          } else if ((Number(ed.contractAmount) || 0) > 0 || (Number(ed.expectedAmount) || 0) > 0) {
+            syncEstimateToFinance(ed);
+          }
+        }
         if (window.WSDataService) {
           window.WSDataService.saveDashboardCache(state.dashData);
         }
@@ -18591,149 +18676,269 @@ end $$;`;
         state.dirtyMobileTabs.finance = true;
       }
 
-      window.openEstimateModal = function (siteKey, forceType, draftData) {
-        if (!siteKey && !forceType && isQuoteTabContext()) {
-          const qCat = state.quoteCategory || "site";
-          if (qCat === "single" || qCat === "as") {
-            window.switchNewRegistrationType(qCat);
-            return;
-          }
-        }
+      window.openEstimateModal = function (siteKey, forceType, draftData, modalOpts) {
         const site = siteKey ? getAllSites().find((s) => s.siteKey === siteKey) : null;
+        const defaultCat = (isQuoteTabContext() ? (state.quoteCategory || "site") : "site");
+        const resolvedType = (forceType === "single" || forceType === "as" || forceType === "site")
+          ? forceType
+          : (site && site.estimateData && (site.estimateData.quoteType === "single" || site.estimateData.quoteType === "as")
+              ? site.estimateData.quoteType
+              : (site ? "site" : defaultCat));
         const baseEd = site && site.estimateData ? site.estimateData : {
           siteName: "", status: "1차상담 예정", inquiryDate: getTodayYmd(), priority: "보통", scope: "전체공사",
+          quoteType: resolvedType, taskName: "", partner: "", costAmount: "",
+          asBillingType: "free", asSpace: "", asFaultType: "", asSymptom: "", asCostPayer: "협력업체 무상재시공",
           memo: "", source: "소개", consultDate: "", expectedDate: "", expectedAmount: "", estimateSendDate: "",
           clientName: "", clientPhone: "", manager: state.user, contractAmount: "", nextAction: "", failReason: "", visitDate: "", address: "", estimateFile: "", row: ""
         };
-        const ed = Object.assign({}, baseEd, draftData || {});
-        state._estCtx = { siteKey, isEdit: !!site, ed: Object.assign({}, ed) };
+        const ed = Object.assign({}, baseEd, draftData || {}, { quoteType: resolvedType });
+        state._estCtx = { siteKey, isEdit: !!site, quoteType: resolvedType, ed: Object.assign({}, ed) };
+        renderEstimateModal();
+        openModal("estimateEditModal", modalOpts);
+      };
+
+      window.renderEstimateModal = function () {
+        const ctx = state._estCtx; if (!ctx) return;
+        const ed = ctx.ed || {};
+        const qt = ctx.quoteType || ed.quoteType || "site";
         const members = getMembersList();
+        const tasksMaster = getTasksMasterList();
+        const partnersMaster = getPartnersMasterList();
         const statuses = ["신규 문의", "상담 중", "1차상담 예정", "2차상담 예정", "현장 방문 예정", "현장 방문 완료", "견적 작성 중", "견적서 전달", "피드백 대기", "계약 완료", "보류", "수주 실패", "문의 접수", "실패"];
 
         const scopes = getEstimateScopesList();
         const curScope = String(ed.scope || "").trim();
-        if (curScope && !scopes.includes(curScope)) {
-          scopes.push(curScope);
-        }
-        const selectedScope = curScope || (site ? "" : "전체공사");
+        if (curScope && !scopes.includes(curScope)) scopes.push(curScope);
+        const selectedScope = curScope || (ctx.isEdit ? "" : "전체공사");
         const scopeOptionsHtml = (!selectedScope ? `<option value="" selected disabled>선택하세요</option>` : "") +
           scopes.map((sc) => `<option value="${escHtml(sc)}" ${selectedScope === sc ? "selected" : ""}>${escHtml(sc)}</option>`).join("");
 
         const sources = getEstimateSourcesList();
         const curSource = String(ed.source || "").trim();
-        if (curSource && !sources.includes(curSource)) {
-          sources.push(curSource);
-        }
-        const selectedSource = curSource || (site ? "" : "소개");
+        if (curSource && !sources.includes(curSource)) sources.push(curSource);
+        const selectedSource = curSource || (ctx.isEdit ? "" : "소개");
         const sourceOptionsHtml = (!selectedSource ? `<option value="" selected disabled>선택하세요</option>` : "") +
           sources.map((so) => `<option value="${escHtml(so)}" ${selectedSource === so ? "selected" : ""}>${escHtml(so)}</option>`).join("");
 
-        document.getElementById("estimateModalTitle").textContent = site ? `📋 [${ed.siteName}] 신규 견적 수정` : "📋 신규 현장 견적 등록";
-        document.getElementById("estimateModalBody").innerHTML = `
-          ${!site ? `
-            <div class="fg" style="margin-bottom:10px;">
-              <label>분류 선택</label>
-              <div class="seg-row">
-                <button type="button" class="seg-btn active" onclick="window.switchNewRegistrationType('newSite')">🏗️ 현장 (신규견적)</button>
-                <button type="button" class="seg-btn" onclick="window.switchNewRegistrationType('single')">⚡ 단건</button>
-                <button type="button" class="seg-btn" onclick="window.switchNewRegistrationType('as')">🔧 AS</button>
+        const siteNamesForAs = Array.from(new Set(
+          getAllSites().filter((s) => s && s.scope !== "newSite" && s.siteName).map((s) => s.siteName)
+        ));
+
+        const titleMap = {
+          site: ctx.isEdit ? `📋 [${ed.siteName}] 신규 견적 수정` : "📋 신규 현장 견적 등록",
+          single: ctx.isEdit ? `⚡ [${ed.siteName}] 신규 단건 수정` : "⚡ 신규 단건 접수·견적 등록",
+          as: ctx.isEdit ? `🔧 [${ed.siteName}] 신규 AS 수정` : "🔧 신규 A/S 접수 등록"
+        };
+        document.getElementById("estimateModalTitle").textContent = titleMap[qt] || titleMap.site;
+
+        const typeSwitcherHtml = !ctx.isEdit ? `
+          <div class="fg" style="margin-bottom:10px;">
+            <label>분류 선택</label>
+            <div class="seg-row">
+              <button type="button" class="seg-btn ${qt === "site" ? "active" : ""}" onclick="window.switchNewRegistrationType('site')">🏗️ 현장 (신규견적)</button>
+              <button type="button" class="seg-btn ${qt === "single" ? "active" : ""}" onclick="window.switchNewRegistrationType('single')">⚡ 단건</button>
+              <button type="button" class="seg-btn ${qt === "as" ? "active" : ""}" onclick="window.switchNewRegistrationType('as')">🔧 AS</button>
+            </div>
+          </div>` : "";
+
+        const isPaidAs = (ed.asBillingType === "paid");
+
+        if (qt === "single") {
+          document.getElementById("estimateModalBody").innerHTML = `
+            ${typeSwitcherHtml}
+            ${buildDatalistHtml("esTasksDl", tasksMaster)}
+            ${buildDatalistHtml("esPartnersDl", partnersMaster)}
+            <div class="form-grid-3">
+              <div class="fg"><label>단건 현장/고객명 *</label><input class="ws-input" id="esSite" value="${escHtml(ed.siteName)}" placeholder="예: 보라매경남 109동 702호"></div>
+              <div class="fg"><label>진행 단계</label><select class="ws-select" id="esStatus">${statuses.map((s) => `<option value="${escHtml(s)}" ${ed.status === s ? "selected" : ""}>${escHtml(s)}</option>`).join("")}</select></div>
+              <div class="fg"><label>우선순위</label><select class="ws-select" id="esPrio">${["높음", "긴급", "보통", "낮음"].map((p) => `<option value="${p}" ${ed.priority === p ? "selected" : ""}>${p}</option>`).join("")}</select></div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>공종명 *</label><input class="ws-input" id="esTaskName" list="esTasksDl" value="${escHtml(ed.taskName || "")}" placeholder="예: 주방 싱크대 / 욕실 / 타일"></div>
+              <div class="fg"><label>작업 예정일</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
+              <div class="fg"><label>담당자</label><select class="ws-select" id="esMgr">${members.map((m) => `<option value="${escHtml(m)}" ${ed.manager === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}</select></div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>고객 성함</label><input class="ws-input" id="esCName" value="${escHtml(ed.clientName || "")}" placeholder="고객명"></div>
+              <div class="fg"><label>고객 연락처</label><input class="ws-input" id="esCPhone" value="${escHtml(ed.clientPhone || "")}" placeholder="010-0000-0000"></div>
+              <div class="fg"><label>협력업체 (선택)</label><input class="ws-input" id="esPartner" list="esPartnersDl" value="${escHtml(ed.partner || "")}" placeholder="협력업체/반장명"></div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>예상 견적금액(원)</label><input type="number" class="ws-input" id="esExpAmt" value="${escHtml(ed.expectedAmount || "")}" placeholder="예: 3500000"></div>
+              <div class="fg"><label>최종 계약금액(고객 청구)</label><input type="number" class="ws-input" id="esConAmt" value="${escHtml(ed.contractAmount || "")}" placeholder="예: 3300000"></div>
+              <div class="fg"><label>외주·자재 원가(예상 지출)</label><input type="number" class="ws-input" id="esCostAmt" value="${escHtml(ed.costAmount || "")}" placeholder="예: 2200000"></div>
+            </div>
+            <div class="form-grid-2">
+              <div class="fg"><label>현장 주소</label><input class="ws-input" id="esAddr" value="${escHtml(ed.address || "")}" placeholder="도로명 및 동호수"></div>
+              <div class="fg"><label>다음 해야 할 일</label><input class="ws-input" id="esNext" value="${escHtml(ed.nextAction || "")}" placeholder="예: 실측 후 견적서 발송"></div>
+            </div>
+            <div class="fg"><label>상담·접수 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="단건 시공 범위, 고객 요구사항 등">${escHtml(ed.memo || "")}</textarea></div>
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 12px;font-size:11.5px;font-weight:700;color:#1e3a8a;">
+              ℹ️ 저장 시 <b>[신규 현장 &gt; 단건]</b>에서 먼저 관리되며, <b>‘계약 완료’</b> 및 현장 승격 시 <b>정식 단건 현장 + 재무·원장(수금현황·비용마감)</b>에 자동 연동됩니다.
+            </div>
+          `;
+        } else if (qt === "as") {
+          document.getElementById("estimateModalBody").innerHTML = `
+            ${typeSwitcherHtml}
+            ${buildDatalistHtml("esTasksDl", tasksMaster)}
+            ${buildDatalistHtml("esPartnersDl", partnersMaster)}
+            ${buildDatalistHtml("esAsSitesDl", siteNamesForAs)}
+            <div class="form-grid-3">
+              <div class="fg"><label>대상 현장명 *</label><input class="ws-input" id="esSite" list="esAsSitesDl" value="${escHtml(ed.siteName)}" placeholder="기존 현장 선택 또는 직접 입력"></div>
+              <div class="fg"><label>진행 단계</label><select class="ws-select" id="esStatus">${statuses.map((s) => `<option value="${escHtml(s)}" ${ed.status === s ? "selected" : ""}>${escHtml(s)}</option>`).join("")}</select></div>
+              <div class="fg"><label>우선순위</label><select class="ws-select" id="esPrio">${["높음", "긴급", "보통", "낮음"].map((p) => `<option value="${p}" ${ed.priority === p ? "selected" : ""}>${p}</option>`).join("")}</select></div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>AS 공종명</label><input class="ws-input" id="esTaskName" list="esTasksDl" value="${escHtml(ed.taskName || "")}" placeholder="예: 실리콘 / 누수 / 도어 / 전기"></div>
+              <div class="fg"><label>방문 예정일</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
+              <div class="fg"><label>담당자</label><select class="ws-select" id="esMgr">${members.map((m) => `<option value="${escHtml(m)}" ${ed.manager === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}</select></div>
+            </div>
+            <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:9px;margin-bottom:8px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:12.5px;font-weight:800;color:#0f172a;">🔧 A/S 접수 상세</span>
+                <div style="display:inline-flex;border:1px solid #cbd5e1;border-radius:6px;overflow:hidden;background:#fff;">
+                  <button type="button" onclick="state._estCtx.ed.asBillingType='free'; state._estCtx.ed.asCostPayer='협력업체 무상재시공'; renderEstimateModal();"
+                    style="border:none;padding:4px 12px;font-size:11.5px;font-weight:800;cursor:pointer;background:${!isPaidAs ? "#1e293b" : "#fff"};color:${!isPaidAs ? "#fff" : "#475569"};">무상 A/S</button>
+                  <button type="button" onclick="state._estCtx.ed.asBillingType='paid'; state._estCtx.ed.asCostPayer='고객 부담'; renderEstimateModal();"
+                    style="border:none;padding:4px 12px;font-size:11.5px;font-weight:800;cursor:pointer;background:${isPaidAs ? "#2563eb" : "#fff"};color:${isPaidAs ? "#fff" : "#475569"};">💰 유상 A/S</button>
+                </div>
+              </div>
+              <div class="form-grid-3" style="gap:8px;">
+                <div class="fg" style="margin:0;"><label style="font-size:11.5px;">공간 (위치)</label><input class="ws-input" id="esAsSpace" value="${escHtml(ed.asSpace || "")}" placeholder="예: 안방 욕실 / 주방"></div>
+                <div class="fg" style="margin:0;">
+                  <label style="font-size:11.5px;">귀책 판단</label>
+                  <select class="ws-select" id="esAsFaultType">
+                    <option value="" ${!ed.asFaultType ? "selected" : ""}>선택 안 함</option>
+                    <option value="협력업체 시공불량" ${ed.asFaultType === "협력업체 시공불량" ? "selected" : ""}>협력업체 시공불량</option>
+                    <option value="자재 하자" ${ed.asFaultType === "자재 하자" ? "selected" : ""}>자재 하자</option>
+                    <option value="고객 과실·변심" ${ed.asFaultType === "고객 과실·변심" ? "selected" : ""}>고객 과실·변심</option>
+                    <option value="보증기간 만료" ${ed.asFaultType === "보증기간 만료" ? "selected" : ""}>보증기간 만료</option>
+                    <option value="기타" ${ed.asFaultType === "기타" ? "selected" : ""}>기타</option>
+                  </select>
+                </div>
+                <div class="fg" style="margin:0;">
+                  <label style="font-size:11.5px;">비용 부담 주체</label>
+                  <select class="ws-select" id="esAsCostPayer">
+                    <option value="협력업체 무상재시공" ${ed.asCostPayer === "협력업체 무상재시공" ? "selected" : ""}>협력업체 무상재시공</option>
+                    <option value="우성아이디 부담" ${ed.asCostPayer === "우성아이디 부담" ? "selected" : ""}>우성아이디 부담</option>
+                    <option value="고객 부담" ${ed.asCostPayer === "고객 부담" ? "selected" : ""}>고객 부담 (유상)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="fg" style="margin:0;"><label style="font-size:11.5px;">증상 및 귀책 판단 근거</label><input class="ws-input" id="esAsSymptom" value="${escHtml(ed.asSymptom || "")}" placeholder="예: 젠다이 실리콘 들뜸 / 고객 사용 중 파손으로 유상 처리 합의"></div>
+              <div class="form-grid-3" style="gap:8px;">
+                <div class="fg" style="margin:0;"><label style="font-size:11.5px;">재시공 협력업체</label><input class="ws-input" id="esPartner" list="esPartnersDl" value="${escHtml(ed.partner || "")}" placeholder="협력업체/반장명"></div>
+                <div class="fg" style="margin:0;"><label style="font-size:11.5px;color:${isPaidAs ? "#1d4ed8" : "#64748b"};">유상 청구금액 (고객 청구)</label><input type="number" class="ws-input" id="esConAmt" value="${escHtml(ed.contractAmount || "")}" placeholder="0"></div>
+                <div class="fg" style="margin:0;"><label style="font-size:11.5px;color:#b45309;">처리 비용 (외주·자재 원가)</label><input type="number" class="ws-input" id="esCostAmt" value="${escHtml(ed.costAmount || "")}" placeholder="0"></div>
               </div>
             </div>
-          ` : ""}
-          <div class="form-grid-3">
-            <div class="fg"><label>현장/고객명 *</label><input class="ws-input" id="esSite" value="${escHtml(ed.siteName)}" placeholder="예: 신대방우성 12동 1110호"></div>
-            <div class="fg"><label>진행 단계</label><select class="ws-select" id="esStatus">${statuses.map((s) => `<option value="${escHtml(s)}" ${ed.status === s ? "selected" : ""}>${escHtml(s)}</option>`).join("")}</select></div>
-            <div class="fg"><label>우선순위</label><select class="ws-select" id="esPrio">${["높음", "긴급", "보통", "낮음"].map((p) => `<option value="${p}" ${ed.priority === p ? "selected" : ""}>${p}</option>`).join("")}</select></div>
-          </div>
-          <div class="form-grid-3">
-            <div class="fg"><label>공사 범위</label><select class="ws-select" id="esScope">${scopeOptionsHtml}</select></div>
-            <div class="fg"><label>유입 경로</label><select class="ws-select" id="esSource">${sourceOptionsHtml}</select></div>
-            <div class="fg"><label>담당자</label><select class="ws-select" id="esMgr">${members.map((m) => `<option value="${escHtml(m)}" ${ed.manager === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}</select></div>
-          </div>
-          <div class="form-grid-3">
-            <div class="fg"><label>고객 성함</label><input class="ws-input" id="esCName" value="${escHtml(ed.clientName || "")}" placeholder="고객명"></div>
-            <div class="fg"><label>고객 연락처</label><input class="ws-input" id="esCPhone" value="${escHtml(ed.clientPhone || "")}" placeholder="010-0000-0000"></div>
-            <div class="fg"><label>예상 공사금액(원)</label><input type="number" class="ws-input" id="esExpAmt" value="${escHtml(ed.expectedAmount || "")}" placeholder="예: 50000000"></div>
-          </div>
-          <div class="form-grid-3">
-            <div class="fg"><label>문의일 (접수)</label><input type="date" class="ws-input" id="esInq" value="${escHtml(ed.inquiryDate || "")}"></div>
-            <div class="fg"><label>1차 상담일</label><input type="date" class="ws-input" id="esCons" value="${escHtml(ed.consultDate || "")}"></div>
-            <div class="fg"><label>현장 방문일 (실측)</label><input type="date" class="ws-input" id="esVisit" value="${escHtml(ed.visitDate || "")}"></div>
-          </div>
-          <div class="form-grid-3">
-            <div class="fg"><label>견적 전달일</label><input type="date" class="ws-input" id="esSend" value="${escHtml(ed.estimateSendDate || "")}"></div>
-            <div class="fg"><label>공사 예정일 (착공)</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
-            <div class="fg"><label>최종 계약금액(원)</label><input type="number" class="ws-input" id="esConAmt" value="${escHtml(ed.contractAmount || "")}" placeholder="예: 48000000"></div>
-          </div>
-          <div class="form-grid-3">
-            <div class="fg"><label>현장 주소</label><input class="ws-input" id="esAddr" value="${escHtml(ed.address || "")}" placeholder="도로명 및 동호수"></div>
-            <div class="fg"><label>다음 해야 할 일</label><input class="ws-input" id="esNext" value="${escHtml(ed.nextAction || "")}" placeholder="예: 1차 견적서 발송 후 해피콜"></div>
-            <div class="fg">
-              <label>⚠️ 보류·실패 사유</label>
-              <input class="ws-input" list="esFailReasonList" id="esFailReason" placeholder="선택 또는 직접 입력" value="${escHtml(ed.failReason || "")}">
-              <datalist id="esFailReasonList">
-                <option value="예산 차이">
-                <option value="일정 불일치">
-                <option value="연락 두절">
-                <option value="경쟁 업체 선택">
-                <option value="공사 취소">
-                <option value="고객 보류">
-                <option value="단순 문의">
-                <option value="기타">
-              </datalist>
+            <div class="form-grid-3">
+              <div class="fg"><label>고객 성함</label><input class="ws-input" id="esCName" value="${escHtml(ed.clientName || "")}" placeholder="고객명"></div>
+              <div class="fg"><label>고객 연락처</label><input class="ws-input" id="esCPhone" value="${escHtml(ed.clientPhone || "")}" placeholder="010-0000-0000"></div>
+              <div class="fg"><label>다음 해야 할 일</label><input class="ws-input" id="esNext" value="${escHtml(ed.nextAction || "")}" placeholder="예: 반장님 일정 조율 후 방문"></div>
             </div>
-          </div>
-          <div class="form-grid-2">
-            <div class="fg"><label>견적서 파일(URL 또는 파일명)</label><input class="ws-input" id="esFile" value="${escHtml(ed.estimateFile || "")}" placeholder="Google Drive 링크 또는 파일명"></div>
-            <div class="fg"><label>상담 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="상담 메모, 고객 요구사항 등">${escHtml(ed.memo || "")}</textarea></div>
-          </div>
-          <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;padding:10px 14px;margin-top:6px;">
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#1e3a8a;background:#eff6ff;padding:7px 10px;border-radius:6px;border:1px solid #bfdbfe;cursor:pointer;margin:0;">
-              <input type="checkbox" id="esAutoSyncFinance" checked>
-              <span>💰 저장 시 재무·원장 자동 연동 (<b>최종 계약금액</b> 입력 또는 <b>계약 완료</b> 시 [현장 수금현황]에 자동 등록/업데이트)</span>
-            </label>
-          </div>
-        `;
+            <div class="fg"><label>접수 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="AS 상세 메모">${escHtml(ed.memo || "")}</textarea></div>
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 12px;font-size:11.5px;font-weight:700;color:#1e3a8a;">
+              ℹ️ 저장 시 <b>[신규 현장 &gt; AS]</b>에서 먼저 관리되며, <b>‘계약 완료(처리 확정)’</b> 및 현장 승격 시 <b>정식 AS 현장 + 재무·원장(수금현황·비용마감)</b>에 자동 연동됩니다.
+            </div>
+          `;
+        } else {
+          document.getElementById("estimateModalBody").innerHTML = `
+            ${typeSwitcherHtml}
+            <div class="form-grid-3">
+              <div class="fg"><label>현장/고객명 *</label><input class="ws-input" id="esSite" value="${escHtml(ed.siteName)}" placeholder="예: 신대방우성 12동 1110호"></div>
+              <div class="fg"><label>진행 단계</label><select class="ws-select" id="esStatus">${statuses.map((s) => `<option value="${escHtml(s)}" ${ed.status === s ? "selected" : ""}>${escHtml(s)}</option>`).join("")}</select></div>
+              <div class="fg"><label>우선순위</label><select class="ws-select" id="esPrio">${["높음", "긴급", "보통", "낮음"].map((p) => `<option value="${p}" ${ed.priority === p ? "selected" : ""}>${p}</option>`).join("")}</select></div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>공사 범위</label><select class="ws-select" id="esScope">${scopeOptionsHtml}</select></div>
+              <div class="fg"><label>유입 경로</label><select class="ws-select" id="esSource">${sourceOptionsHtml}</select></div>
+              <div class="fg"><label>담당자</label><select class="ws-select" id="esMgr">${members.map((m) => `<option value="${escHtml(m)}" ${ed.manager === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}</select></div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>고객 성함</label><input class="ws-input" id="esCName" value="${escHtml(ed.clientName || "")}" placeholder="고객명"></div>
+              <div class="fg"><label>고객 연락처</label><input class="ws-input" id="esCPhone" value="${escHtml(ed.clientPhone || "")}" placeholder="010-0000-0000"></div>
+              <div class="fg"><label>예상 공사금액(원)</label><input type="number" class="ws-input" id="esExpAmt" value="${escHtml(ed.expectedAmount || "")}" placeholder="예: 50000000"></div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>문의일 (접수)</label><input type="date" class="ws-input" id="esInq" value="${escHtml(ed.inquiryDate || "")}"></div>
+              <div class="fg"><label>1차 상담일</label><input type="date" class="ws-input" id="esCons" value="${escHtml(ed.consultDate || "")}"></div>
+              <div class="fg"><label>현장 방문일 (실측)</label><input type="date" class="ws-input" id="esVisit" value="${escHtml(ed.visitDate || "")}"></div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>견적 전달일</label><input type="date" class="ws-input" id="esSend" value="${escHtml(ed.estimateSendDate || "")}"></div>
+              <div class="fg"><label>공사 예정일 (착공)</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
+              <div class="fg"><label>최종 계약금액(원)</label><input type="number" class="ws-input" id="esConAmt" value="${escHtml(ed.contractAmount || "")}" placeholder="예: 48000000"></div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>현장 주소</label><input class="ws-input" id="esAddr" value="${escHtml(ed.address || "")}" placeholder="도로명 및 동호수"></div>
+              <div class="fg"><label>다음 해야 할 일</label><input class="ws-input" id="esNext" value="${escHtml(ed.nextAction || "")}" placeholder="예: 1차 견적서 발송 후 해피콜"></div>
+              <div class="fg">
+                <label>⚠️ 보류·실패 사유</label>
+                <input class="ws-input" list="esFailReasonList" id="esFailReason" placeholder="선택 또는 직접 입력" value="${escHtml(ed.failReason || "")}">
+                <datalist id="esFailReasonList">
+                  <option value="예산 차이"><option value="일정 불일치"><option value="연락 두절"><option value="경쟁 업체 선택">
+                  <option value="공사 취소"><option value="고객 보류"><option value="단순 문의"><option value="기타">
+                </datalist>
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="fg"><label>견적서 파일(URL 또는 파일명)</label><input class="ws-input" id="esFile" value="${escHtml(ed.estimateFile || "")}" placeholder="Google Drive 링크 또는 파일명"></div>
+              <div class="fg"><label>상담 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="상담 메모, 고객 요구사항 등">${escHtml(ed.memo || "")}</textarea></div>
+            </div>
+          `;
+        }
+
         document.getElementById("estimateModalFooter").innerHTML = `
-          ${site ? `<button type="button" class="btn-act-danger" onclick="closeModal('estimateEditModal'); openDeleteConfirm('site', '${escJs(site.siteKey)}');" style="margin-right:auto;">🗑️ 견적 삭제</button>` : ""}
+          ${ctx.isEdit ? `<button type="button" class="btn-act-danger" onclick="closeModal('estimateEditModal'); openDeleteConfirm('site', '${escJs(ctx.siteKey)}');" style="margin-right:auto;">🗑️ 삭제</button>` : ""}
           <button type="button" class="btn-act-white" onclick="closeModal('estimateEditModal')">취소</button>
-          <button type="button" class="btn-act-blue" onclick="saveEstimateModal()">💾 견적 저장</button>
+          <button type="button" class="btn-act-blue" onclick="saveEstimateModal()">💾 저장</button>
         `;
-        openModal("estimateEditModal");
       };
 
       window.saveEstimateModal = function () {
         const ctx = state._estCtx; if (!ctx) return;
-        const siteName = document.getElementById("esSite").value.trim();
+        const qt = ctx.quoteType || (ctx.ed && ctx.ed.quoteType) || "site";
+        const gVal = (id, fb) => { const el = document.getElementById(id); return el ? el.value.trim() : (fb !== undefined ? fb : ""); };
+        const siteName = gVal("esSite");
         if (!siteName) return showToast("⚠️ 현장명을 입력하세요.");
         const ed = {
           row: ctx.ed.row || "",
           originalSiteName: ctx.ed.siteName || siteName,
+          quoteType: qt,
           siteName,
-          status: document.getElementById("esStatus").value,
-          priority: document.getElementById("esPrio").value,
-          scope: document.getElementById("esScope").value.trim(),
-          source: document.getElementById("esSource").value.trim(),
-          manager: document.getElementById("esMgr").value,
-          clientName: document.getElementById("esCName").value.trim(),
-          clientPhone: document.getElementById("esCPhone").value.trim(),
-          expectedAmount: Number(document.getElementById("esExpAmt").value) || "",
-          inquiryDate: document.getElementById("esInq").value,
-          consultDate: document.getElementById("esCons").value,
-          visitDate: document.getElementById("esVisit").value,
-          estimateSendDate: document.getElementById("esSend").value,
-          expectedDate: document.getElementById("esExpD").value,
-          contractAmount: Number(document.getElementById("esConAmt").value) || "",
-          address: document.getElementById("esAddr").value.trim(),
-          nextAction: document.getElementById("esNext").value.trim(),
-          failReason: (document.getElementById("esFailReason") ? document.getElementById("esFailReason").value.trim() : ""),
-          estimateFile: (document.getElementById("esFile") ? document.getElementById("esFile").value.trim() : (ctx.ed.estimateFile || "")),
-          memo: document.getElementById("esMemo").value.trim()
+          status: gVal("esStatus", "1차상담 예정"),
+          priority: gVal("esPrio", "보통"),
+          scope: qt === "single" ? "단건" : (qt === "as" ? "AS" : gVal("esScope", "전체공사")),
+          source: gVal("esSource", ctx.ed.source || "소개"),
+          manager: gVal("esMgr", state.user || "조항만"),
+          clientName: gVal("esCName"),
+          clientPhone: gVal("esCPhone"),
+          expectedAmount: Number(gVal("esExpAmt")) || "",
+          inquiryDate: gVal("esInq", ctx.ed.inquiryDate || getTodayYmd()),
+          consultDate: gVal("esCons", ctx.ed.consultDate || ""),
+          visitDate: gVal("esVisit", ctx.ed.visitDate || ""),
+          estimateSendDate: gVal("esSend", ctx.ed.estimateSendDate || ""),
+          expectedDate: gVal("esExpD", ctx.ed.expectedDate || ""),
+          contractAmount: Number(gVal("esConAmt")) || "",
+          costAmount: Number(gVal("esCostAmt")) || "",
+          taskName: gVal("esTaskName", ctx.ed.taskName || ""),
+          partner: gVal("esPartner", ctx.ed.partner || ""),
+          asBillingType: ctx.ed.asBillingType || "free",
+          asSpace: gVal("esAsSpace", ctx.ed.asSpace || ""),
+          asFaultType: gVal("esAsFaultType", ctx.ed.asFaultType || ""),
+          asSymptom: gVal("esAsSymptom", ctx.ed.asSymptom || ""),
+          asCostPayer: gVal("esAsCostPayer", ctx.ed.asCostPayer || "협력업체 무상재시공"),
+          address: gVal("esAddr", ctx.ed.address || ""),
+          nextAction: gVal("esNext", ctx.ed.nextAction || ""),
+          failReason: gVal("esFailReason", ctx.ed.failReason || ""),
+          estimateFile: gVal("esFile", ctx.ed.estimateFile || ""),
+          memo: gVal("esMemo")
         };
-        const autoSyncEl = document.getElementById("esAutoSyncFinance");
-        if (!autoSyncEl || autoSyncEl.checked) {
-          syncEstimateToFinance(ed);
+        if (qt === "as" && ed.asCostPayer === "고객 부담") {
+          ed.asBillingType = "paid";
         }
+        state.quoteCategory = qt;
         if (ctx.isEdit) {
           const s = getAllSites().find((x) => x.siteKey === ctx.siteKey);
           if (s) {
@@ -21648,10 +21853,8 @@ end $$;`;
           }
         }
         if (tabKey === "quote") {
-          const qCat = state.quoteCategory || "site";
-          const targetScope = qCat === "site" ? "newSite" : qCat;
-          if (state.scope !== targetScope) {
-            state.scope = targetScope;
+          if (state.scope !== "newSite") {
+            state.scope = "newSite";
             markAllDirty();
           }
         } else if (state.scope === "newSite") {
@@ -21716,10 +21919,8 @@ end $$;`;
           } catch (_) {}
         }
         if (tabKey === "quote") {
-          const qCat = state.quoteCategory || "site";
-          const targetScope = qCat === "site" ? "newSite" : qCat;
-          if (state.scope !== targetScope) {
-            state.scope = targetScope;
+          if (state.scope !== "newSite") {
+            state.scope = "newSite";
             markAllDirty();
           }
         } else if (state.scope === "newSite") {
@@ -21764,11 +21965,8 @@ end $$;`;
         if (state.pcTab === "quote") {
           const qCat = (scope === "newSite" || scope === "site") ? "site" : scope;
           state.quoteCategory = qCat;
-          state.scope = qCat === "site" ? "newSite" : qCat;
-          if (qCat !== "site") {
-            state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
-            state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
-          }
+          state.scope = "newSite";
+          state.selectedQuoteKey = null;
           markAllDirty();
           renderActiveViews();
           return;
@@ -21785,12 +21983,8 @@ end $$;`;
         if (state.mobileTab === "quote" || state.mobileTab === "newSite") {
           const qCat = (scope === "newSite" || scope === "site") ? "site" : scope;
           state.quoteCategory = qCat;
-          state.scope = qCat === "site" ? "newSite" : qCat;
-          state.mobileExpandedSiteKeys.clear();
-          if (qCat !== "site") {
-            state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
-            state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
-          }
+          state.scope = "newSite";
+          state.mobileExpandedQuoteKeys.clear();
           markAllDirty();
           renderActiveViews();
           return;
@@ -21965,7 +22159,7 @@ end $$;`;
         if (site && site.scope) state.scope = site.scope;
         state.showArchivedSites = isDone;
         if (site && site.scope === "newSite") {
-          state.quoteCategory = "site";
+          state.quoteCategory = getQuoteTypeOfSite(site);
           state.selectedQuoteKey = siteKey;
           if (isDone) {
             state.quoteStatusFilter = "done";
@@ -21983,11 +22177,6 @@ end $$;`;
         state.siteTaskStatusFilter = "all";
         state.checkedTableTaskIds.clear();
         markAllDirty();
-        if (state.pcTab === "quote" && site && (site.scope === "single" || site.scope === "as")) {
-          state.quoteCategory = site.scope;
-          renderActiveViews();
-          return;
-        }
         window.switchMainTab("sites");
         renderActiveViews();
       };
@@ -21997,7 +22186,7 @@ end $$;`;
         if (site && site.scope) state.scope = site.scope;
         state.showArchivedSites = isDone;
         if (site && site.scope === "newSite") {
-          state.quoteCategory = "site";
+          state.quoteCategory = getQuoteTypeOfSite(site);
           state.selectedQuoteKey = siteKey;
           if (isDone) {
             state.quoteStatusFilter = "done";
@@ -22014,12 +22203,6 @@ end $$;`;
         }
         state.selectedSiteKey = siteKey;
         markAllDirty();
-        if (state.mobileTab === "quote" && site && (site.scope === "single" || site.scope === "as")) {
-          state.quoteCategory = site.scope;
-          if (siteKey) state.mobileExpandedSiteKeys.add(siteKey);
-          renderActiveViews();
-          return;
-        }
         window.switchMobileTab("sites");
         if (siteKey) state.mobileExpandedSiteKeys.add(siteKey);
         renderActiveViews();
