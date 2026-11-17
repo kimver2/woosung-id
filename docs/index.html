@@ -6134,7 +6134,6 @@ end $$;`;
                     <div class="pc-est-info-row"><span class="lbl">연락처</span><span class="val">${hasPhone ? `<a href="tel:${escHtml(cleanPhone)}" style="color:#2563eb;font-weight:700;text-decoration:none;">${escHtml(rawPhone)} 📞</a>` : "-"}</span></div>
                     <div class="pc-est-info-row"><span class="lbl">담당자</span><span class="val">${escHtml(manager)}</span></div>
                     <div class="pc-est-info-row"><span class="lbl">현장 주소</span><span class="val">${address ? `<span style="color:#0f172a;font-weight:600;">${escHtml(address)}</span> <a href="https://map.naver.com/p/search/${encodeURIComponent(address)}" target="_blank" rel="noopener noreferrer" style="color:#16a34a;font-size:11px;margin-left:4px;text-decoration:underline;">지도 ↗</a>` : `<span style="color:#94a3b8;">주소 미등록</span>`}</span></div>
-                    ${est.accessNote ? `<div class="pc-est-info-row"><span class="lbl">출입·주차</span><span class="val">${escHtml(est.accessNote)}</span></div>` : ""}
                     ${est.visitAccess ? `<div class="pc-est-info-row"><span class="lbl">방문·출입</span><span class="val">${escHtml(est.visitAccess)}</span></div>` : ""}
                     ${est.originCompletedDate ? `<div class="pc-est-info-row"><span class="lbl">원현장 준공</span><span class="val" style="color:#0369a1;font-weight:700;">${escHtml(est.originCompletedDate)}</span></div>` : ""}
                   </div>
@@ -9833,7 +9832,7 @@ end $$;`;
                 <thead><tr><th style="${thStyle}width:130px;">분류</th><th style="${thStyle}">전용 입력 항목 및 자동화 기능</th></tr></thead>
                 <tbody>
                   <tr><td style="${tdStyle}"><b>🏗️ 현장<br>(신규견적)</b></td><td style="${tdStyle}">공사 범위, 유입 경로, 예상/최종 계약금액, 주요 일자(문의일·1차 상담일·현장 방문일·견적 전달일·착공 예정일), 현장 주소, 다음 해야 할 일, 보류·실패 사유, 견적서 파일 링크, 상담 메모</td></tr>
-                  <tr><td style="${tdStyle}"><b>⚡ 단건</b></td><td style="${tdStyle}">공종명(검색/직접입력), 협력업체(선택), 유입 경로, 문의일/작업 예정일, 예상 견적·계약금액·외주/자재 원가, <b>출입·주차 메모</b>(비번·주차 등), <b>견적서·사진 링크(URL)</b>, 보류·실패 사유</td></tr>
+                  <tr><td style="${tdStyle}"><b>⚡ 단건</b></td><td style="${tdStyle}">공종명(검색/직접입력), 협력업체(선택), 유입 경로, 주요 일자(문의일·1차 상담일·실측일·견적 전달일·작업 예정일), 예상/계약금액·외주/자재 원가, 현장 주소, 견적서 파일 링크, 보류·실패 사유</td></tr>
                   <tr><td style="${tdStyle}"><b>🔧 AS</b></td><td style="${tdStyle}"><b>대상 현장 선택</b> 시 진행/완료 본 현장의 <b>고객명·연락처·준공일(준공 후 경과 개월 수)</b> 자동 연동, <code>무상 A/S</code> / <code>💰 유상 A/S</code> 토글, AS 접수일·방문 예정일·<b>방문 시간/출입 방식</b>, 공간·귀책 판단·비용 부담 주체·증상 근거, 재시공 협력업체·유상 청구/처리 비용, <b>하자 사진·증빙 링크(URL)</b></td></tr>
                 </tbody>
               </table>
@@ -14409,8 +14408,7 @@ end $$;`;
                       <div style="color:#78350f;font-weight:600;margin-top:2px;">${escHtml(eData.nextAction)}</div>
                     </div>` : ""}
                   ${eData.memo ? `<div style="background:#f8fafc;padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;color:#334155;"><strong>상담 메모:</strong> ${escHtml(eData.memo)}</div>` : ""}
-                  ${(eData.accessNote || eData.visitAccess || eData.originCompletedDate) ? `<div style="background:#f8fafc;padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;color:#334155;display:flex;flex-direction:column;gap:2px;">
-                    ${eData.accessNote ? `<div><strong>출입·주차:</strong> ${escHtml(eData.accessNote)}</div>` : ""}
+                  ${(eData.visitAccess || eData.originCompletedDate) ? `<div style="background:#f8fafc;padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;color:#334155;display:flex;flex-direction:column;gap:2px;">
                     ${eData.visitAccess ? `<div><strong>방문·출입:</strong> ${escHtml(eData.visitAccess)}</div>` : ""}
                     ${eData.originCompletedDate ? `<div><strong>원현장 준공:</strong> <span style="color:#0369a1;font-weight:700;">${escHtml(eData.originCompletedDate)}</span></div>` : ""}
                   </div>` : ""}
@@ -20249,7 +20247,6 @@ end $$;`;
           asSymptom: gVal("esAsSymptom", ctx.ed.asSymptom || ""),
           asCostPayer: gVal("esAsCostPayer", ctx.ed.asCostPayer || "협력업체 무상재시공"),
           address: gVal("esAddr", ctx.ed.address || ""),
-          accessNote: gVal("esAccessNote", ctx.ed.accessNote || ""),
           visitAccess: gVal("esVisitAccess", ctx.ed.visitAccess || ""),
           originCompletedDate: gVal("esOriginDoneDate", ctx.ed.originCompletedDate || ""),
           nextAction: gVal("esNext", ctx.ed.nextAction || ""),
