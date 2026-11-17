@@ -286,22 +286,6 @@
     saveTask: function (isEdit, payload, dashData) {
       if (dashData) this.saveDashboardCache(dashData);
       if (isEdit) {
-        var rowNum = parseInt(payload && payload.row, 10);
-        if (!rowNum || rowNum < 2) {
-          // 로컬에서 방금 등록되어 아직 row가 동기화되지 않은 항목은 addScheduleTask로 안전 폴백
-          return this.callGasApi("addScheduleTask", {
-            site: payload.site,
-            task: payload.task,
-            date: payload.date,
-            manager: payload.manager,
-            status: payload.status,
-            shared: payload.shared,
-            memo: payload.memo,
-            partner: payload.partner,
-            category: payload.sheetName || "현장데이터",
-            partnerPhone: payload.partnerPhone || ""
-          });
-        }
         return this.callGasApi("updateScheduleStatus", Object.assign({ format: "json", id: (payload && (payload.id || payload.taskId)) || "" }, payload));
       }
       return this.callGasApi("addScheduleTask", payload);

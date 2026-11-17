@@ -13451,6 +13451,30 @@
       const __wsDeletedTaskGuards = new Map();
       const __wsDeletedSiteGuards = new Map();
       const __WS_DELETE_GUARD_TTL_MS = 45000;
+      const __WS_DELETE_GUARD_STORAGE_KEY = "ws_deleted_guards_v1";
+      function _loadPersistedDeleteGuards() {
+        try {
+          const raw = localStorage.getItem(__WS_DELETE_GUARD_STORAGE_KEY);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          const now = Date.now();
+          if (parsed && Array.isArray(parsed.tasks)) {
+            parsed.tasks.forEach(([k, exp]) => { if (exp > now) __wsDeletedTaskGuards.set(k, exp); });
+          }
+          if (parsed && Array.isArray(parsed.sites)) {
+            parsed.sites.forEach(([k, exp]) => { if (exp > now) __wsDeletedSiteGuards.set(k, exp); });
+          }
+        } catch (e) {}
+      }
+      function _savePersistedDeleteGuards() {
+        try {
+          const now = Date.now();
+          const tasks = [...__wsDeletedTaskGuards.entries()].filter(([, exp]) => exp > now);
+          const sites = [...__wsDeletedSiteGuards.entries()].filter(([, exp]) => exp > now);
+          localStorage.setItem(__WS_DELETE_GUARD_STORAGE_KEY, JSON.stringify({ tasks, sites }));
+        } catch (e) {}
+      }
+      _loadPersistedDeleteGuards();
       function _normDelSiteName(s) {
         return String(s || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
       }
@@ -13467,6 +13491,7 @@
         const effScope = (task && task.scope) || (site && site.scope) || "site";
         const semKey = _makeTaskSemanticKey(site && site.siteName, task && task.taskName, ymd, effScope);
         __wsDeletedTaskGuards.set("SEM::" + semKey, exp);
+        _savePersistedDeleteGuards();
       }
       function recordDeletedSiteGuard(site) {
         if (!site) return;
@@ -13474,8 +13499,10 @@
         if (site.siteKey) __wsDeletedSiteGuards.set("KEY::" + site.siteKey, exp);
         const effScope = site.scope || "site";
         __wsDeletedSiteGuards.set("NAME::" + effScope + "::" + _normDelSiteName(site.siteName), exp);
+        _savePersistedDeleteGuards();
       }
       function applyDeletedGuardsToDashData(dashData) {
+        _loadPersistedDeleteGuards();
         if (!dashData || !Array.isArray(dashData.sites)) return dashData;
         const now = Date.now();
         for (const [k, exp] of __wsDeletedTaskGuards.entries()) {
@@ -13484,6 +13511,7 @@
         for (const [k, exp] of __wsDeletedSiteGuards.entries()) {
           if (exp <= now) __wsDeletedSiteGuards.delete(k);
         }
+        _savePersistedDeleteGuards();
         if (__wsDeletedTaskGuards.size === 0 && __wsDeletedSiteGuards.size === 0) return dashData;
 
         dashData.sites = dashData.sites.filter((s) => {
@@ -14873,6 +14901,22 @@
         // 2) 백그라운드 GAS 시트 저장 및 재무DB 동기화
         const onSuccess = function (res) {
           if (res && res.success) {
+            if (__wsDeletedSiteGuards.has("NAME::site::" + _normDelSiteName(siteName))) {
+              if (window.WSDataService) window.WSDataService.deleteSite({ site: siteName, scope: "site" }, state.dashData);
+              return;
+            }
+            if (Array.isArray(res.createdTasks) && existingSite && Array.isArray(existingSite.tasks)) {
+              res.createdTasks.forEach((ct, idx) => {
+                if (existingSite.tasks[idx] && ct) {
+                  if (ct.row) existingSite.tasks[idx].row = Number(ct.row);
+                  if (ct.id) {
+                    existingSite.tasks[idx].id = ct.id;
+                    existingSite.tasks[idx].taskId = ct.taskId || ct.id;
+                  }
+                }
+              });
+              if (window.WSDataService) window.WSDataService.saveDashboardCache(state.dashData);
+            }
             if ((res.collectionCreated || res.collectionRow) && res.collectionRow && state.financeDbData && Array.isArray(state.financeDbData.collection)) {
               const alreadyHas = state.financeDbData.collection.some(c => (c.id && c.id === res.collectionRow.id) || (c.siteName && c.siteName.trim() === res.collectionRow.siteName.trim()));
               if (!alreadyHas) {
@@ -17059,7 +17103,7 @@
 
       function bootstrap() {
         const ds = window.WSDataService;
-        state.dashData = ds ? ds.getInitialDashboardData() : { kpi: {}, scopeCounts: {}, sites: [], siteInfoMap: {}, holidays: {} };
+        state.dashData = applyDeletedGuardsToDashData(ds ? ds.getInitialDashboardData() : { kpi: {}, scopeCounts: {}, sites: [], siteInfoMap: {}, holidays: {} });
         state.todoData = ds ? ds.getInitialTodoData() : { list: [] };
         state.financeData = ds ? ds.getInitialFinanceData() : { summary: {}, ledger: [] };
         if (state.financeData && Array.isArray(state.financeData.collection)) {

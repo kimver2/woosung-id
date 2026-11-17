@@ -7827,8 +7827,15 @@ function updateScheduleStatusFromWeb(row, newStatus, newShared, newMemo, newDate
   // [행 추적용 기존 날짜]: 사용자가 날짜를 바꾼 경우 새 날짜(newDate)로 행을 찾으면 동일 현장의 동명 공종 다른 행이 수정되므로
   // 클라이언트가 보낸 '변경 전 날짜'로만 행을 추적 (구버전 호출 시 날짜 없이 현장/공종으로 추적)
   var origDateForMatch = (arguments.length > 11 && arguments[11] !== undefined && arguments[11] !== null) ? String(arguments[11]) : "";
-  var rowNum = parseInt(row, 10);
-  if (!rowNum || rowNum < 2) {
+  var origTaskForMatch = (arguments.length > 12 && arguments[12] !== undefined && arguments[12] !== null && String(arguments[12]).trim() !== "")
+    ? String(arguments[12]).trim()
+    : (taskName ? String(taskName).trim() : "");
+  var origMgrForMatch = (arguments.length > 13 && arguments[13] !== undefined && arguments[13] !== null) ? String(arguments[13]) : "";
+  var taskIdForMatch = (arguments.length > 14 && arguments[14] !== undefined && arguments[14] !== null) ? String(arguments[14]) : "";
+  var origMemoForMatch = (arguments.length > 15 && arguments[15] !== undefined && arguments[15] !== null) ? String(arguments[15]) : "";
+  var partnerPhoneForSave = (arguments.length > 16 && arguments[16] !== undefined && arguments[16] !== null) ? String(arguments[16]).trim() : "";
+  var rowNum = parseInt(row, 10) || -1;
+  if (rowNum < 2 && !siteName && !origTaskForMatch && !taskIdForMatch) {
     return { success: false, error: "유효하지 않은 행 번호입니다. (" + row + ")" };
   }
   if (!newStatus) {
@@ -7861,14 +7868,7 @@ function updateScheduleStatusFromWeb(row, newStatus, newShared, newMemo, newDate
       return { success: false, error: (targetSheetName || (isArchived === true ? "완료현장" : "현장데이터")) + " 시트를 찾을 수 없습니다." };
     }
 
-    // 0단계: 날짜 정렬 등으로 행 번호가 변경되었을 경우 실제 행 번호 자동 추적
-    var origTaskForMatch = (arguments.length > 12 && arguments[12] !== undefined && arguments[12] !== null && String(arguments[12]).trim() !== "")
-      ? String(arguments[12]).trim()
-      : (taskName ? String(taskName).trim() : "");
-    var origMgrForMatch = (arguments.length > 13 && arguments[13] !== undefined && arguments[13] !== null) ? String(arguments[13]) : "";
-    var taskIdForMatch = (arguments.length > 14 && arguments[14] !== undefined && arguments[14] !== null) ? String(arguments[14]) : "";
-    var origMemoForMatch = (arguments.length > 15 && arguments[15] !== undefined && arguments[15] !== null) ? String(arguments[15]) : "";
-    var partnerPhoneForSave = (arguments.length > 16 && arguments[16] !== undefined && arguments[16] !== null) ? String(arguments[16]).trim() : "";
+    // 0단계: 날짜 정렬 등으로 행 번호가 변경되었거나 row가 비어있을 경우 실제 행 번호 자동 추적
     if (siteName || origTaskForMatch || taskIdForMatch) {
       rowNum = resolveActualSheetRow(sheet, rowNum, siteName, origTaskForMatch, origDateForMatch, origMgrForMatch, taskIdForMatch, origMemoForMatch);
     }
@@ -11271,11 +11271,22 @@ function promoteEstimateToSite(data) {
       collectionSkippedReason = "수금현황 자동 등록 옵션 미선택";
     }
 
+    var createdTasksMeta = newRows.map(function(r, idx) {
+      return {
+        row: startRow + idx,
+        taskName: r[2],
+        date: r[1],
+        id: is11Col ? r[9] : r[8],
+        taskId: is11Col ? r[9] : r[8]
+      };
+    });
     var result = {
       success: true,
       siteName: siteName,
       siteKey: siteName,
+      startRow: startRow,
       tasksCount: newRows.length,
+      createdTasks: createdTasksMeta,
       collectionCreated: collectionCreated,
       collectionRow: collectionRow,
       message: "\x27" + siteName + "\x27 현장이 진행 현장으로 성공적으로 승격되었습니다."
