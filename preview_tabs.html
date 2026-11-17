@@ -15417,21 +15417,33 @@ end $$;`;
             <div class="form-grid-2">
               <div class="fg">
                 <label>현장 선택</label>
-                <select id="tsSiteSelect" class="ws-select" onchange="onTaskSheetSiteChange(this.value)">
-                  <option value="">-- 현장 선택 --</option>
-                  ${matchingSites.map((s) => `<option value="${escHtml(s.siteName)}" ${ctx.siteName === s.siteName ? "selected" : ""}>${escHtml(s.siteName)}</option>`).join("")}
-                  ${otherActiveSites.length ? `
-                    <optgroup label="── 다른 분류 진행 현장 ──">
-                      ${otherActiveSites.map((s) => `<option value="${escHtml(s.siteName)}" ${ctx.siteName === s.siteName ? "selected" : ""}>${escHtml((scopeTagMap[s.scope] || "") + s.siteName)}</option>`).join("")}
-                    </optgroup>` : ""}
-                  ${curScope === "as" && completedSitesForAs.length ? `
-                    <optgroup label="── 완료된 본 현장 (AS 연동) ──">
-                      ${completedSitesForAs.slice(0, 60).map((s) => `<option value="${escHtml(s.siteName)}" ${ctx.siteName === s.siteName ? "selected" : ""}>[완료] ${escHtml(s.siteName)}</option>`).join("")}
-                    </optgroup>` : ""}
-                  <option value="__NEW__" ${ctx.siteName === "__NEW__" ? "selected" : ""}>+ 새 현장명 직접 입력</option>
-                </select>
+                ${renderWsCustomDropdownHtml({
+                  id: "tsSite",
+                  value: ctx.siteName || "",
+                  displayText: ctx.siteName === "__NEW__" ? "➕ 새 현장명 직접 입력" : (ctx.siteName || ""),
+                  placeholder: "🔍 현장 검색 / 선택",
+                  searchable: true,
+                  clearable: true,
+                  customFooterLabel: "➕ 새 현장명 직접 입력",
+                  customFooterValue: "__NEW__",
+                  items: [
+                    ...(matchingSites.length ? [{
+                      group: curScope === "single" ? "── 단건 현장 ──" : (curScope === "as" ? "── A/S 현장 ──" : "── 진행 현장 ──"),
+                      options: matchingSites.map((s) => ({ value: s.siteName, label: s.siteName }))
+                    }] : []),
+                    ...(otherActiveSites.length ? [{
+                      group: "── 다른 분류 진행 현장 ──",
+                      options: otherActiveSites.map((s) => ({ value: s.siteName, label: (scopeTagMap[s.scope] || "") + s.siteName }))
+                    }] : []),
+                    ...(curScope === "as" && completedSitesForAs.length ? [{
+                      group: "── 완료된 본 현장 (AS 연동) ──",
+                      options: completedSitesForAs.slice(0, 60).map((s) => ({ value: s.siteName, label: "[완료] " + s.siteName }))
+                    }] : [])
+                  ],
+                  onSelect: (val) => window.onTaskSheetSiteChange(val)
+                })}
               </div>
-              <div class="fg" style="position:relative;">
+              <div class="fg ws-task-wrap" style="position:relative;">
                 <label>${ctx.siteName === "__NEW__" ? "공종명" : "공종명 (검색/선택)"}</label>
                 <div style="position:relative;display:flex;align-items:center;">
                   <input type="text" id="sheetTaskSearchInput" class="ws-input" value="${escHtml(ctx.taskName || "")}" placeholder="🔍 공종 검색 / 선택" autocomplete="off" style="padding-right:26px;cursor:pointer;background-color:#ffffff;" onclick="openSheetTaskDropdown()" onfocus="openSheetTaskDropdown()" oninput="onSheetTaskSearchInput(this.value)" onkeydown="onSheetTaskSearchKeydown(event)">
@@ -15443,7 +15455,7 @@ end $$;`;
             ${ctx.siteName === "__NEW__" ? `
               <div class="fg"><label>새 현장명 입력</label><input class="ws-input" value="${escHtml(ctx.newSiteName || "")}" placeholder="예: 보라매우성 101동 502호" oninput="state_sheetUpdate('newSiteName', this.value)"></div>` : ""}
           ` : `
-            <div class="fg" style="position:relative;">
+            <div class="fg ws-task-wrap" style="position:relative;">
               <label>공종명 (검색/선택)</label>
               <div style="position:relative;display:flex;align-items:center;">
                 <input type="text" id="sheetTaskSearchInput" class="ws-input" value="${escHtml(ctx.taskName || "")}" placeholder="🔍 공종 검색 / 선택" autocomplete="off" style="padding-right:26px;cursor:pointer;background-color:#ffffff;" onclick="openSheetTaskDropdown()" onfocus="openSheetTaskDropdown()" oninput="onSheetTaskSearchInput(this.value)" onkeydown="onSheetTaskSearchKeydown(event)">
@@ -15501,17 +15513,27 @@ end $$;`;
           <div class="form-grid-2">
             <div class="fg">
               <label>담당자 1</label>
-              <select class="ws-select" onchange="state_sheetUpdate('manager1', this.value)">
-                <option value="">미지정</option>
-                ${members.map((m) => `<option value="${escHtml(m)}" ${ctx.manager1 === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}
-              </select>
+              ${renderWsCustomDropdownHtml({
+                id: "tsMgr1",
+                value: ctx.manager1 || "",
+                displayText: ctx.manager1 || "미지정",
+                placeholder: "담당자 선택",
+                searchable: false,
+                items: [{ value: "", label: "미지정" }, ...members.map((m) => ({ value: m, label: m }))],
+                onSelect: (val) => state_sheetUpdate("manager1", val)
+              })}
             </div>
             <div class="fg">
               <label>담당자 2</label>
-              <select class="ws-select" onchange="state_sheetUpdate('manager2', this.value)">
-                <option value="">없음</option>
-                ${members.map((m) => `<option value="${escHtml(m)}" ${ctx.manager2 === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}
-              </select>
+              ${renderWsCustomDropdownHtml({
+                id: "tsMgr2",
+                value: ctx.manager2 || "",
+                displayText: ctx.manager2 || "없음",
+                placeholder: "담당자 선택",
+                searchable: false,
+                items: [{ value: "", label: "없음" }, ...members.map((m) => ({ value: m, label: m }))],
+                onSelect: (val) => state_sheetUpdate("manager2", val)
+              })}
             </div>
           </div>
 
@@ -15885,8 +15907,192 @@ end $$;`;
         return unregHtml + listHtml + customHtml;
       }
 
+      window.wsDropRegistry = window.wsDropRegistry || {};
+      window.closeAllWsCustomDropdowns = function (exceptId) {
+        document.querySelectorAll(".ws-custom-drop-list").forEach((el) => {
+          const id = el.getAttribute("data-drop-id") || "";
+          if (exceptId && id === exceptId) return;
+          el.style.display = "none";
+          const cfg = window.wsDropRegistry[id];
+          const inp = document.getElementById("wsDropInput_" + id);
+          if (inp && cfg && cfg.searchable) {
+            inp.value = cfg.displayText || "";
+          }
+        });
+        if (exceptId !== "__PARTNER__" && state.sheetCtx && state.sheetCtx.partnerDropOpen && typeof window.closeSheetPartnerDropdown === "function") {
+          window.closeSheetPartnerDropdown();
+        }
+        if (exceptId !== "__TASK__" && state.sheetCtx && state.sheetCtx.taskDropOpen && typeof window.closeSheetTaskDropdown === "function") {
+          window.closeSheetTaskDropdown();
+        }
+      };
+
+      function buildWsCustomDropItemsHtml(cfg, query) {
+        const q = String(query || "").trim().toLowerCase();
+        const items = Array.isArray(cfg.items) ? cfg.items : [];
+        let html = "";
+        let matchCount = 0;
+        items.forEach((it) => {
+          if (it.group) {
+            const subMatches = q
+              ? (it.options || []).filter((o) => String(o.label || o.value || "").toLowerCase().includes(q))
+              : (it.options || []);
+            if (!subMatches.length) return;
+            html += `<div style="padding:6px 11px 4px;font-size:10.5px;font-weight:800;color:#64748b;background:#f8fafc;border-bottom:1px solid #f1f5f9;">${escHtml(it.group)}</div>`;
+            subMatches.forEach((o) => {
+              matchCount++;
+              const isSel = String(o.value) === String(cfg.value || "");
+              html += `
+                <div class="partner-drop-item ${isSel ? "selected" : ""}" onmousedown="event.preventDefault()" onclick="window.selectWsCustomDropdownItem('${escJs(cfg.id)}', '${escJs(o.value)}')">
+                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(o.label)}</span>
+                  ${isSel ? `<span style="color:#2563eb;font-weight:800;">✓</span>` : ""}
+                </div>`;
+            });
+            return;
+          }
+          const lbl = String(it.label !== undefined ? it.label : it.value || "");
+          if (q && !lbl.toLowerCase().includes(q) && !String(it.value || "").toLowerCase().includes(q)) return;
+          matchCount++;
+          const isSel = String(it.value) === String(cfg.value || "");
+          html += `
+            <div class="partner-drop-item ${isSel ? "selected" : ""}" onmousedown="event.preventDefault()" onclick="window.selectWsCustomDropdownItem('${escJs(cfg.id)}', '${escJs(it.value)}')">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(lbl)}</span>
+              ${isSel ? `<span style="color:#2563eb;font-weight:800;">✓</span>` : ""}
+            </div>`;
+        });
+        if (!matchCount && q) {
+          html += `<div style="padding:10px 11px;color:#64748b;font-size:12px;background:#f8fafc;">검색 결과가 없습니다.</div>`;
+        }
+        if (cfg.allowDirectInput && q) {
+          html += `
+            <div class="partner-drop-custom" onmousedown="event.preventDefault()" onclick="window.selectWsCustomDropdownItem('${escJs(cfg.id)}', '${escJs(String(query).trim())}')">
+              <span>➕ '${escHtml(String(query).trim())}' 직접 입력</span>
+            </div>`;
+        }
+        if (cfg.customFooterLabel) {
+          html += `
+            <div class="partner-drop-custom" onmousedown="event.preventDefault()" onclick="window.selectWsCustomDropdownItem('${escJs(cfg.id)}', '${escJs(cfg.customFooterValue || "__NEW__")}')">
+              <span>${escHtml(cfg.customFooterLabel)}</span>
+            </div>`;
+        }
+        return html;
+      }
+
+      function renderWsCustomDropdownHtml(cfg) {
+        window.wsDropRegistry[cfg.id] = cfg;
+        const val = cfg.value !== undefined && cfg.value !== null ? String(cfg.value) : "";
+        let displayText = cfg.displayText || "";
+        if (!displayText && val) {
+          if (cfg.customFooterValue && val === cfg.customFooterValue) {
+            displayText = cfg.customFooterLabel || val;
+          } else {
+            const flat = [];
+            (cfg.items || []).forEach((it) => {
+              if (it.group && Array.isArray(it.options)) flat.push(...it.options);
+              else flat.push(it);
+            });
+            const found = flat.find((o) => String(o.value) === val);
+            displayText = found ? String(found.label !== undefined ? found.label : found.value) : val;
+          }
+        }
+        cfg.displayText = displayText;
+        const searchable = Boolean(cfg.searchable);
+        const hiddenInput = cfg.hiddenInputId
+          ? `<input type="hidden" id="${escHtml(cfg.hiddenInputId)}" value="${escHtml(val)}">`
+          : "";
+        return `
+          <div class="sheet-partner-wrap ws-custom-drop-wrap" data-drop-id="${escHtml(cfg.id)}">
+            ${hiddenInput}
+            <div class="sheet-partner-search-box">
+              <input type="text" id="wsDropInput_${escHtml(cfg.id)}" class="ws-input"
+                value="${escHtml(displayText)}"
+                placeholder="${escHtml(cfg.placeholder || "선택하세요")}"
+                autocomplete="off"
+                ${searchable ? "" : "readonly"}
+                style="padding-right:${cfg.clearable && val ? "42px" : "26px"};cursor:pointer;background:#ffffff;color:${val ? "#0f172a" : "#64748b"};font-weight:${val ? "700" : "500"};"
+                onclick="window.openWsCustomDropdown('${escJs(cfg.id)}')"
+                ${searchable ? `onfocus="window.openWsCustomDropdown('${escJs(cfg.id)}')" oninput="window.filterWsCustomDropdown('${escJs(cfg.id)}', this.value)"` : ""}>
+              ${cfg.clearable && val ? `<span class="sheet-partner-clear" onclick="event.stopPropagation(); window.selectWsCustomDropdownItem('${escJs(cfg.id)}', '')" title="선택 해제">✕</span>` : ""}
+              <span class="sheet-partner-arrow" onclick="event.stopPropagation(); window.toggleWsCustomDropdown('${escJs(cfg.id)}')">▼</span>
+            </div>
+            <div id="wsDropList_${escHtml(cfg.id)}" class="sheet-partner-dropdown-popover ws-custom-drop-list" data-drop-id="${escHtml(cfg.id)}" style="display:none;">
+              ${buildWsCustomDropItemsHtml(cfg, "")}
+            </div>
+          </div>`;
+      }
+
+      window.openWsCustomDropdown = function (id) {
+        const cfg = window.wsDropRegistry[id];
+        if (!cfg) return;
+        window.closeAllWsCustomDropdowns(id);
+        const drop = document.getElementById("wsDropList_" + id);
+        const inp = document.getElementById("wsDropInput_" + id);
+        if (drop) {
+          drop.innerHTML = buildWsCustomDropItemsHtml(cfg, "");
+          drop.style.display = "block";
+        }
+        if (inp && cfg.searchable && typeof inp.select === "function") {
+          inp.select();
+        }
+      };
+      window.toggleWsCustomDropdown = function (id) {
+        const drop = document.getElementById("wsDropList_" + id);
+        if (drop && drop.style.display === "block") {
+          window.closeAllWsCustomDropdowns();
+        } else {
+          window.openWsCustomDropdown(id);
+        }
+      };
+      window.filterWsCustomDropdown = function (id, q) {
+        const cfg = window.wsDropRegistry[id];
+        if (!cfg) return;
+        const drop = document.getElementById("wsDropList_" + id);
+        if (drop) {
+          drop.innerHTML = buildWsCustomDropItemsHtml(cfg, q);
+          drop.style.display = "block";
+        }
+        if (cfg.allowDirectInput) {
+          const hid = cfg.hiddenInputId ? document.getElementById(cfg.hiddenInputId) : null;
+          if (hid) hid.value = q;
+          cfg.value = q;
+          cfg.displayText = q;
+        }
+      };
+      window.selectWsCustomDropdownItem = function (id, val) {
+        const cfg = window.wsDropRegistry[id];
+        if (!cfg) return;
+        cfg.value = val;
+        const flat = [];
+        (cfg.items || []).forEach((it) => {
+          if (it.group && Array.isArray(it.options)) flat.push(...it.options);
+          else flat.push(it);
+        });
+        let displayText = "";
+        if (cfg.customFooterValue && val === cfg.customFooterValue) {
+          displayText = cfg.customFooterLabel || val;
+        } else if (val !== "") {
+          const found = flat.find((o) => String(o.value) === String(val));
+          displayText = found ? String(found.label !== undefined ? found.label : found.value) : String(val);
+        }
+        cfg.displayText = displayText;
+        const inp = document.getElementById("wsDropInput_" + id);
+        if (inp) {
+          inp.value = displayText;
+          inp.style.color = val ? "#0f172a" : "#64748b";
+          inp.style.fontWeight = val ? "700" : "500";
+        }
+        const hid = cfg.hiddenInputId ? document.getElementById(cfg.hiddenInputId) : null;
+        if (hid) hid.value = val;
+        const drop = document.getElementById("wsDropList_" + id);
+        if (drop) drop.style.display = "none";
+        if (typeof cfg.onSelect === "function") {
+          cfg.onSelect(val);
+        }
+      };
+
       window.openSheetPartnerDropdown = function () {
         const ctx = state.sheetCtx; if (!ctx) return;
+        window.closeAllWsCustomDropdowns("__PARTNER__");
         ctx.partnerDropOpen = true;
         ctx.partnerSearchQuery = "";
         const drop = document.getElementById("sheetPartnerDropdownList");
@@ -15953,6 +16159,7 @@ end $$;`;
 
       window.openSheetTaskDropdown = function () {
         const ctx = state.sheetCtx; if (!ctx) return;
+        window.closeAllWsCustomDropdowns("__TASK__");
         ctx.taskDropOpen = true;
         ctx.taskSearchQuery = "";
         const drop = document.getElementById("sheetTaskDropdownList");
@@ -18755,25 +18962,70 @@ end $$;`;
 
         const isPaidAs = (ed.asBillingType === "paid");
 
+        const mkEstStatusDrop = () => renderWsCustomDropdownHtml({
+          id: "esStatusDrop",
+          hiddenInputId: "esStatus",
+          value: ed.status || "1차상담 예정",
+          placeholder: "진행 단계",
+          searchable: false,
+          items: statuses.map((s) => ({ value: s, label: s }))
+        });
+        const mkEstPrioDrop = () => renderWsCustomDropdownHtml({
+          id: "esPrioDrop",
+          hiddenInputId: "esPrio",
+          value: ed.priority || "보통",
+          placeholder: "우선순위",
+          searchable: false,
+          items: ["높음", "긴급", "보통", "낮음"].map((p) => ({ value: p, label: p }))
+        });
+        const mkEstMgrDrop = () => renderWsCustomDropdownHtml({
+          id: "esMgrDrop",
+          hiddenInputId: "esMgr",
+          value: ed.manager || state.user || "조항만",
+          placeholder: "담당자 선택",
+          searchable: false,
+          items: members.map((m) => ({ value: m, label: m }))
+        });
+        const mkEstTaskDrop = (ph) => renderWsCustomDropdownHtml({
+          id: "esTaskDrop",
+          hiddenInputId: "esTaskName",
+          value: ed.taskName || "",
+          displayText: ed.taskName || "",
+          placeholder: ph || "🔍 공종 검색 / 선택",
+          searchable: true,
+          clearable: true,
+          allowDirectInput: true,
+          items: tasksMaster.map((t) => ({ value: t, label: t }))
+        });
+        const mkEstPartnerDrop = () => renderWsCustomDropdownHtml({
+          id: "esPartnerDrop",
+          hiddenInputId: "esPartner",
+          value: ed.partner || "",
+          displayText: ed.partner || "",
+          placeholder: "🔍 협력업체 검색 / 선택",
+          searchable: true,
+          clearable: true,
+          allowDirectInput: true,
+          items: partnersMaster.map((p) => ({ value: p, label: p }))
+        });
+
         if (qt === "single") {
           document.getElementById("estimateModalBody").innerHTML = `
             ${typeSwitcherHtml}
-            ${buildDatalistHtml("esTasksDl", tasksMaster)}
-            ${buildDatalistHtml("esPartnersDl", partnersMaster)}
             <div class="form-grid-3">
               <div class="fg"><label>단건 현장/고객명 *</label><input class="ws-input" id="esSite" value="${escHtml(ed.siteName)}" placeholder="예: 보라매경남 109동 702호"></div>
-              <div class="fg"><label>진행 단계</label><select class="ws-select" id="esStatus">${statuses.map((s) => `<option value="${escHtml(s)}" ${ed.status === s ? "selected" : ""}>${escHtml(s)}</option>`).join("")}</select></div>
-              <div class="fg"><label>우선순위</label><select class="ws-select" id="esPrio">${["높음", "긴급", "보통", "낮음"].map((p) => `<option value="${p}" ${ed.priority === p ? "selected" : ""}>${p}</option>`).join("")}</select></div>
+              <div class="fg"><label>진행 단계</label>${mkEstStatusDrop()}</div>
+              <div class="fg"><label>우선순위</label>${mkEstPrioDrop()}</div>
             </div>
             <div class="form-grid-3">
-              <div class="fg"><label>공종명 *</label><input class="ws-input" id="esTaskName" list="esTasksDl" value="${escHtml(ed.taskName || "")}" placeholder="예: 주방 싱크대 / 욕실 / 타일"></div>
+              <div class="fg"><label>공종명 *</label>${mkEstTaskDrop("🔍 공종 검색 / 선택")}</div>
               <div class="fg"><label>작업 예정일</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
-              <div class="fg"><label>담당자</label><select class="ws-select" id="esMgr">${members.map((m) => `<option value="${escHtml(m)}" ${ed.manager === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}</select></div>
+              <div class="fg"><label>담당자</label>${mkEstMgrDrop()}</div>
             </div>
             <div class="form-grid-3">
               <div class="fg"><label>고객 성함</label><input class="ws-input" id="esCName" value="${escHtml(ed.clientName || "")}" placeholder="고객명"></div>
               <div class="fg"><label>고객 연락처</label><input class="ws-input" id="esCPhone" value="${escHtml(ed.clientPhone || "")}" placeholder="010-0000-0000"></div>
-              <div class="fg"><label>협력업체 (선택)</label><input class="ws-input" id="esPartner" list="esPartnersDl" value="${escHtml(ed.partner || "")}" placeholder="협력업체/반장명"></div>
+              <div class="fg"><label>협력업체 (선택)</label>${mkEstPartnerDrop()}</div>
             </div>
             <div class="form-grid-3">
               <div class="fg"><label>예상 견적금액(원)</label><input type="number" class="ws-input" id="esExpAmt" value="${escHtml(ed.expectedAmount || "")}" placeholder="예: 3500000"></div>
@@ -18796,32 +19048,39 @@ end $$;`;
           const asSelectVal = isNewAsSiteMode ? "__NEW__" : curAsSite;
           document.getElementById("estimateModalBody").innerHTML = `
             ${typeSwitcherHtml}
-            ${buildDatalistHtml("esTasksDl", tasksMaster)}
-            ${buildDatalistHtml("esPartnersDl", partnersMaster)}
             <div class="form-grid-3">
               <div class="fg">
                 <label>대상 현장 선택 *</label>
-                <select class="ws-select" id="esAsSiteSelect" onchange="window.onEstAsSiteSelectChange(this.value)">
-                  <option value="">-- 현장 선택 --</option>
-                  ${activeAsSites.length ? `
-                    <optgroup label="── 진행 현장 ──">
-                      ${activeAsSites.map((s) => `<option value="${escHtml(s.siteName)}" ${asSelectVal === s.siteName ? "selected" : ""}>${escHtml(s.siteName)}</option>`).join("")}
-                    </optgroup>` : ""}
-                  ${completedAsSites.length ? `
-                    <optgroup label="── 완료된 본 현장 (AS 연동) ──">
-                      ${completedAsSites.slice(0, 80).map((s) => `<option value="${escHtml(s.siteName)}" ${asSelectVal === s.siteName ? "selected" : ""}>[완료] ${escHtml(s.siteName)}</option>`).join("")}
-                    </optgroup>` : ""}
-                  <option value="__NEW__" ${asSelectVal === "__NEW__" ? "selected" : ""}>+ 새 현장명 직접 입력</option>
-                </select>
+                ${renderWsCustomDropdownHtml({
+                  id: "esAsSiteDrop",
+                  value: asSelectVal,
+                  displayText: asSelectVal === "__NEW__" ? "➕ 새 현장명 직접 입력" : curAsSite,
+                  placeholder: "🔍 현장 검색 / 선택",
+                  searchable: true,
+                  clearable: true,
+                  customFooterLabel: "➕ 새 현장명 직접 입력",
+                  customFooterValue: "__NEW__",
+                  items: [
+                    ...(activeAsSites.length ? [{
+                      group: "── 진행 현장 ──",
+                      options: activeAsSites.map((s) => ({ value: s.siteName, label: s.siteName }))
+                    }] : []),
+                    ...(completedAsSites.length ? [{
+                      group: "── 완료된 본 현장 (AS 연동) ──",
+                      options: completedAsSites.slice(0, 80).map((s) => ({ value: s.siteName, label: "[완료] " + s.siteName }))
+                    }] : [])
+                  ],
+                  onSelect: (val) => window.onEstAsSiteSelectChange(val)
+                })}
                 ${isNewAsSiteMode ? `<input class="ws-input" id="esSite" value="${escHtml(curAsSite)}" placeholder="새 AS 대상 현장명 입력" style="margin-top:6px;">` : `<input type="hidden" id="esSite" value="${escHtml(curAsSite)}">`}
               </div>
-              <div class="fg"><label>진행 단계</label><select class="ws-select" id="esStatus">${statuses.map((s) => `<option value="${escHtml(s)}" ${ed.status === s ? "selected" : ""}>${escHtml(s)}</option>`).join("")}</select></div>
-              <div class="fg"><label>우선순위</label><select class="ws-select" id="esPrio">${["높음", "긴급", "보통", "낮음"].map((p) => `<option value="${p}" ${ed.priority === p ? "selected" : ""}>${p}</option>`).join("")}</select></div>
+              <div class="fg"><label>진행 단계</label>${mkEstStatusDrop()}</div>
+              <div class="fg"><label>우선순위</label>${mkEstPrioDrop()}</div>
             </div>
             <div class="form-grid-3">
-              <div class="fg"><label>AS 공종명</label><input class="ws-input" id="esTaskName" list="esTasksDl" value="${escHtml(ed.taskName || "")}" placeholder="예: 실리콘 / 누수 / 도어 / 전기"></div>
+              <div class="fg"><label>AS 공종명</label>${mkEstTaskDrop("🔍 공종 검색 / 선택")}</div>
               <div class="fg"><label>방문 예정일</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
-              <div class="fg"><label>담당자</label><select class="ws-select" id="esMgr">${members.map((m) => `<option value="${escHtml(m)}" ${ed.manager === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}</select></div>
+              <div class="fg"><label>담당자</label>${mkEstMgrDrop()}</div>
             </div>
             <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:9px;margin-bottom:8px;">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -18837,27 +19096,42 @@ end $$;`;
                 <div class="fg" style="margin:0;"><label style="font-size:11.5px;">공간 (위치)</label><input class="ws-input" id="esAsSpace" value="${escHtml(ed.asSpace || "")}" placeholder="예: 안방 욕실 / 주방"></div>
                 <div class="fg" style="margin:0;">
                   <label style="font-size:11.5px;">귀책 판단</label>
-                  <select class="ws-select" id="esAsFaultType">
-                    <option value="" ${!ed.asFaultType ? "selected" : ""}>선택 안 함</option>
-                    <option value="협력업체 시공불량" ${ed.asFaultType === "협력업체 시공불량" ? "selected" : ""}>협력업체 시공불량</option>
-                    <option value="자재 하자" ${ed.asFaultType === "자재 하자" ? "selected" : ""}>자재 하자</option>
-                    <option value="고객 과실·변심" ${ed.asFaultType === "고객 과실·변심" ? "selected" : ""}>고객 과실·변심</option>
-                    <option value="보증기간 만료" ${ed.asFaultType === "보증기간 만료" ? "selected" : ""}>보증기간 만료</option>
-                    <option value="기타" ${ed.asFaultType === "기타" ? "selected" : ""}>기타</option>
-                  </select>
+                  ${renderWsCustomDropdownHtml({
+                    id: "esAsFaultDrop",
+                    hiddenInputId: "esAsFaultType",
+                    value: ed.asFaultType || "",
+                    displayText: ed.asFaultType || "선택 안 함",
+                    placeholder: "선택 안 함",
+                    searchable: false,
+                    items: [
+                      { value: "", label: "선택 안 함" },
+                      { value: "협력업체 시공불량", label: "협력업체 시공불량" },
+                      { value: "자재 하자", label: "자재 하자" },
+                      { value: "고객 과실·변심", label: "고객 과실·변심" },
+                      { value: "보증기간 만료", label: "보증기간 만료" },
+                      { value: "기타", label: "기타" }
+                    ]
+                  })}
                 </div>
                 <div class="fg" style="margin:0;">
                   <label style="font-size:11.5px;">비용 부담 주체</label>
-                  <select class="ws-select" id="esAsCostPayer">
-                    <option value="협력업체 무상재시공" ${ed.asCostPayer === "협력업체 무상재시공" ? "selected" : ""}>협력업체 무상재시공</option>
-                    <option value="우성아이디 부담" ${ed.asCostPayer === "우성아이디 부담" ? "selected" : ""}>우성아이디 부담</option>
-                    <option value="고객 부담" ${ed.asCostPayer === "고객 부담" ? "selected" : ""}>고객 부담 (유상)</option>
-                  </select>
+                  ${renderWsCustomDropdownHtml({
+                    id: "esAsPayerDrop",
+                    hiddenInputId: "esAsCostPayer",
+                    value: ed.asCostPayer || "협력업체 무상재시공",
+                    placeholder: "비용 부담 주체",
+                    searchable: false,
+                    items: [
+                      { value: "협력업체 무상재시공", label: "협력업체 무상재시공" },
+                      { value: "우성아이디 부담", label: "우성아이디 부담" },
+                      { value: "고객 부담", label: "고객 부담 (유상)" }
+                    ]
+                  })}
                 </div>
               </div>
               <div class="fg" style="margin:0;"><label style="font-size:11.5px;">증상 및 귀책 판단 근거</label><input class="ws-input" id="esAsSymptom" value="${escHtml(ed.asSymptom || "")}" placeholder="예: 젠다이 실리콘 들뜸 / 고객 사용 중 파손으로 유상 처리 합의"></div>
               <div class="form-grid-3" style="gap:8px;">
-                <div class="fg" style="margin:0;"><label style="font-size:11.5px;">재시공 협력업체</label><input class="ws-input" id="esPartner" list="esPartnersDl" value="${escHtml(ed.partner || "")}" placeholder="협력업체/반장명"></div>
+                <div class="fg" style="margin:0;"><label style="font-size:11.5px;">재시공 협력업체</label>${mkEstPartnerDrop()}</div>
                 <div class="fg" style="margin:0;"><label style="font-size:11.5px;color:${isPaidAs ? "#1d4ed8" : "#64748b"};">유상 청구금액 (고객 청구)</label><input type="number" class="ws-input" id="esConAmt" value="${escHtml(ed.contractAmount || "")}" placeholder="0"></div>
                 <div class="fg" style="margin:0;"><label style="font-size:11.5px;color:#b45309;">처리 비용 (외주·자재 원가)</label><input type="number" class="ws-input" id="esCostAmt" value="${escHtml(ed.costAmount || "")}" placeholder="0"></div>
               </div>
@@ -18877,13 +19151,33 @@ end $$;`;
             ${typeSwitcherHtml}
             <div class="form-grid-3">
               <div class="fg"><label>현장/고객명 *</label><input class="ws-input" id="esSite" value="${escHtml(ed.siteName)}" placeholder="예: 신대방우성 12동 1110호"></div>
-              <div class="fg"><label>진행 단계</label><select class="ws-select" id="esStatus">${statuses.map((s) => `<option value="${escHtml(s)}" ${ed.status === s ? "selected" : ""}>${escHtml(s)}</option>`).join("")}</select></div>
-              <div class="fg"><label>우선순위</label><select class="ws-select" id="esPrio">${["높음", "긴급", "보통", "낮음"].map((p) => `<option value="${p}" ${ed.priority === p ? "selected" : ""}>${p}</option>`).join("")}</select></div>
+              <div class="fg"><label>진행 단계</label>${mkEstStatusDrop()}</div>
+              <div class="fg"><label>우선순위</label>${mkEstPrioDrop()}</div>
             </div>
             <div class="form-grid-3">
-              <div class="fg"><label>공사 범위</label><select class="ws-select" id="esScope">${scopeOptionsHtml}</select></div>
-              <div class="fg"><label>유입 경로</label><select class="ws-select" id="esSource">${sourceOptionsHtml}</select></div>
-              <div class="fg"><label>담당자</label><select class="ws-select" id="esMgr">${members.map((m) => `<option value="${escHtml(m)}" ${ed.manager === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}</select></div>
+              <div class="fg">
+                <label>공사 범위</label>
+                ${renderWsCustomDropdownHtml({
+                  id: "esScopeDrop",
+                  hiddenInputId: "esScope",
+                  value: selectedScope || "",
+                  placeholder: "공사 범위 선택",
+                  searchable: false,
+                  items: scopes.map((sc) => ({ value: sc, label: sc }))
+                })}
+              </div>
+              <div class="fg">
+                <label>유입 경로</label>
+                ${renderWsCustomDropdownHtml({
+                  id: "esSourceDrop",
+                  hiddenInputId: "esSource",
+                  value: selectedSource || "",
+                  placeholder: "유입 경로 선택",
+                  searchable: false,
+                  items: sources.map((so) => ({ value: so, label: so }))
+                })}
+              </div>
+              <div class="fg"><label>담당자</label>${mkEstMgrDrop()}</div>
             </div>
             <div class="form-grid-3">
               <div class="fg"><label>고객 성함</label><input class="ws-input" id="esCName" value="${escHtml(ed.clientName || "")}" placeholder="고객명"></div>
@@ -23150,11 +23444,27 @@ end $$;`;
       }
 
       document.addEventListener("mousedown", (e) => {
-        if (state.sheetCtx && state.sheetCtx.partnerDropOpen) {
-          const wrap = e.target && typeof e.target.closest === "function" ? e.target.closest(".sheet-partner-wrap") : null;
-          if (!wrap && typeof window.closeSheetPartnerDropdown === "function") {
-            window.closeSheetPartnerDropdown();
-          }
+        const t = e && e.target;
+        const inCustomWrap = t && typeof t.closest === "function" ? t.closest(".ws-custom-drop-wrap") : null;
+        const inPartnerWrap = t && typeof t.closest === "function" ? t.closest(".sheet-partner-wrap") : null;
+        const inTaskWrap = t && typeof t.closest === "function" ? t.closest(".ws-task-wrap") : null;
+
+        if (!inCustomWrap) {
+          document.querySelectorAll(".ws-custom-drop-list").forEach((el) => {
+            if (el.style.display === "block") {
+              el.style.display = "none";
+              const id = el.getAttribute("data-drop-id") || "";
+              const cfg = window.wsDropRegistry && window.wsDropRegistry[id];
+              const inp = document.getElementById("wsDropInput_" + id);
+              if (inp && cfg && cfg.searchable) inp.value = cfg.displayText || "";
+            }
+          });
+        }
+        if (!inPartnerWrap && state.sheetCtx && state.sheetCtx.partnerDropOpen && typeof window.closeSheetPartnerDropdown === "function") {
+          window.closeSheetPartnerDropdown();
+        }
+        if (!inTaskWrap && state.sheetCtx && state.sheetCtx.taskDropOpen && typeof window.closeSheetTaskDropdown === "function") {
+          window.closeSheetTaskDropdown();
         }
       });
 
