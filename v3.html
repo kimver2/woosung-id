@@ -5983,6 +5983,9 @@ end $$;`;
                     <div class="pc-est-info-row"><span class="lbl">연락처</span><span class="val">${hasPhone ? `<a href="tel:${escHtml(cleanPhone)}" style="color:#2563eb;font-weight:700;text-decoration:none;">${escHtml(rawPhone)} 📞</a>` : "-"}</span></div>
                     <div class="pc-est-info-row"><span class="lbl">담당자</span><span class="val">${escHtml(manager)}</span></div>
                     <div class="pc-est-info-row"><span class="lbl">현장 주소</span><span class="val">${address ? `<span style="color:#0f172a;font-weight:600;">${escHtml(address)}</span> <a href="https://map.naver.com/p/search/${encodeURIComponent(address)}" target="_blank" rel="noopener noreferrer" style="color:#16a34a;font-size:11px;margin-left:4px;text-decoration:underline;">지도 ↗</a>` : `<span style="color:#94a3b8;">주소 미등록</span>`}</span></div>
+                    ${est.accessNote ? `<div class="pc-est-info-row"><span class="lbl">출입·주차</span><span class="val">${escHtml(est.accessNote)}</span></div>` : ""}
+                    ${est.visitAccess ? `<div class="pc-est-info-row"><span class="lbl">방문·출입</span><span class="val">${escHtml(est.visitAccess)}</span></div>` : ""}
+                    ${est.originCompletedDate ? `<div class="pc-est-info-row"><span class="lbl">원현장 준공</span><span class="val" style="color:#0369a1;font-weight:700;">${escHtml(est.originCompletedDate)}</span></div>` : ""}
                   </div>
                 </div>
 
@@ -14000,6 +14003,12 @@ end $$;`;
                       <div style="color:#78350f;font-weight:600;margin-top:2px;">${escHtml(eData.nextAction)}</div>
                     </div>` : ""}
                   ${eData.memo ? `<div style="background:#f8fafc;padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;color:#334155;"><strong>상담 메모:</strong> ${escHtml(eData.memo)}</div>` : ""}
+                  ${(eData.accessNote || eData.visitAccess || eData.originCompletedDate) ? `<div style="background:#f8fafc;padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;color:#334155;display:flex;flex-direction:column;gap:2px;">
+                    ${eData.accessNote ? `<div><strong>출입·주차:</strong> ${escHtml(eData.accessNote)}</div>` : ""}
+                    ${eData.visitAccess ? `<div><strong>방문·출입:</strong> ${escHtml(eData.visitAccess)}</div>` : ""}
+                    ${eData.originCompletedDate ? `<div><strong>원현장 준공:</strong> <span style="color:#0369a1;font-weight:700;">${escHtml(eData.originCompletedDate)}</span></div>` : ""}
+                  </div>` : ""}
+                  ${eData.estimateFile ? `<div style="background:#eff6ff;padding:6px 10px;border-radius:6px;border:1px solid #bfdbfe;display:flex;justify-content:space-between;align-items:center;"><span style="color:#1e40af;font-weight:700;">견적서·사진</span><a href="${escHtml(eData.estimateFile)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;font-weight:800;text-decoration:underline;">파일 열기 ↗</a></div>` : ""}
                   ${eData.failReason ? `
                     <div style="background:#fef2f2;padding:6px 10px;border-radius:6px;border:1px solid #fecaca;color:#991b1b;">
                       <div style="color:#b91c1c;font-size:10.5px;font-weight:800;">⚠️ 보류/실패 사유</div>
@@ -19193,6 +19202,29 @@ end $$;`;
           allowDirectInput: true,
           items: ["예산 차이", "일정 불일치", "연락 두절", "경쟁 업체 선택", "공사 취소", "고객 보류", "단순 문의", "기타"].map((r) => ({ value: r, label: r }))
         });
+        const mkEstSourceDrop = () => renderWsCustomDropdownHtml({
+          id: "esSourceDrop",
+          hiddenInputId: "esSource",
+          value: selectedSource || "",
+          placeholder: "유입 경로 선택",
+          searchable: false,
+          items: sources.map((so) => ({ value: so, label: so }))
+        });
+        const getAsOriginCompletionInfo = (siteName, storedDate) => {
+          const norm = String(siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
+          const matched = norm ? completedAsSites.find((s) => String(s.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").trim() === norm) : null;
+          const ymd = String(storedDate || (matched ? getSiteDateMetrics(matched).latest : "") || "").trim();
+          if (!ymd) return null;
+          const parts = ymd.match(/^(\d{4})-(\d{2})-(\d{2})/);
+          let elapsedText = "";
+          if (parts) {
+            const d0 = new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
+            const now = new Date();
+            const months = Math.max(0, (now.getFullYear() - d0.getFullYear()) * 12 + (now.getMonth() - d0.getMonth()));
+            elapsedText = months === 0 ? "준공 1개월 이내" : `준공 후 ${months}개월 경과`;
+          }
+          return { date: ymd, elapsedText };
+        };
         const mkEstPartnerDrop = () => renderWsCustomDropdownHtml({
           id: "esPartnerDrop",
           hiddenInputId: "esPartner",
@@ -19215,13 +19247,18 @@ end $$;`;
             </div>
             <div class="form-grid-3">
               <div class="fg"><label>공종명 *</label>${mkEstTaskDrop("🔍 공종 검색 / 선택")}</div>
-              <div class="fg"><label>작업 예정일</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
+              <div class="fg"><label>유입 경로</label>${mkEstSourceDrop()}</div>
               <div class="fg"><label>담당자</label>${mkEstMgrDrop()}</div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>문의일 (접수)</label><input type="date" class="ws-input" id="esInq" value="${escHtml(ed.inquiryDate || "")}"></div>
+              <div class="fg"><label>작업 예정일</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
+              <div class="fg"><label>협력업체 (선택)</label>${mkEstPartnerDrop()}</div>
             </div>
             <div class="form-grid-3">
               <div class="fg"><label>고객 성함</label><input class="ws-input" id="esCName" value="${escHtml(ed.clientName || "")}" placeholder="고객명"></div>
               <div class="fg"><label>고객 연락처</label><input class="ws-input" id="esCPhone" value="${escHtml(ed.clientPhone || "")}" placeholder="010-0000-0000"></div>
-              <div class="fg"><label>협력업체 (선택)</label>${mkEstPartnerDrop()}</div>
+              <div class="fg"><label>현장 주소</label><input class="ws-input" id="esAddr" value="${escHtml(ed.address || "")}" placeholder="도로명 및 동호수"></div>
             </div>
             <div class="form-grid-3">
               <div class="fg"><label>예상 견적금액(원)</label><input type="number" class="ws-input" id="esExpAmt" value="${escHtml(ed.expectedAmount || "")}" placeholder="예: 3500000"></div>
@@ -19229,11 +19266,14 @@ end $$;`;
               <div class="fg"><label>외주·자재 원가(예상 지출)</label><input type="number" class="ws-input" id="esCostAmt" value="${escHtml(ed.costAmount || "")}" placeholder="예: 2200000"></div>
             </div>
             <div class="form-grid-3">
-              <div class="fg"><label>현장 주소</label><input class="ws-input" id="esAddr" value="${escHtml(ed.address || "")}" placeholder="도로명 및 동호수"></div>
-              <div class="fg"><label>다음 해야 할 일</label><input class="ws-input" id="esNext" value="${escHtml(ed.nextAction || "")}" placeholder="예: 실측 후 견적서 발송"></div>
+              <div class="fg"><label>출입·주차 메모</label><input class="ws-input" id="esAccessNote" value="${escHtml(ed.accessNote || "")}" placeholder="공동현관 비번, 주차·엘리베이터 등"></div>
+              <div class="fg"><label>견적서·사진 링크(URL)</label><input class="ws-input" id="esFile" value="${escHtml(ed.estimateFile || "")}" placeholder="Google Drive 링크 또는 파일명"></div>
               <div class="fg"><label>⚠️ 보류·실패 사유</label>${mkEstFailReasonDrop()}</div>
             </div>
-            <div class="fg"><label>상담·접수 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="단건 시공 범위, 고객 요구사항 등">${escHtml(ed.memo || "")}</textarea></div>
+            <div class="form-grid-2">
+              <div class="fg"><label>다음 해야 할 일</label><input class="ws-input" id="esNext" value="${escHtml(ed.nextAction || "")}" placeholder="예: 실측 후 견적서 발송"></div>
+              <div class="fg"><label>상담·접수 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="단건 시공 범위, 고객 요구사항 등">${escHtml(ed.memo || "")}</textarea></div>
+            </div>
             <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 12px;font-size:11.5px;font-weight:700;color:#1e3a8a;">
               ℹ️ 저장 시 <b>[신규 현장 &gt; 단건]</b>에서 먼저 관리되며, <b>‘계약 완료’</b> 및 현장 승격 시 <b>정식 단건 현장 + 재무·원장(수금현황·비용마감)</b>에 자동 연동됩니다.
             </div>
@@ -19243,6 +19283,7 @@ end $$;`;
           const isKnownAsSite = curAsSite && siteNamesForAs.includes(curAsSite);
           const isNewAsSiteMode = Boolean(ed._isNewSiteInput || (curAsSite && !isKnownAsSite));
           const asSelectVal = isNewAsSiteMode ? "__NEW__" : curAsSite;
+          const asOriginInfo = !isNewAsSiteMode ? getAsOriginCompletionInfo(curAsSite, ed.originCompletedDate) : null;
           document.getElementById("estimateModalBody").innerHTML = `
             ${typeSwitcherHtml}
             <div class="form-grid-3">
@@ -19270,14 +19311,21 @@ end $$;`;
                   onSelect: (val) => window.onEstAsSiteSelectChange(val)
                 })}
                 ${isNewAsSiteMode ? `<input class="ws-input" id="esSite" value="${escHtml(curAsSite)}" placeholder="새 AS 대상 현장명 입력" style="margin-top:6px;">` : `<input type="hidden" id="esSite" value="${escHtml(curAsSite)}">`}
+                <input type="hidden" id="esOriginDoneDate" value="${escHtml(asOriginInfo ? asOriginInfo.date : (ed.originCompletedDate || ""))}">
+                ${asOriginInfo ? `<div style="margin-top:4px;font-size:11px;font-weight:700;color:#0369a1;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:3px 7px;">📅 준공: ${escHtml(asOriginInfo.date)}${asOriginInfo.elapsedText ? ` · ${escHtml(asOriginInfo.elapsedText)}` : ""}</div>` : ""}
               </div>
               <div class="fg"><label>진행 단계</label>${mkEstStatusDrop()}</div>
               <div class="fg"><label>우선순위</label>${mkEstPrioDrop()}</div>
             </div>
             <div class="form-grid-3">
               <div class="fg"><label>AS 공종명</label>${mkEstTaskDrop("🔍 공종 검색 / 선택")}</div>
-              <div class="fg"><label>방문 예정일</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
+              <div class="fg"><label>AS 접수일</label><input type="date" class="ws-input" id="esInq" value="${escHtml(ed.inquiryDate || "")}"></div>
               <div class="fg"><label>담당자</label>${mkEstMgrDrop()}</div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>방문 예정일</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
+              <div class="fg"><label>방문 시간·출입 방식</label><input class="ws-input" id="esVisitAccess" value="${escHtml(ed.visitAccess || "")}" placeholder="예: 오전 10시 고객재택 / 비번 1234*"></div>
+              <div class="fg"><label>하자 사진·증빙 링크(URL)</label><input class="ws-input" id="esFile" value="${escHtml(ed.estimateFile || "")}" placeholder="Google Drive 링크 또는 파일명"></div>
             </div>
             <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:9px;margin-bottom:8px;">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -19432,12 +19480,15 @@ end $$;`;
         if (val === "__NEW__") {
           ed._isNewSiteInput = true;
           ed.siteName = "";
+          ed.originCompletedDate = "";
         } else {
           ed._isNewSiteInput = false;
           ed.siteName = val;
+          ed.originCompletedDate = "";
           if (val) {
+            const normVal = val.replace(/^\[(단건|AS)\]\s*/i, "").trim();
             const matchedCol = (state.financeDbData && Array.isArray(state.financeDbData.collection))
-              ? state.financeDbData.collection.find((c) => c && c.siteName && c.siteName.replace(/^\[(단건|AS)\]\s*/i, "").trim() === val.replace(/^\[(단건|AS)\]\s*/i, "").trim())
+              ? state.financeDbData.collection.find((c) => c && c.siteName && c.siteName.replace(/^\[(단건|AS)\]\s*/i, "").trim() === normVal)
               : null;
             if (matchedCol && matchedCol.clientName && !ed.clientName) {
               ed.clientName = matchedCol.clientName;
@@ -19445,6 +19496,10 @@ end $$;`;
             const sInfo = getSiteInfo(val);
             if (sInfo && sInfo.officePhone && !ed.clientPhone) {
               ed.clientPhone = sInfo.officePhone;
+            }
+            const matchedSite = getAllSites().find((s) => s && (s.scope || "site") !== "newSite" && s.siteName && s.siteName.replace(/^\[(단건|AS)\]\s*/i, "").trim() === normVal);
+            if (matchedSite && isSiteCompleted(matchedSite)) {
+              ed.originCompletedDate = getSiteDateMetrics(matchedSite).latest || "";
             }
           }
         }
@@ -19485,6 +19540,9 @@ end $$;`;
           asSymptom: gVal("esAsSymptom", ctx.ed.asSymptom || ""),
           asCostPayer: gVal("esAsCostPayer", ctx.ed.asCostPayer || "협력업체 무상재시공"),
           address: gVal("esAddr", ctx.ed.address || ""),
+          accessNote: gVal("esAccessNote", ctx.ed.accessNote || ""),
+          visitAccess: gVal("esVisitAccess", ctx.ed.visitAccess || ""),
+          originCompletedDate: gVal("esOriginDoneDate", ctx.ed.originCompletedDate || ""),
           nextAction: gVal("esNext", ctx.ed.nextAction || ""),
           failReason: gVal("esFailReason", ctx.ed.failReason || ""),
           estimateFile: gVal("esFile", ctx.ed.estimateFile || ""),
