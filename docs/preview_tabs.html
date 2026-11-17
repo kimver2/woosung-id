@@ -6065,16 +6065,20 @@ end $$;`;
 
         document.getElementById("pcQuoteMain").innerHTML = `
           <div class="site-carousel-controls">
-            <div style="display:flex;align-items:center;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <div class="pc-est-status-tabs">
                 <button type="button" class="pc-c-status-tab ${!isDoneView && !isFailedView ? "active" : ""}" onclick="setQuoteStatusFilter('active')">${cm.activeTab} <span class="pc-badge-count">${activeQuotes.length}</span></button>
                 <button type="button" class="pc-c-status-tab done-tab ${isDoneView ? "active" : ""}" onclick="setQuoteStatusFilter('done')">${cm.doneTab} <span class="pc-badge-count-done">${doneQuotes.length}</span></button>
                 <button type="button" class="pc-c-status-tab ${isFailedView ? "active" : ""}" style="${isFailedView ? "background:#fef2f2;color:#b91c1c;border-color:#fca5a5;" : ""}" onclick="setQuoteStatusFilter('failed')">${cm.failedTab} <span class="pc-badge-count" style="background:#fee2e2;color:#b91c1c;">${failedQuotes.length}</span></button>
               </div>
+              <span style="width:1px;height:18px;background:#cbd5e1;display:inline-block;"></span>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <button type="button" class="st-pill ${state.quoteSortBy === "priority" ? "active" : ""}" onclick="setQuoteSort('priority')">우선순위순</button>
+                <button type="button" class="st-pill ${state.quoteSortBy === "inquiry" ? "active" : ""}" onclick="setQuoteSort('inquiry')">문의일순</button>
+              </div>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
-              <button type="button" class="st-pill ${state.quoteSortBy === "priority" ? "active" : ""}" onclick="setQuoteSort('priority')">우선순위순</button>
-              <button type="button" class="st-pill ${state.quoteSortBy === "inquiry" ? "active" : ""}" onclick="setQuoteSort('inquiry')">문의일순</button>
+              <button type="button" class="btn-tool-tag" style="height:29px;padding:0 11px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;color:#334155;" onclick="window.openQuoteGuideModal()">📖 가이드</button>
               <button type="button" class="btn-act-blue" style="height:29px;padding:0 11px;font-size:12px;" onclick="openEstimateModal(null)">${cm.addBtn}</button>
             </div>
           </div>
@@ -9601,6 +9605,103 @@ end $$;`;
                   <tr><td style="${tdStyle}"><b>유상 AS<br>(자동 수금·원가 연동)</b></td><td style="${tdStyle}"><code>유상 청구금액 &gt; 0</code> 입력 후 저장하면 ① 본 현장이 수금현황에 있을 때는 해당 현장의 <b><code>➕ 추가비</code> 행에 <code>[유상 AS]</code>로 자동 합산</b>되고, ② 본 현장이 없는 단독 AS일 때는 <b><code>[AS] 현장명</code>으로 신규 수금 행이 자동 생성</b>됩니다. (<code>처리 비용 &gt; 0</code> 입력 시 외주 원가도 비용마감에 동시 생성)</td></tr>
                 </tbody>
               </table>
+            </div>
+          </div>`;
+
+        fEl.innerHTML = `<button type="button" class="btn-act-white" onclick="closeModal('syncStatusModal')">닫기</button>`;
+        openModal("syncStatusModal");
+      };
+
+      window.openQuoteGuideModal = function () {
+        const tEl = document.getElementById("syncStatusModalTitle");
+        const cEl = document.getElementById("syncStatusModalCloseBtn");
+        const bEl = document.getElementById("syncStatusModalBody");
+        const fEl = document.getElementById("syncStatusModalFooter");
+        if (!tEl || !bEl || !fEl) return;
+
+        tEl.textContent = "📖 신규 현장 탭 완전 활용 가이드";
+        if (cEl) cEl.style.display = "inline-flex";
+        const modalCard = document.querySelector("#syncStatusModal .ws-modal-card");
+        if (modalCard) modalCard.style.maxWidth = "920px";
+
+        const secStyle = "background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;";
+        const h4Style = "margin:0 0 8px;font-size:14.5px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:6px;";
+        const tblStyle = "width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;";
+        const thStyle = "background:#f8fafc;border:1px solid #cbd5e1;padding:6px 8px;text-align:left;font-weight:700;color:#334155;";
+        const tdStyle = "border:1px solid #e2e8f0;padding:6px 8px;vertical-align:top;line-height:1.5;color:#334155;";
+
+        bEl.innerHTML = `
+          <div style="display:flex;flex-direction:column;gap:12px;text-align:left;max-height:72vh;overflow-y:auto;padding-right:4px;" class="visible-scrollbar">
+            <div style="display:flex;flex-wrap:wrap;gap:6px;background:#f8fafc;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0;position:sticky;top:0;z-index:3;">
+              ${[
+                ["qgSec1", "🗂️ 1. 현장·단건·AS 분류"],
+                ["qgSec2", "🔍 2. 필터·정렬·보류분리"],
+                ["qgSec3", "📝 3. 등록·수정 상세 기능"],
+                ["qgSec4", "🃏 4. 카드·표·바로연결"],
+                ["qgSec5", "🚀 5. 계약완료·현장승격"]
+              ].map(([id, lbl]) => `
+                <button type="button" class="btn-sub-chip" style="padding:4px 9px;font-size:11.5px;" onclick="document.getElementById('${id}')?.scrollIntoView({behavior:'smooth',block:'start'})">${lbl}</button>
+              `).join("")}
+            </div>
+
+            <div style="${secStyle}">
+              <h4 style="${h4Style}">0. 신규 현장 탭 역할</h4>
+              <div style="font-size:12.5px;color:#475569;line-height:1.6;">
+                • <b>정식 착공·집행 전 단계(상담·실측·견적·계약 대기)</b>의 <code>🏗️ 현장</code>, <code>⚡ 단건</code>, <code>🔧 AS</code>를 통합 관리하는 영업·접수 파이프라인입니다.<br>
+                • 계약이 확정되면 <b>정식 현장 목록 · 캘린더 · 재무·원장</b>으로 원클릭 승격·연동할 수 있습니다.
+              </div>
+            </div>
+
+            <div id="qgSec1" style="${secStyle}">
+              <h4 style="${h4Style}">1. 🗂️ 현장 · 단건 · AS 분류별 관리</h4>
+              <div style="font-size:12.5px;color:#475569;line-height:1.6;">
+                • 좌측 사이드바 <b><code>현장 분류</code></b> 버튼(<code>현장 N</code> · <code>단건 N</code> · <code>AS N</code>)을 누르면 각 유형별 <b>아직 정식 현장으로 승격되지 않은 진행 건수</b>와 목록만 분리 조회됩니다.<br>
+                • <b>등록 시 분류 전환</b>: 우측 상단 <code>+ 신규 견적 등록</code>(또는 좌측 <code>+ 새 신규견적 등록</code>) 모달 상단에서 <code>🏗️ 현장</code> / <code>⚡ 단건</code> / <code>🔧 AS</code>를 전환해 바로 입력할 수 있습니다.
+              </div>
+            </div>
+
+            <div id="qgSec2" style="${secStyle}">
+              <h4 style="${h4Style}">2. 🔍 좌측 필터 · 상단 상태 탭 · 정렬 · 보류/실패 분리</h4>
+              <table style="${tblStyle}">
+                <thead><tr><th style="${thStyle}width:170px;">기능</th><th style="${thStyle}">설명 및 동작 방식</th></tr></thead>
+                <tbody>
+                  <tr><td style="${tdStyle}"><b>담당자 필터</b></td><td style="${tdStyle}">좌측 사이드바 <code>담당자 필터</code>에서 특정 담당자를 선택하면 진행·완료·보류/실패 목록과 카운트가 해당 담당자 기준으로 필터링됩니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>상단 상태 필터 탭</b></td><td style="${tdStyle}"><code>📋 신규현장</code>(진행 중) · <code>🎉 계약 완료</code> · <code>⚠️ 보류·실패</code> 3개 탭으로 상태를 전환해 조회합니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>정렬 필터<br>(우선순위순 / 문의일순)</b></td><td style="${tdStyle}"><code>우선순위순</code>은 <code>긴급 → 높음 → 보통 → 낮음</code> 순으로 정렬하며, <code>문의일순</code>은 최근 접수일(<code>문의일</code>) 기준으로 정렬합니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>⚠️ 보류·실패 자동 분리</b></td><td style="${tdStyle}">현장·단건·AS 모두 진행 단계가 <code>보류</code> · <code>수주 실패</code> · <code>실패</code>이거나 <code>⚠️ 보류·실패 사유</code>가 등록되면 <b>진행/완료 목록에서 자동 제외</b>되어 좌측 하단 <code>⚠️ 실패·보류 현장</code> 및 상단 <code>⚠️ 보류·실패</code> 탭으로 분리됩니다. 클릭 후 단계/사유를 수정하면 즉시 복구됩니다.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="qgSec3" style="${secStyle}">
+              <h4 style="${h4Style}">3. 📝 분류별 등록·수정 모달 주요 기능</h4>
+              <table style="${tblStyle}">
+                <thead><tr><th style="${thStyle}width:130px;">분류</th><th style="${thStyle}">전용 입력 항목 및 자동화 기능</th></tr></thead>
+                <tbody>
+                  <tr><td style="${tdStyle}"><b>🏗️ 현장<br>(신규견적)</b></td><td style="${tdStyle}">공사 범위, 유입 경로, 예상/최종 계약금액, 주요 일자(문의일·1차 상담일·현장 방문일·견적 전달일·착공 예정일), 현장 주소, 다음 해야 할 일, 보류·실패 사유, 견적서 파일 링크, 상담 메모</td></tr>
+                  <tr><td style="${tdStyle}"><b>⚡ 단건</b></td><td style="${tdStyle}">공종명(검색/직접입력), 협력업체(선택), 유입 경로, 문의일/작업 예정일, 예상 견적·계약금액·외주/자재 원가, <b>출입·주차 메모</b>(비번·주차 등), <b>견적서·사진 링크(URL)</b>, 보류·실패 사유</td></tr>
+                  <tr><td style="${tdStyle}"><b>🔧 AS</b></td><td style="${tdStyle}"><b>대상 현장 선택</b> 시 진행/완료 본 현장의 <b>고객명·연락처·준공일(준공 후 경과 개월 수)</b> 자동 연동, <code>무상 A/S</code> / <code>💰 유상 A/S</code> 토글, AS 접수일·방문 예정일·<b>방문 시간/출입 방식</b>, 공간·귀책 판단·비용 부담 주체·증상 근거, 재시공 협력업체·유상 청구/처리 비용, <b>하자 사진·증빙 링크(URL)</b></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="qgSec4" style="${secStyle}">
+              <h4 style="${h4Style}">4. 🃏 캐러셀 · 상세 카드 · 전체 데이터 현황 표</h4>
+              <div style="font-size:12.5px;color:#475569;line-height:1.6;">
+                • <b>상단 캐러셀 &amp; 좌측 리스트</b>: 카드를 클릭하면 가운데 상세 패널과 하단 표 선택 행이 동기화됩니다.<br>
+                • <b>원클릭 액션</b>: 상세 패널에서 <b>고객 연락처 클릭(전화 걸기)</b>, <b>주소 옆 <code>지도 ↗</code>(네이버 지도 검색)</b>, <b><code>파일 열기 ↗</code>(견적서·사진 URL 열기)</b>를 바로 사용할 수 있습니다.<br>
+                • <b>전체 데이터 현황 표</b>: 우측 검색창에서 <b>현장명·고객명·연락처·담당자·메모</b>를 실시간 검색할 수 있으며, <b>행을 더블클릭</b>하거나 <code>수정</code> 버튼을 누르면 즉시 편집 모달이 열립니다.
+              </div>
+            </div>
+
+            <div id="qgSec5" style="${secStyle}">
+              <h4 style="${h4Style}">5. 🚀 계약 완료 처리 및 정식 현장·재무 승격 연동</h4>
+              <div style="font-size:12.5px;color:#475569;line-height:1.6;">
+                • <b><code>✅ 계약 완료</code></b>: 진행 단계가 <code>계약 완료</code>로 변경되며 <code>🎉 계약 완료</code> 탭과 좌측 <code>✅ 완료·보관 현장</code>으로 이동합니다. (실수로 완료한 경우 <code>↩️ 신규로 되돌리기</code>로 복구 가능)<br>
+                • <b><code>🚀 진행 현장으로 승격</code></b>: 계약 완료 건을 정식 현장으로 전환합니다.<br>
+                  - <b>🏗️ 현장</b>: <code>현장 목록</code> 및 <code>캘린더</code>에 착공 공정으로 등록되며, <code>✅ 현장 등록됨 → 해당 현장 보기</code>로 바로 이동할 수 있습니다.<br>
+                  - <b>⚡ 단건 / 🔧 AS</b>: 승격 시 <b>정식 단건/AS 현장</b>으로 등록되는 동시에 <b><code>재무·원장</code>(수금현황·월별 비용마감)</b>에도 계약금액·원가·유/무상 내역이 자동 연동됩니다.
+              </div>
             </div>
           </div>`;
 
@@ -13937,6 +14038,7 @@ end $$;`;
               </button>
             </div>
             <div style="display:flex;gap:4px;">
+              <button type="button" onclick="window.openQuoteGuideModal()" style="padding:5px 8px;font-size:11px;font-weight:700;border:1px solid #cbd5e1;background:#ffffff;color:#334155;border-radius:6px;cursor:pointer;white-space:nowrap;">📖 가이드</button>
               <button type="button" onclick="openSpreadsheetEstimateSheet()" style="padding:5px 8px;font-size:11px;font-weight:700;border:1px solid #cbd5e1;background:#ffffff;color:#334155;border-radius:6px;cursor:pointer;white-space:nowrap;">📊 시트 ↗</button>
             </div>
           </div>`;
