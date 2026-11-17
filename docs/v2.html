@@ -3102,6 +3102,7 @@ end $$;`;
         showArchivedSites: false,
         checkedTableTaskIds: new Set(),
         todoMemberFilter: "all",
+        quoteCategory: "site",
         quoteShowArchived: false,
         quoteStatusFilter: "active",
         quoteSortBy: "priority",
@@ -3970,6 +3971,10 @@ end $$;`;
       function renderSharedSidebarHtml(mode) {
         const dash = state.dashData;
         const counts = (dash && dash.scopeCounts) || {};
+        const qCat = state.quoteCategory || "site";
+        if (mode === "quote") {
+          state.scope = (qCat === "site" ? "newSite" : qCat);
+        }
         const activeSites = getActiveScopeSites();
         const doneSites = getDoneScopeSites();
         ensureCheckedSitesInitialized();
@@ -4007,7 +4012,7 @@ end $$;`;
         const scopeLabels = { site: "진행 현장", single: "단건 공정", as: "A/S 목록", newSite: "신규 견적" };
         let siteRows = activeSites.map((site) => {
           const isChecked = state.checkedSiteKeys && state.checkedSiteKeys.has(site.siteKey);
-          const isSelected = (mode === "sites" && state.selectedSiteKey === site.siteKey) || (mode === "quote" && state.selectedQuoteKey === site.siteKey);
+          const isSelected = (mode === "sites" && state.selectedSiteKey === site.siteKey) || (mode === "quote" && (qCat === "site" ? state.selectedQuoteKey === site.siteKey : state.selectedSiteKey === site.siteKey));
           const cnt = (site.tasks || []).filter((t) => !isTaskCompleted(t)).length;
           return `
             <div class="site-check-row ${isSelected ? "selected-site" : ""}" onclick="onSidebarSiteClick('${escJs(site.siteKey)}', event)">
@@ -4024,7 +4029,7 @@ end $$;`;
 
         return `
           ${mode === "quote"
-            ? `<button type="button" class="btn-new-task-big" onclick="openEstimateModal(null)">➕ 새 신규견적 등록</button>`
+            ? `<button type="button" class="btn-new-task-big" onclick="openEstimateModal(null)">➕ ${qCat === "single" ? "새 단건 등록" : qCat === "as" ? "새 AS 접수 등록" : "새 신규견적 등록"}</button>`
             : `<button type="button" class="btn-new-task-big" onclick="openNewTaskModal('', state.selectedDayStr)">➕ 새 일정 등록</button>`}
 
           <div class="sidebar-kpi-row">
@@ -4060,9 +4065,9 @@ end $$;`;
           <div class="sidebar-form-group">
             <span class="sidebar-form-label">현장 분류</span>
             <div class="sidebar-cat-grid">
-              <button type="button" class="cat-btn ${state.scope === "site" ? "active" : ""}" onclick="onCategoryClicked('site')">현장 ${counts.site || 0}</button>
-              <button type="button" class="cat-btn ${state.scope === "single" ? "active" : ""}" onclick="onCategoryClicked('single')">단건 ${counts.single || 0}</button>
-              <button type="button" class="cat-btn ${state.scope === "as" ? "active" : ""}" onclick="onCategoryClicked('as')">AS ${counts.as || 0}</button>
+              <button type="button" class="cat-btn ${(mode === "quote" ? qCat === "site" : state.scope === "site") ? "active" : ""}" onclick="onCategoryClicked('site')">현장 ${mode === "quote" ? (counts.newSite || 0) : (counts.site || 0)}</button>
+              <button type="button" class="cat-btn ${(mode === "quote" ? qCat === "single" : state.scope === "single") ? "active" : ""}" onclick="onCategoryClicked('single')">단건 ${counts.single || 0}</button>
+              <button type="button" class="cat-btn ${(mode === "quote" ? qCat === "as" : state.scope === "as") ? "active" : ""}" onclick="onCategoryClicked('as')">AS ${counts.as || 0}</button>
             </div>
           </div>
 
@@ -4080,7 +4085,7 @@ end $$;`;
               <span>${state.showArchivedSites ? "▲" : "▼"}</span>
             </button>
             ${state.showArchivedSites ? `<div class="site-checklist">${doneSites.slice(0, 12).map((s) => {
-              const isSelected = (mode === "sites" && state.selectedSiteKey === s.siteKey) || (mode === "quote" && state.selectedQuoteKey === s.siteKey);
+              const isSelected = (mode === "sites" && state.selectedSiteKey === s.siteKey) || (mode === "quote" && (qCat === "site" ? state.selectedQuoteKey === s.siteKey : state.selectedSiteKey === s.siteKey));
               const countLbl = s.scope === "newSite" ? escHtml((s.estimateData && s.estimateData.status) || "완료") : `${s.progressRate || 100}%`;
               return `
                 <div class="site-check-row ${isSelected ? "selected-site" : ""}" style="opacity:0.85;" onclick="openSiteDetail('${escJs(s.siteKey)}')">
@@ -4937,16 +4942,8 @@ end $$;`;
 
         const allChecked = filteredRows.length > 0 && filteredRows.every((t) => state.checkedTableTaskIds.has(t.id || t.taskId));
         const checkedCount = filteredRows.filter((t) => state.checkedTableTaskIds.has(t.id || t.taskId)).length;
-
-        const tbody = document.getElementById("pcSiteTaskTbody");
-        if (tbody) tbody.innerHTML = renderPcSiteTaskRowsHtml(filteredRows);
-
-        const allCheckEl = document.getElementById("pcSiteTableAllCheck");
-        if (allCheckEl) allCheckEl.checked = allChecked;
-
-        const bulkContainer = document.getElementById("pcSiteBulkBarContainer");
-        if (bulkContainer) {
-          bulkContainer.innerHTML = checkedCount > 0 ? `
+        const rowsHtml = renderPcSiteTaskRowsHtml(filteredRows);
+        const bulkHtml = checkedCount > 0 ? `
             <div class="bulk-action-bar">
               <span>☑️ 선택된 공정 <strong>${checkedCount}건</strong></span>
               <div style="display:flex;gap:6px;">
@@ -4956,11 +4953,22 @@ end $$;`;
                 <button type="button" class="btn-tool-tag" onclick="openPartnerGuideForSite('${escJs(selectedSite.siteKey)}')">📋 선택 안내문 생성</button>
               </div>
             </div>` : "";
-        }
+
+        ["pcSite", "pcQuoteSite"].forEach((pfx) => {
+          const tbody = document.getElementById(pfx + "TaskTbody");
+          if (tbody) tbody.innerHTML = rowsHtml;
+          const allCheckEl = document.getElementById(pfx + "TableAllCheck");
+          if (allCheckEl) allCheckEl.checked = allChecked;
+          const bulkContainer = document.getElementById(pfx + "BulkBarContainer");
+          if (bulkContainer) bulkContainer.innerHTML = bulkHtml;
+        });
       }
 
       // ================= [PC 탭 4: 현장 목록 (체크박스/모달 완비)] =================
-      function renderPcSitesTab() {
+      function renderPcSitesTab(isQuoteTabScoped) {
+        const isQ = Boolean(isQuoteTabScoped);
+        const pfx = isQ ? "pcQuoteSite" : "pcSite";
+        const trackId = isQ ? "pcQuoteScopedCarouselTrack" : "pcSiteCarouselTrack";
         const sitesPool = getScopeSites(true);
         const q = state.searchQuery.trim();
         const m = state.memberFilter;
@@ -5005,7 +5013,8 @@ end $$;`;
 
         let selectedSite = visibleSites.find((s) => s.siteKey === state.selectedSiteKey) || visibleSites[0] || sitesPool[0];
         if (selectedSite) state.selectedSiteKey = selectedSite.siteKey;
-        document.getElementById("pcSiteSidebar").innerHTML = renderSharedSidebarHtml("sites");
+        const sidebarEl = document.getElementById(isQ ? "pcQuoteSidebar" : "pcSiteSidebar");
+        if (sidebarEl) sidebarEl.innerHTML = renderSharedSidebarHtml(isQ ? "quote" : "sites");
 
         const activeCountAll = sitesPool.filter((s) => !isSiteCompleted(s)).length;
         const doneCountAll = sitesPool.filter((s) => isSiteCompleted(s)).length;
@@ -5165,12 +5174,12 @@ end $$;`;
               <div class="site-task-filter-row" style="justify-content:flex-end;">
                 <div class="site-task-search-wrap" style="width:280px;box-sizing:border-box;">
                   <span class="search-icon">🔍</span>
-                  <input type="text" id="pcSiteTaskSearchInput" class="ws-input" value="${escHtml(state.siteTaskSearch)}" placeholder="공종 / 업체 / 메모 검색" oninput="setSiteTaskSearch(this.value)" onkeydown="if(event.key==='Escape')clearSiteTaskSearch()" style="height:30px;font-size:12px;">
-                  <button type="button" id="pcSiteTaskSearchClear" class="search-clear search-clear-btn" onclick="clearSiteTaskSearch()" style="display:${state.siteTaskSearch ? "flex" : "none"};" title="검색어 지우기">✕</button>
+                  <input type="text" id="${pfx}TaskSearchInput" class="ws-input" value="${escHtml(state.siteTaskSearch)}" placeholder="공종 / 업체 / 메모 검색" oninput="setSiteTaskSearch(this.value)" onkeydown="if(event.key==='Escape')clearSiteTaskSearch()" style="height:30px;font-size:12px;">
+                  <button type="button" id="${pfx}TaskSearchClear" class="search-clear search-clear-btn" onclick="clearSiteTaskSearch()" style="display:${state.siteTaskSearch ? "flex" : "none"};" title="검색어 지우기">✕</button>
                 </div>
               </div>
 
-              <div id="pcSiteBulkBarContainer">
+              <div id="${pfx}BulkBarContainer">
                 ${checkedCount > 0 ? `
                   <div class="bulk-action-bar">
                     <span>☑️ 선택된 공정 <strong>${checkedCount}건</strong></span>
@@ -5187,7 +5196,7 @@ end $$;`;
                 <table class="clean-table">
                   <thead>
                     <tr>
-                      <th style="width:32px;"><input type="checkbox" id="pcSiteTableAllCheck" ${allChecked ? "checked" : ""} onchange="toggleSiteTableAllCheck(this.checked)" style="width:15px;height:15px;accent-color:#1e40af;cursor:pointer;"></th>
+                      <th style="width:32px;"><input type="checkbox" id="${pfx}TableAllCheck" ${allChecked ? "checked" : ""} onchange="toggleSiteTableAllCheck(this.checked)" style="width:15px;height:15px;accent-color:#1e40af;cursor:pointer;"></th>
                       <th style="width:82px;">상태</th>
                       <th style="width:130px;">공종</th>
                       <th style="width:110px;">일정</th>
@@ -5197,52 +5206,53 @@ end $$;`;
                       <th style="width:105px;">관리</th>
                     </tr>
                   </thead>
-                  <tbody id="pcSiteTaskTbody">${tableRowsHtml}</tbody>
+                  <tbody id="${pfx}TaskTbody">${tableRowsHtml}</tbody>
                 </table>
               </div>
             </div>
           `;
         }
 
-        const pcSiteEl = document.getElementById("pcSiteMain");
-        const existingInput = document.getElementById("pcSearchInput");
-        const isSitesActive = state.pcTab === "sites";
-        const bodyAreaEl = pcSiteEl ? document.getElementById("pcSiteBodyArea") : null;
+        const pcSiteEl = document.getElementById(isQ ? "pcQuoteMain" : "pcSiteMain");
+        const existingInput = document.getElementById(isQ ? "pcQuoteScopedSearchInput" : "pcSearchInput");
+        const isSitesActive = isQ ? (state.pcTab === "quote") : (state.pcTab === "sites");
+        const bodyAreaEl = pcSiteEl ? document.getElementById(pfx + "BodyArea") : null;
         if (pcSiteEl && existingInput && bodyAreaEl && isSitesActive && pcSiteEl.contains(existingInput) && document.activeElement === existingInput) {
           bodyAreaEl.innerHTML = `
             ${visibleSites.length ? `
               <div class="carousel-wrap-box">
-                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcSiteCarouselTrack', -360)" title="이전 현장 보기">‹</button>
-                <div class="site-carousel-track" id="pcSiteCarouselTrack">${carouselHtml}</div>
-                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcSiteCarouselTrack', 360)" title="다음 현장 보기">›</button>
+                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('${trackId}', -360)" title="이전 현장 보기">‹</button>
+                <div class="site-carousel-track" id="${trackId}">${carouselHtml}</div>
+                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('${trackId}', 360)" title="다음 현장 보기">›</button>
               </div>` : ""}
             ${detailHtml}
           `;
-          const countSpan = document.getElementById("pcSiteVisibleCount");
+          const countSpan = document.getElementById(pfx + "VisibleCount");
           if (countSpan) countSpan.textContent = `표시 ${visibleSites.length}개`;
           if (existingInput.value !== state.searchQuery) {
             existingInput.value = state.searchQuery;
           }
-          autoScrollCarouselToActive("pcSiteCarouselTrack", ".site-carousel-card.active");
+          autoScrollCarouselToActive(trackId, ".site-carousel-card.active");
           return;
         }
 
+        const scopeProceedLbl = state.scope === "single" ? "⚡ 진행 단건" : state.scope === "as" ? "🔧 진행 A/S" : "🏗️ 진행 현장";
         pcSiteEl.innerHTML = `
           <div class="site-carousel-controls">
             <div style="display:flex;align-items:center;gap:8px;">
               <div class="pc-est-status-tabs">
-                <button type="button" class="pc-c-status-tab ${!state.showArchivedSites ? "active" : ""}" onclick="if(state.showArchivedSites) toggleArchivedSites()">🏗️ 진행 현장 <span class="pc-badge-count">${activeCountAll}</span></button>
+                <button type="button" class="pc-c-status-tab ${!state.showArchivedSites ? "active" : ""}" onclick="if(state.showArchivedSites) toggleArchivedSites()">${scopeProceedLbl} <span class="pc-badge-count">${activeCountAll}</span></button>
                 <button type="button" class="pc-c-status-tab done-tab ${state.showArchivedSites ? "active" : ""}" onclick="if(!state.showArchivedSites) toggleArchivedSites()">✅ 완료·보관 포함 <span class="pc-badge-count-done">${doneCountAll}</span></button>
               </div>
-              <span id="pcSiteVisibleCount" style="font-size:12px;font-weight:700;color:var(--text-muted);">표시 ${visibleSites.length}개</span>
+              <span id="${pfx}VisibleCount" style="font-size:12px;font-weight:700;color:var(--text-muted);">표시 ${visibleSites.length}개</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
               <div class="pc-page-search-wrap">
                 <span class="pc-page-search-icon">🔍</span>
-                <input type="text" id="pcSearchInput" class="pc-page-search-input" placeholder="현장, 공종, 담당자 검색 (Alt+S)" value="${escHtml(state.searchQuery)}" oninput="onGlobalSearch(this.value)">
+                <input type="text" id="${isQ ? "pcQuoteScopedSearchInput" : "pcSearchInput"}" class="pc-page-search-input" placeholder="현장, 공종, 담당자 검색 (Alt+S)" value="${escHtml(state.searchQuery)}" oninput="onGlobalSearch(this.value)">
                 ${state.searchQuery ? `<span class="pc-page-search-clear" onclick="clearGlobalSearch()" title="검색 초기화">✕</span>` : `<span class="search-shortcut-badge" style="position:absolute;right:6px;font-size:10px;padding:2px 4px;border-radius:4px;background:#f1f5f9;color:#64748b;pointer-events:none;">Alt+S</span>`}
               </div>
-              <div style="display:flex;gap:5px;">
+              <div style="display:flex;gap:5px;align-items:center;">
                 ${state.showArchivedSites ? `
                   <button type="button" class="st-pill ${state.siteSortBy !== "name" ? "active" : ""}" onclick="setSiteSort('recent')">최근완료순</button>
                   <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
@@ -5251,20 +5261,21 @@ end $$;`;
                   <button type="button" class="st-pill ${state.siteSortBy === "date" ? "active" : ""}" onclick="setSiteSort('date')">일정순</button>
                   <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
                 `}
+                ${isQ ? `<button type="button" class="btn-act-blue" style="height:29px;padding:0 11px;font-size:12px;" onclick="openEstimateModal(null)">+ ${state.scope === "single" ? "신규 단건 등록" : "신규 AS 등록"}</button>` : ""}
               </div>
             </div>
           </div>
-          <div id="pcSiteBodyArea">
+          <div id="${pfx}BodyArea">
             ${visibleSites.length ? `
               <div class="carousel-wrap-box">
-                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcSiteCarouselTrack', -360)" title="이전 현장 보기">‹</button>
-                <div class="site-carousel-track" id="pcSiteCarouselTrack">${carouselHtml}</div>
-                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcSiteCarouselTrack', 360)" title="다음 현장 보기">›</button>
+                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('${trackId}', -360)" title="이전 현장 보기">‹</button>
+                <div class="site-carousel-track" id="${trackId}">${carouselHtml}</div>
+                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('${trackId}', 360)" title="다음 현장 보기">›</button>
               </div>` : ""}
             ${detailHtml}
           </div>
         `;
-        autoScrollCarouselToActive("pcSiteCarouselTrack", ".site-carousel-card.active");
+        autoScrollCarouselToActive(trackId, ".site-carousel-card.active");
       }
 
       // ================= [PC 탭 2: To-Do 리스트 (스마트 그룹핑 & 빠른 액션)] =================
@@ -5769,6 +5780,13 @@ end $$;`;
       };
 
       function renderPcQuoteTab() {
+        const qCat = state.quoteCategory || "site";
+        if (qCat === "single" || qCat === "as") {
+          state.scope = qCat;
+          renderPcSitesTab(true);
+          return;
+        }
+        state.scope = "newSite";
         const isDoneView = state.quoteStatusFilter === "done";
         const { activeQuotes, doneQuotes, filtered } = getSortedQuotesForTab(state.quoteStatusFilter);
 
@@ -13112,7 +13130,7 @@ end $$;`;
       }
 
       // [모바일 탭 4: 현장 목록 — 진행/완료 토글 & 아코디언 전체 공정/길안내/업로드/안내문]
-      function renderMobileSitesTab() {
+      function renderMobileSitesTab(targetContainerId, topExtraHtml) {
         const q = state.searchQuery.trim();
         const m = state.memberFilter;
         const pool = getScopeSites(true);
@@ -13154,9 +13172,9 @@ end $$;`;
           return compareActiveSites(a, b);
         });
 
-        const toggleBarHtml = `
+        const toggleBarHtml = (topExtraHtml || "") + `
           <div style="display:flex;gap:6px;margin-bottom:8px;">
-            <button type="button" class="m-sites-archived-btn" data-archived="false" onclick="setMobileSitesArchived(false)" style="flex:1;padding:8px 8px;border-radius:8px;border:1px solid ${!state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${!state.showArchivedSites ? "#0f766e" : "#fff"};color:${!state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">🏗️ 진행 현장 ${activeCountAll}</button>
+            <button type="button" class="m-sites-archived-btn" data-archived="false" onclick="setMobileSitesArchived(false)" style="flex:1;padding:8px 8px;border-radius:8px;border:1px solid ${!state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${!state.showArchivedSites ? "#0f766e" : "#fff"};color:${!state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">${state.scope === "single" ? "⚡ 진행 단건" : state.scope === "as" ? "🔧 진행 A/S" : "🏗️ 진행 현장"} ${activeCountAll}</button>
             <button type="button" class="m-sites-archived-btn" data-archived="true" onclick="setMobileSitesArchived(true)" style="flex:1;padding:8px 8px;border-radius:8px;border:1px solid ${state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${state.showArchivedSites ? "#0f766e" : "#fff"};color:${state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">✅ 완료 현장 ${doneCountAll}</button>
           </div>
           <div style="display:flex;gap:5px;margin-bottom:10px;justify-content:flex-end;">
@@ -13170,7 +13188,7 @@ end $$;`;
             `}
           </div>`;
 
-        document.getElementById("m-page-sites").innerHTML = toggleBarHtml + (visible.map((s) => {
+        document.getElementById(targetContainerId || "m-page-sites").innerHTML = toggleBarHtml + (visible.map((s) => {
           const info = getSiteInfo(s.siteName) || {};
           const tasks = s.tasks || [];
           const nextTask = tasks.find((t) => !isTaskCompleted(t)) || tasks[0];
@@ -13549,10 +13567,25 @@ end $$;`;
 
       // [모바일 탭 5: 신규 (기존 현장서식.js 동일 아코디언 카드)] & [모바일 탭 6: 재무]
       function renderMobileQuoteTab() {
+        const qCat = state.quoteCategory || "site";
+        const counts = (state.dashData && state.dashData.scopeCounts) || {};
+        const catSwitchHtml = `
+          <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center;">
+            <button type="button" class="m-filter-chip-btn ${qCat === "site" ? "active" : ""}" style="flex:1;justify-content:center;" onclick="onMScopeClick('site')">🏗️ 현장 ${counts.newSite || 0}</button>
+            <button type="button" class="m-filter-chip-btn ${qCat === "single" ? "active" : ""}" style="flex:1;justify-content:center;" onclick="onMScopeClick('single')">⚡ 단건 ${counts.single || 0}</button>
+            <button type="button" class="m-filter-chip-btn ${qCat === "as" ? "active" : ""}" style="flex:1;justify-content:center;" onclick="onMScopeClick('as')">🔧 AS ${counts.as || 0}</button>
+            <button type="button" onclick="openEstimateModal(null)" style="padding:6px 10px;font-size:11.5px;font-weight:800;border:none;background:#2563eb;color:#ffffff;border-radius:7px;cursor:pointer;white-space:nowrap;">+ 등록</button>
+          </div>`;
+        if (qCat === "single" || qCat === "as") {
+          state.scope = qCat;
+          renderMobileSitesTab("m-page-quote", catSwitchHtml);
+          return;
+        }
+        state.scope = "newSite";
         const isDoneMode = state.quoteStatusFilter === "done";
         const { activeQuotes, doneQuotes, filtered } = getSortedQuotesForTab(state.quoteStatusFilter);
 
-        const headBarHtml = `
+        const headBarHtml = catSwitchHtml + `
           <div class="mobile-est-head-bar" style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 0 10px;margin-bottom:8px;border-bottom:1px solid #e2e8f0;">
             <div style="display:flex;background:#f1f5f9;padding:2px;border-radius:8px;gap:2px;">
               <button type="button" onclick="setQuoteStatusFilter('active')" style="padding:5px 9px;font-size:11.5px;font-weight:700;border:none;border-radius:6px;cursor:pointer;background:${!isDoneMode ? "#ffffff" : "transparent"};color:${!isDoneMode ? "#2563eb" : "#64748b"};box-shadow:${!isDoneMode ? "0 1px 3px rgba(0,0,0,0.08)" : "none"};">
@@ -13563,7 +13596,6 @@ end $$;`;
               </button>
             </div>
             <div style="display:flex;gap:4px;">
-              <button type="button" onclick="openEstimateModal(null)" style="padding:5px 8px;font-size:11px;font-weight:800;border:none;background:#2563eb;color:#ffffff;border-radius:6px;cursor:pointer;">+ 등록</button>
               <button type="button" onclick="openSpreadsheetEstimateSheet()" style="padding:5px 8px;font-size:11px;font-weight:700;border:1px solid #cbd5e1;background:#ffffff;color:#334155;border-radius:6px;cursor:pointer;white-space:nowrap;">📊 시트 ↗</button>
             </div>
           </div>`;
@@ -14746,25 +14778,79 @@ end $$;`;
         presentTaskSheet();
       };
 
-      window.openNewTaskModal = function (presetSiteName, presetDateYmd) {
-        const isQuote = isQuoteTabContext();
-        if (isQuote && !presetSiteName) {
-          openEstimateModal(null);
+      window.switchNewRegistrationType = function (targetType) {
+        const estModal = document.getElementById("estimateEditModal");
+        const taskModal = document.getElementById("taskSheetModal");
+        const wasEstOpen = Boolean(estModal && estModal.classList.contains("open"));
+        const wasTaskOpen = Boolean(taskModal && taskModal.classList.contains("open"));
+
+        if (targetType === "newSite") {
+          const draft = {};
+          if (wasTaskOpen && state.sheetCtx) {
+            const sc = state.sheetCtx;
+            draft.siteName = sc.siteName === "__NEW__" ? (sc.newSiteName || "") : (sc.siteName || "");
+            draft.memo = sc.memo || "";
+            draft.expectedDate = sc.startYmd || "";
+            draft.manager = sc.manager1 || state.user || "조항만";
+            if (sc.asMeta) {
+              if (sc.asMeta.clientName) draft.clientName = sc.asMeta.clientName;
+              if (sc.asMeta.chargeAmount) draft.contractAmount = sc.asMeta.chargeAmount;
+            }
+          }
+          if (wasTaskOpen) window.closeModal("taskSheetModal");
+          window.openEstimateModal(null, "newSite", draft);
           return;
+        }
+
+        const draftSiteName = wasEstOpen && document.getElementById("esSite") ? document.getElementById("esSite").value.trim() : "";
+        const draftMemo = wasEstOpen && document.getElementById("esMemo") ? document.getElementById("esMemo").value.trim() : "";
+        const draftCName = wasEstOpen && document.getElementById("esCName") ? document.getElementById("esCName").value.trim() : "";
+        const draftCPhone = wasEstOpen && document.getElementById("esCPhone") ? document.getElementById("esCPhone").value.trim() : "";
+        const draftConAmt = wasEstOpen && document.getElementById("esConAmt") ? (Number(document.getElementById("esConAmt").value) || 0) : 0;
+        const draftExpAmt = wasEstOpen && document.getElementById("esExpAmt") ? (Number(document.getElementById("esExpAmt").value) || 0) : 0;
+        const draftExpDate = wasEstOpen && document.getElementById("esExpD") ? document.getElementById("esExpD").value : "";
+        const draftMgr = wasEstOpen && document.getElementById("esMgr") ? document.getElementById("esMgr").value : (state.user || "조항만");
+
+        if (wasEstOpen) window.closeModal("estimateEditModal");
+        window.openNewTaskModal("", draftExpDate || state.selectedDayStr, targetType, {
+          fromEstimateModal: Boolean(wasEstOpen || isQuoteTabContext()),
+          newSiteName: draftSiteName,
+          memo: draftMemo,
+          manager1: draftMgr,
+          clientName: [draftCName, draftCPhone].filter(Boolean).join(" / "),
+          chargeAmount: draftConAmt || draftExpAmt || 0
+        });
+      };
+
+      window.openNewTaskModal = function (presetSiteName, presetDateYmd, forceScope, draftOpts) {
+        const opts = draftOpts || {};
+        const isQuote = isQuoteTabContext();
+        if (isQuote && !presetSiteName && !forceScope) {
+          const qCat = state.quoteCategory || "site";
+          if (qCat === "single" || qCat === "as") {
+            forceScope = qCat;
+          } else {
+            openEstimateModal(null);
+            return;
+          }
         }
         const d = presetDateYmd || state.selectedDayStr || getTodayYmd();
         const matchedSiteForPreset = presetSiteName
           ? (getAllSites().find((s) => s.siteName === presetSiteName && s.scope === state.scope)
              || getAllSites().find((s) => s.siteName === presetSiteName && (s.scope || "site") !== "newSite"))
           : null;
-        const initialScope = isQuote
-          ? "newSite"
+        const initialScope = forceScope
+          ? forceScope
           : (matchedSiteForPreset ? (matchedSiteForPreset.scope || "site") : ((state.scope === "newSite" || !state.scope) ? "site" : state.scope));
+        const defaultSiteSelect = presetSiteName
+          ? presetSiteName
+          : ((initialScope === "single" || opts.newSiteName) ? "__NEW__" : "");
         state.sheetCtx = {
           mode: "create",
           scope: initialScope,
-          siteName: presetSiteName || "",
-          newSiteName: "",
+          fromEstimateModal: Boolean(opts.fromEstimateModal || isQuote),
+          siteName: defaultSiteSelect,
+          newSiteName: opts.newSiteName || "",
           taskName: "",
           startYmd: d,
           endYmd: d,
@@ -14775,7 +14861,7 @@ end $$;`;
           showDatePop: false,
           calPopYear: Number(d.slice(0, 4)),
           calPopMonth: Number(d.slice(5, 7)),
-          manager1: state.user || "조항만",
+          manager1: opts.manager1 || state.user || "조항만",
           manager2: "",
           partner: "",
           isCustomPartner: false,
@@ -14785,16 +14871,17 @@ end $$;`;
           partnerPhone: "",
           taskDropOpen: false,
           taskSearchQuery: "",
-          status: "예정",
+          status: initialScope === "as" ? "AS" : "예정",
           isShared: false,
-          memo: "",
+          memo: opts.memo || "",
           asMeta: {
-            billingType: "free",
+            billingType: (Number(opts.chargeAmount) || 0) > 0 ? "paid" : "free",
             faultType: "",
             space: "",
             symptom: "",
-            costPayer: "협력업체 무상재시공",
-            chargeAmount: 0,
+            costPayer: (Number(opts.chargeAmount) || 0) > 0 ? "고객 부담" : "협력업체 무상재시공",
+            clientName: opts.clientName || "",
+            chargeAmount: Number(opts.chargeAmount) || 0,
             costAmount: 0,
             autoSyncFinance: true,
             financeSynced: false
@@ -14898,34 +14985,19 @@ end $$;`;
         const partnersMaster = getPartnersMasterList();
         const info = getSiteInfo(ctx.siteName) || {};
         const isQuote = isQuoteTabContext();
-
-        if (ctx.mode === "create" && (ctx.scope === "newSite" || isQuote)) {
-          ctx.scope = "newSite";
-          titleEl.innerHTML = `📋 신규 현장(신규 견적) 등록`;
-          bodyEl.innerHTML = `
-            <div class="fg">
-              <label>등록 분류 선택</label>
-              <div class="seg-row">
-                <button type="button" class="seg-btn active">📋 신규현장</button>
-              </div>
-            </div>
-            <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12.5px;">
-              신규 문의/견적 파이프라인에 새 현장을 등록하려면 아래 버튼을 눌러 전체 견적 양식을 열어주세요.
-            </div>`;
-          footEl.innerHTML = `
-            <button type="button" class="btn-act-white" onclick="closeModal('taskSheetModal')">취소</button>
-            <button type="button" class="btn-act-blue" onclick="closeModal('taskSheetModal'); openEstimateModal(null);">📋 신규 견적 양식 열기</button>`;
-          return;
-        }
-
         if (ctx.mode === "create" && ctx.scope === "newSite") {
           ctx.scope = "site";
         }
 
         const isEdit = ctx.mode === "edit";
+        const createTitleMap = {
+          site: (ctx.fromEstimateModal || isQuote) ? "🏗️ 신규 현장·공정 등록" : "➕ 새 일정 등록",
+          single: "⚡ 신규 단건 시공 등록",
+          as: "🔧 신규 A/S 접수 등록"
+        };
         titleEl.innerHTML = isEdit
           ? `🛠️ <span style="color:#1e40af;">${escHtml(ctx.siteName)}</span> · ${escHtml(ctx.taskName)}`
-          : `➕ 새 일정 등록`;
+          : (createTitleMap[ctx.scope] || `➕ 새 일정 등록`);
 
         let topActionsHtml = "";
         if (isEdit) {
@@ -15015,6 +15087,7 @@ end $$;`;
         const scopeTagMap = { site: "[현장] ", single: "[단독] ", as: "[A/S] " };
         const isAsMode = (curScope === "as" || ctx.status === "AS");
         const isSingleMode = (!isAsMode && curScope === "single");
+        const isSiteMode = (!isAsMode && !isSingleMode && curScope === "site");
         const asMeta = ctx.asMeta || { billingType: "free", faultType: "", space: "", symptom: "", costPayer: "협력업체 무상재시공", chargeAmount: 0, costAmount: 0, clientName: "", autoSyncFinance: true, financeSynced: false };
         const isPaidAs = (asMeta.billingType === "paid");
 
@@ -15026,9 +15099,16 @@ end $$;`;
             <div class="fg">
               <label>분류 선택</label>
               <div class="seg-row">
-                <button type="button" class="seg-btn ${ctx.scope === "site" ? "active" : ""}" onclick="setSheetField('scope','site')">🏗️ 현장</button>
-                <button type="button" class="seg-btn ${ctx.scope === "single" ? "active" : ""}" onclick="setSheetField('scope','single')">⚡ 단건</button>
-                <button type="button" class="seg-btn ${ctx.scope === "as" ? "active" : ""}" onclick="setSheetField('scope','as')">🔧 AS</button>
+                ${(ctx.fromEstimateModal || isQuote) ? `
+                  <button type="button" class="seg-btn" onclick="window.switchNewRegistrationType('newSite')">🏗️ 현장 (신규견적)</button>
+                  <button type="button" class="seg-btn ${ctx.scope === "single" ? "active" : ""}" onclick="setSheetField('scope','single')">⚡ 단건</button>
+                  <button type="button" class="seg-btn ${ctx.scope === "as" ? "active" : ""}" onclick="setSheetField('scope','as')">🔧 AS</button>
+                ` : `
+                  <button type="button" class="seg-btn ${ctx.scope === "site" ? "active" : ""}" onclick="setSheetField('scope','site')">🏗️ 현장</button>
+                  <button type="button" class="seg-btn ${ctx.scope === "single" ? "active" : ""}" onclick="setSheetField('scope','single')">⚡ 단건</button>
+                  <button type="button" class="seg-btn ${ctx.scope === "as" ? "active" : ""}" onclick="setSheetField('scope','as')">🔧 AS</button>
+                  <button type="button" class="seg-btn" onclick="window.switchNewRegistrationType('newSite')">📋 신규견적</button>
+                `}
               </div>
             </div>
             <div class="form-grid-2">
@@ -15253,10 +15333,10 @@ end $$;`;
             </div>
           ` : ""}
 
-          ${isSingleMode ? `
+          ${(isSingleMode || (isSiteMode && !isEdit)) ? `
             <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;margin-bottom:4px;">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-                <span style="font-size:13px;font-weight:800;color:#0f172a;">⚡ 단건 정산 &amp; 재무·원장 자동 연동</span>
+                <span style="font-size:13px;font-weight:800;color:#0f172a;">${isSingleMode ? "⚡ 단건 정산" : "🏗️ 현장 정산"} &amp; 재무·원장 자동 연동</span>
                 <span style="font-size:11px;color:#64748b;">금액 입력 시 수금현황·비용마감에 한 번에 등록됩니다</span>
               </div>
               <div class="form-grid-3" style="gap:8px;">
@@ -15266,7 +15346,7 @@ end $$;`;
                     oninput="window.updateTaskAsMeta('clientName', this.value, false)" style="height:32px;font-size:12px;">
                 </div>
                 <div class="fg" style="margin:0;">
-                  <label style="font-size:11.5px;color:#1d4ed8;">단건 계약금액 (고객 청구)</label>
+                  <label style="font-size:11.5px;color:#1d4ed8;">${isSingleMode ? "단건 계약금액 (고객 청구)" : "현장 계약금액 (고객 청구)"}</label>
                   <input type="text" inputmode="numeric" class="ws-input" value="${asMeta.chargeAmount ? Number(asMeta.chargeAmount).toLocaleString('ko-KR') : ''}" placeholder="0"
                     oninput="formatNumberInputWithCommas(this); window.updateTaskAsMeta('chargeAmount', this.value, false)"
                     style="height:32px;font-size:12px;text-align:right;font-weight:700;border-color:#93c5fd;background:#eff6ff;">
@@ -15353,17 +15433,20 @@ end $$;`;
       };
       window.setSheetField = function (k, v) {
         if (!state.sheetCtx) return;
-        const isQuote = isQuoteTabContext();
         if (k === "scope") {
-          if (!isQuote && v === "newSite") {
-            v = "site";
-          } else if (isQuote && v !== "newSite") {
-            v = "newSite";
-          }
           if (v === "newSite" && state.sheetCtx.mode === "create") {
-            window.closeModal("taskSheetModal");
-            window.openEstimateModal(null);
+            window.switchNewRegistrationType("newSite");
             return;
+          }
+          if (v === "single" && !state.sheetCtx.siteName) {
+            state.sheetCtx.siteName = "__NEW__";
+          } else if (v === "as" && state.sheetCtx.siteName === "__NEW__" && !state.sheetCtx.newSiteName) {
+            state.sheetCtx.siteName = "";
+          }
+          if (v === "as" && state.sheetCtx.status === "예정") {
+            state.sheetCtx.status = "AS";
+          } else if (v !== "as" && state.sheetCtx.status === "AS") {
+            state.sheetCtx.status = "예정";
           }
         }
         state.sheetCtx[k] = v;
@@ -16226,12 +16309,13 @@ end $$;`;
         state.dirtyMobileTabs.finance = true;
       }
 
-      function syncSingleTaskToFinance(siteName, taskName, startYmd, endYmd, partner, manager, asMeta) {
+      function syncSingleTaskToFinance(siteName, taskName, startYmd, endYmd, partner, manager, asMeta, scopeType) {
         if (!asMeta || !window.WSDataService) return;
         const chargeAmt = Number(asMeta.chargeAmount) || 0;
         const costAmt = Number(asMeta.costAmount) || 0;
         if (chargeAmt <= 0 && costAmt <= 0) return;
 
+        const isSiteScope = (scopeType === "site");
         const ds = window.WSDataService;
         const user = state.authUser || state.currentUser || state.user || "조항만";
         const baseName = String(siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
@@ -16254,12 +16338,12 @@ end $$;`;
               siteName: baseName,
               clientName: String(asMeta.clientName || "").trim(),
               manager: extractFirstManager(manager, user),
-              category: "단품",
+              category: isSiteScope ? "전체공사" : "단품",
               status: "진행중",
               period: periodStr,
               contractAmount: chargeAmt,
               changeAmount: 0,
-              changeDesc: taskName || "",
+              changeDesc: isSiteScope ? "" : (taskName || ""),
               downPayment: 0,
               startPayment: 0,
               midPayment1: 0,
@@ -16267,7 +16351,7 @@ end $$;`;
               midPayment3: 0,
               finalPayment: 0,
               taxInvoice: "미발행",
-              note: `[단건] ${taskName || ""}`.trim()
+              note: isSiteScope ? `[현장] ${taskName || ""}`.trim() : `[단건] ${taskName || ""}`.trim()
             };
             ds.saveCollectionRow(newCol, user);
           }
@@ -16279,8 +16363,8 @@ end $$;`;
             id: "",
             settleMonth: settleMonth,
             item: "외주",
-            category: taskName || "단건시공",
-            vendor: partner || "단건 외주/자재",
+            category: taskName || (isSiteScope ? "현장시공" : "단건시공"),
+            vendor: partner || (isSiteScope ? "현장 외주/자재" : "단건 외주/자재"),
             category2: "",
             accountNumber: "",
             siteName: baseName,
@@ -16288,7 +16372,7 @@ end $$;`;
             paidAmount: 0,
             balance: costAmt,
             payDate: startYmd || getTodayYmd(),
-            note: `[단건 원가] ${taskName || ""}`.trim()
+            note: `[${isSiteScope ? "현장" : "단건"} 원가] ${taskName || ""}`.trim()
           };
           ds.saveExpenseRow(newExp, user);
         }
@@ -16346,6 +16430,7 @@ end $$;`;
         }
         const isAsMode = (ctx.scope === "as" || ctx.status === "AS");
         const isSingleMode = (!isAsMode && ctx.scope === "single");
+        const isSiteMode = (!isAsMode && !isSingleMode && ctx.scope === "site");
         if (isAsMode && ctx.asMeta) {
           const am = ctx.asMeta;
           if (am.space || am.symptom || am.faultType || am.billingType === "paid") {
@@ -16359,10 +16444,10 @@ end $$;`;
           if (am.autoSyncFinance && !am.financeSynced && ((Number(am.chargeAmount) || 0) > 0 || (Number(am.costAmount) || 0) > 0)) {
             syncAsTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, finalPartner, managerCombined, am);
           }
-        } else if (isSingleMode && ctx.asMeta) {
+        } else if ((isSingleMode || isSiteMode) && ctx.asMeta) {
           const am = ctx.asMeta;
           if (am.autoSyncFinance && !am.financeSynced && ((Number(am.chargeAmount) || 0) > 0 || (Number(am.costAmount) || 0) > 0)) {
-            syncSingleTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, ctx.isRange ? ctx.endYmd : ctx.startYmd, finalPartner, managerCombined, am);
+            syncSingleTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, ctx.isRange ? ctx.endYmd : ctx.startYmd, finalPartner, managerCombined, am, isSiteMode ? "site" : "single");
           }
         }
 
@@ -18176,13 +18261,81 @@ end $$;`;
       };
 
       // ================= 모달 7: 신규 견적 등록/수정 모달 =================
-      window.openEstimateModal = function (siteKey) {
+      function syncEstimateToFinance(ed) {
+        if (!ed || !window.WSDataService) return;
+        const amt = Number(ed.contractAmount) || (ed.status === "계약 완료" ? (Number(ed.expectedAmount) || 0) : 0);
+        if (amt <= 0) return;
+        const ds = window.WSDataService;
+        if (typeof ds.saveCollectionRow !== "function") return;
+        const user = state.authUser || state.currentUser || state.user || "조항만";
+        const baseName = String(ed.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
+        const origName = String(ed.originalSiteName || baseName).replace(/^\[(단건|AS)\]\s*/i, "").trim();
+        const normKey = baseName.replace(/\s+/g, "").toLowerCase();
+        const origKey = origName.replace(/\s+/g, "").toLowerCase();
+
+        if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+        if (!Array.isArray(state.financeDbData.collection)) state.financeDbData.collection = [];
+
+        const existingCol = state.financeDbData.collection.find(c => {
+          if (!c) return false;
+          const ck = String(c.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase();
+          return ck === normKey || (origKey && ck === origKey);
+        });
+
+        const clientCombined = [ed.clientName, ed.clientPhone].filter(Boolean).join(" / ");
+        const periodStr = (ed.expectedDate || ed.inquiryDate || getTodayYmd()).replace(/-/g, ".");
+
+        if (existingCol) {
+          const updatedCol = Object.assign({}, existingCol, {
+            siteName: baseName,
+            clientName: clientCombined || existingCol.clientName || "",
+            manager: extractFirstManager(ed.manager, user),
+            category: ed.scope || existingCol.category || "전체공사",
+            contractAmount: amt
+          });
+          ds.saveCollectionRow(updatedCol, user);
+        } else {
+          const newCol = {
+            id: "",
+            siteName: baseName,
+            clientName: clientCombined,
+            manager: extractFirstManager(ed.manager, user),
+            category: ed.scope || "전체공사",
+            status: "진행중",
+            period: periodStr,
+            contractAmount: amt,
+            changeAmount: 0,
+            changeDesc: "",
+            downPayment: 0,
+            startPayment: 0,
+            midPayment1: 0,
+            midPayment2: 0,
+            midPayment3: 0,
+            finalPayment: 0,
+            taxInvoice: "미발행",
+            note: ed.memo ? `[신규견적 연동] ${ed.memo}` : "[신규견적 연동]"
+          };
+          ds.saveCollectionRow(newCol, user);
+        }
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+      }
+
+      window.openEstimateModal = function (siteKey, forceType, draftData) {
+        if (!siteKey && !forceType && isQuoteTabContext()) {
+          const qCat = state.quoteCategory || "site";
+          if (qCat === "single" || qCat === "as") {
+            window.switchNewRegistrationType(qCat);
+            return;
+          }
+        }
         const site = siteKey ? getAllSites().find((s) => s.siteKey === siteKey) : null;
-        const ed = site && site.estimateData ? site.estimateData : {
+        const baseEd = site && site.estimateData ? site.estimateData : {
           siteName: "", status: "1차상담 예정", inquiryDate: getTodayYmd(), priority: "보통", scope: "전체공사",
           memo: "", source: "소개", consultDate: "", expectedDate: "", expectedAmount: "", estimateSendDate: "",
           clientName: "", clientPhone: "", manager: state.user, contractAmount: "", nextAction: "", failReason: "", visitDate: "", address: "", estimateFile: "", row: ""
         };
+        const ed = Object.assign({}, baseEd, draftData || {});
         state._estCtx = { siteKey, isEdit: !!site, ed: Object.assign({}, ed) };
         const members = getMembersList();
         const statuses = ["신규 문의", "상담 중", "1차상담 예정", "2차상담 예정", "현장 방문 예정", "현장 방문 완료", "견적 작성 중", "견적서 전달", "피드백 대기", "계약 완료", "보류", "수주 실패", "문의 접수", "실패"];
@@ -18207,6 +18360,16 @@ end $$;`;
 
         document.getElementById("estimateModalTitle").textContent = site ? `📋 [${ed.siteName}] 신규 견적 수정` : "📋 신규 현장 견적 등록";
         document.getElementById("estimateModalBody").innerHTML = `
+          ${!site ? `
+            <div class="fg" style="margin-bottom:10px;">
+              <label>분류 선택</label>
+              <div class="seg-row">
+                <button type="button" class="seg-btn active" onclick="window.switchNewRegistrationType('newSite')">🏗️ 현장 (신규견적)</button>
+                <button type="button" class="seg-btn" onclick="window.switchNewRegistrationType('single')">⚡ 단건</button>
+                <button type="button" class="seg-btn" onclick="window.switchNewRegistrationType('as')">🔧 AS</button>
+              </div>
+            </div>
+          ` : ""}
           <div class="form-grid-3">
             <div class="fg"><label>현장/고객명 *</label><input class="ws-input" id="esSite" value="${escHtml(ed.siteName)}" placeholder="예: 신대방우성 12동 1110호"></div>
             <div class="fg"><label>진행 단계</label><select class="ws-select" id="esStatus">${statuses.map((s) => `<option value="${escHtml(s)}" ${ed.status === s ? "selected" : ""}>${escHtml(s)}</option>`).join("")}</select></div>
@@ -18254,6 +18417,12 @@ end $$;`;
             <div class="fg"><label>견적서 파일(URL 또는 파일명)</label><input class="ws-input" id="esFile" value="${escHtml(ed.estimateFile || "")}" placeholder="Google Drive 링크 또는 파일명"></div>
             <div class="fg"><label>상담 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="상담 메모, 고객 요구사항 등">${escHtml(ed.memo || "")}</textarea></div>
           </div>
+          <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;padding:10px 14px;margin-top:6px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#1e3a8a;background:#eff6ff;padding:7px 10px;border-radius:6px;border:1px solid #bfdbfe;cursor:pointer;margin:0;">
+              <input type="checkbox" id="esAutoSyncFinance" checked>
+              <span>💰 저장 시 재무·원장 자동 연동 (<b>최종 계약금액</b> 입력 또는 <b>계약 완료</b> 시 [현장 수금현황]에 자동 등록/업데이트)</span>
+            </label>
+          </div>
         `;
         document.getElementById("estimateModalFooter").innerHTML = `
           ${site ? `<button type="button" class="btn-act-danger" onclick="closeModal('estimateEditModal'); openDeleteConfirm('site', '${escJs(site.siteKey)}');" style="margin-right:auto;">🗑️ 견적 삭제</button>` : ""}
@@ -18291,6 +18460,10 @@ end $$;`;
           estimateFile: (document.getElementById("esFile") ? document.getElementById("esFile").value.trim() : (ctx.ed.estimateFile || "")),
           memo: document.getElementById("esMemo").value.trim()
         };
+        const autoSyncEl = document.getElementById("esAutoSyncFinance");
+        if (!autoSyncEl || autoSyncEl.checked) {
+          syncEstimateToFinance(ed);
+        }
         if (ctx.isEdit) {
           const s = getAllSites().find((x) => x.siteKey === ctx.siteKey);
           if (s) {
@@ -21205,8 +21378,10 @@ end $$;`;
           }
         }
         if (tabKey === "quote") {
-          if (state.scope !== "newSite") {
-            state.scope = "newSite";
+          const qCat = state.quoteCategory || "site";
+          const targetScope = qCat === "site" ? "newSite" : qCat;
+          if (state.scope !== targetScope) {
+            state.scope = targetScope;
             markAllDirty();
           }
         } else if (state.scope === "newSite") {
@@ -21271,8 +21446,10 @@ end $$;`;
           } catch (_) {}
         }
         if (tabKey === "quote") {
-          if (state.scope !== "newSite") {
-            state.scope = "newSite";
+          const qCat = state.quoteCategory || "site";
+          const targetScope = qCat === "site" ? "newSite" : qCat;
+          if (state.scope !== targetScope) {
+            state.scope = targetScope;
             markAllDirty();
           }
         } else if (state.scope === "newSite") {
@@ -21314,23 +21491,46 @@ end $$;`;
       };
 
       window.onCategoryClicked = function (scope) {
+        if (state.pcTab === "quote") {
+          const qCat = (scope === "newSite" || scope === "site") ? "site" : scope;
+          state.quoteCategory = qCat;
+          state.scope = qCat === "site" ? "newSite" : qCat;
+          if (qCat !== "site") {
+            state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
+            state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
+          }
+          markAllDirty();
+          renderActiveViews();
+          return;
+        }
         state.scope = scope;
         state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
         markAllDirty();
         if (scope === "newSite") window.switchMainTab("quote");
-        else if (state.pcTab === "quote") window.switchMainTab("sites");
         else renderActiveViews();
       };
 
       window.onMScopeClick = function (scope) {
+        if (state.mobileTab === "quote" || state.mobileTab === "newSite") {
+          const qCat = (scope === "newSite" || scope === "site") ? "site" : scope;
+          state.quoteCategory = qCat;
+          state.scope = qCat === "site" ? "newSite" : qCat;
+          state.mobileExpandedSiteKeys.clear();
+          if (qCat !== "site") {
+            state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
+            state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
+          }
+          markAllDirty();
+          renderActiveViews();
+          return;
+        }
         state.scope = scope;
         state.mobileHomeTasksExpanded = false;
         state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
         markAllDirty();
         if (scope === "newSite") window.switchMobileTab("quote");
-        else if (state.mobileTab === "quote") window.switchMobileTab("sites");
         else renderActiveViews();
       };
 
@@ -21401,7 +21601,9 @@ end $$;`;
         state.showArchivedSites = Boolean(archived);
         state.mobileExpandedSiteKeys.clear();
         state.dirtyMobileTabs.sites = true;
+        state.dirtyMobileTabs.quote = true;
         state.dirtyPcTabs.sites = true;
+        state.dirtyPcTabs.quote = true;
         renderActiveViews();
         const bodyEl = document.getElementById("mAppBody");
         if (bodyEl) bodyEl.scrollTop = 0;
@@ -21411,6 +21613,7 @@ end $$;`;
         if (state.mobileExpandedSiteKeys.has(siteKey)) state.mobileExpandedSiteKeys.delete(siteKey);
         else state.mobileExpandedSiteKeys.add(siteKey);
         state.dirtyMobileTabs.sites = true;
+        state.dirtyMobileTabs.quote = true;
         renderActiveViews();
       };
       window.toggleMobileTaskCheck = function (tid, checked) {
@@ -21492,6 +21695,7 @@ end $$;`;
         if (site && site.scope) state.scope = site.scope;
         state.showArchivedSites = isDone;
         if (site && site.scope === "newSite") {
+          state.quoteCategory = "site";
           state.selectedQuoteKey = siteKey;
           if (isDone) {
             state.quoteStatusFilter = "done";
@@ -21509,6 +21713,11 @@ end $$;`;
         state.siteTaskStatusFilter = "all";
         state.checkedTableTaskIds.clear();
         markAllDirty();
+        if (state.pcTab === "quote" && site && (site.scope === "single" || site.scope === "as")) {
+          state.quoteCategory = site.scope;
+          renderActiveViews();
+          return;
+        }
         window.switchMainTab("sites");
         renderActiveViews();
       };
@@ -21518,6 +21727,7 @@ end $$;`;
         if (site && site.scope) state.scope = site.scope;
         state.showArchivedSites = isDone;
         if (site && site.scope === "newSite") {
+          state.quoteCategory = "site";
           state.selectedQuoteKey = siteKey;
           if (isDone) {
             state.quoteStatusFilter = "done";
@@ -21534,11 +21744,17 @@ end $$;`;
         }
         state.selectedSiteKey = siteKey;
         markAllDirty();
+        if (state.mobileTab === "quote" && site && (site.scope === "single" || site.scope === "as")) {
+          state.quoteCategory = site.scope;
+          if (siteKey) state.mobileExpandedSiteKeys.add(siteKey);
+          renderActiveViews();
+          return;
+        }
         window.switchMobileTab("sites");
         if (siteKey) state.mobileExpandedSiteKeys.add(siteKey);
         renderActiveViews();
       };
-      window.selectSiteCard = function (siteKey) { state.selectedSiteKey = siteKey; state.siteTaskStatusFilter = "all"; state.checkedTableTaskIds.clear(); state.dirtyPcTabs.sites = true; renderActiveViews(); };
+      window.selectSiteCard = function (siteKey) { state.selectedSiteKey = siteKey; state.siteTaskStatusFilter = "all"; state.checkedTableTaskIds.clear(); state.dirtyPcTabs.sites = true; state.dirtyPcTabs.quote = true; renderActiveViews(); };
       window.focusSiteOnCalendar = function (siteKey, isMobile) {
         const site = getAllSites().find((s) => s.siteKey === siteKey);
         if (site && site.scope) state.scope = site.scope;
@@ -21569,7 +21785,7 @@ end $$;`;
         }
       };
       window.toggleArchivedSites = function () { state.showArchivedSites = !state.showArchivedSites; markAllDirty(); renderActiveViews(); };
-      window.setSiteSort = function (sortBy) { state.siteSortBy = sortBy; state.dirtyPcTabs.sites = true; state.dirtyMobileTabs.sites = true; renderActiveViews(); };
+      window.setSiteSort = function (sortBy) { state.siteSortBy = sortBy; state.dirtyPcTabs.sites = true; state.dirtyPcTabs.quote = true; state.dirtyMobileTabs.sites = true; state.dirtyMobileTabs.quote = true; renderActiveViews(); };
       window.setSiteTaskFilter = function (f) {
         state.siteTaskStatusFilter = f;
 
@@ -21615,11 +21831,12 @@ end $$;`;
           });
         }
 
-        const pcTbody = document.getElementById("pcSiteTaskTbody");
+        const pcTbody = document.getElementById("pcSiteTaskTbody") || document.getElementById("pcQuoteSiteTaskTbody");
         if (pcTbody) {
           updatePcSiteTasksPartial();
         } else {
           state.dirtyPcTabs.sites = true;
+          state.dirtyPcTabs.quote = true;
         }
 
         const mExpandedCards = document.querySelectorAll(".m-site-acc-card.expanded");
@@ -21630,14 +21847,17 @@ end $$;`;
           });
         } else {
           state.dirtyMobileTabs.sites = true;
+          state.dirtyMobileTabs.quote = true;
         }
 
-        if (!pcTbody && state.pcTab === "sites") {
+        if (!pcTbody && (state.pcTab === "sites" || state.pcTab === "quote")) {
           state.dirtyPcTabs.sites = true;
+          state.dirtyPcTabs.quote = true;
           renderActiveViews();
         }
-        if (mExpandedCards.length === 0 && state.mobileTab === "sites") {
+        if (mExpandedCards.length === 0 && (state.mobileTab === "sites" || state.mobileTab === "quote")) {
           state.dirtyMobileTabs.sites = true;
+          state.dirtyMobileTabs.quote = true;
           renderActiveViews();
         }
       };
@@ -21645,16 +21865,17 @@ end $$;`;
       window.setSiteTaskSearch = function (q) {
         state.siteTaskSearch = q || "";
 
-        const pcTbody = document.getElementById("pcSiteTaskTbody");
-        const pcSearchInput = document.getElementById("pcSiteTaskSearchInput");
-        const pcClearBtn = document.getElementById("pcSiteTaskSearchClear");
-
-        if (pcClearBtn) {
-          pcClearBtn.style.display = state.siteTaskSearch ? "flex" : "none";
-        }
-        if (pcSearchInput && document.activeElement !== pcSearchInput && pcSearchInput.value !== state.siteTaskSearch) {
-          pcSearchInput.value = state.siteTaskSearch;
-        }
+        const pcTbody = document.getElementById("pcSiteTaskTbody") || document.getElementById("pcQuoteSiteTaskTbody");
+        ["pcSite", "pcQuoteSite"].forEach((pfx) => {
+          const pcSearchInput = document.getElementById(pfx + "TaskSearchInput");
+          const pcClearBtn = document.getElementById(pfx + "TaskSearchClear");
+          if (pcClearBtn) {
+            pcClearBtn.style.display = state.siteTaskSearch ? "flex" : "none";
+          }
+          if (pcSearchInput && document.activeElement !== pcSearchInput && pcSearchInput.value !== state.siteTaskSearch) {
+            pcSearchInput.value = state.siteTaskSearch;
+          }
+        });
 
         let pcUpdated = false;
         if (pcTbody) {
@@ -21662,6 +21883,7 @@ end $$;`;
           pcUpdated = true;
         } else {
           state.dirtyPcTabs.sites = true;
+          state.dirtyPcTabs.quote = true;
         }
 
         let mUpdated = false;
@@ -21676,14 +21898,17 @@ end $$;`;
           });
         } else {
           state.dirtyMobileTabs.sites = true;
+          state.dirtyMobileTabs.quote = true;
         }
 
-        if (!pcUpdated && state.pcTab === "sites") {
+        if (!pcUpdated && (state.pcTab === "sites" || state.pcTab === "quote")) {
           state.dirtyPcTabs.sites = true;
+          state.dirtyPcTabs.quote = true;
           renderActiveViews();
         }
-        if (!mUpdated && state.mobileTab === "sites" && mExpandedCards.length === 0) {
+        if (!mUpdated && (state.mobileTab === "sites" || state.mobileTab === "quote") && mExpandedCards.length === 0) {
           state.dirtyMobileTabs.sites = true;
+          state.dirtyMobileTabs.quote = true;
           renderActiveViews();
         }
       };
@@ -21691,7 +21916,7 @@ end $$;`;
       window.clearSiteTaskSearch = function () {
         setSiteTaskSearch("");
         if (state.device === "pc") {
-          const pcInput = document.getElementById("pcSiteTaskSearchInput");
+          const pcInput = document.getElementById(state.pcTab === "quote" ? "pcQuoteSiteTaskSearchInput" : "pcSiteTaskSearchInput") || document.getElementById("pcSiteTaskSearchInput");
           if (pcInput) {
             pcInput.value = "";
             pcInput.focus();
