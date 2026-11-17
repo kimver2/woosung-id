@@ -15203,9 +15203,10 @@ end $$;`;
               <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
                   <span style="font-size:12px;font-weight:800;color:#334155;">📋 초기 생성 공정 세트 (공종·날짜 자유 변경 가능)</span>
-                  <div style="display:inline-flex;align-items:center;gap:8px;">
+                  <div style="display:inline-flex;align-items:center;gap:6px;">
                     <span id="pmModalTaskCountBadge" style="font-size:11px;color:#2563eb;font-weight:700;"></span>
                     <button type="button" id="btnAddPromoteTaskRow" class="btn-tool-tag" onclick="addPromoteTaskRow()" style="padding:2px 8px;font-size:11px;background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;font-weight:700;">➕ 공정 추가</button>
+                    <button type="button" id="btnClearPromoteTaskRows" class="btn-tool-tag" onclick="clearAllPromoteTaskRows()" style="padding:2px 8px;font-size:11px;background:#fef2f2;border-color:#fecaca;color:#dc2626;font-weight:700;">🗑️ 전체 삭제</button>
                   </div>
                 </div>
                 <div id="pmModalSchedulePreviewBox" style="background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;padding:10px;max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
@@ -15246,11 +15247,13 @@ end $$;`;
         const previewBox = document.getElementById("pmModalSchedulePreviewBox");
         const countBadge = document.getElementById("pmModalTaskCountBadge");
         const addBtn = document.getElementById("btnAddPromoteTaskRow");
+        const clearBtn = document.getElementById("btnClearPromoteTaskRows");
         if (!previewBox) return;
 
         if (!isAuto) {
           if (configRow) configRow.style.opacity = "0.5";
           if (addBtn) addBtn.style.display = "none";
+          if (clearBtn) clearBtn.style.display = "none";
           if (countBadge) countBadge.innerText = "1개 기본 행";
           previewBox.innerHTML = '<div style="font-size:12px;color:#64748b;padding:8px 6px;text-align:center;">※ 공정 일정 없이 현장 기본 정보(상담 1행)만 진행 현장에 등록됩니다.</div>';
           return;
@@ -15258,6 +15261,7 @@ end $$;`;
 
         if (configRow) configRow.style.opacity = "1";
         if (addBtn) addBtn.style.display = "inline-flex";
+        if (clearBtn) clearBtn.style.display = "inline-flex";
         const scopeEl = document.getElementById("pmModalScope");
         const scope = scopeEl ? scopeEl.value : "전체공사";
         const dateEl = document.getElementById("pmModalStartDate");
@@ -15316,6 +15320,14 @@ end $$;`;
         if (!Array.isArray(state.promoteEditableTasks)) return;
         state.promoteEditableTasks.splice(idx, 1);
         window.updatePromoteSchedulePreview(true);
+      };
+      window.clearAllPromoteTaskRows = function () {
+        if (!Array.isArray(state.promoteEditableTasks) || state.promoteEditableTasks.length === 0) {
+          return showToast("ℹ️ 삭제할 공종이 없습니다.");
+        }
+        state.promoteEditableTasks = [];
+        window.updatePromoteSchedulePreview(true);
+        showToast("🗑️ 기본 공종이 모두 삭제되었습니다.");
       };
       window.addPromoteTaskRow = function () {
         if (!Array.isArray(state.promoteEditableTasks)) state.promoteEditableTasks = [];
