@@ -8628,7 +8628,9 @@ end $$;`;
           items: (saved && Array.isArray(saved.items) && saved.items.length) ? saved.items : defaultItems,
           overheadRate: (saved && saved.overheadRate !== undefined) ? saved.overheadRate : 5,
           profitRate: (saved && saved.profitRate !== undefined) ? saved.profitRate : 10,
-          vatSeparate: (saved && saved.vatSeparate !== undefined) ? saved.vatSeparate : true
+          vatSeparate: (saved && saved.vatSeparate !== undefined) ? saved.vatSeparate : true,
+          priceMode: (saved && saved.priceMode === "lumpSum") ? "lumpSum" : "detail",
+          lumpSumAmount: (saved && saved.lumpSumAmount !== undefined) ? (Number(saved.lumpSumAmount) || 0) : ((colRow && Number(colRow.totalAmount)) || (ed && Number(ed.finalAmount)) || 0)
         };
         renderEstimatePdfModal();
         openModal("syncStatusModal");
@@ -8647,10 +8649,29 @@ end $$;`;
             items: ctx.items,
             overheadRate: ctx.overheadRate,
             profitRate: ctx.profitRate,
-            vatSeparate: ctx.vatSeparate
+            vatSeparate: ctx.vatSeparate,
+            priceMode: ctx.priceMode || "detail",
+            lumpSumAmount: Number(ctx.lumpSumAmount) || 0
           }));
         } catch (_) {}
       }
+
+      window.setEstPdfPriceMode = function (mode) {
+        const ctx = window._estPdfCtx;
+        if (!ctx) return;
+        ctx.priceMode = (mode === "lumpSum") ? "lumpSum" : "detail";
+        persistEstPdfCtx();
+        renderEstimatePdfModal();
+      };
+
+      window.updateEstPdfLumpSum = function (val) {
+        const ctx = window._estPdfCtx;
+        if (!ctx) return;
+        const n = Number(String(val || "").replace(/,/g, "").trim());
+        ctx.lumpSumAmount = isNaN(n) ? 0 : n;
+        persistEstPdfCtx();
+        renderEstimatePdfModal();
+      };
 
       window.updateEstPdfHeader = function (field, val) {
         const ctx = window._estPdfCtx;
@@ -8695,6 +8716,7 @@ end $$;`;
         const supplier = getSupplierBizInfo();
         const issueDate = ctx.issueDate || getTodayYmd();
 
+        const isLumpSum = (ctx.priceMode === "lumpSum");
         let sumMat = 0, sumLab = 0, sumExp = 0;
         ctx.items.forEach(it => {
           const q = Number(it.qty) || 1;
@@ -8705,7 +8727,7 @@ end $$;`;
         const directTotal = sumMat + sumLab + sumExp;
         const overheadAmt = Math.round(directTotal * (ctx.overheadRate / 100));
         const profitAmt = Math.round(directTotal * (ctx.profitRate / 100));
-        const finalTotal = directTotal + overheadAmt + profitAmt;
+        const finalTotal = isLumpSum ? (Number(ctx.lumpSumAmount) || 0) : (directTotal + overheadAmt + profitAmt);
 
         const tEl = document.getElementById("syncStatusModalTitle");
         const cEl = document.getElementById("syncStatusModalCloseBtn");
@@ -8726,10 +8748,12 @@ end $$;`;
               <td style="padding:4px;"><input type="text" class="ws-input" value="${escHtml(it.spec)}" onchange="window.updateEstPdfItem(${idx},'spec',this.value)" style="height:28px;font-size:11.5px;padding:0 6px;"></td>
               <td style="padding:4px;width:54px;"><input type="number" class="ws-input" value="${it.qty}" onchange="window.updateEstPdfItem(${idx},'qty',this.value)" style="height:28px;font-size:11.5px;padding:0 4px;text-align:center;"></td>
               <td style="padding:4px;width:52px;"><input type="text" class="ws-input" value="${escHtml(it.unit)}" onchange="window.updateEstPdfItem(${idx},'unit',this.value)" style="height:28px;font-size:11.5px;padding:0 4px;text-align:center;"></td>
-              <td style="padding:4px;width:95px;"><input type="number" class="ws-input" value="${it.mat}" onchange="window.updateEstPdfItem(${idx},'mat',this.value)" style="height:28px;font-size:11.5px;padding:0 6px;text-align:right;"></td>
-              <td style="padding:4px;width:95px;"><input type="number" class="ws-input" value="${it.lab}" onchange="window.updateEstPdfItem(${idx},'lab',this.value)" style="height:28px;font-size:11.5px;padding:0 6px;text-align:right;"></td>
-              <td style="padding:4px;width:90px;"><input type="number" class="ws-input" value="${it.exp}" onchange="window.updateEstPdfItem(${idx},'exp',this.value)" style="height:28px;font-size:11.5px;padding:0 6px;text-align:right;"></td>
-              <td style="padding:4px;text-align:right;font-weight:800;white-space:nowrap;">${rowSum.toLocaleString("ko-KR")}원</td>
+              ${isLumpSum ? "" : `
+                <td style="padding:4px;width:95px;"><input type="number" class="ws-input" value="${it.mat}" onchange="window.updateEstPdfItem(${idx},'mat',this.value)" style="height:28px;font-size:11.5px;padding:0 6px;text-align:right;"></td>
+                <td style="padding:4px;width:95px;"><input type="number" class="ws-input" value="${it.lab}" onchange="window.updateEstPdfItem(${idx},'lab',this.value)" style="height:28px;font-size:11.5px;padding:0 6px;text-align:right;"></td>
+                <td style="padding:4px;width:90px;"><input type="number" class="ws-input" value="${it.exp}" onchange="window.updateEstPdfItem(${idx},'exp',this.value)" style="height:28px;font-size:11.5px;padding:0 6px;text-align:right;"></td>
+                <td style="padding:4px;text-align:right;font-weight:800;white-space:nowrap;">${rowSum.toLocaleString("ko-KR")}원</td>
+              `}
               <td style="padding:4px;text-align:center;"><button type="button" onclick="window.delEstPdfRow(${idx})" style="border:none;background:none;color:#dc2626;cursor:pointer;font-weight:800;">✕</button></td>
             </tr>`;
         }).join("");
@@ -8765,49 +8789,79 @@ end $$;`;
           </div>
           <div style="padding:14px 4px;">
             <div style="text-align:center;font-size:20px;font-weight:900;letter-spacing:6px;margin-bottom:14px;">세 부 내 역 서</div>
-            <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:14px;">
-              <thead>
-                <tr style="background:#f1f5f9;">
-                  <th style="border:1px solid #cbd5e1;padding:6px;">항목</th>
-                  <th style="border:1px solid #cbd5e1;padding:6px;">규격 · 세부내역</th>
-                  <th style="border:1px solid #cbd5e1;padding:6px;">수량</th>
-                  <th style="border:1px solid #cbd5e1;padding:6px;">단위</th>
-                  <th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">자재비</th>
-                  <th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">인건비</th>
-                  <th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">경비</th>
-                  <th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">합계</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${ctx.items.map(it => {
-                  const q = Number(it.qty) || 1;
-                  const m = (Number(it.mat)||0)*q, l = (Number(it.lab)||0)*q, e = (Number(it.exp)||0)*q;
-                  return `<tr>
-                    <td style="border:1px solid #cbd5e1;padding:6px;font-weight:700;">${escHtml(it.name)}</td>
-                    <td style="border:1px solid #cbd5e1;padding:6px;">${escHtml(it.spec)}</td>
-                    <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${q}</td>
-                    <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escHtml(it.unit)}</td>
-                    <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${m.toLocaleString("ko-KR")}</td>
-                    <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${l.toLocaleString("ko-KR")}</td>
-                    <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${e.toLocaleString("ko-KR")}</td>
-                    <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;font-weight:800;">₩${(m+l+e).toLocaleString("ko-KR")}</td>
-                  </tr>`;
-                }).join("")}
-                <tr style="background:#0f172a;color:#fff;font-weight:900;">
-                  <td colspan="4" style="padding:7px;text-align:center;">공 사 비 합 계</td>
-                  <td style="padding:7px;text-align:right;">${sumMat.toLocaleString("ko-KR")}</td>
-                  <td style="padding:7px;text-align:right;">${sumLab.toLocaleString("ko-KR")}</td>
-                  <td style="padding:7px;text-align:right;">${sumExp.toLocaleString("ko-KR")}</td>
-                  <td style="padding:7px;text-align:right;">₩${directTotal.toLocaleString("ko-KR")}</td>
-                </tr>
-              </tbody>
-            </table>
-            <table style="width:45%;margin-left:auto;border-collapse:collapse;font-size:12px;">
-              <tr><td style="border:1px solid #cbd5e1;padding:6px 10px;background:#f8fafc;">직접 공사비 합계</td><td style="border:1px solid #cbd5e1;padding:6px 10px;text-align:right;font-weight:700;">₩${directTotal.toLocaleString("ko-KR")}</td></tr>
-              <tr><td style="border:1px solid #cbd5e1;padding:6px 10px;background:#f8fafc;">공과잡비 및 일반관리비 ${ctx.overheadRate}%</td><td style="border:1px solid #cbd5e1;padding:6px 10px;text-align:right;">₩${overheadAmt.toLocaleString("ko-KR")}</td></tr>
-              <tr><td style="border:1px solid #cbd5e1;padding:6px 10px;background:#f8fafc;">기업이윤 ${ctx.profitRate}%</td><td style="border:1px solid #cbd5e1;padding:6px 10px;text-align:right;">₩${profitAmt.toLocaleString("ko-KR")}</td></tr>
-              <tr style="background:#0f172a;color:#fff;font-weight:900;"><td style="padding:7px 10px;">TOTAL (${ctx.vatSeparate ? "VAT 별도" : "VAT 포함"})</td><td style="padding:7px 10px;text-align:right;">₩${finalTotal.toLocaleString("ko-KR")}</td></tr>
-            </table>
+            ${isLumpSum ? `
+              <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:14px;">
+                <thead>
+                  <tr style="background:#f1f5f9;">
+                    <th style="border:1px solid #cbd5e1;padding:6px;">항목</th>
+                    <th style="border:1px solid #cbd5e1;padding:6px;">규격 · 세부내역</th>
+                    <th style="border:1px solid #cbd5e1;padding:6px;width:60px;">수량</th>
+                    <th style="border:1px solid #cbd5e1;padding:6px;width:60px;">단위</th>
+                    <th style="border:1px solid #cbd5e1;padding:6px;text-align:right;width:130px;">비고 / 금액</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${ctx.items.map(it => {
+                    const q = Number(it.qty) || 1;
+                    return `<tr>
+                      <td style="border:1px solid #cbd5e1;padding:6px;font-weight:700;">${escHtml(it.name)}</td>
+                      <td style="border:1px solid #cbd5e1;padding:6px;">${escHtml(it.spec)}</td>
+                      <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${q}</td>
+                      <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escHtml(it.unit)}</td>
+                      <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;color:#64748b;">일식 포함</td>
+                    </tr>`;
+                  }).join("")}
+                  <tr style="background:#0f172a;color:#fff;font-weight:900;">
+                    <td colspan="4" style="padding:8px;text-align:center;">총 공 사 금 액 (${ctx.vatSeparate ? "VAT 별도" : "VAT 포함"} · 일식)</td>
+                    <td style="padding:8px;text-align:right;">₩${finalTotal.toLocaleString("ko-KR")}</td>
+                  </tr>
+                </tbody>
+              </table>
+            ` : `
+              <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:14px;">
+                <thead>
+                  <tr style="background:#f1f5f9;">
+                    <th style="border:1px solid #cbd5e1;padding:6px;">항목</th>
+                    <th style="border:1px solid #cbd5e1;padding:6px;">규격 · 세부내역</th>
+                    <th style="border:1px solid #cbd5e1;padding:6px;">수량</th>
+                    <th style="border:1px solid #cbd5e1;padding:6px;">단위</th>
+                    <th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">자재비</th>
+                    <th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">인건비</th>
+                    <th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">경비</th>
+                    <th style="border:1px solid #cbd5e1;padding:6px;text-align:right;">합계</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${ctx.items.map(it => {
+                    const q = Number(it.qty) || 1;
+                    const m = (Number(it.mat)||0)*q, l = (Number(it.lab)||0)*q, e = (Number(it.exp)||0)*q;
+                    return `<tr>
+                      <td style="border:1px solid #cbd5e1;padding:6px;font-weight:700;">${escHtml(it.name)}</td>
+                      <td style="border:1px solid #cbd5e1;padding:6px;">${escHtml(it.spec)}</td>
+                      <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${q}</td>
+                      <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escHtml(it.unit)}</td>
+                      <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${m.toLocaleString("ko-KR")}</td>
+                      <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${l.toLocaleString("ko-KR")}</td>
+                      <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${e.toLocaleString("ko-KR")}</td>
+                      <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;font-weight:800;">₩${(m+l+e).toLocaleString("ko-KR")}</td>
+                    </tr>`;
+                  }).join("")}
+                  <tr style="background:#0f172a;color:#fff;font-weight:900;">
+                    <td colspan="4" style="padding:7px;text-align:center;">공 사 비 합 계</td>
+                    <td style="padding:7px;text-align:right;">${sumMat.toLocaleString("ko-KR")}</td>
+                    <td style="padding:7px;text-align:right;">${sumLab.toLocaleString("ko-KR")}</td>
+                    <td style="padding:7px;text-align:right;">${sumExp.toLocaleString("ko-KR")}</td>
+                    <td style="padding:7px;text-align:right;">₩${directTotal.toLocaleString("ko-KR")}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <table style="width:45%;margin-left:auto;border-collapse:collapse;font-size:12px;">
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 10px;background:#f8fafc;">직접 공사비 합계</td><td style="border:1px solid #cbd5e1;padding:6px 10px;text-align:right;font-weight:700;">₩${directTotal.toLocaleString("ko-KR")}</td></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 10px;background:#f8fafc;">공과잡비 및 일반관리비 ${ctx.overheadRate}%</td><td style="border:1px solid #cbd5e1;padding:6px 10px;text-align:right;">₩${overheadAmt.toLocaleString("ko-KR")}</td></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 10px;background:#f8fafc;">기업이윤 ${ctx.profitRate}%</td><td style="border:1px solid #cbd5e1;padding:6px 10px;text-align:right;">₩${profitAmt.toLocaleString("ko-KR")}</td></tr>
+                <tr style="background:#0f172a;color:#fff;font-weight:900;"><td style="padding:7px 10px;">TOTAL (${ctx.vatSeparate ? "VAT 별도" : "VAT 포함"})</td><td style="padding:7px 10px;text-align:right;">₩${finalTotal.toLocaleString("ko-KR")}</td></tr>
+              </table>
+            `}
           </div>`;
 
         bEl.innerHTML = `
@@ -8867,17 +8921,31 @@ end $$;`;
             </div>
 
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;background:#f8fafc;padding:8px 12px;border-radius:8px;border:1px solid #e2e8f0;">
-              <div style="font-size:12.5px;font-weight:800;color:#1e3a8a;">일금 ${numberToKoreanCurrency(finalTotal)}원정 (₩${finalTotal.toLocaleString("ko-KR")} · ${ctx.vatSeparate ? "VAT 별도" : "VAT 포함"})</div>
-              <div style="display:flex;gap:8px;align-items:center;font-size:11.5px;">
-                <label>관리비% <input type="number" value="${ctx.overheadRate}" style="width:46px;height:26px;text-align:center;" onchange="window._estPdfCtx.overheadRate=Number(this.value)||0; persistEstPdfCtx(); renderEstimatePdfModal();"></label>
-                <label>이윤% <input type="number" value="${ctx.profitRate}" style="width:46px;height:26px;text-align:center;" onchange="window._estPdfCtx.profitRate=Number(this.value)||0; persistEstPdfCtx(); renderEstimatePdfModal();"></label>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <div style="display:inline-flex;border:1px solid #cbd5e1;border-radius:6px;overflow:hidden;background:#fff;">
+                  <button type="button" onclick="window.setEstPdfPriceMode('detail')" style="border:none;padding:4px 10px;font-size:11.5px;font-weight:700;cursor:pointer;background:${!isLumpSum ? "#1e293b" : "#fff"};color:${!isLumpSum ? "#fff" : "#475569"};">공종별 상세 계산</button>
+                  <button type="button" onclick="window.setEstPdfPriceMode('lumpSum')" style="border:none;padding:4px 10px;font-size:11.5px;font-weight:700;cursor:pointer;background:${isLumpSum ? "#1e293b" : "#fff"};color:${isLumpSum ? "#fff" : "#475569"};">총액 간편 입력</button>
+                </div>
+                <div style="font-size:12.5px;font-weight:800;color:#1e3a8a;">일금 ${numberToKoreanCurrency(finalTotal)}원정 (₩${finalTotal.toLocaleString("ko-KR")} · ${ctx.vatSeparate ? "VAT 별도" : "VAT 포함"})</div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;font-size:11.5px;flex-wrap:wrap;">
+                ${isLumpSum ? `
+                  <label style="font-weight:700;color:#0f172a;">총 공사금액(원)
+                    <input type="text" inputmode="numeric" value="${finalTotal ? finalTotal.toLocaleString('ko-KR') : ''}" placeholder="0"
+                      onchange="window.updateEstPdfLumpSum(this.value)"
+                      style="width:130px;height:28px;padding:0 8px;border:1.5px solid #2563eb;border-radius:6px;font-size:12.5px;font-weight:800;text-align:right;background:#fff;margin-left:4px;">
+                  </label>
+                ` : `
+                  <label>관리비% <input type="number" value="${ctx.overheadRate}" style="width:46px;height:26px;text-align:center;" onchange="window._estPdfCtx.overheadRate=Number(this.value)||0; persistEstPdfCtx(); renderEstimatePdfModal();"></label>
+                  <label>이윤% <input type="number" value="${ctx.profitRate}" style="width:46px;height:26px;text-align:center;" onchange="window._estPdfCtx.profitRate=Number(this.value)||0; persistEstPdfCtx(); renderEstimatePdfModal();"></label>
+                `}
                 <button type="button" class="btn-tool-tag" onclick="window.reloadEstPdfFromSiteTasks()">🔄 현장 공종 불러오기</button>
                 <button type="button" class="btn-tool-tag" onclick="window.addEstPdfRow()">➕ 공종 행 추가</button>
               </div>
             </div>
             <div style="overflow-x:auto;border:1px solid #e2e8f0;border-radius:8px;">
               <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
-                <thead><tr style="background:#f8fafc;border-bottom:1px solid #cbd5e1;"><th style="padding:6px;">항목</th><th style="padding:6px;">규격·세부내역</th><th style="padding:6px;">수량</th><th style="padding:6px;">단위</th><th style="padding:6px;">자재비</th><th style="padding:6px;">인건비</th><th style="padding:6px;">경비</th><th style="padding:6px;text-align:right;">합계</th><th></th></tr></thead>
+                <thead><tr style="background:#f8fafc;border-bottom:1px solid #cbd5e1;"><th style="padding:6px;">항목</th><th style="padding:6px;">규격·세부내역</th><th style="padding:6px;">수량</th><th style="padding:6px;">단위</th>${isLumpSum ? "" : `<th style="padding:6px;">자재비</th><th style="padding:6px;">인건비</th><th style="padding:6px;">경비</th><th style="padding:6px;text-align:right;">합계</th>`}<th></th></tr></thead>
                 <tbody>${editorRows}</tbody>
               </table>
             </div>
