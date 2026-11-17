@@ -19958,29 +19958,31 @@ end $$;`;
               <div class="fg"><label>담당자</label>${mkEstMgrDrop()}</div>
             </div>
             <div class="form-grid-3">
-              <div class="fg"><label>문의일 (접수)</label><input type="date" class="ws-input" id="esInq" value="${escHtml(ed.inquiryDate || "")}"></div>
-              <div class="fg"><label>작업 예정일</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
+              <div class="fg"><label>고객 성함</label><input class="ws-input" id="esCName" value="${escHtml(ed.clientName || "")}" placeholder="고객명"></div>
+              <div class="fg"><label>고객 연락처</label><input class="ws-input" id="esCPhone" value="${escHtml(ed.clientPhone || "")}" placeholder="010-0000-0000"></div>
               <div class="fg"><label>협력업체 (선택)</label>${mkEstPartnerDrop()}</div>
             </div>
             <div class="form-grid-3">
-              <div class="fg"><label>고객 성함</label><input class="ws-input" id="esCName" value="${escHtml(ed.clientName || "")}" placeholder="고객명"></div>
-              <div class="fg"><label>고객 연락처</label><input class="ws-input" id="esCPhone" value="${escHtml(ed.clientPhone || "")}" placeholder="010-0000-0000"></div>
+              <div class="fg"><label>문의일 (접수)</label><input type="date" class="ws-input" id="esInq" value="${escHtml(ed.inquiryDate || "")}"></div>
+              <div class="fg"><label>1차 상담일</label><input type="date" class="ws-input" id="esCons" value="${escHtml(ed.consultDate || "")}"></div>
+              <div class="fg"><label>현장 방문일 (실측)</label><input type="date" class="ws-input" id="esVisit" value="${escHtml(ed.visitDate || "")}"></div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>견적 전달일</label><input type="date" class="ws-input" id="esSend" value="${escHtml(ed.estimateSendDate || "")}"></div>
+              <div class="fg"><label>작업 예정일 (착공)</label><input type="date" class="ws-input" id="esExpD" value="${escHtml(ed.expectedDate || "")}"></div>
+              <div class="fg"><label>예상 공사금액(원)</label><input type="number" class="ws-input" id="esExpAmt" value="${escHtml(ed.expectedAmount || "")}" placeholder="예: 3500000"></div>
+            </div>
+            <div class="form-grid-3">
+              <div class="fg"><label>최종 계약금액(원)</label><input type="number" class="ws-input" id="esConAmt" value="${escHtml(ed.contractAmount || "")}" placeholder="예: 3300000"></div>
+              <div class="fg"><label>외주·자재 원가(예상 지출)</label><input type="number" class="ws-input" id="esCostAmt" value="${escHtml(ed.costAmount || "")}" placeholder="예: 2200000"></div>
               <div class="fg"><label>현장 주소</label><input class="ws-input" id="esAddr" value="${escHtml(ed.address || "")}" placeholder="도로명 및 동호수"></div>
             </div>
             <div class="form-grid-3">
-              <div class="fg"><label>예상 견적금액(원)</label><input type="number" class="ws-input" id="esExpAmt" value="${escHtml(ed.expectedAmount || "")}" placeholder="예: 3500000"></div>
-              <div class="fg"><label>최종 계약금액(고객 청구)</label><input type="number" class="ws-input" id="esConAmt" value="${escHtml(ed.contractAmount || "")}" placeholder="예: 3300000"></div>
-              <div class="fg"><label>외주·자재 원가(예상 지출)</label><input type="number" class="ws-input" id="esCostAmt" value="${escHtml(ed.costAmount || "")}" placeholder="예: 2200000"></div>
-            </div>
-            <div class="form-grid-3">
-              <div class="fg"><label>출입·주차 메모</label><input class="ws-input" id="esAccessNote" value="${escHtml(ed.accessNote || "")}" placeholder="공동현관 비번, 주차·엘리베이터 등"></div>
-              <div class="fg"><label>견적서·사진 링크(URL)</label><input class="ws-input" id="esFile" value="${escHtml(ed.estimateFile || "")}" placeholder="Google Drive 링크 또는 파일명"></div>
-              <div class="fg"><label>⚠️ 보류·실패 사유</label>${mkEstFailReasonDrop()}</div>
-            </div>
-            <div class="form-grid-2">
               <div class="fg"><label>다음 해야 할 일</label><input class="ws-input" id="esNext" value="${escHtml(ed.nextAction || "")}" placeholder="예: 실측 후 견적서 발송"></div>
-              <div class="fg"><label>상담·접수 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="단건 시공 범위, 고객 요구사항 등">${escHtml(ed.memo || "")}</textarea></div>
+              <div class="fg"><label>⚠️ 보류·실패 사유</label>${mkEstFailReasonDrop()}</div>
+              <div class="fg"><label>견적서 파일(URL 또는 파일명)</label><input class="ws-input" id="esFile" value="${escHtml(ed.estimateFile || "")}" placeholder="Google Drive 링크 또는 파일명"></div>
             </div>
+            <div class="fg"><label>상담 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="상담 메모, 고객 요구사항 등">${escHtml(ed.memo || "")}</textarea></div>
             <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 12px;font-size:11.5px;font-weight:700;color:#1e3a8a;">
               ℹ️ 저장 시 <b>[신규 현장 &gt; 단건]</b>에서 먼저 관리되며, <b>‘계약 완료’</b> 및 현장 승격 시 <b>정식 단건 현장 + 재무·원장(수금현황·비용마감)</b>에 자동 연동됩니다.
             </div>
