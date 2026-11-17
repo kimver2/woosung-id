@@ -19342,11 +19342,17 @@ end $$;`;
               <div class="fg"><label>다음 해야 할 일</label><input class="ws-input" id="esNext" value="${escHtml(ed.nextAction || "")}" placeholder="예: 1차 견적서 발송 후 해피콜"></div>
               <div class="fg">
                 <label>⚠️ 보류·실패 사유</label>
-                <input class="ws-input" list="esFailReasonList" id="esFailReason" placeholder="선택 또는 직접 입력" value="${escHtml(ed.failReason || "")}">
-                <datalist id="esFailReasonList">
-                  <option value="예산 차이"><option value="일정 불일치"><option value="연락 두절"><option value="경쟁 업체 선택">
-                  <option value="공사 취소"><option value="고객 보류"><option value="단순 문의"><option value="기타">
-                </datalist>
+                ${renderWsCustomDropdownHtml({
+                  id: "esFailReasonDrop",
+                  hiddenInputId: "esFailReason",
+                  value: ed.failReason || "",
+                  displayText: ed.failReason || "",
+                  placeholder: "🔍 선택 또는 직접 입력",
+                  searchable: true,
+                  clearable: true,
+                  allowDirectInput: true,
+                  items: ["예산 차이", "일정 불일치", "연락 두절", "경쟁 업체 선택", "공사 취소", "고객 보류", "단순 문의", "기타"].map((r) => ({ value: r, label: r }))
+                })}
               </div>
             </div>
             <div class="form-grid-2">
