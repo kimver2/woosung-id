@@ -2344,6 +2344,9 @@
       outline-offset: 1px;
       box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
     }
+    .btn-act-blue, .btn-act-white, .btn-act-danger, .btn-tool-tag, .btn-sub-chip, .btn-subtab-chip, .btn-sub-xs {
+      white-space: nowrap;
+    }
     @media (max-width: 640px) {
       .sb-mode-grid { grid-template-columns: 1fr; }
       .sb-stat-grid { grid-template-columns: repeat(2, 1fr); }
@@ -9547,9 +9550,9 @@ end $$;`;
                     <th style="padding:8px 12px;">누적 수금액</th>
                     <th style="padding:8px 12px;">총 지출 (비용마감)</th>
                     <th style="padding:8px 12px;">예상 순이익</th>
-                    <th style="padding:8px 12px;text-align:center;width:75px;">마진율</th>
-                    <th style="padding:8px 12px;">미수금 / 외상</th>
-                    <th style="padding:8px 12px;text-align:center;width:60px;">상세</th>
+                    <th style="padding:8px 12px;text-align:center;min-width:118px;white-space:nowrap;">마진율</th>
+                    <th style="padding:8px 12px;white-space:nowrap;">미수금 / 외상</th>
+                    <th style="padding:8px 8px;text-align:center;width:72px;white-space:nowrap;">상세</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -9567,9 +9570,9 @@ end $$;`;
                     let alertBadge = "";
                     if (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.lowMarginAlert) {
                       if (s.marginRate < 0) {
-                        alertBadge = `<span style="display:inline-block;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:800;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;margin-left:4px;">🚨 적자</span>`;
+                        alertBadge = `<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:800;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;margin-left:4px;white-space:nowrap;">🚨 적자</span>`;
                       } else if (s.marginRate < 15) {
-                        alertBadge = `<span style="display:inline-block;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:800;background:#fef3c7;color:#b45309;border:1px solid #fde68a;margin-left:4px;">⚠️ 저마진</span>`;
+                        alertBadge = `<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:800;background:#fef3c7;color:#b45309;border:1px solid #fde68a;margin-left:4px;white-space:nowrap;">⚠️ 저마진</span>`;
                       }
                     }
 
@@ -9585,20 +9588,20 @@ end $$;`;
                         <td style="padding:8px 12px;color:#10b981;font-weight:700;">${formatKrw(s.collected)}</td>
                         <td style="padding:8px 12px;color:#d97706;font-weight:700;">${formatKrw(s.expenseClaim)}</td>
                         <td style="padding:8px 12px;font-weight:800;color:${profitColor};">${(s.netProfit > 0 ? "+" : "") + formatKrw(s.netProfit)}</td>
-                        <td style="padding:8px 12px;text-align:center;">
-                          <div style="display:inline-flex;align-items:center;justify-content:center;">
-                            <span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:800;background:${marginBadgeBg};color:${marginBadgeColor};">
+                        <td style="padding:8px 10px;text-align:center;white-space:nowrap;">
+                          <div style="display:inline-flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap;">
+                            <span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:800;background:${marginBadgeBg};color:${marginBadgeColor};white-space:nowrap;">
                               ${s.marginRate}%
                             </span>
                             ${alertBadge}
                           </div>
                         </td>
-                        <td style="padding:8px 12px;font-size:11.5px;">
+                        <td style="padding:8px 12px;font-size:11.5px;white-space:nowrap;">
                           <span style="color:${s.uncollected > 0 ? "#dc2626" : "#16a34a"};font-weight:700;">미수 ${formatKrw(s.uncollected)}</span><br>
                           <span style="color:${s.expenseBalance > 0 ? "#b45309" : "#64748b"};">외상 ${formatKrw(s.expenseBalance)}</span>
                         </td>
-                        <td style="padding:8px 12px;text-align:center;">
-                          <button type="button" class="btn-act-blue" style="height:26px;padding:0 8px;font-size:11px;border-radius:6px;" onclick="event.stopPropagation(); window.openSiteFinanceDetailModal('${escJs(s.siteName)}')">
+                        <td style="padding:8px 8px;text-align:center;white-space:nowrap;">
+                          <button type="button" class="btn-act-blue" style="height:28px;padding:0 10px;font-size:11.5px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;" onclick="event.stopPropagation(); window.openSiteFinanceDetailModal('${escJs(s.siteName)}')">
                             상세
                           </button>
                         </td>
