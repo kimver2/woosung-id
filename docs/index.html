@@ -4180,8 +4180,10 @@ end $$;`;
 
       function getHomeTaskCategory(task, ymd, todayYmd) {
         if (!task) return "";
+        const endYmd = ymd ? parseEndYmdFromTask(task, ymd) : "";
+        const spansToday = Boolean(ymd && ymd <= todayYmd && (endYmd || ymd) >= todayYmd);
+        if (task.isToday || ymd === todayYmd || spansToday || String(task.status || "").includes("진행")) return "progress";
         if (task.isDelayed || (ymd && ymd < todayYmd)) return "delayed";
-        if (task.isToday || ymd === todayYmd || String(task.status || "").includes("진행")) return "progress";
         const maxPlannedYmd = addDaysYmd(todayYmd, 7);
         if (ymd && ymd > todayYmd && ymd <= maxPlannedYmd) return "planned";
         return "";
@@ -4397,8 +4399,8 @@ end $$;`;
             if (aDel !== bDel) return aDel ? -1 : 1;
             return String(a.ymd || "9999-99-99").localeCompare(String(b.ymd || "9999-99-99"));
           });
-        const todayTasks = myTasks.filter((x) => x.task.isToday || x.ymd === todayYmd);
-        const delayedTasks = myTasks.filter((x) => x.task.isDelayed || (x.ymd && x.ymd < todayYmd));
+        const todayTasks = myTasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === "progress");
+        const delayedTasks = myTasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === "delayed");
         const activeFilter = state.homeTaskFilter || "all";
         const filteredHomeTasks = activeFilter === "all"
           ? activeOrToday
@@ -4441,8 +4443,9 @@ end $$;`;
 
         // 2) 아래 주요 현장 공정 2열 카드 그리드 (미완료 공정만 표시, 상태 필터 반영)
         const scheduleItemsHtml = filteredHomeTasks.map(({ site, task, ymd }) => {
-          const isDel = Boolean(task.isDelayed || (ymd && ymd < todayYmd));
-          const isToday = Boolean(task.isToday || ymd === todayYmd);
+          const cat = getHomeTaskCategory(task, ymd, todayYmd);
+          const isDel = (cat === "delayed");
+          const isToday = (cat === "progress");
           const cls = isDel ? "danger" : isToday ? "" : "warning";
           const stBg = isDel ? "#fee2e2" : isToday ? "#dcfce7" : "#dbeafe";
           const stFg = isDel ? "#dc2626" : isToday ? "#15803d" : "#1e40af";
@@ -12944,8 +12947,8 @@ end $$;`;
           return String(a.ymd || "9999-99-99").localeCompare(String(b.ymd || "9999-99-99"));
         });
 
-        const todayTasks = tasks.filter((x) => x.task.isToday || x.ymd === todayYmd);
-        const delayed = tasks.filter((x) => x.task.isDelayed || (x.ymd && x.ymd < todayYmd));
+        const todayTasks = tasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === "progress");
+        const delayed = tasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === "delayed");
         const activeFilter = state.homeTaskFilter || "all";
         const filteredMobileTasks = activeFilter === "all"
           ? homeEligibleTasks
