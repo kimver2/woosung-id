@@ -2824,7 +2824,7 @@
         url: "https://uyqvguzglviqegxmxqyn.supabase.co",
         anonKey: "sb_publishable_f8JwxMgpgs6AVSEumSIV2g_KlK6o9GA",
         engineMode: "supabase", // "supabase" | "sheets"
-        dualWrite: true         // true: Supabase 초고속 저장 + 백그라운드 Google Sheets 동시 백업
+        dualWrite: false        // false: 낮 시간엔 Supabase만 저장 + 매일 새벽 4시 일괄 Google Sheets 자동 백업
       };
 
       const SUPABASE_V3_SCHEMA_SQL = `-- ============================================================================

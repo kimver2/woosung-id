@@ -2191,6 +2191,15 @@ function runDailyAutoSortTrigger() {
     if (!ss) ss = getAppSpreadsheet();
     if (!ss) return;
 
+    // [v3 Supabase -> Google Sheets 일일 자동 백업]: 매일 새벽 4시 최신 DB 스냅샷을 시트로 백업
+    try {
+      if (typeof backupSupabaseToSheetsDaily === "function") {
+        backupSupabaseToSheetsDaily(true);
+      }
+    } catch (eSbBackup) {
+      Logger.log("Supabase 일일 백업 오류(정렬 계속 진행): " + eSbBackup.toString());
+    }
+
     // '현장데이터', '단건', 'AS', '완료현장' 4개 시트 동일 현장 병합 + 최신순 정렬 + 아코디언 그룹화 일괄 실행 (무음)
     var sortRes = sortAllScheduleSheetsByDate(ss, true);
     var sortedCount = (sortRes && typeof sortRes.totalCount === "number") ? sortRes.totalCount : (Number(sortRes) || 0);
@@ -29785,4 +29794,221 @@ html += 'function openEditEstimateModal(siteNameOrEnc) {';
   html += '</body></html>';
 
   return html;
+}
+
+// ============================================================================
+// [v3 Supabase -> Google Sheets 하루 1회 자동 백업 엔진]
+// ============================================================================
+var SUPABASE_V3_BACKUP_URL = "https://uyqvguzglviqegxmxqyn.supabase.co";
+var SUPABASE_V3_BACKUP_KEY = "sb_publishable_f8JwxMgpgs6AVSEumSIV2g_KlK6o9GA";
+
+function overwriteSheetDataRowsSafely_(sheet, rows, colCount, textCols) {
+  if (!sheet || !Array.isArray(rows) || rows.length === 0) return 0;
+  var lastR = sheet.getLastRow();
+  var clearRows = Math.max(lastR - 1, rows.length);
+  if (lastR >= 2) {
+    sheet.getRange(2, 1, lastR - 1, colCount).clearContent();
+  }
+  if (typeof ensureSheetDimensions_ === "function") {
+    ensureSheetDimensions_(sheet, rows.length + 5, colCount);
+  }
+  var normalized = rows.map(function (r) {
+    var arr = (r || []).slice(0, colCount);
+    while (arr.length < colCount) arr.push("");
+    return arr;
+  });
+  if (Array.isArray(textCols)) {
+    textCols.forEach(function (colIdx) {
+      sheet.getRange(2, colIdx, normalized.length, 1).setNumberFormat("@");
+    });
+  }
+  sheet.getRange(2, 1, normalized.length, colCount).setValues(normalized);
+  return normalized.length;
+}
+
+/**
+ * Supabase(ws_state_store)의 최신 데이터를 읽어 Google Sheets로 1일 1회 백업 동기화
+ * - runDailyAutoSortTrigger(매일 새벽 4시)에서 자동 호출되며 수동 실행도 가능
+ * @param {boolean} [silent=false]
+ */
+function backupSupabaseToSheetsDaily(silent) {
+  var summary = { success: false, backedUp: {} };
+  try {
+    var endpoint = SUPABASE_V3_BACKUP_URL + "/rest/v1/ws_state_store?select=key,payload,updated_at";
+    var resp = UrlFetchApp.fetch(endpoint, {
+      method: "get",
+      headers: {
+        "apikey": SUPABASE_V3_BACKUP_KEY,
+        "Authorization": "Bearer " + SUPABASE_V3_BACKUP_KEY
+      },
+      muteHttpExceptions: true
+    });
+    if (resp.getResponseCode() !== 200) {
+      Logger.log("backupSupabaseToSheetsDaily HTTP 오류: " + resp.getResponseCode());
+      return summary;
+    }
+    var records = JSON.parse(resp.getContentText() || "[]");
+    if (!Array.isArray(records) || records.length === 0) return summary;
+
+    var store = {};
+    records.forEach(function (rec) {
+      if (rec && rec.key && rec.payload) store[rec.key] = rec.payload;
+    });
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet() || getAppSpreadsheet();
+    if (!ss) return summary;
+
+    // 1. 현장/공정 (현장데이터, 단건, AS, 완료현장) & 현장정보 & 신규견적
+    var dash = store["dashboard_main"];
+    if (dash && Array.isArray(dash.sites) && dash.sites.length > 0) {
+      var rowsByScope = { site: [], single: [], as: [], completed: [] };
+      var estRows = [];
+
+      dash.sites.forEach(function (site) {
+        if (!site) return;
+        var sc = String(site.scope || "site");
+        if (sc === "newSite") {
+          var ed = site.estimateData || {};
+          estRows.push([
+            ed.siteName || site.siteName || "", ed.status || "신규 문의", ed.inquiryDate || "",
+            ed.priority || "보통", ed.scope || "", ed.memo || "", ed.source || "",
+            ed.consultDate || "", ed.expectedDate || "", ed.expectedAmount || "",
+            ed.estimateSendDate || "", ed.clientName || "", ed.clientPhone || "",
+            ed.manager || "", ed.estimateFile || "", ed.contractAmount || "",
+            ed.nextAction || "", ed.failReason || "", ed.visitDate || "", ed.address || ""
+          ]);
+          return;
+        }
+        var targetBucket = site.isArchived ? "completed" : (rowsByScope[sc] ? sc : "site");
+        (site.tasks || []).forEach(function (t) {
+          if (!t) return;
+          var mgrParts = String(t.manager || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean);
+          var dateText = String(t.startDateStr || t.dateDisplay || "").replace(/\s*\([^)]*\)/g, "").trim();
+          rowsByScope[targetBucket].push([
+            site.siteName || "",
+            dateText,
+            t.taskName || "",
+            t.partner || "",
+            Boolean(t.isShared),
+            t.memo || "",
+            mgrParts[0] || "",
+            mgrParts[1] || "",
+            t.status || "예정",
+            t.taskId || t.id || "",
+            t.dateMs || ""
+          ]);
+        });
+      });
+
+      if (rowsByScope.site.length > 0) {
+        summary.backedUp.site = overwriteSheetDataRowsSafely_(findSiteScheduleSheet(ss), rowsByScope.site, 11);
+      }
+      if (rowsByScope.single.length > 0 && typeof findSingleTaskSheet === "function") {
+        summary.backedUp.single = overwriteSheetDataRowsSafely_(findSingleTaskSheet(ss, true), rowsByScope.single, 11);
+      }
+      if (rowsByScope.as.length > 0 && typeof findAsTaskSheet === "function") {
+        summary.backedUp.as = overwriteSheetDataRowsSafely_(findAsTaskSheet(ss, true), rowsByScope.as, 11);
+      }
+      if (rowsByScope.completed.length > 0 && typeof findCompletedSiteSheet === "function") {
+        summary.backedUp.completed = overwriteSheetDataRowsSafely_(findCompletedSiteSheet(ss, true), rowsByScope.completed, 11);
+      }
+      if (estRows.length > 0 && typeof findEstimateSheet === "function") {
+        summary.backedUp.estimates = overwriteSheetDataRowsSafely_(findEstimateSheet(ss, true), estRows, 20);
+      }
+
+      // 현장정보 (도어락 비밀번호 앞자리 0 보존)
+      if (dash.siteInfoMap && typeof findSiteInfoSheet === "function") {
+        var infoSheet = findSiteInfoSheet(ss, true);
+        var seenInfo = {};
+        var infoRows = [];
+        Object.keys(dash.siteInfoMap).forEach(function (k) {
+          var item = dash.siteInfoMap[k];
+          if (!item || !item.siteName || seenInfo[item.siteName]) return;
+          seenInfo[item.siteName] = true;
+          infoRows.push([
+            item.siteName, item.address || "", item.doorPassword || "", item.officePhone || "",
+            Boolean(item.consentDone), Boolean(item.elevatorCoverDone), Boolean(item.officeNoticeDone),
+            item.memo || "", item.driveUrl || ""
+          ]);
+        });
+        if (infoRows.length > 0) {
+          summary.backedUp.siteInfo = overwriteSheetDataRowsSafely_(infoSheet, infoRows, 9, [3]);
+        }
+      }
+    }
+
+    // 2. To-Do (05_ToDo)
+    var todo = store["todo_main"];
+    if (todo && Array.isArray(todo.list) && todo.list.length > 0 && typeof findOrCreateTodoSheet === "function") {
+      var todoSheet = findOrCreateTodoSheet(ss);
+      var todoRows = todo.list.map(function (td) {
+        return [
+          td.id || "", td.dueDate || "", td.status || "미완료", td.manager || "",
+          td.title || "", td.tag || "", td.detail || "", td.siteName || "",
+          Boolean(td.isImportant), td.createdAt || "", td.completedAt || ""
+        ];
+      });
+      summary.backedUp.todos = overwriteSheetDataRowsSafely_(todoSheet, todoRows, 11);
+    }
+
+    // 3. 재무 DB (수금현황, 비용마감, 비용마감_고정)
+    var fin = store["finance_db"];
+    if (fin && typeof FINANCE_DB_SPREADSHEET_ID !== "undefined") {
+      var fss = SpreadsheetApp.openById(FINANCE_DB_SPREADSHEET_ID);
+      if (fss) {
+        if (Array.isArray(fin.collection) && fin.collection.length > 0) {
+          var colSheet = fss.getSheetByName("수금현황");
+          if (colSheet) {
+            var colRows = fin.collection.map(function (c) {
+              return [
+                c.id || "", c.siteName || "", c.period || "", c.manager || "", c.category || "",
+                c.status || "진행중", c.clientName || "", Number(c.contractAmount) || 0, Number(c.changeAmount) || 0,
+                c.changeDesc || "", c.progressRate !== null && c.progressRate !== undefined ? c.progressRate : "",
+                Number(c.totalAmount) || 0, Number(c.downPayment) || 0, Number(c.startPayment) || 0,
+                Number(c.midPayment1) || 0, Number(c.midPayment2) || 0, Number(c.midPayment3) || 0,
+                Number(c.finalPayment) || 0, Number(c.uncollectedAmount) || 0, c.taxInvoice || "미발행", c.note || ""
+              ];
+            });
+            summary.backedUp.collection = overwriteSheetDataRowsSafely_(colSheet, colRows, 21);
+          }
+        }
+        if (Array.isArray(fin.expense) && fin.expense.length > 0) {
+          var expSheet = fss.getSheetByName("비용마감");
+          if (expSheet) {
+            var expRows = fin.expense.map(function (e) {
+              return [
+                e.id || "", e.settleMonth || "", e.item || "", e.category || "", e.vendor || "",
+                e.accountNumber || e.category2 || "", e.siteName || "",
+                Number(e.claimAmount) || 0, Number(e.paidAmount) || 0, Number(e.balance) || 0,
+                e.payDate || "", e.note || ""
+              ];
+            });
+            summary.backedUp.expense = overwriteSheetDataRowsSafely_(expSheet, expRows, 12);
+          }
+        }
+        if (Array.isArray(fin.fixedMaster) && fin.fixedMaster.length > 0) {
+          var fixSheet = fss.getSheetByName("비용마감_고정");
+          if (fixSheet) {
+            var fixRows = fin.fixedMaster.map(function (f) {
+              return [
+                f.id || "", f.active || "Y", f.item || "고정비", f.category || "",
+                f.vendor || "", f.accountNumber || f.category2 || "",
+                Number(f.baseAmount) || 0, f.payDay || "", f.note || ""
+              ];
+            });
+            summary.backedUp.fixedMaster = overwriteSheetDataRowsSafely_(fixSheet, fixRows, 9);
+          }
+        }
+      }
+    }
+
+    summary.success = true;
+    invalidateDashboardServerCache();
+    invalidateTodoServerCache();
+    Logger.log("backupSupabaseToSheetsDaily 완료: " + JSON.stringify(summary.backedUp));
+  } catch (err) {
+    Logger.log("backupSupabaseToSheetsDaily 오류: " + err.toString());
+    summary.error = err.toString();
+  }
+  return summary;
 }
