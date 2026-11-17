@@ -6638,62 +6638,6 @@ end $$;`;
       }
       window.buildCollectionNoteWithExtra = buildCollectionNoteWithExtra;
 
-      // [3-1] 월간집계/비용마감 리포트 이미지 저장 및 인쇄 함수
-      window.captureFinanceReport = async function (type) {
-        if (!window.FINANCE_EXT_FLAGS || !window.FINANCE_EXT_FLAGS.reportCapturePrint) return;
-        const subTab = type || state.financeSubTab || "monthly";
-        const isMobile = state.device !== "pc";
-        let targetEl = isMobile ? document.getElementById("m-page-finance") : document.getElementById("pcFinanceMain");
-        if (!targetEl) targetEl = document.body;
-
-        const subTabNames = { collection: "수금현황", expense: "비용마감", monthly: "월간집계", fixed: "고정비관리" };
-        const tabTitle = subTabNames[subTab] || "재무원장";
-        const nowStr = getTodayYmd().replace(/-/g, "");
-        const fileName = `우성아이디_${tabTitle}_리포트_${nowStr}.png`;
-
-        if (typeof showToast === "function") showToast("📸 화면을 이미지로 변환 중입니다...");
-
-        try {
-          let canvas = null;
-          if (typeof html2canvas === "function") {
-            canvas = await html2canvas(targetEl, {
-              useCORS: true,
-              scale: Math.min(2, window.devicePixelRatio || 1.5),
-              logging: false,
-              backgroundColor: "#ffffff",
-              ignoreElements: (el) => el.id === "toastBanner" || (el.classList && el.classList.contains("toast-banner")) || el.id === "captureModal"
-            });
-          } else {
-            canvas = document.createElement("canvas");
-            canvas.width = 1200;
-            canvas.height = 800;
-            const ctx = canvas.getContext("2d");
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, 0, 1200, 800);
-            ctx.fillStyle = "#1e293b";
-            ctx.font = "bold 24px sans-serif";
-            ctx.fillText(`우성아이디 ${tabTitle} 리포트`, 40, 60);
-          }
-
-          const dataUrl = canvas.toDataURL("image/png");
-          const link = document.createElement("a");
-          link.download = fileName;
-          link.href = dataUrl;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          if (typeof showToast === "function") showToast(`✅ ${fileName} 저장 완료!`);
-        } catch (err) {
-          console.error("리포트 이미지 저장 실패:", err);
-          alert("이미지 저장 중 오류가 발생했습니다: " + err.message);
-        }
-      };
-
-      window.printFinanceReport = function () {
-        if (!window.FINANCE_EXT_FLAGS || !window.FINANCE_EXT_FLAGS.reportCapturePrint) return;
-        window.print();
-      };
-
       // [1-1] KPI 카드 클릭 시 필터 토글 함수
       window.toggleFinanceUncollectedFilter = function () {
         if (!window.FINANCE_EXT_FLAGS || !window.FINANCE_EXT_FLAGS.kpiClickFilter) return;

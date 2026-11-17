@@ -9,6 +9,12 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
+const isVerbose = process.argv.includes('--verbose') || process.argv.includes('-v');
+const rawConsoleLog = console.log.bind(console);
+if (!isVerbose) {
+  console.log = function () {};
+}
+
 console.log('========================================================');
 console.log('🧪 [QA & 코드리뷰 검증 파이프라인] 테스트 시작');
 console.log('========================================================\n');
@@ -2330,12 +2336,15 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     v2RootHtml.includes('window.onFixedMasterAmountInput')
   );
 }
-console.log('\n========================================================');
-console.log(`📊 [QA 검증 최종 결과]: 총 ${passCount + failCount}개 항목 중 ${passCount}개 통과, ${failCount}개 실패`);
-console.log('========================================================');
+if (isVerbose) {
+  rawConsoleLog('\n========================================================');
+  rawConsoleLog(`📊 [QA 검증 최종 결과]: 총 ${passCount + failCount}개 항목 중 ${passCount}개 통과, ${failCount}개 실패`);
+  rawConsoleLog('========================================================');
+}
 
 if (failCount > 0) {
+  rawConsoleLog(`❌ [QA] ${passCount} / ${passCount + failCount} PASS, ${failCount} FAIL (자세한 로그: node scripts/run_qa_tests.js --verbose)`);
   process.exit(1);
 } else {
-  console.log('🎉 모든 QA 및 코드리뷰 무결성 테스트를 100% 통과했습니다!');
+  rawConsoleLog(`✅ [QA] ${passCount} / ${passCount + failCount} PASS (JS AST · 미러 동기화 · 런타임 정상)`);
 }
