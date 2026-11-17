@@ -1,0 +1,22 @@
+name: Supabase Keep-Alive Ping
+
+on:
+  schedule:
+    # 매일 새벽 05:00 KST (20:00 UTC) 가벼운 헬스체크 요청으로 무료 플랜 7일 미사용 일시정지 방지
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://uyqvguzglviqegxmxqyn.supabase.co/rest/v1/ws_state_store?select=key&limit=1" \
+            -H "apikey: sb_publishable_f8JwxMgpgs6AVSEumSIV2g_KlK6o9GA")
+          echo "Supabase Keep-Alive HTTP Status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "Unexpected HTTP status: $STATUS"
+            exit 1
+          fi

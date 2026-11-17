@@ -3193,6 +3193,14 @@ function isDateEqual(d1, d2) {
  */
 function formatDateYYMMDD(date) {
   if (!date) return "";
+  if (!(date instanceof Date)) {
+    if (typeof normalizeDateStringToYYYYMMDD === "function") {
+      var norm = normalizeDateStringToYYYYMMDD(date);
+      if (norm) return norm;
+    }
+    return String(date).trim();
+  }
+  if (isNaN(date.getTime())) return "";
   var yyyy = String(date.getFullYear());
   var mm = String(date.getMonth() + 1);
   if (mm.length < 2) mm = "0" + mm;

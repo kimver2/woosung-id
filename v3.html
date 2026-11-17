@@ -2823,8 +2823,8 @@
       // - 브라우저 localStorage 설정이 저장되어 있으면 localStorage가 우선합니다.
       // ========================================================
       const SUPABASE_V3_DEFAULT_CONFIG = window.SUPABASE_V3_DEFAULT_CONFIG = {
-        url: "",
-        anonKey: "",
+        url: "https://uyqvguzglviqegxmxqyn.supabase.co",
+        anonKey: "sb_publishable_f8JwxMgpgs6AVSEumSIV2g_KlK6o9GA",
         engineMode: "supabase", // "supabase" | "sheets"
         dualWrite: true         // true: Supabase 초고속 저장 + 백그라운드 Google Sheets 동시 백업
       };
@@ -14047,6 +14047,8 @@ end $$;`;
           const found = findTaskById(targetId);
           if (found) {
             const { site, task } = found;
+            const delSiteName = site.siteName || "";
+            const delTaskName = task.taskName || "공정";
             recordDeletedTaskGuard(site, task);
             const wasArchived = Boolean(task.isArchived || site.isArchived || task.sheetName === "완료현장");
             const effSheetName = task.sheetName || (site.scope === "as" ? "AS" : site.scope === "single" ? "단건" : wasArchived ? "완료현장" : "현장데이터");
@@ -14081,12 +14083,18 @@ end $$;`;
                 sheetName: effSheetName, isArchived: wasArchived, origDate, origMgr
               }, state.dashData);
             }
+            window.__wsDeletedPopupInfo = {
+              title: "✅ 공정 삭제 완료",
+              message: `<strong>${escHtml(delSiteName)}</strong> · <strong>${escHtml(delTaskName)}</strong> 공정이 삭제되었습니다.`,
+              subNote: "실시간 DB 및 구글 시트에 반영됩니다."
+            };
           }
           showToast("🗑️ 공정이 삭제되었습니다.");
         } else if (type === "site") {
           const idx = state.dashData.sites.findIndex((s) => s.siteKey === targetId);
           if (idx > -1) {
             const s = state.dashData.sites[idx];
+            const delSiteName = s.siteName || "현장";
             recordDeletedSiteGuard(s);
             (s.tasks || []).forEach((t) => recordDeletedTaskGuard(s, t));
             state.dashData.sites.splice(idx, 1);
@@ -14095,6 +14103,11 @@ end $$;`;
             recalcDashMeta();
             const targetScope = (s.scope === "newSite" || s.scope === "single" || s.scope === "as") ? s.scope : (s.isArchived ? "완료현장" : s.scope);
             if (window.WSDataService) window.WSDataService.deleteSite({ site: s.siteName, scope: targetScope }, state.dashData);
+            window.__wsDeletedPopupInfo = {
+              title: "✅ 현장 삭제 완료",
+              message: `<strong>${escHtml(delSiteName)}</strong> 현장이 삭제되었습니다.`,
+              subNote: "※ 재무·원장(수금현황/비용마감) 데이터는 정산 보호를 위해 별도 유지됩니다. 수금현황에서도 지우려면 재무·원장 탭에서 삭제해 주세요."
+            };
           }
           showToast("🗑️ 현장이 삭제되었습니다.");
         } else if (type === "todo") {
@@ -14105,6 +14118,25 @@ end $$;`;
         window.closeModal("deleteConfirmModal");
         markAllDirty();
         renderActiveViews();
+        if (window.__wsDeletedPopupInfo) {
+          const info = window.__wsDeletedPopupInfo;
+          window.__wsDeletedPopupInfo = null;
+          const tEl = document.getElementById("syncStatusModalTitle");
+          const cEl = document.getElementById("syncStatusModalCloseBtn");
+          const bEl = document.getElementById("syncStatusModalBody");
+          const fEl = document.getElementById("syncStatusModalFooter");
+          if (tEl && bEl && fEl) {
+            tEl.textContent = info.title;
+            if (cEl) cEl.style.display = "inline-flex";
+            bEl.innerHTML = `<div style="text-align:center;line-height:1.65;">
+              <div style="font-size:28px;margin-bottom:8px;">🗑️</div>
+              <div style="font-size:14px;color:#1e293b;margin-bottom:8px;">${info.message}</div>
+              <div style="font-size:12px;color:#64748b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;">${escHtml(info.subNote)}</div>
+            </div>`;
+            fEl.innerHTML = `<button type="button" class="ws-btn ws-btn-primary" onclick="closeModal('syncStatusModal')">확인</button>`;
+            openModal("syncStatusModal");
+          }
+        }
       };
 
       // ================= 모달 3 & 착공 필수 체크박스 =================
@@ -17556,10 +17588,36 @@ end $$;`;
                 const exists = fb.collection.some(c => c && String(c.siteName || "").trim() === String(payload.siteName || "").trim());
                 if (!exists) {
                   const baseAmt = Number(payload.contractAmount) || Number(payload.expectedAmount) || 0;
+                  let calcPeriod = String(payload.period || "").trim();
+                  if (!calcPeriod && Array.isArray(payload.tasks) && payload.tasks.length > 0) {
+                    const ymdList = [];
+                    payload.tasks.forEach(t => {
+                      if (!t) return;
+                      const rawStr = [t.date, t.dateStr, t.startDateStr, t.endDateStr, t.dateDisplay].filter(Boolean).join(" ");
+                      const matches = rawStr.match(/\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}/g);
+                      if (matches) {
+                        matches.forEach(m => {
+                          const parts = m.split(/[.\-/]/);
+                          if (parts.length === 3) {
+                            ymdList.push(`${parts[0]}.${parts[1].padStart(2, "0")}.${parts[2].padStart(2, "0")}`);
+                          }
+                        });
+                      }
+                    });
+                    if (ymdList.length > 0) {
+                      ymdList.sort();
+                      const minD = ymdList[0];
+                      const maxD = ymdList[ymdList.length - 1];
+                      calcPeriod = (minD === maxD) ? minD : `${minD} ~ ${maxD}`;
+                    }
+                  }
+                  if (!calcPeriod && payload.startDate) {
+                    calcPeriod = String(payload.startDate).trim().replace(/-/g, ".");
+                  }
                   collectionRow = {
                     id: "COL-" + Date.now(),
                     siteName: payload.siteName,
-                    period: payload.startDate ? `${payload.startDate} ~` : "",
+                    period: calcPeriod,
                     manager: payload.manager || "",
                     category: payload.scope || "전체공사",
                     status: "진행중",
