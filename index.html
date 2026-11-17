@@ -5391,7 +5391,7 @@ end $$;`;
         const existingInput = document.getElementById(isQ ? "pcQuoteScopedSearchInput" : "pcSearchInput");
         const isSitesActive = isQ ? (state.pcTab === "quote") : (state.pcTab === "sites");
         const bodyAreaEl = pcSiteEl ? document.getElementById(pfx + "BodyArea") : null;
-        if (pcSiteEl && existingInput && bodyAreaEl && isSitesActive && pcSiteEl.contains(existingInput) && document.activeElement === existingInput) {
+        if (pcSiteEl && existingInput && bodyAreaEl && isSitesActive && pcSiteEl.contains(existingInput) && (document.activeElement === existingInput || state._keepPcSearchFocus)) {
           bodyAreaEl.innerHTML = `
             ${visibleSites.length ? `
               <div class="carousel-wrap-box">
@@ -5405,6 +5405,31 @@ end $$;`;
           if (countSpan) countSpan.textContent = `표시 ${visibleSites.length}개`;
           if (existingInput.value !== state.searchQuery) {
             existingInput.value = state.searchQuery;
+          }
+          const wrap = existingInput.closest(".pc-page-search-wrap");
+          if (wrap) {
+            const oldClear = wrap.querySelector(".pc-page-search-clear");
+            const oldBadge = wrap.querySelector(".search-shortcut-badge");
+            if (state.searchQuery) {
+              if (oldBadge) oldBadge.remove();
+              if (!oldClear) {
+                const sp = document.createElement("span");
+                sp.className = "pc-page-search-clear";
+                sp.title = "검색 초기화";
+                sp.textContent = "✕";
+                sp.onclick = () => clearGlobalSearch();
+                wrap.appendChild(sp);
+              }
+            } else {
+              if (oldClear) oldClear.remove();
+              if (!oldBadge) {
+                const sp = document.createElement("span");
+                sp.className = "search-shortcut-badge";
+                sp.style.cssText = "position:absolute;right:6px;font-size:10px;padding:2px 4px;border-radius:4px;background:#f1f5f9;color:#64748b;pointer-events:none;";
+                sp.textContent = "Alt+S";
+                wrap.appendChild(sp);
+              }
+            }
           }
           autoScrollCarouselToActive(trackId, ".site-carousel-card.active");
           return;
@@ -23334,6 +23359,9 @@ end $$;`;
       };
 
       window.onGlobalSearch = function (query) {
+        const activeId = document.activeElement ? document.activeElement.id : "";
+        const keepPcFocus = (activeId === "pcSearchInput" || activeId === "pcQuoteScopedSearchInput");
+        state._keepPcSearchFocus = keepPcFocus;
         state.searchQuery = query || "";
         state.mobileHomeTasksExpanded = false;
         const pcIn = document.getElementById("pcSearchInput");
@@ -23346,6 +23374,15 @@ end $$;`;
         if (clearBadge) clearBadge.textContent = state.searchQuery.trim() ? "✕" : "Alt+S";
         markAllDirty();
         renderActiveViews();
+        state._keepPcSearchFocus = false;
+        if (keepPcFocus) {
+          const targetEl = document.getElementById(activeId);
+          if (targetEl && document.activeElement !== targetEl) {
+            targetEl.focus();
+            const len = targetEl.value.length;
+            try { targetEl.setSelectionRange(len, len); } catch (_) {}
+          }
+        }
       };
       window.clearGlobalSearch = function () { window.onGlobalSearch(""); };
       window.resetAllFilters = function () {
