@@ -17746,6 +17746,7 @@ end $$;`;
       window.openMonthlyReportModal = function () {
         state.reportCtx.year = state.calYear;
         state.reportCtx.month = state.calMonth;
+        state.reportCtx.scope = "all";
         renderMonthlyReportModal();
         openModal("monthlyReportModal");
       };
@@ -17753,18 +17754,29 @@ end $$;`;
       function renderMonthlyReportModal() {
         const rc = state.reportCtx;
         const ym = rc.year + "-" + String(rc.month).padStart(2, "0");
+        const monthStart = ym + "-01";
+        const lastDay = new Date(rc.year, rc.month, 0).getDate();
+        const monthEnd = ym + "-" + String(lastDay).padStart(2, "0");
+
+        const scopeCounts = { all: 0, site: 0, single: 0, as: 0 };
         const matched = [];
         getAllSites().forEach((s) => {
-          if (rc.scope !== "all" && s.scope !== rc.scope) return;
+          const sScope = s.scope || "site";
           (s.tasks || []).forEach((t) => {
             const sy = parseYmdFromTask(t);
-            if (!sy || !sy.startsWith(ym)) return;
+            if (!sy) return;
+            const ey = parseEndYmdFromTask(t, sy) || sy;
+            if (sy > monthEnd || ey < monthStart) return;
             const hay = [s.siteName, t.taskName, t.partner, t.manager].join(" ");
             if (rc.query && !matchesQuery(hay, rc.query)) return;
+            scopeCounts.all++;
+            if (scopeCounts[sScope] !== undefined) scopeCounts[sScope]++;
+            if (rc.scope !== "all" && sScope !== rc.scope) return;
             matched.push({ site: s, task: t, ymd: sy });
           });
         });
 
+        const siteSet = new Set(matched.map(m => m.site.siteName));
         const groups = {};
         matched.forEach(({ site, task, ymd }) => {
           const key = rc.tab === "partner" ? (task.partner || "업체 미등록") : rc.tab === "member" ? (task.manager || "담당 미지정") : site.siteName;
@@ -17780,12 +17792,12 @@ end $$;`;
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <div style="display:flex;align-items:center;gap:6px;">
               <button type="button" class="btn-tool-tag" onclick="moveReportMonth(-1)">◀</button>
-              <strong style="font-size:15px;">${rc.year}년 ${rc.month}월 집계 (총 ${matched.length}건)</strong>
+              <strong style="font-size:15px;">${rc.year}년 ${rc.month}월 집계 (총 ${matched.length}건 · ${siteSet.size}개 현장)</strong>
               <button type="button" class="btn-tool-tag" onclick="moveReportMonth(1)">▶</button>
             </div>
-            <div style="display:flex;gap:5px;">
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">
               ${[["all", "전체"], ["site", "현장"], ["single", "단건"], ["as", "AS"]].map(([k, l]) =>
-                `<button type="button" class="st-pill ${rc.scope === k ? "active" : ""}" onclick="setReportField('scope','${k}')">${l}</button>`
+                `<button type="button" class="st-pill ${rc.scope === k ? "active" : ""}" onclick="setReportField('scope','${k}')">${l} (${scopeCounts[k] || 0})</button>`
               ).join("")}
             </div>
           </div>
