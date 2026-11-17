@@ -685,7 +685,7 @@
 
       const calHtml = buildClientCalendarCardHtml(tasks, todayYmd);
       const remainTasks = tasks.filter((t) => t.status !== "완료");
-      const visibleTasks = clientViewState.showAllTasks ? remainTasks : remainTasks.slice(0, 10);
+      const visibleTasks = clientViewState.showAllTasks ? remainTasks : remainTasks.slice(0, 5);
       const hiddenCount = Math.max(0, remainTasks.length - visibleTasks.length);
       const taskListHtml = visibleTasks.length ? visibleTasks.map((t) => {
         const isToday = (t.date && t.endDate && t.date <= todayYmd && t.endDate >= todayYmd) || t.date === todayYmd || String(t.status || "").includes("진행");
@@ -702,9 +702,9 @@
           </div>
         `;
       }).join("") : `<div style="font-size:13px;color:#15803d;font-weight:700;text-align:center;padding:16px 0;">모든 공정이 완료되었습니다. 🎉</div>`;
-      const moreTasksBtnHtml = remainTasks.length > 10 ? `
+      const moreTasksBtnHtml = remainTasks.length > 5 ? `
         <button type="button" class="more-btn" onclick="toggleClientShowAllTasks()">
-          ${clientViewState.showAllTasks ? "▲ 10개만 보기 (접기)" : `▼ 나머지 ${hiddenCount}개 일정 더보기 (남은 ${remainTasks.length}건)`}
+          ${clientViewState.showAllTasks ? "▲ 5개만 보기 (접기)" : `▼ 나머지 ${hiddenCount}개 일정 더보기 (남은 ${remainTasks.length}건)`}
         </button>
       ` : "";
 
