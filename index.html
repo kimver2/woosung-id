@@ -23513,19 +23513,22 @@ end $$;`;
       window.toggleQuoteArchived = function () { state.quoteShowArchived = !state.quoteShowArchived; state.dirtyPcTabs.quote = true; renderActiveViews(); };
       window.setFinancePartner = function (partner) { state.financePartnerFilter = partner; state.dirtyPcTabs.finance = true; renderActiveViews(); };
       function preserveHomeScrollAndRender(fn) {
-        const scrollTargets = [
-          document.scrollingElement || document.documentElement,
-          document.getElementById("page-home"),
-          document.getElementById("m-page-home"),
-          document.querySelector(".pc-main"),
-          document.querySelector(".m-body")
-        ].filter(Boolean);
-        const saved = scrollTargets.map((el) => [el, el.scrollTop]);
+        const selectors = [".home-workspace", ".m-app-body", "#page-home", "#m-page-home"];
+        const savedBySelector = selectors.map((sel) => {
+          const el = document.querySelector(sel);
+          return [sel, el ? el.scrollTop : 0];
+        });
+        const docEl = document.scrollingElement || document.documentElement;
+        const docTop = docEl ? docEl.scrollTop : 0;
         const winY = window.scrollY;
         fn();
         const restore = () => {
-          saved.forEach(([el, top]) => { if (el) el.scrollTop = top; });
-          if (window.scrollY !== winY) window.scrollTo(0, winY);
+          savedBySelector.forEach(([sel, top]) => {
+            const el = document.querySelector(sel);
+            if (el && top > 0) el.scrollTop = top;
+          });
+          if (docEl && docTop > 0) docEl.scrollTop = docTop;
+          if (winY > 0 && window.scrollY !== winY) window.scrollTo(0, winY);
         };
         restore();
         requestAnimationFrame(restore);
