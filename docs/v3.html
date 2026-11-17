@@ -5089,6 +5089,7 @@ end $$;`;
               <td style="color:var(--text-sub);max-width:240px;">${formatMemoTextInlineHtml(t.memo || "-")}</td>
               <td onclick="event.stopPropagation();" style="white-space:nowrap;">
                 <button type="button" class="btn-tool-tag" onclick="openTaskEditModal('${escJs(tid)}')">수정</button>
+                <button type="button" class="btn-tool-tag" onclick="window.copyTaskToNewModal('${escJs(tid)}')" title="동일 공종·협력업체로 새 공정 등록">복사</button>
                 <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="openDeleteConfirm('task', '${escJs(tid)}')">삭제</button>
               </td>
             </tr>`;
@@ -15451,6 +15452,21 @@ end $$;`;
         window.openEstimateModal(null, normQuoteType);
       };
 
+      window.copyTaskToNewModal = function (taskId) {
+        const found = findTaskById(taskId);
+        if (!found || !found.task || !found.site) return showToast("⚠️ 복사할 공정 정보를 찾을 수 없습니다.");
+        const { site, task } = found;
+        const mgrs = filterRegisteredManagers(task.manager);
+        const effScope = site.scope || (/^\[단건\]/i.test(site.siteName) ? "single" : /^\[AS\]/i.test(site.siteName) ? "as" : "site");
+        window.openNewTaskModal(site.siteName, getTodayYmd(), effScope, {
+          taskName: task.taskName || "",
+          partner: task.partner || "",
+          partnerPhone: lookupPartnerPhone(task.partner || "") || "",
+          manager1: mgrs[0] || state.user || "조항만",
+          manager2: mgrs[1] || ""
+        });
+      };
+
       window.openNewTaskModal = function (presetSiteName, presetDateYmd, forceScope, draftOpts) {
         const opts = draftOpts || {};
         const isQuote = isQuoteTabContext();
@@ -15475,7 +15491,7 @@ end $$;`;
           fromEstimateModal: Boolean(opts.fromEstimateModal || isQuote),
           siteName: defaultSiteSelect,
           newSiteName: opts.newSiteName || "",
-          taskName: "",
+          taskName: opts.taskName || "",
           startYmd: d,
           endYmd: d,
           isRange: false,
@@ -15486,13 +15502,13 @@ end $$;`;
           calPopYear: Number(d.slice(0, 4)),
           calPopMonth: Number(d.slice(5, 7)),
           manager1: opts.manager1 || state.user || "조항만",
-          manager2: "",
-          partner: "",
+          manager2: opts.manager2 || "",
+          partner: opts.partner || "",
           isCustomPartner: false,
           customPartnerName: "",
           partnerSearchQuery: "",
           partnerDropOpen: false,
-          partnerPhone: "",
+          partnerPhone: opts.partnerPhone || lookupPartnerPhone(opts.partner || "") || "",
           taskDropOpen: false,
           taskSearchQuery: "",
           status: initialScope === "as" ? "AS" : "예정",
@@ -16032,7 +16048,10 @@ end $$;`;
         `;
 
         footEl.innerHTML = isEdit ? `
-          <button type="button" class="btn-act-danger" onclick="closeModal('taskSheetModal'); openDeleteConfirm('task', '${escJs(ctx.taskId)}')">🗑️ 삭제</button>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button type="button" class="btn-act-danger" onclick="closeModal('taskSheetModal'); openDeleteConfirm('task', '${escJs(ctx.taskId)}')">🗑️ 삭제</button>
+            <button type="button" class="btn-act-white" onclick="window.copyTaskToNewModal('${escJs(ctx.taskId)}')" title="동일 공종·협력업체로 새 공정 등록">📋 복사 등록</button>
+          </div>
           <div style="display:flex;gap:8px;">
             <button type="button" class="btn-act-white" onclick="closeModal('taskSheetModal')">취소</button>
             <button type="button" class="btn-act-blue" onclick="saveTaskSheetModal()">💾 저장하기</button>
