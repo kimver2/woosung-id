@@ -8146,53 +8146,55 @@ end $$;`;
 
         tEl.textContent = `📄 [${col.siteName}] 명세서 · 청구서 자동 생성`;
         if (cEl) cEl.style.display = "inline-flex";
+        const modalCard = document.querySelector("#syncStatusModal .ws-modal-card");
+        if (modalCard) modalCard.style.maxWidth = "840px";
 
         const docHtml = `
-          <div id="invoiceDocPrintArea" style="background:#ffffff;border:1.5px solid #334155;border-radius:8px;padding:18px;color:#0f172a;font-size:12px;text-align:left;">
-            <div style="text-align:center;font-size:19px;font-weight:900;letter-spacing:4px;border-bottom:2px solid #0f172a;padding-bottom:8px;margin-bottom:12px;">
+          <div id="invoiceDocPrintArea" style="background:#ffffff;border:1.5px solid #334155;border-radius:8px;padding:22px 24px;color:#0f172a;font-size:12.5px;text-align:left;width:100%;box-sizing:border-box;">
+            <div style="text-align:center;font-size:21px;font-weight:900;letter-spacing:6px;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px;">
               ${docTitle}
             </div>
-            <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#475569;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#475569;margin-bottom:12px;">
               <span><strong>작성일:</strong> ${escHtml(todayYmd)}</span>
               <span><strong>문서번호:</strong> WS-${escHtml(String(col.id || "").replace(/[^0-9A-Za-z]/g, "").slice(-6))}</span>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-              <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
-                <tr><th colspan="2" style="background:#f1f5f9;border:1px solid #cbd5e1;padding:5px;text-align:center;">공급받는자 (고객)</th></tr>
-                <tr><td style="border:1px solid #cbd5e1;padding:5px;width:72px;font-weight:700;background:#f8fafc;">성명/상호</td><td style="border:1px solid #cbd5e1;padding:5px;">${escHtml(col.clientName || col.siteName)}</td></tr>
-                <tr><td style="border:1px solid #cbd5e1;padding:5px;font-weight:700;background:#f8fafc;">현장명</td><td style="border:1px solid #cbd5e1;padding:5px;font-weight:800;">${escHtml(col.siteName)}</td></tr>
-                <tr><td style="border:1px solid #cbd5e1;padding:5px;font-weight:700;background:#f8fafc;">공사기간</td><td style="border:1px solid #cbd5e1;padding:5px;">${escHtml(col.period || "-")}</td></tr>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <tr><th colspan="2" style="background:#f1f5f9;border:1px solid #cbd5e1;padding:6px;text-align:center;">공급받는자 (고객)</th></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;width:82px;font-weight:700;background:#f8fafc;white-space:nowrap;">성명/상호</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${escHtml(col.clientName || col.siteName)}</td></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:700;background:#f8fafc;white-space:nowrap;">현장명</td><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:800;">${escHtml(col.siteName)}</td></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:700;background:#f8fafc;white-space:nowrap;">공사기간</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${escHtml(col.period || "-")}</td></tr>
               </table>
-              <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
-                <tr><th colspan="2" style="background:#eff6ff;border:1px solid #bfdbfe;padding:5px;text-align:center;color:#1e3a8a;">공급자</th></tr>
-                <tr><td style="border:1px solid #cbd5e1;padding:5px;width:76px;font-weight:700;background:#f8fafc;">상호/대표</td><td style="border:1px solid #cbd5e1;padding:5px;">${escHtml(supplier.companyName)} (${escHtml(supplier.ceoName)})</td></tr>
-                <tr><td style="border:1px solid #cbd5e1;padding:5px;font-weight:700;background:#f8fafc;">사업자번호</td><td style="border:1px solid #cbd5e1;padding:5px;">${escHtml(supplier.bizNo || "미입력 (상단에서 입력)")}</td></tr>
-                <tr><td style="border:1px solid #cbd5e1;padding:5px;font-weight:700;background:#f8fafc;">입금계좌</td><td style="border:1px solid #cbd5e1;padding:5px;">${escHtml(supplier.bankInfo || "미입력 (상단에서 입력)")}</td></tr>
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <tr><th colspan="2" style="background:#eff6ff;border:1px solid #bfdbfe;padding:6px;text-align:center;color:#1e3a8a;">공급자</th></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;width:86px;font-weight:700;background:#f8fafc;white-space:nowrap;">상호/대표</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${escHtml(supplier.companyName)} (${escHtml(supplier.ceoName)})</td></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:700;background:#f8fafc;white-space:nowrap;">사업자번호</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${escHtml(supplier.bizNo || "미입력 (상단에서 입력)")}</td></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:700;background:#f8fafc;white-space:nowrap;">입금계좌</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${escHtml(supplier.bankInfo || "미입력 (상단에서 입력)")}</td></tr>
               </table>
             </div>
-            <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;">
               <thead>
                 <tr style="background:#f8fafc;">
-                  <th style="border:1px solid #cbd5e1;padding:6px;text-align:left;">품목 / 내역</th>
-                  <th style="border:1px solid #cbd5e1;padding:6px;text-align:center;width:95px;">기준</th>
-                  <th style="border:1px solid #cbd5e1;padding:6px;text-align:right;width:105px;">공급가액</th>
-                  <th style="border:1px solid #cbd5e1;padding:6px;text-align:right;width:90px;">부가세(10%)</th>
-                  <th style="border:1px solid #cbd5e1;padding:6px;text-align:right;width:110px;">합계금액</th>
+                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:left;min-width:190px;">품목 / 내역</th>
+                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:center;width:100px;white-space:nowrap;">기준</th>
+                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:right;width:110px;white-space:nowrap;">공급가액</th>
+                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:right;width:95px;white-space:nowrap;">부가세(10%)</th>
+                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:right;width:115px;white-space:nowrap;">합계금액</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td style="border:1px solid #cbd5e1;padding:8px;font-weight:700;">[${escHtml(col.category || "인테리어공사")}] ${escHtml(col.siteName)}</td>
-                  <td style="border:1px solid #cbd5e1;padding:8px;text-align:center;color:#475569;">${escHtml(basisLabel)}</td>
-                  <td style="border:1px solid #cbd5e1;padding:8px;text-align:right;">${supplyAmt.toLocaleString("ko-KR")}원</td>
-                  <td style="border:1px solid #cbd5e1;padding:8px;text-align:right;">${taxAmt.toLocaleString("ko-KR")}원</td>
-                  <td style="border:1px solid #cbd5e1;padding:8px;text-align:right;font-weight:900;color:#1d4ed8;">${grandTotal.toLocaleString("ko-KR")}원</td>
+                  <td style="border:1px solid #cbd5e1;padding:10px 8px;font-weight:700;line-height:1.45;word-break:keep-all;">[${escHtml(col.category || "인테리어공사")}] ${escHtml(col.siteName)}</td>
+                  <td style="border:1px solid #cbd5e1;padding:10px 8px;text-align:center;color:#475569;white-space:nowrap;">${escHtml(basisLabel)}</td>
+                  <td style="border:1px solid #cbd5e1;padding:10px 8px;text-align:right;white-space:nowrap;">${supplyAmt.toLocaleString("ko-KR")}원</td>
+                  <td style="border:1px solid #cbd5e1;padding:10px 8px;text-align:right;white-space:nowrap;">${taxAmt.toLocaleString("ko-KR")}원</td>
+                  <td style="border:1px solid #cbd5e1;padding:10px 8px;text-align:right;font-weight:900;color:#1d4ed8;white-space:nowrap;">${grandTotal.toLocaleString("ko-KR")}원</td>
                 </tr>
               </tbody>
             </table>
-            <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;font-size:11.5px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;font-size:12px;">
               <span>기수금: 계약 ${formatShortAmount(col.downPayment)} · 착수 ${formatShortAmount(col.startPayment)} · 중도 ${formatShortAmount((Number(col.midPayment1)||0)+(Number(col.midPayment2)||0)+(Number(col.midPayment3)||0))} · 잔금 ${formatShortAmount(col.finalPayment)}</span>
-              <strong style="color:#0f172a;font-size:13px;">청구 합계: ${grandTotal.toLocaleString("ko-KR")}원</strong>
+              <strong style="color:#0f172a;font-size:13.5px;white-space:nowrap;">청구 합계: ${grandTotal.toLocaleString("ko-KR")}원</strong>
             </div>
           </div>`;
 
@@ -8238,9 +8240,9 @@ end $$;`;
       window.printFinanceInvoiceDoc = function () {
         const area = document.getElementById("invoiceDocPrintArea");
         if (!area) return;
-        const win = window.open("", "_blank", "width=820,height=900");
+        const win = window.open("", "_blank", "width=900,height=1050");
         if (!win) return showToast("⚠️ 팝업 차단을 해제해 주세요.");
-        win.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>우성아이디 거래명세서·청구서</title><style>body{font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;padding:28px;color:#0f172a;}@media print{body{padding:0;}}</style></head><body>${area.outerHTML}<script>window.onload=function(){setTimeout(function(){window.print();},200);};<\/script></body></html>`);
+        win.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>우성아이디 거래명세서·청구서</title><style>@page{size:A4 portrait;margin:14mm;}*{box-sizing:border-box;}body{font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;margin:0;padding:18px;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact;}#invoiceDocPrintArea{width:100%;max-width:182mm;margin:0 auto;}@media print{body{padding:0;}#invoiceDocPrintArea{border-width:1.5px;max-width:none;}}</style></head><body>${area.outerHTML}<script>window.onload=function(){setTimeout(function(){window.print();},200);};<\/script></body></html>`);
         win.document.close();
       };
 
@@ -13124,6 +13126,10 @@ end $$;`;
         el.classList.remove("open");
         el.style.zIndex = "";
         el.dataset.skipHistory = "";
+        if (id === "syncStatusModal") {
+          const card = el.querySelector(".ws-modal-card");
+          if (card) card.style.maxWidth = "";
+        }
         if (id === "taskSheetModal") {
           const drawer = document.getElementById("pcCalDetailDrawer");
           if (drawer) drawer.style.display = "none";
