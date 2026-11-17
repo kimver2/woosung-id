@@ -5867,8 +5867,7 @@ end $$;`;
                     </div>
                   </div>
                   <div class="pc-est-hero-actions">
-                    ${isContractDone ? (isPromoted ? `<button type="button" class="btn-act-blue" style="background:#16a34a;color:#ffffff;font-weight:800;" onclick="navigateToSiteDetail('${escJs(siteName)}', false)" title="진행 현장 바로가기"><span>✅</span> 현장 등록됨 → 보기</button>` : `<button type="button" class="btn-act-blue" style="background:linear-gradient(135deg, #2563eb, #1d4ed8);color:#ffffff;font-weight:800;box-shadow:0 2px 6px rgba(37,99,235,0.3);" onclick="openPromoteEstimateModal('${escJs(curSite.siteKey)}')" title="진행 현장으로 승격"><span>🚀</span> 현장으로 승격</button>`) : ""}
-                    <button type="button" class="btn-act-blue" onclick="openSpreadsheetEstimateSheet()" title="스프레드시트 신규견적 탭 열기">📊 시트에서 보기</button>
+                    ${isContractDone ? (isPromoted ? `<button type="button" class="btn-act-blue" style="background:#16a34a;color:#ffffff;font-weight:800;" onclick="navigateToSiteDetail('${escJs(siteName)}', false)" title="진행 현장 바로가기"><span>✅</span> 현장 등록됨 → 보기</button>` : `<button type="button" class="btn-act-blue" style="background:linear-gradient(135deg, #2563eb, #1d4ed8);color:#ffffff;font-weight:800;box-shadow:0 2px 6px rgba(37,99,235,0.3);" onclick="openPromoteEstimateModal('${escJs(curSite.siteKey)}')" title="진행 현장으로 승격"><span>🚀</span> 현장으로 승격</button>`) : `<button type="button" class="btn-act-blue" style="background:#059669;color:#ffffff;font-weight:800;" onclick="window.markEstimateContractDone('${escJs(curSite.siteKey)}')" title="진행 단계를 계약 완료로 변경">✅ 계약 완료</button>`}
                     <button type="button" class="btn-act-blue" style="background:#3b82f6;" onclick="openEstimateModal('${escJs(curSite.siteKey)}')" title="신규현장 정보 수정">✏️ 정보 수정</button>
                     <button type="button" class="btn-act-danger" onclick="openDeleteConfirm('site', '${escJs(curSite.siteKey)}')" title="이 신규현장 삭제">🗑️ 현장 삭제</button>
                   </div>
@@ -13599,7 +13598,7 @@ end $$;`;
                     </div>`) : ""}
                   <div style="display:flex;gap:6px;margin-top:4px;">
                     <button type="button" onclick="openEstimateModal('${escJs(s.siteKey)}')" style="flex:1;padding:7px;background:#3b82f6;color:#ffffff;border:none;border-radius:6px;font-weight:700;font-size:11.5px;cursor:pointer;">✏️ 정보 수정</button>
-                    <button type="button" onclick="openSpreadsheetEstimateSheet()" style="flex:1;padding:7px;background:#2563eb;color:#ffffff;border:none;border-radius:6px;font-weight:700;font-size:11.5px;cursor:pointer;">📊 시트에서 보기</button>
+                    ${!isContractDone ? `<button type="button" onclick="window.markEstimateContractDone('${escJs(s.siteKey)}')" style="flex:1;padding:7px;background:#059669;color:#ffffff;border:none;border-radius:6px;font-weight:800;font-size:11.5px;cursor:pointer;">✅ 계약 완료</button>` : ""}
                     <button type="button" onclick="openDeleteConfirm('site', '${escJs(s.siteKey)}')" style="padding:7px 9px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-weight:700;font-size:11.5px;cursor:pointer;">🗑️</button>
                     <button type="button" onclick="toggleMobileQuoteCard('${escJs(s.siteKey)}')" style="padding:7px 10px;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;border-radius:6px;font-weight:700;font-size:11.5px;cursor:pointer;">접기 ▲</button>
                   </div>
@@ -17936,6 +17935,27 @@ end $$;`;
         if (ed.status === "계약 완료" && !isEstimatePromotedToSite(siteName)) {
           setTimeout(function () {
             openPromoteEstimateModal(ctx.isEdit ? ctx.siteKey : ("NEWSITE::" + siteName), ed);
+          }, 350);
+        }
+      };
+
+      window.markEstimateContractDone = function (siteKey) {
+        const s = getAllSites().find(x => x && x.siteKey === siteKey);
+        if (!s || !s.estimateData) return showToast("신규현장 정보를 찾을 수 없습니다.");
+        const ed = Object.assign({}, s.estimateData, { status: "계약 완료" });
+        s.estimateData = ed;
+        s.isArchived = true;
+        s.isAllCompleted = true;
+        state.selectedQuoteKey = s.siteKey;
+        if (window.WSDataService) {
+          window.WSDataService.saveEstimate(true, ed, state.dashData);
+        }
+        markAllDirty();
+        renderActiveViews();
+        showToast(`✅ [${s.siteName}] 계약 완료 처리되었습니다.`);
+        if (!isEstimatePromotedToSite(s.siteName)) {
+          setTimeout(function () {
+            openPromoteEstimateModal(s.siteKey, ed);
           }, 350);
         }
       };
