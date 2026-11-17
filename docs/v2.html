@@ -9507,7 +9507,7 @@ end $$;`;
               <table style="${tblStyle}">
                 <thead><tr><th style="${thStyle}width:130px;">구분</th><th style="${thStyle}">수금현황 &amp; 비용마감 활용 방법</th></tr></thead>
                 <tbody>
-                  <tr><td style="${tdStyle}"><b>단건<br>(부분공사·단품)</b></td><td style="${tdStyle}"><code>🏗️ 등록 현장 불러오기</code>로 수금현황에 등록(보통 계약금/잔금 1~2회차)하고, 비용마감에서 해당 현장으로 지출을 연결하면 정산 상세·마진율에 자동 반영됩니다. 완료 시 완료현장 시트에 <code>[단건]</code> 접두사로 구분 보관됩니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>⚡ 단건<br>(부분공사·단품)</b></td><td style="${tdStyle}">새 일정 등록에서 분류 <b><code>⚡ 단건</code></b> 선택 시 <b>고객명 · 단건 계약금액(고객 청구) · 외주/자재 원가</b> 입력칸이 나타나며, 저장 즉시 <b><code>수금현황</code> 및 <code>월별 비용마감</code>에 자동 등록</b>됩니다. (기존 진행 단건은 <code>🏗️ 등록 현장 불러오기</code>로도 추가 가능, 완료 시 <code>[단건]</code> 접두사로 보관)</td></tr>
                   <tr><td style="${tdStyle}"><b>🔧 A/S 접수 등록<br>(전용 입력창)</b></td><td style="${tdStyle}">새 일정 등록(또는 공정 수정)에서 분류 <b><code>🔧 AS</code></b>를 선택하면 완료된 본 현장까지 선택 가능하며, <b><code>무상 / 유상 A/S</code> 토글 · 공간 · 귀책 판단 · 증상 · 비용 부담 주체 · 유상 청구금액 · 처리 비용(원가)</b> 전용 입력칸이 나타납니다.</td></tr>
                   <tr><td style="${tdStyle}"><b>무상 AS<br>(자동 원가 연동)</b></td><td style="${tdStyle}">협력업체 무상재시공(0원)이면 별도 재무 등록이 필요 없습니다. 만약 당사 부담으로 외주·자재비(<code>처리 비용 &gt; 0</code>)가 발생하면, 저장 시 <b><code>월별 비용마감</code>에 본 현장 연결 지출로 자동 등록</b>되어 본 현장의 실질 마진율에 즉시 반영됩니다.</td></tr>
                   <tr><td style="${tdStyle}"><b>유상 AS<br>(자동 수금·원가 연동)</b></td><td style="${tdStyle}"><code>유상 청구금액 &gt; 0</code> 입력 후 저장하면 ① 본 현장이 수금현황에 있을 때는 해당 현장의 <b><code>➕ 추가비</code> 행에 <code>[유상 AS]</code>로 자동 합산</b>되고, ② 본 현장이 없는 단독 AS일 때는 <b><code>[AS] 현장명</code>으로 신규 수금 행이 자동 생성</b>됩니다. (<code>처리 비용 &gt; 0</code> 입력 시 외주 원가도 비용마감에 동시 생성)</td></tr>
@@ -15014,7 +15014,8 @@ end $$;`;
           .sort(siteSortFn);
         const scopeTagMap = { site: "[현장] ", single: "[단독] ", as: "[A/S] " };
         const isAsMode = (curScope === "as" || ctx.status === "AS");
-        const asMeta = ctx.asMeta || { billingType: "free", faultType: "", space: "", symptom: "", costPayer: "협력업체 무상재시공", chargeAmount: 0, costAmount: 0, autoSyncFinance: true, financeSynced: false };
+        const isSingleMode = (!isAsMode && curScope === "single");
+        const asMeta = ctx.asMeta || { billingType: "free", faultType: "", space: "", symptom: "", costPayer: "협력업체 무상재시공", chargeAmount: 0, costAmount: 0, clientName: "", autoSyncFinance: true, financeSynced: false };
         const isPaidAs = (asMeta.billingType === "paid");
 
         bodyEl.innerHTML = `
@@ -15247,6 +15248,39 @@ end $$;`;
               <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#1e3a8a;background:#eff6ff;padding:7px 10px;border-radius:6px;border:1px solid #bfdbfe;cursor:pointer;">
                 <input type="checkbox" ${asMeta.autoSyncFinance ? "checked" : ""} onchange="window.updateTaskAsMeta('autoSyncFinance', this.checked, false)">
                 <span>💰 저장 시 재무·원장 자동 연동 (유상 청구액 → 수금현황 <b>추가비/신규</b> · 처리 비용 → <b>월별 비용마감</b> 자동 등록)</span>
+                ${asMeta.financeSynced ? `<span style="margin-left:auto;color:#15803d;font-size:11px;">✓ 반영됨</span>` : ""}
+              </label>
+            </div>
+          ` : ""}
+
+          ${isSingleMode ? `
+            <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;margin-bottom:4px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                <span style="font-size:13px;font-weight:800;color:#0f172a;">⚡ 단건 정산 &amp; 재무·원장 자동 연동</span>
+                <span style="font-size:11px;color:#64748b;">금액 입력 시 수금현황·비용마감에 한 번에 등록됩니다</span>
+              </div>
+              <div class="form-grid-3" style="gap:8px;">
+                <div class="fg" style="margin:0;">
+                  <label style="font-size:11.5px;">고객명 / 연락처 (선택)</label>
+                  <input type="text" class="ws-input" value="${escHtml(asMeta.clientName || "")}" placeholder="예: 홍길동 / 010-..."
+                    oninput="window.updateTaskAsMeta('clientName', this.value, false)" style="height:32px;font-size:12px;">
+                </div>
+                <div class="fg" style="margin:0;">
+                  <label style="font-size:11.5px;color:#1d4ed8;">단건 계약금액 (고객 청구)</label>
+                  <input type="text" inputmode="numeric" class="ws-input" value="${asMeta.chargeAmount ? Number(asMeta.chargeAmount).toLocaleString('ko-KR') : ''}" placeholder="0"
+                    oninput="formatNumberInputWithCommas(this); window.updateTaskAsMeta('chargeAmount', this.value, false)"
+                    style="height:32px;font-size:12px;text-align:right;font-weight:700;border-color:#93c5fd;background:#eff6ff;">
+                </div>
+                <div class="fg" style="margin:0;">
+                  <label style="font-size:11.5px;color:#b45309;">외주·자재 비용 (지출 원가)</label>
+                  <input type="text" inputmode="numeric" class="ws-input" value="${asMeta.costAmount ? Number(asMeta.costAmount).toLocaleString('ko-KR') : ''}" placeholder="0"
+                    oninput="formatNumberInputWithCommas(this); window.updateTaskAsMeta('costAmount', this.value, false)"
+                    style="height:32px;font-size:12px;text-align:right;font-weight:700;">
+                </div>
+              </div>
+              <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#1e3a8a;background:#eff6ff;padding:7px 10px;border-radius:6px;border:1px solid #bfdbfe;cursor:pointer;">
+                <input type="checkbox" ${asMeta.autoSyncFinance ? "checked" : ""} onchange="window.updateTaskAsMeta('autoSyncFinance', this.checked, false)">
+                <span>💰 저장 시 재무·원장 자동 연동 (계약금액 → <b>수금현황</b> · 외주/자재 원가 → <b>월별 비용마감</b> 자동 등록)</span>
                 ${asMeta.financeSynced ? `<span style="margin-left:auto;color:#15803d;font-size:11px;">✓ 반영됨</span>` : ""}
               </label>
             </div>
@@ -16192,6 +16226,78 @@ end $$;`;
         state.dirtyMobileTabs.finance = true;
       }
 
+      function syncSingleTaskToFinance(siteName, taskName, startYmd, endYmd, partner, manager, asMeta) {
+        if (!asMeta || !window.WSDataService) return;
+        const chargeAmt = Number(asMeta.chargeAmount) || 0;
+        const costAmt = Number(asMeta.costAmount) || 0;
+        if (chargeAmt <= 0 && costAmt <= 0) return;
+
+        const ds = window.WSDataService;
+        const user = state.authUser || state.currentUser || state.user || "조항만";
+        const baseName = String(siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
+        const normKey = baseName.replace(/\s+/g, "").toLowerCase();
+        const sFmt = (startYmd || getTodayYmd()).replace(/-/g, ".");
+        const eFmt = (endYmd || startYmd || getTodayYmd()).replace(/-/g, ".");
+        const periodStr = sFmt === eFmt ? sFmt : `${sFmt} ~ ${eFmt}`;
+
+        if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+        if (!Array.isArray(state.financeDbData.collection)) state.financeDbData.collection = [];
+        if (!Array.isArray(state.financeDbData.expense)) state.financeDbData.expense = [];
+
+        if (chargeAmt > 0 && typeof ds.saveCollectionRow === "function") {
+          const existingCol = state.financeDbData.collection.find(c =>
+            c && String(c.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase() === normKey
+          );
+          if (!existingCol) {
+            const newCol = {
+              id: "",
+              siteName: baseName,
+              clientName: String(asMeta.clientName || "").trim(),
+              manager: extractFirstManager(manager, user),
+              category: "단품",
+              status: "진행중",
+              period: periodStr,
+              contractAmount: chargeAmt,
+              changeAmount: 0,
+              changeDesc: taskName || "",
+              downPayment: 0,
+              startPayment: 0,
+              midPayment1: 0,
+              midPayment2: 0,
+              midPayment3: 0,
+              finalPayment: 0,
+              taxInvoice: "미발행",
+              note: `[단건] ${taskName || ""}`.trim()
+            };
+            ds.saveCollectionRow(newCol, user);
+          }
+        }
+
+        if (costAmt > 0 && typeof ds.saveExpenseRow === "function") {
+          const settleMonth = (startYmd || getTodayYmd()).slice(0, 7);
+          const newExp = {
+            id: "",
+            settleMonth: settleMonth,
+            item: "외주",
+            category: taskName || "단건시공",
+            vendor: partner || "단건 외주/자재",
+            category2: "",
+            accountNumber: "",
+            siteName: baseName,
+            claimAmount: costAmt,
+            paidAmount: 0,
+            balance: costAmt,
+            payDate: startYmd || getTodayYmd(),
+            note: `[단건 원가] ${taskName || ""}`.trim()
+          };
+          ds.saveExpenseRow(newExp, user);
+        }
+
+        asMeta.financeSynced = true;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+      }
+
       window.saveTaskSheetModal = function () {
         const ctx = state.sheetCtx;
         if (!ctx) return;
@@ -16239,6 +16345,7 @@ end $$;`;
           finalMemo = (finalMemo ? finalMemo + "\n" : "") + `${stamp} ${ctx.newMemo.trim()}`;
         }
         const isAsMode = (ctx.scope === "as" || ctx.status === "AS");
+        const isSingleMode = (!isAsMode && ctx.scope === "single");
         if (isAsMode && ctx.asMeta) {
           const am = ctx.asMeta;
           if (am.space || am.symptom || am.faultType || am.billingType === "paid") {
@@ -16251,6 +16358,11 @@ end $$;`;
           }
           if (am.autoSyncFinance && !am.financeSynced && ((Number(am.chargeAmount) || 0) > 0 || (Number(am.costAmount) || 0) > 0)) {
             syncAsTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, finalPartner, managerCombined, am);
+          }
+        } else if (isSingleMode && ctx.asMeta) {
+          const am = ctx.asMeta;
+          if (am.autoSyncFinance && !am.financeSynced && ((Number(am.chargeAmount) || 0) > 0 || (Number(am.costAmount) || 0) > 0)) {
+            syncSingleTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, ctx.isRange ? ctx.endYmd : ctx.startYmd, finalPartner, managerCombined, am);
           }
         }
 
