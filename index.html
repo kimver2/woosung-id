@@ -8053,6 +8053,147 @@ end $$;`;
         window.executeBatchDeleteExpenses(selected, "선택 항목");
       };
 
+      window.openCollectionSiteImportModal = function (includeCompleted) {
+        const tEl = document.getElementById("syncStatusModalTitle");
+        const cEl = document.getElementById("syncStatusModalCloseBtn");
+        const bEl = document.getElementById("syncStatusModalBody");
+        const fEl = document.getElementById("syncStatusModalFooter");
+        if (!tEl || !bEl || !fEl) return;
+
+        const normBase = (n) => String(n || "").replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase();
+        const existingCol = (state.financeDbData && Array.isArray(state.financeDbData.collection)) ? state.financeDbData.collection : [];
+        const existingBaseSet = new Set(existingCol.map(c => normBase(c && c.siteName)).filter(Boolean));
+
+        const allCandidateSites = getAllSites().filter(s => s && (s.scope || "site") !== "newSite");
+        const activeBaseInList = new Set(
+          allCandidateSites.filter(s => (s.scope || "site") === "site").map(s => normBase(s.siteName))
+        );
+
+        const rows = [];
+        allCandidateSites.forEach((s, idx) => {
+          const isDone = isSiteCompleted(s);
+          if (!includeCompleted && isDone) return;
+          const sc = s.scope || "site";
+          const base = normBase(s.siteName);
+          const alreadyExists = existingBaseSet.has(base);
+          const mergesIntoSite = !alreadyExists && sc === "as" && activeBaseInList.has(base);
+
+          // 공사기간 자동 계산
+          const ymds = [];
+          (s.tasks || []).forEach(t => {
+            const raw = [t.startDateStr, t.endDateStr, t.dateDisplay].filter(Boolean).join(" ");
+            const m = raw.match(/\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}/g);
+            if (m) m.forEach(x => {
+              const p = x.split(/[.\-/]/);
+              if (p.length === 3) ymds.push(`${p[0]}.${p[1].padStart(2, "0")}.${p[2].padStart(2, "0")}`);
+            });
+          });
+          ymds.sort();
+          const period = ymds.length ? (ymds[0] === ymds[ymds.length - 1] ? ymds[0] : `${ymds[0]} ~ ${ymds[ymds.length - 1]}`) : "";
+          const mgr = getUniqueSiteManagers(s.tasks).slice(0, 1)[0] || "";
+          const cat = sc === "single" ? "단건" : (sc === "as" ? "AS" : "전체공사");
+
+          rows.push({
+            idx,
+            siteName: s.siteName,
+            scope: sc,
+            category: cat,
+            manager: mgr,
+            period,
+            isDone,
+            alreadyExists,
+            mergesIntoSite,
+            defaultChecked: !alreadyExists && !mergesIntoSite
+          });
+        });
+
+        window._colImportCandidates = rows;
+        tEl.textContent = "🏗️ 등록 현장 수금현황 일괄 불러오기";
+        if (cEl) cEl.style.display = "inline-flex";
+        bEl.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;text-align:left;">
+            <div style="font-size:12px;color:#475569;">현장·단건·AS의 현장명, 담당자, 공사기간을 수금현황에 일괄 생성합니다. <strong style="color:#1d4ed8;">(기존 현장과 겹치는 AS는 자동 통합)</strong></div>
+            <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:#334155;cursor:pointer;">
+              <input type="checkbox" ${includeCompleted ? "checked" : ""} onchange="window.openCollectionSiteImportModal(this.checked)" style="width:14px;height:14px;accent-color:#2563eb;"> 완료 현장 포함
+            </label>
+          </div>
+          <div style="max-height:360px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;text-align:left;">
+            ${rows.map((r, i) => `
+              <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;${r.alreadyExists || r.mergesIntoSite ? "background:#f8fafc;opacity:0.75;" : "background:#fff;"}">
+                <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                  <input type="checkbox" class="col-import-cb" data-idx="${i}" ${r.defaultChecked ? "checked" : ""} style="width:15px;height:15px;accent-color:#2563eb;flex-shrink:0;">
+                  <span style="font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:4px;background:${r.scope === "as" ? "#fef3c7" : (r.scope === "single" ? "#e0f2fe" : "#eff6ff")};color:${r.scope === "as" ? "#d97706" : (r.scope === "single" ? "#0284c7" : "#1d4ed8")};flex-shrink:0;">${escHtml(r.category)}</span>
+                  <div style="min-width:0;">
+                    <div style="font-size:12.5px;font-weight:800;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                      ${escHtml(r.siteName)}
+                      ${r.isDone ? `<span style="font-size:10px;color:#059669;margin-left:4px;">[완료]</span>` : ""}
+                      ${r.alreadyExists ? `<span style="font-size:10px;color:#64748b;margin-left:4px;">· 이미 등록됨</span>` : (r.mergesIntoSite ? `<span style="font-size:10px;color:#d97706;margin-left:4px;">· 기존 현장에 통합됨</span>` : "")}
+                    </div>
+                    <div style="font-size:11px;color:#64748b;">담당: ${escHtml(r.manager || "미지정")} · 기간: ${escHtml(r.period || "미정")}</div>
+                  </div>
+                </div>
+              </label>
+            `).join("") || `<div style="padding:28px;text-align:center;color:#94a3b8;font-size:12.5px;">불러올 수 있는 현장이 없습니다.</div>`}
+          </div>`;
+        fEl.innerHTML = `
+          <button type="button" class="btn-act-white" onclick="closeModal('syncStatusModal')">취소</button>
+          <button type="button" class="btn-act-blue" onclick="window.submitCollectionSiteImport()">✅ 선택한 현장 수금현황에 등록</button>`;
+        openModal("syncStatusModal");
+      };
+
+      window.submitCollectionSiteImport = function () {
+        const list = window._colImportCandidates || [];
+        const cbs = document.querySelectorAll(".col-import-cb:checked");
+        const picked = [];
+        const baseTime = Date.now();
+        cbs.forEach((cb, k) => {
+          const item = list[Number(cb.getAttribute("data-idx"))];
+          if (!item) return;
+          picked.push({
+            id: `COL-${baseTime}_${k}`,
+            siteName: item.siteName,
+            period: item.period,
+            manager: item.manager,
+            category: item.category,
+            status: item.isDone ? "완료" : "진행중",
+            clientName: "",
+            contractAmount: 0,
+            changeAmount: 0,
+            changeDesc: "",
+            progressRate: item.isDone ? 100 : 0,
+            totalAmount: 0,
+            downPayment: 0,
+            startPayment: 0,
+            midPayment1: 0,
+            midPayment2: 0,
+            midPayment3: 0,
+            finalPayment: 0,
+            collectedAmount: 0,
+            uncollectedAmount: 0,
+            taxInvoice: "미발행",
+            note: ""
+          });
+        });
+        if (picked.length === 0) return showToast("ℹ️ 선택된 현장이 없습니다.");
+        if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+        state.financeDbData.collection = [...picked, ...(state.financeDbData.collection || [])];
+        const ds = window.WSDataService;
+        if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+        if (typeof window.recordAuditLog === "function") {
+          window.recordAuditLog("재무", "일괄 불러오기", `수금현황 ${picked.length}건`, picked.map(p => p.siteName).slice(0, 3).join(", "));
+        }
+        window.closeModal("syncStatusModal");
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+        showToast(`✅ ${picked.length}개 현장이 수금현황에 등록되었습니다.`);
+        if (ds && typeof ds.saveCollectionBatchRows === "function") {
+          ds.saveCollectionBatchRows(picked, state.authUser).catch(err => console.error("saveCollectionBatchRows error:", err));
+        } else if (ds && typeof ds.saveCollectionRow === "function") {
+          picked.forEach(r => ds.saveCollectionRow(r, state.authUser).catch(() => {}));
+        }
+      };
+
       window.deleteAllFilteredExpenses = function() {
         const filtered = getFilteredExpenseList();
         window.executeBatchDeleteExpenses(filtered.map(e => e.id), "현재 조회 전체");
@@ -10313,6 +10454,9 @@ end $$;`;
                   📥 CSV
                 </button>
               ` : ""}
+              <button type="button" class="btn-tool-tag" onclick="window.openCollectionSiteImportModal(false)" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;" title="현장 목록(진행·단건·AS)에서 수금현황 일괄 불러오기">
+                🏗️ 등록 현장 불러오기
+              </button>
               <button type="button" class="btn-act-blue" onclick="window.openCollectionModal(null)" style="height:34px;padding:0 14px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:6px;">
                 + 수금 현장 등록
               </button>
@@ -12427,6 +12571,9 @@ end $$;`;
                 📥 CSV
               </button>
             ` : ""}
+            <button type="button" onclick="window.openCollectionSiteImportModal(false)" style="height:34px;padding:0 9px;font-size:11.5px;font-weight:700;border-radius:6px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;cursor:pointer;white-space:nowrap;">
+              🏗️ 불러오기
+            </button>
             <button type="button" onclick="window.openCollectionModal(null)" style="height:34px;padding:0 10px;font-size:12px;font-weight:700;border-radius:6px;background:#2563eb;color:#fff;border:none;cursor:pointer;white-space:nowrap;">
               + 등록
             </button>
@@ -18396,6 +18543,29 @@ end $$;`;
               await persistDomainSnapshot("finance_db", nextFb);
               await upsertRows("ws_finance_store", [{ record_key: "collection::" + savedId, category: "collection", payload: saved, updated_at: new Date().toISOString() }], "record_key");
               return { success: true, row: saved, id: savedId, source: "supabase" };
+            });
+          };
+
+          ds.saveCollectionBatchRows = function (rows, authUser) {
+            const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
+            if (list.length === 0) return Promise.resolve({ success: true });
+            if (!isSupabaseActive()) {
+              return Promise.all(list.map(r => orig.saveCollectionRow.call(ds, r, authUser))).then(() => ({ success: true }));
+            }
+            bgDualWrite("saveCollectionBatchRows", () => Promise.all(list.map(r => orig.saveCollectionRow.call(ds, r, authUser))));
+            return enqueueKeyWrite("finance_db", async () => {
+              const fb = await ensureFinanceInMemory();
+              const existingIds = new Set((fb.collection || []).map(c => c && c.id));
+              const newOnes = list.filter(r => r && !existingIds.has(r.id));
+              const nextFb = Object.assign({}, fb, {
+                collection: [...newOnes, ...(fb.collection || [])],
+                updatedAt: new Date().toISOString()
+              });
+              await persistDomainSnapshot("finance_db", nextFb);
+              if (newOnes.length > 0) {
+                await upsertRows("ws_finance_store", newOnes.map(r => ({ record_key: "collection::" + r.id, category: "collection", payload: r, updated_at: new Date().toISOString() })), "record_key");
+              }
+              return { success: true, createdCount: newOnes.length, source: "supabase" };
             });
           };
 
