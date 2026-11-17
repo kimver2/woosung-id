@@ -4413,7 +4413,7 @@ end $$;`;
         }).join("") || `<div style="grid-column:1/-1;color:var(--text-muted);font-size:13px;padding:16px;text-align:center;background:#f8fafc;border-radius:10px;">확인할 예정/진행 공정이 없습니다.</div>`;
 
         // 3) 내 담당 진행 현장 미니 카드 그리드 (완료 현장 제외 + 남은 공정 건수 표시)
-        const mySitesCardsHtml = mySites.slice(0, 6).map((s) => {
+        const mySitesCardsHtml = mySites.map((s) => {
           const pct = s.progressRate || 0;
           const barCol = pct >= 80 ? "#10b981" : pct >= 40 ? "#2563eb" : "#f59e0b";
           const mgrText = getUniqueSiteManagers(s.tasks).slice(0, 2).join(", ") || "미지정";
@@ -11070,7 +11070,7 @@ end $$;`;
               <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMobileTab('sites')">전체 ➔</span>
             </div>
             <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;">
-              ${mySites.slice(0, 8).map((s) => {
+              ${mySites.map((s) => {
                 const pct = s.progressRate || 0;
                 const col = pct >= 80 ? "#10b981" : pct >= 40 ? "#2563eb" : "#f59e0b";
                 const remainingCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t)).length;
