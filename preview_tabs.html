@@ -14847,12 +14847,17 @@
         if (btn && btn.disabled) return;
         if (btn) { btn.disabled = true; btn.innerText = "⏳ 승격 처리 중..."; }
 
-        // 1) Optimistic UI 즉시 반영 (0.1초 만에 모달 닫기 및 진행 현장 생성)
+        // 1) Optimistic UI 즉시 반영 (0.01초 만에 모달 닫기 및 홈/캘린더/현장목록 즉시 반영)
         clearDeletedSiteGuardByName(siteName);
         const estSiteObj = getAllSites().find((s) => s.scope === "newSite" && (s.siteKey === curPromoteSiteKey || s.siteName === siteName));
-        if (estSiteObj && estSiteObj.estimateData) {
-          estSiteObj.estimateData.status = "계약 완료";
+        if (estSiteObj) {
+          if (estSiteObj.estimateData) {
+            estSiteObj.estimateData.status = "계약 완료";
+          }
+          estSiteObj.isArchived = true;
+          estSiteObj.isAllCompleted = true;
         }
+        const todayYmd = getTodayYmd();
         let existingSite = getAllSites().find((s) => s.siteName === siteName && (s.scope || "site") !== "newSite");
         if (!existingSite) {
           const nowTs = Date.now();
@@ -14861,23 +14866,37 @@
             siteName: siteName,
             colorCode: "1",
             colorHex: "#0284c7",
-            tasks: computedTasks.map((t, idx) => ({
-              id: "task_" + nowTs + "_" + idx,
-              taskId: "task_" + nowTs + "_" + idx,
-              row: "",
-              taskName: t.taskName,
-              dateDisplay: t.date,
-              startDateStr: t.date,
-              endDateStr: t.date,
-              manager: t.manager || manager,
-              partner: t.partner || "",
-              status: t.status || "예정",
-              isShared: true,
-              memo: t.memo || "",
-              scope: "site",
-              sheetName: "현장데이터",
-              isArchived: false
-            })),
+            tasks: computedTasks.map((t, idx) => {
+              const normYmd = String(t.date || startDate || todayYmd).replace(/\./g, "-").trim().slice(0, 10);
+              const dMs = new Date(normYmd + "T00:00:00").getTime() || nowTs;
+              const rawMgr = String(t.manager || manager || "조항만").trim();
+              const mgrParts = rawMgr.split(",").map((x) => x.trim()).filter(Boolean);
+              const tMemo = String(t.memo || "").trim();
+              return {
+                id: "task_" + nowTs + "_" + idx,
+                taskId: "task_" + nowTs + "_" + idx,
+                row: "",
+                taskName: t.taskName,
+                dateDisplay: formatKoreanDateLabel(normYmd) || normYmd,
+                startDateStr: normYmd,
+                endDateStr: normYmd,
+                dateMs: dMs,
+                manager: rawMgr,
+                manager1: mgrParts[0] || "",
+                manager2: mgrParts[1] || "",
+                partner: t.partner || "",
+                status: t.status || "예정",
+                isShared: true,
+                memo: tMemo,
+                updatedAtMs: nowTs + idx,
+                memoUpdatedAtMs: tMemo ? (nowTs + idx) : 0,
+                isToday: normYmd === todayYmd,
+                isDelayed: Boolean(normYmd && normYmd < todayYmd),
+                scope: "site",
+                sheetName: "현장데이터",
+                isArchived: false
+              };
+            }),
             scope: "site",
             isArchived: false,
             isAllCompleted: false,
@@ -14889,6 +14908,9 @@
           recalcSiteStats(newSiteObj, true);
           if (state.dashData && Array.isArray(state.dashData.sites)) {
             state.dashData.sites.unshift(newSiteObj);
+          }
+          if (state.checkedSiteKeys instanceof Set) {
+            state.checkedSiteKeys.add(newSiteObj.siteKey);
           }
           existingSite = newSiteObj;
         }
@@ -14940,11 +14962,13 @@
               const alreadyHas = state.financeDbData.collection.some(c => (c.id && c.id === res.collectionRow.id) || (c.siteName && c.siteName.trim() === res.collectionRow.siteName.trim()));
               if (!alreadyHas) {
                 state.financeDbData.collection.unshift(res.collectionRow);
-                state.dirtyPcTabs.finance = true;
-                state.dirtyMobileTabs.finance = true;
-                renderActiveViews();
+                if (window.WSDataService && typeof window.WSDataService.saveFinanceCache === "function") {
+                  window.WSDataService.saveFinanceCache(state.financeDbData);
+                }
               }
             }
+            markAllDirty();
+            renderActiveViews();
           } else if (res && res.error) {
             showToast("⚠️ 시트 승격 동기화 알림: " + res.error);
           }
@@ -16644,7 +16668,23 @@
         window.WSDataService.syncLiveFromGAS(syncOpts, ({ dashData, todoData, settingsData, financeData, meta }) => {
           let updated = false;
           if (dashData) {
-            state.dashData = applyDeletedGuardsToDashData(dashData);
+            const cleanDash = applyDeletedGuardsToDashData(dashData);
+            let mutStart = 0;
+            try { mutStart = Number(localStorage.getItem("ws_last_mutation_start_ms") || "0"); } catch (_) {}
+            if (Date.now() - mutStart < 25000 && state.dashData && Array.isArray(state.dashData.sites) && Array.isArray(cleanDash.sites)) {
+              const serverKeys = new Set(cleanDash.sites.map((s) => `${s.scope || "site"}::${_normDelSiteName(s.siteName)}`));
+              state.dashData.sites.forEach((localSite) => {
+                if (!localSite || (localSite.scope || "site") === "newSite") return;
+                const key = `${localSite.scope || "site"}::${_normDelSiteName(localSite.siteName)}`;
+                if (__wsDeletedSiteGuards.has("KEY::" + localSite.siteKey) || __wsDeletedSiteGuards.has("NAME::" + key)) return;
+                const hasPendingOpt = (localSite.tasks || []).some((t) => t && (!t.row || (Number(t.updatedAtMs) || 0) >= mutStart - 2000));
+                if (hasPendingOpt && !serverKeys.has(key)) {
+                  cleanDash.sites.unshift(localSite);
+                  serverKeys.add(key);
+                }
+              });
+            }
+            state.dashData = cleanDash;
             if (window.WSDataService && typeof window.WSDataService.saveDashboardCache === "function") {
               window.WSDataService.saveDashboardCache(state.dashData);
             }
