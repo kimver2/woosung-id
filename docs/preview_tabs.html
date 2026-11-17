@@ -5988,7 +5988,10 @@ end $$;`;
               <div class="scc-sub" style="gap:5px;">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
                   <span style="font-size:11.5px;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">👤 ${escHtml(sMgr)}</span>
-                  ${buildEstimateBadgeHtml("priority", eData.priority || "보통")}
+                  <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                    ${(!isDoneView && !isFailedView) ? getQuoteElapsedBadgeHtml(eData.inquiryDate) : ""}
+                    ${buildEstimateBadgeHtml("priority", eData.priority || "보통")}
+                  </div>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
                   ${buildEstimateBadgeHtml("scope", eData.scope || "전체공사")}
@@ -6111,7 +6114,10 @@ end $$;`;
                 </div>
 
                 <div class="pc-est-card">
-                  <div class="pc-est-card-head"><span class="pc-est-card-icon">🗓️</span><span class="pc-est-card-title">주요 진행 일정</span></div>
+                  <div class="pc-est-card-head" style="justify-content:space-between;">
+                    <div style="display:flex;align-items:center;gap:6px;"><span class="pc-est-card-icon">🗓️</span><span class="pc-est-card-title">주요 진행 일정</span></div>
+                    ${(!isDoneView && !isFailedView) ? getQuoteElapsedBadgeHtml(est.inquiryDate) : ""}
+                  </div>
                   <div class="pc-est-card-body">
                     <div class="pc-est-info-row"><span class="lbl">문의 접수일</span><span class="val">${escHtml(formatEstimateDateYMD(est.inquiryDate))}</span></div>
                     <div class="pc-est-info-row"><span class="lbl">1차 상담일</span><span class="val">${escHtml(formatEstimateDateYMD(est.consultDate))}</span></div>
@@ -14213,7 +14219,10 @@ end $$;`;
                   <span style="font-size:14px;font-weight:800;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.siteName)}</span>
                   ${mIsDone && mIsPromoted ? `<span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:8px;background:#dcfce7;color:#15803d;border:1px solid #86efac;cursor:pointer;white-space:nowrap;" onclick="event.stopPropagation(); navigateToSiteDetail('${escJs(s.siteName)}', true);">✅ 승격됨</span>` : ""}
                 </div>
-                <span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;background:${stStyle.bg};color:${stStyle.fg};border:1px solid ${stStyle.border};white-space:nowrap;flex-shrink:0;">${escHtml(eSt)}</span>
+                <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                  ${(!mIsDone && !isFailedView) ? getQuoteElapsedBadgeHtml(eData.inquiryDate) : ""}
+                  <span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;background:${stStyle.bg};color:${stStyle.fg};border:1px solid ${stStyle.border};white-space:nowrap;flex-shrink:0;">${escHtml(eSt)}</span>
+                </div>
               </div>
               <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-bottom:6px;color:#475569;">
                 <span style="display:inline-flex;align-items:center;gap:4px;font-weight:600;color:#334155;">👤 ${escHtml(sMgr)}</span>
