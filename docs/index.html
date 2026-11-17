@@ -4213,9 +4213,61 @@ end $$;`;
         const spansToday = Boolean(ymd && ymd <= todayYmd && (endYmd || ymd) >= todayYmd);
         if (task.isToday || ymd === todayYmd || spansToday || String(task.status || "").includes("진행")) return "progress";
         if (task.isDelayed || (ymd && ymd < todayYmd)) return "delayed";
+        const tomorrowYmd = addDaysYmd(todayYmd, 1);
+        if (ymd && ymd === tomorrowYmd) return "tomorrow";
         const maxPlannedYmd = addDaysYmd(todayYmd, 7);
-        if (ymd && ymd > todayYmd && ymd <= maxPlannedYmd) return "planned";
+        if (ymd && ymd > tomorrowYmd && ymd <= maxPlannedYmd) return "planned";
         return "";
+      }
+
+      function getHomeFinanceCollectionSummary(todayYmd) {
+        const allCol = (state.financeDbData && Array.isArray(state.financeDbData.collection)) ? state.financeDbData.collection : [];
+        const weekEndYmd = addDaysYmd(todayYmd, 7);
+        const items = [];
+        let totalUncollected = 0;
+        let soonCount = 0;
+        allCol.forEach((r) => {
+          if (!r || !r.siteName) return;
+          const fin = typeof getCollectionRowFinancials === "function" ? getCollectionRowFinancials(r) : { uncollected: 0 };
+          if (!fin || fin.uncollected <= 0) return;
+          totalUncollected += fin.uncollected;
+          let dueYmd = String(r.nextDueDate || "").trim().replace(/\./g, "-").slice(0, 10);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dueYmd) && typeof findMatchedSiteInfo === "function" && typeof getCollectionPeriodInfo === "function") {
+            const pInfo = getCollectionPeriodInfo(r, findMatchedSiteInfo(r.siteName));
+            dueYmd = pInfo && pInfo.endYmd ? pInfo.endYmd : "";
+          }
+          const isSoon = Boolean(dueYmd && dueYmd <= weekEndYmd);
+          if (isSoon) soonCount++;
+          items.push({
+            id: r.id,
+            siteName: r.siteName,
+            clientName: r.clientName || "",
+            uncollected: fin.uncollected,
+            dueYmd,
+            isSoon,
+            taxInvoice: r.taxInvoice || "미발행"
+          });
+        });
+        items.sort((a, b) => {
+          if (a.isSoon !== b.isSoon) return a.isSoon ? -1 : 1;
+          if ((a.dueYmd || "9999") !== (b.dueYmd || "9999")) return (a.dueYmd || "9999").localeCompare(b.dueYmd || "9999");
+          return b.uncollected - a.uncollected;
+        });
+        return { totalUncollected, soonCount, items };
+      }
+
+      function getQuoteElapsedBadgeHtml(inquiryDate, todayYmd) {
+        const s = String(inquiryDate || "").trim().replace(/\./g, "-").slice(0, 10);
+        const t = String(todayYmd || getTodayYmd()).slice(0, 10);
+        const m1 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        const m2 = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!m1 || !m2) return "";
+        const d1 = new Date(Number(m1[1]), Number(m1[2]) - 1, Number(m1[3])).getTime();
+        const d2 = new Date(Number(m2[1]), Number(m2[2]) - 1, Number(m2[3])).getTime();
+        const diffDays = Math.floor((d2 - d1) / 86400000);
+        if (diffDays < 7) return "";
+        const urgent = diffDays >= 14;
+        return `<span style="font-size:10px;font-weight:800;padding:1px 5px;border-radius:4px;background:${urgent ? "#fee2e2" : "#fef3c7"};color:${urgent ? "#b91c1c" : "#b45309"};border:1px solid ${urgent ? "#fca5a5" : "#fde68a"};white-space:nowrap;">⏳ ${diffDays}일 경과</span>`;
       }
 
       function getHomeScopeBadgeHtml(scope) {
@@ -4229,7 +4281,7 @@ end $$;`;
       }
 
       function renderHomeTaskFilterGroupHtml(tasksList, todayYmd) {
-        const counts = { all: tasksList.length, progress: 0, delayed: 0, planned: 0 };
+        const counts = { all: tasksList.length, progress: 0, delayed: 0, tomorrow: 0, planned: 0 };
         tasksList.forEach(({ task, ymd }) => {
           const cat = getHomeTaskCategory(task, ymd, todayYmd);
           if (counts[cat] !== undefined) counts[cat]++;
@@ -4238,6 +4290,7 @@ end $$;`;
           { key: "all", label: "전체" },
           { key: "progress", label: "진행" },
           { key: "delayed", label: "지연" },
+          { key: "tomorrow", label: "내일" },
           { key: "planned", label: "예정" }
         ];
         const cur = state.homeTaskFilter || "all";
@@ -4430,13 +4483,15 @@ end $$;`;
           });
         const todayTasks = myTasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === "progress");
         const delayedTasks = myTasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === "delayed");
+        const tomorrowTasks = myTasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === "tomorrow");
         const activeFilter = state.homeTaskFilter || "all";
         const filteredHomeTasks = activeFilter === "all"
           ? activeOrToday
           : activeOrToday.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === activeFilter);
         const taskFilterGroupHtml = renderHomeTaskFilterGroupHtml(activeOrToday, todayYmd);
 
-        const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s));
+        const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s) && !isQuoteFailedOrHold(s));
+        const homeColSummary = canViewFinance() ? getHomeFinanceCollectionSummary(todayYmd) : null;
         const allTodos = (state.todoData && state.todoData.list) || [];
         const myTodos = allTodos.filter((t) => isUserAssignedTodo(t, user));
         const myPendingTodos = myTodos.filter((t) => t.status !== "완료");
@@ -4475,10 +4530,11 @@ end $$;`;
           const cat = getHomeTaskCategory(task, ymd, todayYmd);
           const isDel = (cat === "delayed");
           const isToday = (cat === "progress");
+          const isTmr = (cat === "tomorrow");
           const cls = isDel ? "danger" : isToday ? "" : "warning";
-          const stBg = isDel ? "#fee2e2" : isToday ? "#dcfce7" : "#dbeafe";
-          const stFg = isDel ? "#dc2626" : isToday ? "#15803d" : "#1e40af";
-          const stLabel = isDel ? "⚠️ 지연" : isToday ? "🔥 오늘 진행" : escHtml(task.status || "예정");
+          const stBg = isDel ? "#fee2e2" : isToday ? "#dcfce7" : isTmr ? "#ede9fe" : "#dbeafe";
+          const stFg = isDel ? "#dc2626" : isToday ? "#15803d" : isTmr ? "#5b21b6" : "#1e40af";
+          const stLabel = isDel ? "⚠️ 지연" : isToday ? "🔥 오늘 진행" : isTmr ? "📅 내일 예정" : escHtml(task.status || "예정");
           const effScope = site.scope || (/^\[단건\]/i.test(site.siteName) ? "single" : /^\[AS\]/i.test(site.siteName) ? "as" : "site");
           const cleanSiteName = String(site.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "");
           return `
@@ -4545,19 +4601,24 @@ end $$;`;
         }
 
         // 우측 신규 견적 파이프라인 카드
-        const quotePreviewHtml = activeNewQuotes.slice(0, 3).map((qs) => {
+        const quotePreviewHtml = activeNewQuotes.slice(0, 4).map((qs) => {
           const ed = qs.estimateData || {};
           const stStyle = getEstimateBadgeStyle("status", ed.status || "신규 문의");
+          const elapsedBadge = getQuoteElapsedBadgeHtml(ed.inquiryDate, todayYmd);
           return `
             <div class="home-quote-mini-card" onclick="openSiteDetail('${escJs(qs.siteKey)}')">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
                 <strong style="font-size:12.5px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(qs.siteName)}</strong>
-                <span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:8px;background:${stStyle.bg};color:${stStyle.fg};border:1px solid ${stStyle.border};white-space:nowrap;">${escHtml(ed.status || "신규 문의")}</span>
+                <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                  ${elapsedBadge}
+                  <span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:8px;background:${stStyle.bg};color:${stStyle.fg};border:1px solid ${stStyle.border};white-space:nowrap;">${escHtml(ed.status || "신규 문의")}</span>
+                </div>
               </div>
               <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-muted);">
                 <span>${escHtml(ed.scope || "전체공사")} · ${escHtml(ed.manager || "미지정")}</span>
                 <span style="color:#2563eb;font-weight:800;">${formatEstimateAmtStr(ed.expectedAmount)}</span>
               </div>
+              ${ed.nextAction ? `<div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:3px 7px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;">⚡ ${escHtml(ed.nextAction)}</div>` : ""}
             </div>`;
         }).join("") || `<div style="font-size:12px;color:var(--text-muted);">진행 중인 신규 견적이 없습니다.</div>`;
 
@@ -4572,6 +4633,7 @@ end $$;`;
                   <div class="home-hero-chips">
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecTodo')">✅ 미완료 To-Do ${myPendingTodos.length}건</span>
                     <span class="home-hero-chip" onclick="setHomeTaskFilter('progress'); scrollAndHighlightHomeSection('homeSecTasks');">🔨 오늘 공정 ${todayTasks.length}건</span>
+                    ${tomorrowTasks.length > 0 ? `<span class="home-hero-chip" onclick="setHomeTaskFilter('tomorrow'); scrollAndHighlightHomeSection('homeSecTasks');">📅 내일 공정 ${tomorrowTasks.length}건</span>` : ""}
                     ${delayedTasks.length > 0 ? `<span class="home-hero-chip" style="background:rgba(239,68,68,0.22);border-color:rgba(254,202,202,0.5);" onclick="setHomeTaskFilter('delayed'); scrollAndHighlightHomeSection('homeSecTasks');">⚠️ 지연 공정 ${delayedTasks.length}건</span>` : ""}
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecSites')">🏢 담당 현장 ${mySites.length}개소</span>
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecQuotes')">📋 신규 견적 ${activeNewQuotes.length}건</span>
@@ -4682,6 +4744,32 @@ end $$;`;
                   </div>
                   <div style="display:flex;flex-direction:column;gap:8px;">${quotePreviewHtml}</div>
                 </div>
+
+                ${homeColSummary ? `
+                <div class="home-panel-box" id="homeSecFinanceCol">
+                  <div class="hp-header">
+                    <span class="hp-title">💰 수금 예정 · 미수 (${homeColSummary.items.length}건)</span>
+                    <a class="hp-link" onclick="state.financeSubTab='collection'; state.financeStatusFilter='uncollected'; switchMainTab('finance');">수금현황 ➔</a>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 10px;margin-bottom:8px;">
+                    <span style="font-size:11.5px;font-weight:700;color:#166534;">총 미수 잔금${homeColSummary.soonCount > 0 ? ` · 7일내 ${homeColSummary.soonCount}건` : ""}</span>
+                    <strong style="font-size:13.5px;color:#15803d;">${formatKrw(homeColSummary.totalUncollected)}</strong>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    ${homeColSummary.items.slice(0, 4).map((c) => `
+                      <div class="home-quote-mini-card" onclick="window.openCollectionModal('${escJs(c.id)}')" style="padding:8px 10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                          <strong style="font-size:12px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.siteName)}</strong>
+                          <strong style="font-size:12px;color:#dc2626;white-space:nowrap;">${formatKrw(c.uncollected)}</strong>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--text-muted);margin-top:2px;">
+                          <span>${c.isSoon ? `<span style="color:#b45309;font-weight:800;">📅 ${escHtml(c.dueYmd)} 예정</span>` : (c.dueYmd ? escHtml(c.dueYmd) : "수금대기")} · ${escHtml(c.clientName || "계약자")}</span>
+                          <span>계산서 ${escHtml(c.taxInvoice)}</span>
+                        </div>
+                      </div>
+                    `).join("") || `<div style="font-size:12px;color:var(--text-muted);">미수 현장이 없습니다. 🎉</div>`}
+                  </div>
+                </div>` : ""}
 
                 <div class="home-panel-box home-memo-panel">
                   <div class="hp-header"><span class="hp-title">📌 최근 현장 메모 브리핑</span></div>
@@ -13091,6 +13179,7 @@ end $$;`;
 
         const todayTasks = tasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === "progress");
         const delayed = tasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === "delayed");
+        const tomorrowTasks = tasks.filter((x) => getHomeTaskCategory(x.task, x.ymd, todayYmd) === "tomorrow");
         const activeFilter = state.homeTaskFilter || "all";
         const filteredMobileTasks = activeFilter === "all"
           ? homeEligibleTasks
@@ -13100,7 +13189,8 @@ end $$;`;
         const isTasksExpanded = Boolean(state.mobileHomeTasksExpanded);
         const visibleMobileTasks = isTasksExpanded ? filteredMobileTasks : filteredMobileTasks.slice(0, limitTasks);
         const hiddenTasksCount = filteredMobileTasks.length - visibleMobileTasks.length;
-        const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s));
+        const activeNewQuotes = getAllSites().filter((s) => s.scope === "newSite" && !isSiteCompleted(s) && !isQuoteFailedOrHold(s));
+        const homeColSummary = canViewFinance() ? getHomeFinanceCollectionSummary(todayYmd) : null;
         const todos = ((state.todoData && state.todoData.list) || []).filter((t) => isUserAssignedTodo(t, user));
         const pendingTodos = todos.filter((t) => t.status !== "완료");
 
@@ -13119,6 +13209,7 @@ end $$;`;
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecTodo" onclick="scrollAndHighlightHomeSection('mHomeSecTodo')">✅ To-Do ${pendingTodos.length}건</button>
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecTasks" onclick="setHomeTaskFilter('progress'); scrollAndHighlightHomeSection('mHomeSecTasks');">🔨 오늘 공정 ${todayTasks.length}건</button>
+              ${tomorrowTasks.length > 0 ? `<button type="button" class="m-hero-chip-btn" data-target="mHomeSecTasks" onclick="setHomeTaskFilter('tomorrow'); scrollAndHighlightHomeSection('mHomeSecTasks');">📅 내일 공정 ${tomorrowTasks.length}건</button>` : ""}
               ${delayed.length > 0 ? `<button type="button" class="m-hero-chip-btn" style="background:rgba(239,68,68,0.28);border-color:rgba(254,202,202,0.55);" data-target="mHomeSecTasks" onclick="setHomeTaskFilter('delayed'); scrollAndHighlightHomeSection('mHomeSecTasks');">⚠️ 지연 공정 ${delayed.length}건</button>` : ""}
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecSites" onclick="scrollAndHighlightHomeSection('mHomeSecSites')">🏢 담당 현장 ${mySites.length}개소</button>
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecQuotes" onclick="scrollAndHighlightHomeSection('mHomeSecQuotes')">📋 신규 견적 ${activeNewQuotes.length}건</button>
@@ -13181,7 +13272,9 @@ end $$;`;
               ${visibleMobileTasks.map(({ site, task, ymd }) => {
                 const phone = lookupPartnerPhone(task.partner);
                 const tid = task.id || task.taskId;
-                const isDel = Boolean(task.isDelayed || (ymd && ymd < todayYmd));
+                const cat = getHomeTaskCategory(task, ymd, todayYmd);
+                const isDel = (cat === "delayed");
+                const isTmr = (cat === "tomorrow");
                 const effScope = site.scope || (/^\[단건\]/i.test(site.siteName) ? "single" : /^\[AS\]/i.test(site.siteName) ? "as" : "site");
                 const cleanSiteName = String(site.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "");
                 return `
@@ -13192,7 +13285,7 @@ end $$;`;
                     </div>
                     <div style="font-size:11.5px;color:var(--text-muted);margin-top:3px;">${escHtml(task.taskName)} · ${escHtml(task.partner || filterRegisteredManagers(task.manager).join(", ") || "-")}</div>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">
-                      <span style="font-size:10.5px;font-weight:700;color:${isDel ? "#dc2626" : "#1e40af"};">${escHtml(ymd)} (${isDel ? "⚠️ 지연" : escHtml(task.status || "예정")})</span>
+                      <span style="font-size:10.5px;font-weight:700;color:${isDel ? "#dc2626" : isTmr ? "#5b21b6" : "#1e40af"};">${escHtml(ymd)} (${isDel ? "⚠️ 지연" : isTmr ? "📅 내일 예정" : escHtml(task.status || "예정")})</span>
                       ${phone ? `<a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="font-size:11px;color:#166534;font-weight:700;text-decoration:none;">📞 통화</a>` : ""}
                     </div>
                   </div>`;
@@ -13245,23 +13338,54 @@ end $$;`;
               <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="switchMobileTab('quote')">전체 ➔</span>
             </div>
             <div style="display:flex;flex-direction:column;gap:7px;">
-              ${activeNewQuotes.slice(0, 3).map((s) => {
+              ${activeNewQuotes.slice(0, 4).map((s) => {
                 const ed = s.estimateData || {};
                 const st = ed.status || "신규 문의";
+                const elapsedBadge = getQuoteElapsedBadgeHtml(ed.inquiryDate, todayYmd);
                 return `
-                  <div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:9px 10px;cursor:pointer;" onclick="switchMobileTab('quote')">
-                    <div style="display:flex;justify-content:space-between;align-items:center;">
-                      <span style="font-size:12.5px;font-weight:800;color:#0f172a;">${escHtml(s.siteName)}</span>
-                      <span style="font-size:10.5px;font-weight:700;color:#2563eb;padding:1px 6px;border-radius:4px;background:#eff6ff;">${escHtml(st)}</span>
+                  <div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:9px 10px;cursor:pointer;" onclick="openSiteDetailMobile('${escJs(s.siteKey)}')">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                      <span style="font-size:12.5px;font-weight:800;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.siteName)}</span>
+                      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                        ${elapsedBadge}
+                        <span style="font-size:10.5px;font-weight:700;color:#2563eb;padding:1px 6px;border-radius:4px;background:#eff6ff;">${escHtml(st)}</span>
+                      </div>
                     </div>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:11px;color:var(--text-muted);">
                       <span>👤 ${escHtml(ed.manager || s.primaryManager || "미지정")} · ${escHtml(ed.scope || "전체공사")}</span>
                       <span style="font-weight:700;color:#1e40af;">${formatEstimateAmtStr(ed.expectedAmount)}</span>
                     </div>
+                    ${ed.nextAction ? `<div style="font-size:10.5px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:3px 7px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;">⚡ ${escHtml(ed.nextAction)}</div>` : ""}
                   </div>`;
               }).join("") || `<div style="font-size:12px;color:var(--text-muted);padding:4px 0;">진행 중인 신규 견적이 없습니다.</div>`}
             </div>
           </div>
+
+          ${homeColSummary ? `
+          <div class="m-card-box" id="mHomeSecFinanceCol">
+            <div class="m-card-title-row">
+              <span class="m-card-title">💰 수금 예정 · 미수 (${homeColSummary.items.length}건)</span>
+              <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="state.financeSubTab='collection'; state.financeStatusFilter='uncollected'; switchMobileTab('finance');">수금현황 ➔</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 10px;margin-bottom:8px;">
+              <span style="font-size:11px;font-weight:700;color:#166534;">총 미수 잔금${homeColSummary.soonCount > 0 ? ` · 7일내 ${homeColSummary.soonCount}건` : ""}</span>
+              <strong style="font-size:13px;color:#15803d;">${formatKrw(homeColSummary.totalUncollected)}</strong>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              ${homeColSummary.items.slice(0, 3).map((c) => `
+                <div style="background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:8px 10px;cursor:pointer;" onclick="window.openCollectionModal('${escJs(c.id)}')">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                    <span style="font-size:12px;font-weight:800;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.siteName)}</span>
+                    <strong style="font-size:12px;color:#dc2626;white-space:nowrap;">${formatKrw(c.uncollected)}</strong>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--text-muted);margin-top:2px;">
+                    <span>${c.isSoon ? `<span style="color:#b45309;font-weight:800;">📅 ${escHtml(c.dueYmd)} 예정</span>` : (c.dueYmd ? escHtml(c.dueYmd) : "수금대기")} · ${escHtml(c.clientName || "계약자")}</span>
+                    <span>계산서 ${escHtml(c.taxInvoice)}</span>
+                  </div>
+                </div>
+              `).join("") || `<div style="font-size:12px;color:var(--text-muted);padding:4px 0;">미수 현장이 없습니다. 🎉</div>`}
+            </div>
+          </div>` : ""}
         `;
       }
 
