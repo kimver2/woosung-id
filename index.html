@@ -5869,7 +5869,6 @@ end $$;`;
                   <div class="pc-est-hero-actions">
                     ${isContractDone ? (isPromoted ? `<button type="button" class="btn-act-blue" style="background:#16a34a;color:#ffffff;font-weight:800;" onclick="navigateToSiteDetail('${escJs(siteName)}', false)" title="진행 현장 바로가기"><span>✅</span> 현장 등록됨 → 보기</button>` : `<button type="button" class="btn-act-blue" style="background:linear-gradient(135deg, #2563eb, #1d4ed8);color:#ffffff;font-weight:800;box-shadow:0 2px 6px rgba(37,99,235,0.3);" onclick="openPromoteEstimateModal('${escJs(curSite.siteKey)}')" title="진행 현장으로 승격"><span>🚀</span> 현장으로 승격</button>`) : ""}
                     <button type="button" class="btn-act-blue" onclick="openSpreadsheetEstimateSheet()" title="스프레드시트 신규견적 탭 열기">📊 시트에서 보기</button>
-                    <button type="button" class="btn-act-blue" style="background:#0f766e;" onclick="openEstimatePdfModal('${escJs(curSite.siteKey)}')" title="A4 견적서(갑지+세부내역서) 작성 및 PDF 출력">📄 견적서 PDF</button>
                     <button type="button" class="btn-act-blue" style="background:#3b82f6;" onclick="openEstimateModal('${escJs(curSite.siteKey)}')" title="신규현장 정보 수정">✏️ 정보 수정</button>
                     <button type="button" class="btn-act-danger" onclick="openDeleteConfirm('site', '${escJs(curSite.siteKey)}')" title="이 신규현장 삭제">🗑️ 현장 삭제</button>
                   </div>
@@ -8570,6 +8569,35 @@ end $$;`;
         return res;
       }
 
+      function buildEstPdfItemsFromSiteTasks(site) {
+        const tasks = (site && Array.isArray(site.tasks)) ? site.tasks : [];
+        if (tasks.length === 0) return null;
+        return tasks.map(t => ({
+          name: (t && t.taskName) ? String(t.taskName) : "공종",
+          spec: [t && t.partner ? t.partner : "", t && t.memo ? t.memo : ""].filter(Boolean).join(" · ") || (t && (t.dateDisplay || t.dateStr) ? String(t.dateDisplay || t.dateStr) : ""),
+          qty: 1,
+          unit: "식",
+          mat: 0,
+          lab: 0,
+          exp: 0
+        }));
+      }
+
+      window.reloadEstPdfFromSiteTasks = function () {
+        const ctx = window._estPdfCtx;
+        if (!ctx) return;
+        const allSites = getAllSites();
+        const site = allSites.find(s => s && (s.siteKey === ctx.siteKey || s.siteName === ctx.siteName));
+        const taskItems = buildEstPdfItemsFromSiteTasks(site);
+        if (!taskItems || taskItems.length === 0) {
+          return showToast("ℹ️ 해당 현장에 등록된 공종이 없습니다.");
+        }
+        ctx.items = taskItems;
+        persistEstPdfCtx();
+        renderEstimatePdfModal();
+        showToast(`✅ 현장 공종 ${taskItems.length}건을 불러왔습니다.`);
+      };
+
       window.openEstimatePdfModal = function (siteKeyOrName) {
         const allSites = getAllSites();
         const site = allSites.find(s => s && (s.siteKey === siteKeyOrName || s.siteName === siteKeyOrName))
@@ -8582,7 +8610,8 @@ end $$;`;
         const storeKey = "ws_estimate_pdf_items_" + (site.siteName || site.siteKey);
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem(storeKey) || "null"); } catch (_) {}
-        const defaultItems = [
+        const taskItems = buildEstPdfItemsFromSiteTasks(site);
+        const defaultItems = taskItems || [
           { name: "철거", spec: "기존 시설물 철거 및 폐기물 반출", qty: 1, unit: "식", mat: 0, lab: 0, exp: 0 },
           { name: "설비/방수", spec: "배관 및 방수 공사", qty: 1, unit: "식", mat: 0, lab: 0, exp: 0 },
           { name: "목공/도어", spec: "천장·벽체·문틀 목공 작업", qty: 1, unit: "식", mat: 0, lab: 0, exp: 0 },
@@ -8843,6 +8872,7 @@ end $$;`;
               <div style="display:flex;gap:8px;align-items:center;font-size:11.5px;">
                 <label>관리비% <input type="number" value="${ctx.overheadRate}" style="width:46px;height:26px;text-align:center;" onchange="window._estPdfCtx.overheadRate=Number(this.value)||0; persistEstPdfCtx(); renderEstimatePdfModal();"></label>
                 <label>이윤% <input type="number" value="${ctx.profitRate}" style="width:46px;height:26px;text-align:center;" onchange="window._estPdfCtx.profitRate=Number(this.value)||0; persistEstPdfCtx(); renderEstimatePdfModal();"></label>
+                <button type="button" class="btn-tool-tag" onclick="window.reloadEstPdfFromSiteTasks()">🔄 현장 공종 불러오기</button>
                 <button type="button" class="btn-tool-tag" onclick="window.addEstPdfRow()">➕ 공종 행 추가</button>
               </div>
             </div>
