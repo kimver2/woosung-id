@@ -23493,8 +23493,40 @@ end $$;`;
       window.filterTodoMember = function (mem) { state.todoMemberFilter = mem; state.dirtyPcTabs.todo = true; renderActiveViews(); };
       window.toggleQuoteArchived = function () { state.quoteShowArchived = !state.quoteShowArchived; state.dirtyPcTabs.quote = true; renderActiveViews(); };
       window.setFinancePartner = function (partner) { state.financePartnerFilter = partner; state.dirtyPcTabs.finance = true; renderActiveViews(); };
-      window.setHomeTaskFilter = function (filter) { state.homeTaskFilter = filter || "all"; state.mobileHomeTasksExpanded = false; state.dirtyPcTabs.home = true; state.dirtyMobileTabs.home = true; renderActiveViews(); };
-      window.toggleMobileHomeTasksExpand = function () { state.mobileHomeTasksExpanded = !state.mobileHomeTasksExpanded; state.dirtyMobileTabs.home = true; renderActiveViews(); };
+      function preserveHomeScrollAndRender(fn) {
+        const scrollTargets = [
+          document.scrollingElement || document.documentElement,
+          document.getElementById("page-home"),
+          document.getElementById("m-page-home"),
+          document.querySelector(".pc-main"),
+          document.querySelector(".m-body")
+        ].filter(Boolean);
+        const saved = scrollTargets.map((el) => [el, el.scrollTop]);
+        const winY = window.scrollY;
+        fn();
+        const restore = () => {
+          saved.forEach(([el, top]) => { if (el) el.scrollTop = top; });
+          if (window.scrollY !== winY) window.scrollTo(0, winY);
+        };
+        restore();
+        requestAnimationFrame(restore);
+      }
+      window.setHomeTaskFilter = function (filter) {
+        preserveHomeScrollAndRender(() => {
+          state.homeTaskFilter = filter || "all";
+          state.mobileHomeTasksExpanded = false;
+          state.dirtyPcTabs.home = true;
+          state.dirtyMobileTabs.home = true;
+          renderActiveViews();
+        });
+      };
+      window.toggleMobileHomeTasksExpand = function () {
+        preserveHomeScrollAndRender(() => {
+          state.mobileHomeTasksExpanded = !state.mobileHomeTasksExpanded;
+          state.dirtyMobileTabs.home = true;
+          renderActiveViews();
+        });
+      };
       window.copyText = copyText;
       window.showToast = showToast;
       window.renderActiveViews = renderActiveViews;
