@@ -4259,13 +4259,30 @@ end $$;`;
         return list;
       }
 
+      const DEFAULT_PROMOTE_TEMPLATE_MEMOS = new Set([
+        "승강기 및 바닥 보양", "철거 및 폐기물 반출", "배관 및 방수", "전기 배선 및 입선",
+        "창호 및 샷시 시공", "가벽, 천장, 도어틀 목공", "욕실/주방 타일 시공", "인테리어 필름 시공",
+        "전체 도배 시공", "바닥 마루 시공", "맞춤가구 및 싱크대", "조명 기구 및 기구 마감",
+        "준공 입주 청소", "잔손보기 및 최종 점검",
+        "동선 보양", "욕실 철거", "벽 및 바닥 타일 시공", "욕실 돔천장 시공",
+        "도기 및 수전 설치", "실리콘 및 최종 점검",
+        "주방 동선 보양", "싱크대 및 주방 철거", "수도 배관 및 전기 입선", "주방 벽 타일 시공",
+        "싱크대 및 아일랜드 설치", "주방 조명 및 후드 연결", "실리콘 및 마감 점검",
+        "보양 작업", "문틀 및 샷시 필름", "걸레받이 및 실리콘 마감",
+        "정밀 실측 및 도면 확인", "바닥 보양", "붙박이장 및 맞춤가구 설치", "가구 마감 및 점검",
+        "창호 제작 정밀 실측", "창호 작업 동선 보양", "기존 창호 철거", "샷시 창호 시공 및 단열",
+        "실리콘 및 유리 마감",
+        "착공 전 실측", "현장 보양", "공사 부위 철거", "목공 및 보수", "최종 마감 및 점검"
+      ]);
+
       function renderHomeMemoBriefingHtml(tasksList, isMobile) {
         const sourceTasks = tasksList || getAllActiveTasksForMemoBriefing();
         const todayYmd = getTodayYmd();
         const minMemoYmd = addDaysYmd(todayYmd, -2);
         const memoTasks = (sourceTasks || [])
           .filter((x) => {
-            if (!x || !x.task || !String(x.task.memo || "").trim()) return false;
+            const mTxt = x && x.task ? String(x.task.memo || "").trim() : "";
+            if (!mTxt || DEFAULT_PROMOTE_TEMPLATE_MEMOS.has(mTxt)) return false;
             const memoYmd = getTaskMemoYmd(x.task);
             if (!memoYmd) return false;
             return memoYmd >= minMemoYmd && memoYmd <= todayYmd;
