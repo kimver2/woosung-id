@@ -447,7 +447,7 @@
         <div class="card hero-card">
           <h1 class="site-title">${esc(p.siteName || "현장 진행 현황")}</h1>
           <div class="meta-row">
-            ${p.manager ? `<span>👤 담당자: ${esc(p.manager)}</span>` : ""}
+            ${p.manager ? `<span>👤 담당자: ${esc(p.manager)}${p.managerPhone ? ` (<a href="tel:${esc(String(p.managerPhone).replace(/[^0-9+]/g, ""))}">📞 ${esc(p.managerPhone)}</a>)` : ""}</span>` : ""}
             ${p.periodText ? `<span>🗓️ 공사기간: ${esc(p.periodText)}</span>` : ""}
             ${p.address ? `<span>📍 ${esc(p.address)} <a href="https://map.naver.com/p/search/${encodeURIComponent(p.address)}" target="_blank" rel="noopener noreferrer">지도 ↗</a></span>` : ""}
           </div>
