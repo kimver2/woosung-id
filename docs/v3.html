@@ -8962,11 +8962,25 @@ end $$;`;
         if (!col) {
           return showToast("ℹ️ 수금현황에 등록된 현장을 먼저 선택해 주세요.");
         }
+        const matchedSite = findMatchedSiteInfo(col.siteName);
+        const pInfo = getCollectionPeriodInfo(col, matchedSite);
+        const resolvedPeriod = col.period || (pInfo && pInfo.periodDisplay) || "";
+
         window._invoiceDocState = {
           colId: col.id,
           docType: "statement", // statement(거래명세서) | invoice(입금청구서) | cashReceipt(현금영수증 확인증)
           amtBasis: "total",    // total(최종계약) | uncollected(미수잔금) | collected(기수금액)
-          vatMode: "included"   // included(부가세 포함) | separate(부가세 별도) | exempt(부가세 제외)
+          vatMode: "included",  // included(부가세 포함) | separate(부가세 별도) | exempt(부가세 제외)
+          editingKey: null,
+          overrides: {
+            issueDate: getTodayYmd(),
+            docNo: "WS-" + String(col.id || "").replace(/[^0-9A-Za-z]/g, "").slice(-6),
+            clientName: col.clientName || col.siteName || "",
+            siteName: col.siteName || "",
+            period: resolvedPeriod,
+            footerNote: ""
+          },
+          customItems: null
         };
         renderFinanceInvoiceDocModal();
         openModal("syncStatusModal");
@@ -8975,6 +8989,79 @@ end $$;`;
       window.setInvoiceDocOption = function (key, val) {
         if (!window._invoiceDocState) return;
         window._invoiceDocState[key] = val;
+        if (key === "amtBasis" || key === "vatMode") {
+          window._invoiceDocState.customItems = null;
+        }
+        window._invoiceDocState.editingKey = null;
+        renderFinanceInvoiceDocModal();
+      };
+
+      window.toggleInvoiceEdit = function (key) {
+        if (!window._invoiceDocState) return;
+        window._invoiceDocState.editingKey = (window._invoiceDocState.editingKey === key) ? null : key;
+        renderFinanceInvoiceDocModal();
+      };
+
+      window.saveInvoiceFieldEdit = function (key, inputId) {
+        if (!window._invoiceDocState) return;
+        const el = document.getElementById(inputId);
+        if (!el) return;
+        const val = String(el.value || "").trim();
+        if (key === "bizNo" || key === "bankInfo" || key === "companyName" || key === "ceoName") {
+          const cur = getSupplierBizInfo();
+          cur[key] = val;
+          try { localStorage.setItem(SUPPLIER_BIZ_KEY, JSON.stringify(cur)); } catch (_) {}
+        } else {
+          window._invoiceDocState.overrides[key] = val;
+        }
+        window._invoiceDocState.editingKey = null;
+        renderFinanceInvoiceDocModal();
+      };
+
+      window.saveInvoiceSupplierPair = function () {
+        if (!window._invoiceDocState) return;
+        const comp = (document.getElementById("invEdit_companyName")?.value || "").trim();
+        const ceo = (document.getElementById("invEdit_ceoName")?.value || "").trim();
+        const cur = getSupplierBizInfo();
+        if (comp) cur.companyName = comp;
+        if (ceo) cur.ceoName = ceo;
+        try { localStorage.setItem(SUPPLIER_BIZ_KEY, JSON.stringify(cur)); } catch (_) {}
+        window._invoiceDocState.editingKey = null;
+        renderFinanceInvoiceDocModal();
+      };
+
+      window.saveInvoiceItemRowEdit = function (idx) {
+        if (!window._invoiceDocState || !Array.isArray(window._invoiceDocState.customItems)) return;
+        const it = window._invoiceDocState.customItems[idx];
+        if (!it) return;
+        const nameEl = document.getElementById("invItemName_" + idx);
+        const basisEl = document.getElementById("invItemBasis_" + idx);
+        const amtEl = document.getElementById("invItemAmt_" + idx);
+        if (nameEl) it.name = nameEl.value.trim();
+        if (basisEl) it.basis = basisEl.value.trim();
+        if (amtEl) {
+          const n = Number(String(amtEl.value || "").replace(/,/g, "").trim());
+          it.amount = isNaN(n) ? 0 : n;
+        }
+        window._invoiceDocState.editingKey = null;
+        renderFinanceInvoiceDocModal();
+      };
+
+      window.addInvoiceItemRow = function () {
+        if (!window._invoiceDocState) return;
+        if (!Array.isArray(window._invoiceDocState.customItems)) window._invoiceDocState.customItems = [];
+        window._invoiceDocState.customItems.push({ name: "추가 공정/내역", basis: "추가분", amount: 0 });
+        window._invoiceDocState.editingKey = "item_" + (window._invoiceDocState.customItems.length - 1);
+        renderFinanceInvoiceDocModal();
+      };
+
+      window.delInvoiceItemRow = function (idx) {
+        if (!window._invoiceDocState || !Array.isArray(window._invoiceDocState.customItems)) return;
+        if (window._invoiceDocState.customItems.length <= 1) {
+          return showToast("최소 1개 이상의 품목 행이 필요합니다.");
+        }
+        window._invoiceDocState.customItems.splice(idx, 1);
+        window._invoiceDocState.editingKey = null;
         renderFinanceInvoiceDocModal();
       };
 
@@ -8987,23 +9074,42 @@ end $$;`;
 
         const fin = getCollectionRowFinancials(col);
         const supplier = getSupplierBizInfo();
-        const todayYmd = getTodayYmd();
+        const ov = st.overrides || {};
 
         let baseAmt = fin.total;
         let basisLabel = "최종 계약금액";
         if (st.amtBasis === "uncollected") { baseAmt = Math.max(0, fin.uncollected); basisLabel = "미수 잔금 청구"; }
         else if (st.amtBasis === "collected") { baseAmt = Math.max(0, fin.collected); basisLabel = "누적 수금액"; }
 
-        let supplyAmt = baseAmt, taxAmt = 0, grandTotal = baseAmt;
-        if (st.vatMode === "included") {
-          supplyAmt = Math.round(baseAmt / 1.1);
-          taxAmt = baseAmt - supplyAmt;
-          grandTotal = baseAmt;
-        } else if (st.vatMode === "separate") {
-          supplyAmt = baseAmt;
-          taxAmt = Math.round(baseAmt * 0.1);
-          grandTotal = supplyAmt + taxAmt;
+        if (!Array.isArray(st.customItems)) {
+          st.customItems = [{
+            name: `[${col.category || "인테리어공사"}] ${ov.siteName || col.siteName}`,
+            basis: basisLabel,
+            amount: baseAmt
+          }];
         }
+
+        const calcItemTax = (rawAmt) => {
+          const a = Number(rawAmt) || 0;
+          if (st.vatMode === "included") {
+            const sup = Math.round(a / 1.1);
+            return { supply: sup, tax: a - sup, total: a };
+          }
+          if (st.vatMode === "separate") {
+            const tax = Math.round(a * 0.1);
+            return { supply: a, tax: tax, total: a + tax };
+          }
+          return { supply: a, tax: 0, total: a };
+        };
+
+        let sumSupply = 0, sumTax = 0, sumGrand = 0;
+        const computedItems = st.customItems.map(it => {
+          const t = calcItemTax(it.amount);
+          sumSupply += t.supply;
+          sumTax += t.tax;
+          sumGrand += t.total;
+          return Object.assign({}, it, t);
+        });
 
         const docTitleMap = {
           statement: "거 래 명 세 서",
@@ -9018,57 +9124,110 @@ end $$;`;
         const fEl = document.getElementById("syncStatusModalFooter");
         if (!tEl || !bEl || !fEl) return;
 
-        tEl.textContent = `📄 [${col.siteName}] 명세서 · 청구서 자동 생성`;
+        tEl.textContent = `📄 [${ov.siteName || col.siteName}] 명세서 · 청구서 자동 생성`;
         if (cEl) cEl.style.display = "inline-flex";
         const modalCard = document.querySelector("#syncStatusModal .ws-modal-card");
-        if (modalCard) modalCard.style.maxWidth = "840px";
+        if (modalCard) modalCard.style.maxWidth = "860px";
+
+        const editBtn = (key, title) => `<button type="button" class="no-print" onclick="window.toggleInvoiceEdit('${key}')" title="${escHtml(title || "수정")}" style="border:none;background:none;cursor:pointer;font-size:11px;padding:0 3px;color:#64748b;vertical-align:middle;">✏️</button>`;
+        const renderCellField = (key, displayVal, placeholder) => {
+          if (st.editingKey === key) {
+            return `
+              <div class="no-print" style="display:flex;gap:4px;align-items:center;">
+                <input type="text" id="invEdit_${key}" value="${escHtml(displayVal === "-" ? "" : displayVal)}" placeholder="${escHtml(placeholder || "")}"
+                  onkeydown="if(event.key==='Enter'){window.saveInvoiceFieldEdit('${key}','invEdit_${key}');}"
+                  style="flex:1;min-width:80px;height:26px;padding:0 6px;border:1px solid #2563eb;border-radius:4px;font-size:12px;" />
+                <button type="button" onclick="window.saveInvoiceFieldEdit('${key}','invEdit_${key}')" style="height:26px;padding:0 7px;border:none;border-radius:4px;background:#2563eb;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">✓</button>
+              </div>`;
+          }
+          return `<span>${escHtml(displayVal || "-")}</span> ${editBtn(key)}`;
+        };
+
+        const defaultFooterNote = `기수금: 계약 ${formatShortAmount(col.downPayment)} · 착수 ${formatShortAmount(col.startPayment)} · 중도 ${formatShortAmount((Number(col.midPayment1)||0)+(Number(col.midPayment2)||0)+(Number(col.midPayment3)||0))} · 잔금 ${formatShortAmount(col.finalPayment)}`;
+        const footerNoteVal = ov.footerNote !== "" ? ov.footerNote : defaultFooterNote;
 
         const docHtml = `
           <div id="invoiceDocPrintArea" style="background:#ffffff;border:1.5px solid #334155;border-radius:8px;padding:22px 24px;color:#0f172a;font-size:12.5px;text-align:left;width:100%;box-sizing:border-box;">
             <div style="text-align:center;font-size:21px;font-weight:900;letter-spacing:6px;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px;">
               ${docTitle}
             </div>
-            <div style="display:flex;justify-content:space-between;font-size:12px;color:#475569;margin-bottom:12px;">
-              <span><strong>작성일:</strong> ${escHtml(todayYmd)}</span>
-              <span><strong>문서번호:</strong> WS-${escHtml(String(col.id || "").replace(/[^0-9A-Za-z]/g, "").slice(-6))}</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#475569;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
+              <span style="display:inline-flex;align-items:center;gap:4px;"><strong>작성일:</strong> ${renderCellField("issueDate", ov.issueDate || getTodayYmd(), "YYYY-MM-DD")}</span>
+              <span style="display:inline-flex;align-items:center;gap:4px;"><strong>문서번호:</strong> ${renderCellField("docNo", ov.docNo || "", "문서번호")}</span>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
               <table style="width:100%;border-collapse:collapse;font-size:12px;">
                 <tr><th colspan="2" style="background:#f1f5f9;border:1px solid #cbd5e1;padding:6px;text-align:center;">공급받는자 (고객)</th></tr>
-                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;width:82px;font-weight:700;background:#f8fafc;white-space:nowrap;">성명/상호</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${escHtml(col.clientName || col.siteName)}</td></tr>
-                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:700;background:#f8fafc;white-space:nowrap;">현장명</td><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:800;">${escHtml(col.siteName)}</td></tr>
-                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:700;background:#f8fafc;white-space:nowrap;">공사기간</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${escHtml(col.period || "-")}</td></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;width:82px;font-weight:700;background:#f8fafc;white-space:nowrap;">성명/상호</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${renderCellField("clientName", ov.clientName || "-", "고객 성명/상호")}</td></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:700;background:#f8fafc;white-space:nowrap;">현장명</td><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:800;">${renderCellField("siteName", ov.siteName || "-", "현장명")}</td></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:700;background:#f8fafc;white-space:nowrap;">공사기간</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${renderCellField("period", ov.period || "-", "예: 2026.11.01 ~ 2026.11.30")}</td></tr>
               </table>
               <table style="width:100%;border-collapse:collapse;font-size:12px;">
                 <tr><th colspan="2" style="background:#eff6ff;border:1px solid #bfdbfe;padding:6px;text-align:center;color:#1e3a8a;">공급자</th></tr>
-                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;width:86px;font-weight:700;background:#f8fafc;white-space:nowrap;">상호/대표</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${escHtml(supplier.companyName)} (${escHtml(supplier.ceoName)})</td></tr>
-                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:700;background:#f8fafc;white-space:nowrap;">사업자번호</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${escHtml(supplier.bizNo || "미입력 (상단에서 입력)")}</td></tr>
-                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:700;background:#f8fafc;white-space:nowrap;">입금계좌</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${escHtml(supplier.bankInfo || "미입력 (상단에서 입력)")}</td></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;width:86px;font-weight:700;background:#f8fafc;white-space:nowrap;">상호/대표</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">
+                  ${st.editingKey === "supplierPair" ? `
+                    <div class="no-print" style="display:flex;gap:4px;align-items:center;">
+                      <input type="text" id="invEdit_companyName" value="${escHtml(supplier.companyName)}" placeholder="상호" style="width:90px;height:26px;padding:0 5px;border:1px solid #2563eb;border-radius:4px;font-size:11.5px;" />
+                      <input type="text" id="invEdit_ceoName" value="${escHtml(supplier.ceoName)}" placeholder="대표자" style="width:66px;height:26px;padding:0 5px;border:1px solid #2563eb;border-radius:4px;font-size:11.5px;" />
+                      <button type="button" onclick="window.saveInvoiceSupplierPair()" style="height:26px;padding:0 7px;border:none;border-radius:4px;background:#2563eb;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">✓</button>
+                    </div>
+                  ` : `<span>${escHtml(supplier.companyName)} (${escHtml(supplier.ceoName)})</span> ${editBtn("supplierPair")}`}
+                </td></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:700;background:#f8fafc;white-space:nowrap;">사업자번호</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${renderCellField("bizNo", supplier.bizNo || "미입력 (상단에서 입력)", "000-00-00000")}</td></tr>
+                <tr><td style="border:1px solid #cbd5e1;padding:6px 8px;font-weight:700;background:#f8fafc;white-space:nowrap;">입금계좌</td><td style="border:1px solid #cbd5e1;padding:6px 8px;">${renderCellField("bankInfo", supplier.bankInfo || "미입력 (상단에서 입력)", "은행 계좌번호 예금주")}</td></tr>
               </table>
             </div>
-            <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
               <thead>
                 <tr style="background:#f8fafc;">
-                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:left;min-width:190px;">품목 / 내역</th>
-                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:center;width:100px;white-space:nowrap;">기준</th>
-                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:right;width:110px;white-space:nowrap;">공급가액</th>
-                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:right;width:95px;white-space:nowrap;">부가세(10%)</th>
-                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:right;width:115px;white-space:nowrap;">합계금액</th>
+                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:left;min-width:180px;">품목 / 내역</th>
+                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:center;width:95px;white-space:nowrap;">기준</th>
+                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:right;width:105px;white-space:nowrap;">공급가액</th>
+                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:right;width:90px;white-space:nowrap;">부가세(10%)</th>
+                  <th style="border:1px solid #cbd5e1;padding:7px 8px;text-align:right;width:110px;white-space:nowrap;">합계금액</th>
+                  <th class="no-print" style="border:1px solid #cbd5e1;padding:7px 4px;text-align:center;width:54px;">편집</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td style="border:1px solid #cbd5e1;padding:10px 8px;font-weight:700;line-height:1.45;word-break:keep-all;">[${escHtml(col.category || "인테리어공사")}] ${escHtml(col.siteName)}</td>
-                  <td style="border:1px solid #cbd5e1;padding:10px 8px;text-align:center;color:#475569;white-space:nowrap;">${escHtml(basisLabel)}</td>
-                  <td style="border:1px solid #cbd5e1;padding:10px 8px;text-align:right;white-space:nowrap;">${supplyAmt.toLocaleString("ko-KR")}원</td>
-                  <td style="border:1px solid #cbd5e1;padding:10px 8px;text-align:right;white-space:nowrap;">${taxAmt.toLocaleString("ko-KR")}원</td>
-                  <td style="border:1px solid #cbd5e1;padding:10px 8px;text-align:right;font-weight:900;color:#1d4ed8;white-space:nowrap;">${grandTotal.toLocaleString("ko-KR")}원</td>
-                </tr>
+                ${computedItems.map((it, idx) => {
+                  const isEd = st.editingKey === ("item_" + idx);
+                  if (isEd) {
+                    return `
+                      <tr class="no-print" style="background:#eff6ff;">
+                        <td style="border:1px solid #cbd5e1;padding:6px;"><input type="text" id="invItemName_${idx}" value="${escHtml(it.name)}" style="width:100%;height:28px;padding:0 6px;border:1px solid #2563eb;border-radius:4px;font-size:12px;" /></td>
+                        <td style="border:1px solid #cbd5e1;padding:6px;"><input type="text" id="invItemBasis_${idx}" value="${escHtml(it.basis)}" style="width:100%;height:28px;padding:0 5px;border:1px solid #2563eb;border-radius:4px;font-size:11.5px;text-align:center;" /></td>
+                        <td colspan="3" style="border:1px solid #cbd5e1;padding:6px;text-align:right;">
+                          <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;">
+                            <span style="font-size:11px;color:#475569;">기준금액:</span>
+                            <input type="text" inputmode="numeric" id="invItemAmt_${idx}" value="${Number(it.amount || 0).toLocaleString('ko-KR')}" onkeydown="if(event.key==='Enter'){window.saveInvoiceItemRowEdit(${idx});}" style="width:120px;height:28px;padding:0 6px;border:1px solid #2563eb;border-radius:4px;font-size:12px;font-weight:700;text-align:right;" />
+                          </div>
+                        </td>
+                        <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">
+                          <button type="button" onclick="window.saveInvoiceItemRowEdit(${idx})" style="height:26px;padding:0 8px;border:none;border-radius:4px;background:#2563eb;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">✓</button>
+                        </td>
+                      </tr>`;
+                  }
+                  return `
+                    <tr>
+                      <td style="border:1px solid #cbd5e1;padding:10px 8px;font-weight:700;line-height:1.45;word-break:keep-all;">${escHtml(it.name)}</td>
+                      <td style="border:1px solid #cbd5e1;padding:10px 8px;text-align:center;color:#475569;white-space:nowrap;">${escHtml(it.basis)}</td>
+                      <td style="border:1px solid #cbd5e1;padding:10px 8px;text-align:right;white-space:nowrap;">${it.supply.toLocaleString("ko-KR")}원</td>
+                      <td style="border:1px solid #cbd5e1;padding:10px 8px;text-align:right;white-space:nowrap;">${it.tax.toLocaleString("ko-KR")}원</td>
+                      <td style="border:1px solid #cbd5e1;padding:10px 8px;text-align:right;font-weight:900;color:#1d4ed8;white-space:nowrap;">${it.total.toLocaleString("ko-KR")}원</td>
+                      <td class="no-print" style="border:1px solid #cbd5e1;padding:6px 4px;text-align:center;white-space:nowrap;">
+                        <button type="button" onclick="window.toggleInvoiceEdit('item_${idx}')" style="border:none;background:none;cursor:pointer;font-size:12px;padding:2px;" title="품목 행 수정">✏️</button>
+                        ${computedItems.length > 1 ? `<button type="button" onclick="window.delInvoiceItemRow(${idx})" style="border:none;background:none;cursor:pointer;font-size:11px;color:#dc2626;padding:2px;" title="삭제">✕</button>` : ""}
+                      </td>
+                    </tr>`;
+                }).join("")}
               </tbody>
             </table>
+            <div class="no-print" style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+              <button type="button" class="btn-tool-tag" onclick="window.addInvoiceItemRow()" style="height:26px;padding:0 9px;font-size:11px;font-weight:700;">+ 품목 행 추가</button>
+            </div>
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;font-size:12px;">
-              <span>기수금: 계약 ${formatShortAmount(col.downPayment)} · 착수 ${formatShortAmount(col.startPayment)} · 중도 ${formatShortAmount((Number(col.midPayment1)||0)+(Number(col.midPayment2)||0)+(Number(col.midPayment3)||0))} · 잔금 ${formatShortAmount(col.finalPayment)}</span>
-              <strong style="color:#0f172a;font-size:13.5px;white-space:nowrap;">청구 합계: ${grandTotal.toLocaleString("ko-KR")}원</strong>
+              <span style="flex:1;min-width:220px;">${renderCellField("footerNote", footerNoteVal, "하단 기수금/비고 문구")}</span>
+              <strong style="color:#0f172a;font-size:13.5px;white-space:nowrap;">청구 합계: ${sumGrand.toLocaleString("ko-KR")}원</strong>
             </div>
           </div>`;
 
@@ -9104,7 +9263,7 @@ end $$;`;
             ${docHtml}
           </div>`;
 
-        window._lastInvoiceCopyText = `[홈택스 발행용 정보]\n품목: [${col.category || "인테리어공사"}] ${col.siteName}\n고객: ${col.clientName || col.siteName}\n공급가액: ${supplyAmt.toLocaleString("ko-KR")}원\n부가세(10%): ${taxAmt.toLocaleString("ko-KR")}원\n합계금액: ${grandTotal.toLocaleString("ko-KR")}원\n기준: ${basisLabel}`;
+        window._lastInvoiceCopyText = `[홈택스 발행용 정보]\n품목: ${computedItems.map(i => i.name).join(", ")}\n고객: ${ov.clientName || ov.siteName || col.siteName}\n공급가액: ${sumSupply.toLocaleString("ko-KR")}원\n부가세(10%): ${sumTax.toLocaleString("ko-KR")}원\n합계금액: ${sumGrand.toLocaleString("ko-KR")}원`;
         fEl.innerHTML = `
           <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;" onclick="copyText(window._lastInvoiceCopyText || ''); showToast('📋 홈택스 입력 정보가 복사되었습니다.');">📋 홈택스 정보 복사</button>
           <button type="button" class="btn-act-blue" style="height:34px;padding:0 14px;font-size:12.5px;" onclick="window.printFinanceInvoiceDoc()">🖨️ 인쇄 / PDF 저장</button>
@@ -9114,9 +9273,11 @@ end $$;`;
       window.printFinanceInvoiceDoc = function () {
         const area = document.getElementById("invoiceDocPrintArea");
         if (!area) return;
+        const clone = area.cloneNode(true);
+        clone.querySelectorAll(".no-print").forEach(el => el.remove());
         const win = window.open("", "_blank", "width=900,height=1050");
         if (!win) return showToast("⚠️ 팝업 차단을 해제해 주세요.");
-        win.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>우성아이디 거래명세서·청구서</title><style>@page{size:A4 portrait;margin:14mm;}*{box-sizing:border-box;}body{font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;margin:0;padding:18px;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact;}#invoiceDocPrintArea{width:100%;max-width:182mm;margin:0 auto;}@media print{body{padding:0;}#invoiceDocPrintArea{border-width:1.5px;max-width:none;}}</style></head><body>${area.outerHTML}<script>window.onload=function(){setTimeout(function(){window.print();},200);};<\/script></body></html>`);
+        win.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>우성아이디 거래명세서·청구서</title><style>@page{size:A4 portrait;margin:14mm;}*{box-sizing:border-box;}body{font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;margin:0;padding:18px;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact;}#invoiceDocPrintArea{width:100%;max-width:182mm;margin:0 auto;}@media print{body{padding:0;}#invoiceDocPrintArea{border-width:1.5px;max-width:none;}.no-print{display:none!important;}}</style></head><body>${clone.outerHTML}<script>window.onload=function(){setTimeout(function(){window.print();},200);};<\/script></body></html>`);
         win.document.close();
       };
 
