@@ -18723,9 +18723,18 @@ end $$;`;
         const sourceOptionsHtml = (!selectedSource ? `<option value="" selected disabled>선택하세요</option>` : "") +
           sources.map((so) => `<option value="${escHtml(so)}" ${selectedSource === so ? "selected" : ""}>${escHtml(so)}</option>`).join("");
 
-        const siteNamesForAs = Array.from(new Set(
-          getAllSites().filter((s) => s && s.scope !== "newSite" && s.siteName).map((s) => s.siteName)
-        ));
+        const activeAsSites = [];
+        const completedAsSites = [];
+        const seenAsNames = new Set();
+        getAllSites().forEach((s) => {
+          if (!s || (s.scope || "site") === "newSite" || !s.siteName || seenAsNames.has(s.siteName)) return;
+          seenAsNames.add(s.siteName);
+          if (isSiteCompleted(s)) completedAsSites.push(s);
+          else activeAsSites.push(s);
+        });
+        activeAsSites.sort(compareActiveSites);
+        completedAsSites.sort(compareDoneSites);
+        const siteNamesForAs = [...activeAsSites, ...completedAsSites].map((s) => s.siteName);
 
         const titleMap = {
           site: ctx.isEdit ? `📋 [${ed.siteName}] 신규 견적 수정` : "📋 신규 현장 견적 등록",
@@ -18781,13 +18790,31 @@ end $$;`;
             </div>
           `;
         } else if (qt === "as") {
+          const curAsSite = String(ed.siteName || "").trim();
+          const isKnownAsSite = curAsSite && siteNamesForAs.includes(curAsSite);
+          const isNewAsSiteMode = Boolean(ed._isNewSiteInput || (curAsSite && !isKnownAsSite));
+          const asSelectVal = isNewAsSiteMode ? "__NEW__" : curAsSite;
           document.getElementById("estimateModalBody").innerHTML = `
             ${typeSwitcherHtml}
             ${buildDatalistHtml("esTasksDl", tasksMaster)}
             ${buildDatalistHtml("esPartnersDl", partnersMaster)}
-            ${buildDatalistHtml("esAsSitesDl", siteNamesForAs)}
             <div class="form-grid-3">
-              <div class="fg"><label>대상 현장명 *</label><input class="ws-input" id="esSite" list="esAsSitesDl" value="${escHtml(ed.siteName)}" placeholder="기존 현장 선택 또는 직접 입력"></div>
+              <div class="fg">
+                <label>대상 현장 선택 *</label>
+                <select class="ws-select" id="esAsSiteSelect" onchange="window.onEstAsSiteSelectChange(this.value)">
+                  <option value="">-- 현장 선택 --</option>
+                  ${activeAsSites.length ? `
+                    <optgroup label="── 진행 현장 ──">
+                      ${activeAsSites.map((s) => `<option value="${escHtml(s.siteName)}" ${asSelectVal === s.siteName ? "selected" : ""}>${escHtml(s.siteName)}</option>`).join("")}
+                    </optgroup>` : ""}
+                  ${completedAsSites.length ? `
+                    <optgroup label="── 완료된 본 현장 (AS 연동) ──">
+                      ${completedAsSites.slice(0, 80).map((s) => `<option value="${escHtml(s.siteName)}" ${asSelectVal === s.siteName ? "selected" : ""}>[완료] ${escHtml(s.siteName)}</option>`).join("")}
+                    </optgroup>` : ""}
+                  <option value="__NEW__" ${asSelectVal === "__NEW__" ? "selected" : ""}>+ 새 현장명 직접 입력</option>
+                </select>
+                ${isNewAsSiteMode ? `<input class="ws-input" id="esSite" value="${escHtml(curAsSite)}" placeholder="새 AS 대상 현장명 입력" style="margin-top:6px;">` : `<input type="hidden" id="esSite" value="${escHtml(curAsSite)}">`}
+              </div>
               <div class="fg"><label>진행 단계</label><select class="ws-select" id="esStatus">${statuses.map((s) => `<option value="${escHtml(s)}" ${ed.status === s ? "selected" : ""}>${escHtml(s)}</option>`).join("")}</select></div>
               <div class="fg"><label>우선순위</label><select class="ws-select" id="esPrio">${["높음", "긴급", "보통", "낮음"].map((p) => `<option value="${p}" ${ed.priority === p ? "selected" : ""}>${p}</option>`).join("")}</select></div>
             </div>
@@ -18897,6 +18924,31 @@ end $$;`;
           <button type="button" class="btn-act-white" onclick="closeModal('estimateEditModal')">취소</button>
           <button type="button" class="btn-act-blue" onclick="saveEstimateModal()">💾 저장</button>
         `;
+      };
+
+      window.onEstAsSiteSelectChange = function (val) {
+        const ctx = state._estCtx; if (!ctx) return;
+        const ed = ctx.ed || (ctx.ed = {});
+        if (val === "__NEW__") {
+          ed._isNewSiteInput = true;
+          ed.siteName = "";
+        } else {
+          ed._isNewSiteInput = false;
+          ed.siteName = val;
+          if (val) {
+            const matchedCol = (state.financeDbData && Array.isArray(state.financeDbData.collection))
+              ? state.financeDbData.collection.find((c) => c && c.siteName && c.siteName.replace(/^\[(단건|AS)\]\s*/i, "").trim() === val.replace(/^\[(단건|AS)\]\s*/i, "").trim())
+              : null;
+            if (matchedCol && matchedCol.clientName && !ed.clientName) {
+              ed.clientName = matchedCol.clientName;
+            }
+            const sInfo = getSiteInfo(val);
+            if (sInfo && sInfo.officePhone && !ed.clientPhone) {
+              ed.clientPhone = sInfo.officePhone;
+            }
+          }
+        }
+        renderEstimateModal();
       };
 
       window.saveEstimateModal = function () {
