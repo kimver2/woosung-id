@@ -4499,8 +4499,6 @@
 
       // ================= [PC 탭 4: 현장 목록 (체크박스/모달 완비)] =================
       function renderPcSitesTab() {
-        document.getElementById("pcSiteSidebar").innerHTML = renderSharedSidebarHtml("sites");
-
         const sitesPool = getScopeSites(true);
         const q = state.searchQuery.trim();
         const m = state.memberFilter;
@@ -4545,6 +4543,7 @@
 
         let selectedSite = visibleSites.find((s) => s.siteKey === state.selectedSiteKey) || visibleSites[0] || sitesPool[0];
         if (selectedSite) state.selectedSiteKey = selectedSite.siteKey;
+        document.getElementById("pcSiteSidebar").innerHTML = renderSharedSidebarHtml("sites");
 
         const activeCountAll = sitesPool.filter((s) => !isSiteCompleted(s)).length;
         const doneCountAll = sitesPool.filter((s) => isSiteCompleted(s)).length;
@@ -5238,14 +5237,13 @@
       };
 
       function renderPcQuoteTab() {
-        const sb = document.getElementById("pcQuoteSidebar");
-        if (sb) sb.innerHTML = renderSharedSidebarHtml("quote");
-
         const isDoneView = state.quoteStatusFilter === "done";
         const { activeQuotes, doneQuotes, filtered } = getSortedQuotesForTab(state.quoteStatusFilter);
 
         let curSite = filtered.find((s) => s.siteKey === state.selectedQuoteKey) || filtered[0] || null;
         if (curSite) state.selectedQuoteKey = curSite.siteKey;
+        const sb = document.getElementById("pcQuoteSidebar");
+        if (sb) sb.innerHTML = renderSharedSidebarHtml("quote");
 
         const carouselHtml = filtered.map((s) => {
           const isSel = curSite && s.siteKey === curSite.siteKey;
