@@ -14538,7 +14538,7 @@
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px;">
               <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#0f172a;font-size:13px;">
-                  <input type="checkbox" id="pmModalAutoTasks" checked onchange="updatePromoteSchedulePreview()" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
+                  <input type="checkbox" id="pmModalAutoTasks" checked onchange="updatePromoteSchedulePreview(true)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
                   착공예정일 기준 표준 공정 자동 생성
                 </label>
                 <span style="font-size:11px;color:#64748b;">(04_공종 마스터 기준)</span>
@@ -14556,11 +14556,14 @@
                 </div>
               </div>
               <div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                  <span style="font-size:12px;font-weight:800;color:#334155;">📋 초기 생성 공정 세트 미리보기</span>
-                  <span id="pmModalTaskCountBadge" style="font-size:11px;color:#2563eb;font-weight:700;"></span>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
+                  <span style="font-size:12px;font-weight:800;color:#334155;">📋 초기 생성 공정 세트 (공종·날짜 자유 변경 가능)</span>
+                  <div style="display:inline-flex;align-items:center;gap:8px;">
+                    <span id="pmModalTaskCountBadge" style="font-size:11px;color:#2563eb;font-weight:700;"></span>
+                    <button type="button" id="btnAddPromoteTaskRow" class="btn-tool-tag" onclick="addPromoteTaskRow()" style="padding:2px 8px;font-size:11px;background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;font-weight:700;">➕ 공정 추가</button>
+                  </div>
                 </div>
-                <div id="pmModalSchedulePreviewBox" style="background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;padding:10px;max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;"></div>
+                <div id="pmModalSchedulePreviewBox" style="background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;padding:10px;max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
               </div>
               <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;color:#166534;font-size:12.5px;">
@@ -14591,38 +14594,100 @@
         closeModal("promoteEstimateModal");
       };
 
-      window.updatePromoteSchedulePreview = function () {
+      window.updatePromoteSchedulePreview = function (keepExistingEdits) {
         const autoCb = document.getElementById("pmModalAutoTasks");
         const isAuto = autoCb ? autoCb.checked : true;
         const configRow = document.getElementById("pmModalConfigRow");
         const previewBox = document.getElementById("pmModalSchedulePreviewBox");
         const countBadge = document.getElementById("pmModalTaskCountBadge");
+        const addBtn = document.getElementById("btnAddPromoteTaskRow");
         if (!previewBox) return;
 
         if (!isAuto) {
           if (configRow) configRow.style.opacity = "0.5";
+          if (addBtn) addBtn.style.display = "none";
           if (countBadge) countBadge.innerText = "1개 기본 행";
           previewBox.innerHTML = '<div style="font-size:12px;color:#64748b;padding:8px 6px;text-align:center;">※ 공정 일정 없이 현장 기본 정보(상담 1행)만 진행 현장에 등록됩니다.</div>';
           return;
         }
 
         if (configRow) configRow.style.opacity = "1";
+        if (addBtn) addBtn.style.display = "inline-flex";
         const scopeEl = document.getElementById("pmModalScope");
         const scope = scopeEl ? scopeEl.value : "전체공사";
         const dateEl = document.getElementById("pmModalStartDate");
         const startDate = dateEl ? dateEl.value : getTodayYmd();
-        const tasks = getDefaultProcessSchedule(scope, startDate, curPromoteEstimateData ? curPromoteEstimateData.manager : "조항만");
-        if (countBadge) countBadge.innerText = tasks.length + "개 공종 자동 생성";
-        previewBox.innerHTML = tasks.map((t, idx) => `
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:#f8fafc;border-radius:6px;font-size:12px;border:1px solid #f1f5f9;">
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-weight:800;color:#94a3b8;width:18px;text-align:right;">${idx + 1}.</span>
-              <strong style="color:#0f172a;min-width:55px;">${escHtml(t.taskName)}</strong>
-              <span style="color:#64748b;font-size:11px;">(${escHtml(t.memo || "")})</span>
+        const mgr = curPromoteEstimateData ? curPromoteEstimateData.manager : "조항만";
+
+        if (!keepExistingEdits || !Array.isArray(state.promoteEditableTasks)) {
+          const baseTasks = getDefaultProcessSchedule(scope, startDate, mgr);
+          state.promoteEditableTasks = baseTasks.map((t) => Object.assign({ enabled: true }, t));
+        }
+
+        const tasks = state.promoteEditableTasks || [];
+        const activeCount = tasks.filter((t) => t.enabled !== false).length;
+        if (countBadge) countBadge.innerText = `${activeCount}개 공종 선택됨`;
+
+        const masterTasks = getTasksList();
+        previewBox.innerHTML = tasks.map((t, idx) => {
+          const isChecked = t.enabled !== false;
+          const curTaskName = String(t.taskName || "").trim();
+          const allTaskNames = Array.from(new Set([curTaskName, ...masterTasks].filter(Boolean)));
+          const taskOptionsHtml = allTaskNames.map((tn) =>
+            `<option value="${escHtml(tn)}" ${tn === curTaskName ? "selected" : ""}>${escHtml(tn)}</option>`
+          ).join("");
+          return `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;background:${isChecked ? "#f8fafc" : "#f1f5f9"};opacity:${isChecked ? "1" : "0.55"};border-radius:6px;font-size:12px;border:1px solid #e2e8f0;">
+              <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
+                <input type="checkbox" ${isChecked ? "checked" : ""} onchange="onPromoteTaskRowToggle(${idx}, this.checked)" style="width:15px;height:15px;accent-color:#2563eb;cursor:pointer;flex-shrink:0;" title="이 공정 생성 여부">
+                <span style="font-weight:800;color:#94a3b8;width:18px;text-align:right;flex-shrink:0;">${idx + 1}.</span>
+                <select class="sheet-filter-select" onchange="onPromoteTaskRowChange(${idx}, 'taskName', this.value)" style="padding:3px 6px;font-size:12px;font-weight:700;color:#0f172a;min-width:92px;max-width:120px;height:28px;">
+                  ${taskOptionsHtml}
+                </select>
+                <input type="text" class="ws-input" value="${escHtml(t.memo || "")}" placeholder="비고/작업내용" oninput="onPromoteTaskRowChange(${idx}, 'memo', this.value)" style="flex:1;min-width:70px;height:28px;font-size:11.5px;padding:2px 7px;">
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
+                <input type="date" class="sheet-filter-select" value="${escHtml(t.date || startDate)}" onchange="onPromoteTaskRowChange(${idx}, 'date', this.value)" style="padding:3px 6px;font-size:11.5px;font-weight:700;color:#2563eb;height:28px;width:130px;">
+                <button type="button" onclick="removePromoteTaskRow(${idx})" title="이 행 삭제" style="border:none;background:#fee2e2;color:#dc2626;border-radius:5px;width:24px;height:24px;font-size:11px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;">✕</button>
+              </div>
             </div>
-            <span style="color:#2563eb;font-weight:700;font-size:11.5px;">📅 ${escHtml(t.date)}</span>
-          </div>
-        `).join("");
+          `;
+        }).join("") || '<div style="font-size:12px;color:#64748b;padding:8px 6px;text-align:center;">생성할 공정이 없습니다. 우측 상단 [➕ 공정 추가]를 눌러 추가하세요.</div>';
+      };
+
+      window.onPromoteTaskRowToggle = function (idx, checked) {
+        if (!Array.isArray(state.promoteEditableTasks) || !state.promoteEditableTasks[idx]) return;
+        state.promoteEditableTasks[idx].enabled = Boolean(checked);
+        window.updatePromoteSchedulePreview(true);
+      };
+      window.onPromoteTaskRowChange = function (idx, field, val) {
+        if (!Array.isArray(state.promoteEditableTasks) || !state.promoteEditableTasks[idx]) return;
+        state.promoteEditableTasks[idx][field] = val;
+      };
+      window.removePromoteTaskRow = function (idx) {
+        if (!Array.isArray(state.promoteEditableTasks)) return;
+        state.promoteEditableTasks.splice(idx, 1);
+        window.updatePromoteSchedulePreview(true);
+      };
+      window.addPromoteTaskRow = function () {
+        if (!Array.isArray(state.promoteEditableTasks)) state.promoteEditableTasks = [];
+        const dateEl = document.getElementById("pmModalStartDate");
+        const fallbackDate = (state.promoteEditableTasks.length ? state.promoteEditableTasks[state.promoteEditableTasks.length - 1].date : "") || (dateEl ? dateEl.value : getTodayYmd());
+        const mgr = curPromoteEstimateData ? curPromoteEstimateData.manager : "조항만";
+        const defaultTaskName = (getTasksList()[0]) || "기타공정";
+        state.promoteEditableTasks.push({
+          enabled: true,
+          taskName: defaultTaskName,
+          date: fallbackDate,
+          manager: mgr,
+          partner: "",
+          status: "예정",
+          isShared: true,
+          memo: ""
+        });
+        window.updatePromoteSchedulePreview(true);
+        const previewBox = document.getElementById("pmModalSchedulePreviewBox");
+        if (previewBox) previewBox.scrollTop = previewBox.scrollHeight;
       };
 
       window.submitPromoteEstimateModal = function () {
@@ -14639,9 +14704,14 @@
         const autoCreateCollection = autoColCb ? autoColCb.checked : true;
         const manager = ed.manager || "조항만";
 
-        const computedTasks = generateTasks ? getDefaultProcessSchedule(scope, startDate, manager) : [{
-          taskName: "상담", date: startDate, manager: manager, partner: "", status: "예정", isShared: true, memo: ed.memo ? "견적 메모: " + ed.memo : ""
-        }];
+        const customSelectedTasks = Array.isArray(state.promoteEditableTasks)
+          ? state.promoteEditableTasks.filter((t) => t && t.enabled !== false && String(t.taskName || "").trim())
+          : null;
+        const computedTasks = generateTasks
+          ? (customSelectedTasks && customSelectedTasks.length > 0 ? customSelectedTasks : getDefaultProcessSchedule(scope, startDate, manager))
+          : [{
+              taskName: "상담", date: startDate, manager: manager, partner: "", status: "예정", isShared: true, memo: ed.memo ? "견적 메모: " + ed.memo : ""
+            }];
 
         const payload = {
           siteName: siteName,
