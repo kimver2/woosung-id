@@ -253,21 +253,6 @@
       color: #64748b;
       margin-top: 2px;
     }
-    .drive-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      width: 100%;
-      padding: 11px;
-      border-radius: 10px;
-      background: #f0f9ff;
-      border: 1px solid #bae6fd;
-      color: #0369a1;
-      font-size: 13px;
-      font-weight: 800;
-      text-decoration: none;
-    }
     .empty-card {
       text-align: center;
       padding: 48px 20px;
@@ -762,12 +747,6 @@
         </div>
 
         ${paymentHtml}
-
-        ${p.driveUrl ? `
-          <div class="card" style="padding:12px;">
-            <a href="${esc(p.driveUrl)}" target="_blank" rel="noopener noreferrer" class="drive-btn">📂 현장 공유 자료 · 사진 보기 ↗</a>
-          </div>
-        ` : ""}
 
         ${calHtml}
 

@@ -18528,7 +18528,6 @@ end $$;`;
           noticeText: String(shareCfg.noticeText !== undefined ? shareCfg.noticeText : buildDefaultClientShareNotice(siteName)),
           showPayment,
           payment,
-          driveUrl: shareCfg.showDrive === true ? String(info.driveUrl || "") : "",
           progressRate,
           totalTasksCount,
           completedTasksCount,
@@ -18557,7 +18556,6 @@ end $$;`;
         const token = existing.token || generateClientShareToken();
         const enabled = existing.token ? (existing.enabled !== false) : true;
         const showPayment = existing.showPayment !== false;
-        const showDrive = existing.showDrive === true;
         const isLegacyAutoNotice = Boolean(
           !existing.noticeText
           || existing.noticeText === DEFAULT_CLIENT_SHARE_NOTICE
@@ -18566,7 +18564,7 @@ end $$;`;
         const noticeText = isLegacyAutoNotice
           ? DEFAULT_CLIENT_SHARE_NOTICE
           : existing.noticeText;
-        state._clientShareDraft = { siteName, token, enabled, showPayment, showDrive, noticeText };
+        state._clientShareDraft = { siteName, token, enabled, showPayment, noticeText };
 
         tEl.textContent = `🔗 [${siteName}] 고객용 진행 현황 공유`;
         if (cEl) cEl.style.display = "inline-flex";
@@ -18593,10 +18591,6 @@ end $$;`;
                 <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#1e293b;cursor:pointer;">
                   <input type="checkbox" id="csPayChk" ${d.showPayment ? "checked" : ""} onchange="state._clientShareDraft.showPayment = this.checked;" style="width:16px;height:16px;accent-color:#2563eb;">
                   💰 수금 진행 현황 함께 표시
-                </label>
-                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#1e293b;cursor:pointer;">
-                  <input type="checkbox" id="csDriveChk" ${d.showDrive ? "checked" : ""} onchange="state._clientShareDraft.showDrive = this.checked;" style="width:16px;height:16px;accent-color:#2563eb;">
-                  📂 현장 공유 자료 링크 표시
                 </label>
               </div>
 
@@ -18668,7 +18662,6 @@ end $$;`;
           token: d.token,
           enabled: !!d.enabled,
           showPayment: !!d.showPayment,
-          showDrive: !!d.showDrive,
           noticeText: String(d.noticeText || ""),
           updatedAt: new Date().toISOString()
         };
