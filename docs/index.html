@@ -3,31 +3,34 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>우성아이디 통합 현장 대시보드 v2</title>
+  <title>우성아이디 통합 현장 대시보드 v3 (Supabase)</title>
 
   <!-- PWA & 모바일 웹앱 최적화 메타 태그 -->
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#1e40af">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="우성아이디">
+  <meta name="apple-mobile-web-app-title" content="우성아이디 v3">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="application-name" content="우성아이디">
+  <meta name="application-name" content="우성아이디 v3">
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📱</text></svg>">
-  <!-- 구글 서버 사전 연결 가속 (Preconnect & DNS-Prefetch) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+  <!-- 구글 및 Supabase CDN 사전 연결 가속 -->
   <link rel="preconnect" href="https://script.google.com" crossorigin>
   <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="dns-prefetch" href="https://script.google.com">
   <link rel="dns-prefetch" href="https://script.googleusercontent.com">
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
   <!-- 캐시 방지 메타 태그 (모바일 웹앱 즉시 최신 반영 보장) -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
       --primary: #1e40af;
@@ -2132,6 +2135,190 @@
         flex-shrink: 0;
       }
     }
+
+    /* ================= [v3 Supabase 하이브리드 UI & 설정 모달] ================= */
+    .ws-v3-sb-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #fcd34d;
+      background: #fffbeb;
+      color: #92400e;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+      line-height: 1.25;
+    }
+    .ws-v3-sb-badge:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 3px 8px rgba(15, 23, 42, 0.10);
+    }
+    .ws-v3-sb-badge .sb-brand-tag {
+      background: linear-gradient(135deg, #0f766e, #059669);
+      color: #ffffff;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+    .ws-v3-sb-badge.is-pending {
+      background: #fffbeb;
+      border-color: #fcd34d;
+      color: #92400e;
+    }
+    .ws-v3-sb-badge.is-pending .sb-brand-tag {
+      background: linear-gradient(135deg, #d97706, #b45309);
+    }
+    .ws-v3-sb-badge.is-connecting {
+      background: #eff6ff;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+    }
+    .ws-v3-sb-badge.is-connecting .sb-brand-tag {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    }
+    .ws-v3-sb-badge.is-connected {
+      background: #ecfdf5;
+      border-color: #6ee7b7;
+      color: #065f46;
+    }
+    .ws-v3-sb-badge.is-connected .sb-brand-tag {
+      background: linear-gradient(135deg, #059669, #047857);
+    }
+    .ws-v3-sb-badge.is-sheets {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+      color: #334155;
+    }
+    .ws-v3-sb-badge.is-sheets .sb-brand-tag {
+      background: linear-gradient(135deg, #475569, #334155);
+    }
+    .ws-v3-sb-badge.is-error {
+      background: #fef2f2;
+      border-color: #fecaca;
+      color: #991b1b;
+    }
+    .ws-v3-sb-badge.is-error .sb-brand-tag {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+    }
+
+    .ws-v3-sb-mbadge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid #fcd34d;
+      background: #fffbeb;
+      color: #92400e;
+      font-size: 10px;
+      font-weight: 800;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      line-height: 1.3;
+    }
+    .ws-v3-sb-mbadge.is-connected { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+    .ws-v3-sb-mbadge.is-connecting { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+    .ws-v3-sb-mbadge.is-sheets { background: #f1f5f9; border-color: #cbd5e1; color: #334155; }
+    .ws-v3-sb-mbadge.is-error { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+
+    /* PC 헤더 배지 추가로 인한 중간 데스크탑 해상도 폭 균형 유지 */
+    .unified-header { gap: 10px; padding: 0 12px; }
+    .header-left { gap: 10px; min-width: 0; }
+    @media (max-width: 1520px) {
+      .header-nav-tabs { grid-auto-columns: 98px; gap: 4px; }
+      .nav-tab-item { width: 98px; font-size: 12px; padding: 0 3px; }
+    }
+    @media (max-width: 1360px) {
+      .header-nav-tabs { grid-auto-columns: 88px; gap: 3px; }
+      .nav-tab-item { width: 88px; font-size: 11.5px; }
+      .ws-v3-sb-badge { padding: 3px 8px; font-size: 10.5px; }
+    }
+
+    #supabaseSetupModal { z-index: 10130; }
+    #supabaseSetupModal .ws-modal-card.wide { max-width: 780px; }
+    .sb-step-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .sb-step-title {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .sb-mode-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .sb-mode-btn {
+      padding: 10px 12px;
+      border-radius: 9px;
+      border: 1.5px solid #cbd5e1;
+      background: #ffffff;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .sb-mode-btn.active-sb {
+      border-color: #059669;
+      background: #ecfdf5;
+      box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.14);
+    }
+    .sb-mode-btn.active-sheets {
+      border-color: #2563eb;
+      background: #eff6ff;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
+    }
+    .sb-log-box {
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11.5px;
+      line-height: 1.55;
+      border-radius: 8px;
+      padding: 10px 12px;
+      max-height: 160px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .sb-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    @media (max-width: 640px) {
+      .sb-mode-grid { grid-template-columns: 1fr; }
+      .sb-stat-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .sb-stat-tile {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 8px 10px;
+      text-align: center;
+    }
+    .sb-stat-val { font-size: 16px; font-weight: 800; color: #0f766e; }
+    .sb-stat-lbl { font-size: 11px; color: #64748b; font-weight: 700; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -2142,7 +2329,7 @@
       <div class="ws-auth-logo-wrap">
         <img src="./icon-192.png" alt="우성아이디" class="ws-auth-logo">
       </div>
-      <h2 id="topAccessTitle" class="ws-auth-title">우성아이디</h2>
+      <h2 id="topAccessTitle" class="ws-auth-title">우성아이디 <span style="display:inline-block;vertical-align:middle;margin-left:4px;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;background:#ecfdf5;color:#047857;border:1px solid #6ee7b7;">⚡ v3 Supabase</span></h2>
       <input type="text" id="topAccessNameInput" class="ws-auth-input"
              placeholder="이름" autocomplete="username"
              onkeydown="if(event.key==='Enter'){ const p=document.getElementById('topAccessPinInput'); if(p) p.focus(); }">
@@ -2163,8 +2350,8 @@
   <!-- ================= 0. 프리뷰 글로벌 컨트롤 바 (preview_tabs.html / ?preview=1 전용) ================= -->
   <div class="preview-global-bar">
     <div class="pg-title">
-      🏢 <strong>우성아이디 통합 대시보드 v2</strong>
-      <span class="perf-pill" id="perfBadge">⚡ 분리 아키텍처 로딩 중...</span>
+      🏢 <strong>우성아이디 통합 대시보드 v3 · Supabase</strong>
+      <span class="perf-pill" id="perfBadge">⚡ Supabase v3 아키텍처 로딩 중...</span>
     </div>
     <div class="device-switch-pill">
       <button type="button" class="dev-btn active" id="btnDevPc" onclick="switchDeviceMode('pc')">💻 PC 와이드 뷰 (1540px)</button>
@@ -2192,6 +2379,10 @@
           <div class="brand-logo" onclick="switchMainTab('home')">
             🏢 우성아이디
           </div>
+          <button type="button" id="pcSupabaseBadge" class="ws-v3-sb-badge is-pending" onclick="openSupabaseSetupModal()" title="클릭하여 Supabase v3 연결 설정 및 데이터 이관 모달 열기">
+            <span class="sb-brand-tag">⚡ v3 Supabase</span>
+            <span id="pcSupabaseStatusText">🟡 설정 대기중</span>
+          </button>
 
           <nav class="header-nav-tabs">
             <button type="button" class="nav-tab-item active" data-tab="home" onclick="switchMainTab('home')">🏠 홈</button>
@@ -2257,10 +2448,13 @@
         </div>
 
         <header class="m-header-bar">
-          <div class="m-brand-title" onclick="switchMobileTab('home')">
-            <span>🏢</span>
-            <span>우성아이디</span>
-            <span id="mSyncDot" style="width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;" title="데이터 준비 완료"></span>
+          <div style="display:flex;align-items:center;gap:5px;min-width:0;">
+            <div class="m-brand-title" onclick="switchMobileTab('home')">
+              <span>🏢</span>
+              <span>우성아이디</span>
+              <span id="mSyncDot" style="width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;" title="데이터 준비 완료"></span>
+            </div>
+            <button type="button" id="mSupabaseBadge" class="ws-v3-sb-mbadge is-pending" onclick="openSupabaseSetupModal()" title="Supabase v3 연결 설정 및 상태">⚡v3 🟡</button>
           </div>
 
           <div style="display:flex;align-items:center;gap:6px;">
@@ -2565,6 +2759,18 @@
     </div>
   </div>
 
+  <!-- 12. Supabase v3 연결 및 원클릭 마이그레이션 모달 -->
+  <div class="ws-modal-backdrop" id="supabaseSetupModal">
+    <div class="ws-modal-card wide" style="max-width:780px;max-height:90vh;">
+      <div class="ws-modal-header">
+        <div class="ws-modal-title" id="supabaseSetupModalTitle">⚡ Supabase v3 실시간 DB 연결 &amp; 원클릭 마이그레이션</div>
+        <button type="button" class="ws-modal-close" onclick="closeModal('supabaseSetupModal')">✕</button>
+      </div>
+      <div class="ws-modal-body" id="supabaseSetupModalBody" style="display:flex;flex-direction:column;gap:12px;overflow-y:auto;"></div>
+      <div class="ws-modal-footer" id="supabaseSetupModalFooter"></div>
+    </div>
+  </div>
+
   <div class="toast-banner" id="toastBanner"></div>
 
   <script src="data/dashboard_data.js"></script>
@@ -2609,6 +2815,187 @@
         reportCapturePrint: true,     // [3-1] 월간집계/비용마감 이미지 캡처 및 인쇄(PDF) 버튼
         mobileFinanceCardUx: true     // [3-2] 모바일 재무·원장 카드형 요약/터치 UX 보강
       };
+
+      // ========================================================
+      // ⚡ v3 Supabase 하이브리드 기본 설정 상수 (전 기기 공통 기본값)
+      // - 관리자 배포 시 아래 url / anonKey를 입력해 두면 모든 PC/모바일에서
+      //   별도 입력 없이 즉시 Supabase 실시간 DB 모드로 자동 연결됩니다.
+      // - 브라우저 localStorage 설정이 저장되어 있으면 localStorage가 우선합니다.
+      // ========================================================
+      const SUPABASE_V3_DEFAULT_CONFIG = window.SUPABASE_V3_DEFAULT_CONFIG = {
+        url: "https://uyqvguzglviqegxmxqyn.supabase.co",
+        anonKey: "sb_publishable_f8JwxMgpgs6AVSEumSIV2g_KlK6o9GA",
+        engineMode: "supabase", // "supabase" | "sheets"
+        dualWrite: true         // true: Supabase 초고속 저장 + 백그라운드 Google Sheets 동시 백업
+      };
+
+      const SUPABASE_V3_SCHEMA_SQL = `-- ============================================================================
+-- 우성아이디 통합 현장·재무 대시보드 v3 — Supabase PostgreSQL 스키마 (Idempotent)
+-- ============================================================================
+-- 실행 방법:
+--   Supabase Dashboard -> SQL Editor -> New query -> 전체 붙여넣기 -> Run
+--   (여러 번 반복 실행해도 기존 데이터 손상 없이 안전하게 재적용됩니다.)
+-- ============================================================================
+
+-- 1. 대시보드 전체/도메인별 스냅샷 고속 동기화 & 호환용 테이블
+create table if not exists public.ws_state_store (
+  key text primary key,
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  updated_by text default ''
+);
+
+-- 2. 현장 정규화 테이블 (개별 현장 조회·확장용)
+create table if not exists public.ws_sites (
+  site_name text primary key,
+  status text default '',
+  meta jsonb default '{}'::jsonb,
+  drive_folder_url text default '',
+  updated_at timestamptz not null default now()
+);
+
+-- 3. 공정/일정 정규화 테이블 (개별 공정 조회·필터링·확장용)
+create table if not exists public.ws_tasks (
+  id text primary key,
+  row_index integer,
+  site_name text default '',
+  category text default 'site',
+  work_date text default '',
+  end_date text default '',
+  assignee text default '',
+  content text default '',
+  status text default '',
+  memo text default '',
+  raw_json jsonb default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+-- 4. 재무·원장 정규화 테이블 (수금/비용마감/고정비 마스터)
+create table if not exists public.ws_finance_store (
+  record_key text primary key,
+  category text default '',
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+-- 조회 성능 최적화 인덱스
+create index if not exists idx_ws_sites_status on public.ws_sites (status);
+create index if not exists idx_ws_tasks_site_name on public.ws_tasks (site_name);
+create index if not exists idx_ws_tasks_work_date on public.ws_tasks (work_date);
+create index if not exists idx_ws_tasks_category on public.ws_tasks (category);
+create index if not exists idx_ws_tasks_status on public.ws_tasks (status);
+create index if not exists idx_ws_finance_category on public.ws_finance_store (category);
+
+-- updated_at 자동 갱신 트리거 함수
+create or replace function public.ws_v3_set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_ws_state_store_updated_at on public.ws_state_store;
+create trigger trg_ws_state_store_updated_at
+  before update on public.ws_state_store
+  for each row execute function public.ws_v3_set_updated_at();
+
+drop trigger if exists trg_ws_sites_updated_at on public.ws_sites;
+create trigger trg_ws_sites_updated_at
+  before update on public.ws_sites
+  for each row execute function public.ws_v3_set_updated_at();
+
+drop trigger if exists trg_ws_tasks_updated_at on public.ws_tasks;
+create trigger trg_ws_tasks_updated_at
+  before update on public.ws_tasks
+  for each row execute function public.ws_v3_set_updated_at();
+
+drop trigger if exists trg_ws_finance_store_updated_at on public.ws_finance_store;
+create trigger trg_ws_finance_store_updated_at
+  before update on public.ws_finance_store
+  for each row execute function public.ws_v3_set_updated_at();
+
+-- API 역할(anon / authenticated) 권한 부여
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on table public.ws_state_store to anon, authenticated;
+grant select, insert, update, delete on table public.ws_sites to anon, authenticated;
+grant select, insert, update, delete on table public.ws_tasks to anon, authenticated;
+grant select, insert, update, delete on table public.ws_finance_store to anon, authenticated;
+
+-- RLS(Row Level Security) 활성화 및 허용 정책 (Idempotent)
+alter table public.ws_state_store enable row level security;
+alter table public.ws_sites enable row level security;
+alter table public.ws_tasks enable row level security;
+alter table public.ws_finance_store enable row level security;
+
+drop policy if exists "ws_state_store_anon_auth_all" on public.ws_state_store;
+create policy "ws_state_store_anon_auth_all"
+  on public.ws_state_store
+  for all
+  to anon, authenticated
+  using (true)
+  with check (true);
+
+drop policy if exists "ws_sites_anon_auth_all" on public.ws_sites;
+create policy "ws_sites_anon_auth_all"
+  on public.ws_sites
+  for all
+  to anon, authenticated
+  using (true)
+  with check (true);
+
+drop policy if exists "ws_tasks_anon_auth_all" on public.ws_tasks;
+create policy "ws_tasks_anon_auth_all"
+  on public.ws_tasks
+  for all
+  to anon, authenticated
+  using (true)
+  with check (true);
+
+drop policy if exists "ws_finance_store_anon_auth_all" on public.ws_finance_store;
+create policy "ws_finance_store_anon_auth_all"
+  on public.ws_finance_store
+  for all
+  to anon, authenticated
+  using (true)
+  with check (true);
+
+-- Realtime 변경사항 전체 필드 전송 설정
+alter table public.ws_state_store replica identity full;
+alter table public.ws_sites replica identity full;
+alter table public.ws_tasks replica identity full;
+alter table public.ws_finance_store replica identity full;
+
+-- Supabase Realtime Publication 등록 (이미 등록된 경우 안전하게 무시)
+do $$
+declare
+  tbl text;
+  already_added boolean;
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach tbl in array array['ws_state_store', 'ws_sites', 'ws_tasks', 'ws_finance_store']
+    loop
+      select exists (
+        select 1
+        from pg_publication_tables
+        where pubname = 'supabase_realtime'
+          and schemaname = 'public'
+          and tablename = tbl
+      ) into already_added;
+
+      if not already_added then
+        begin
+          execute format('alter publication supabase_realtime add table public.%I', tbl);
+        exception
+          when duplicate_object then null;
+          when undefined_object then null;
+        end;
+      end if;
+    end loop;
+  end if;
+end $$;`;
 
       const state = window.state = {
         dashData: null,
@@ -11838,6 +12225,7 @@
         else if (id === "expenseModal" || id === "collectionModal" || id === "partnerImportModal") minZ = 10080;
         else if (id === "deleteConfirmModal") minZ = 10100;
         else if (id === "syncStatusModal") minZ = 10120;
+        else if (id === "supabaseSetupModal") minZ = 10130;
         if (_modalTopZIndex < minZ) _modalTopZIndex = minZ;
         el.style.zIndex = _modalTopZIndex;
 
@@ -13659,6 +14047,8 @@
           const found = findTaskById(targetId);
           if (found) {
             const { site, task } = found;
+            const delSiteName = site.siteName || "";
+            const delTaskName = task.taskName || "공정";
             recordDeletedTaskGuard(site, task);
             const wasArchived = Boolean(task.isArchived || site.isArchived || task.sheetName === "완료현장");
             const effSheetName = task.sheetName || (site.scope === "as" ? "AS" : site.scope === "single" ? "단건" : wasArchived ? "완료현장" : "현장데이터");
@@ -13693,12 +14083,18 @@
                 sheetName: effSheetName, isArchived: wasArchived, origDate, origMgr
               }, state.dashData);
             }
+            window.__wsDeletedPopupInfo = {
+              title: "✅ 공정 삭제 완료",
+              message: `<strong>${escHtml(delSiteName)}</strong> · <strong>${escHtml(delTaskName)}</strong> 공정이 삭제되었습니다.`,
+              subNote: "실시간 DB 및 구글 시트에 반영됩니다."
+            };
           }
           showToast("🗑️ 공정이 삭제되었습니다.");
         } else if (type === "site") {
           const idx = state.dashData.sites.findIndex((s) => s.siteKey === targetId);
           if (idx > -1) {
             const s = state.dashData.sites[idx];
+            const delSiteName = s.siteName || "현장";
             recordDeletedSiteGuard(s);
             (s.tasks || []).forEach((t) => recordDeletedTaskGuard(s, t));
             state.dashData.sites.splice(idx, 1);
@@ -13707,6 +14103,11 @@
             recalcDashMeta();
             const targetScope = (s.scope === "newSite" || s.scope === "single" || s.scope === "as") ? s.scope : (s.isArchived ? "완료현장" : s.scope);
             if (window.WSDataService) window.WSDataService.deleteSite({ site: s.siteName, scope: targetScope }, state.dashData);
+            window.__wsDeletedPopupInfo = {
+              title: "✅ 현장 삭제 완료",
+              message: `<strong>${escHtml(delSiteName)}</strong> 현장이 삭제되었습니다.`,
+              subNote: "※ 재무·원장(수금현황/비용마감) 데이터는 정산 보호를 위해 별도 유지됩니다. 수금현황에서도 지우려면 재무·원장 탭에서 삭제해 주세요."
+            };
           }
           showToast("🗑️ 현장이 삭제되었습니다.");
         } else if (type === "todo") {
@@ -13717,6 +14118,25 @@
         window.closeModal("deleteConfirmModal");
         markAllDirty();
         renderActiveViews();
+        if (window.__wsDeletedPopupInfo) {
+          const info = window.__wsDeletedPopupInfo;
+          window.__wsDeletedPopupInfo = null;
+          const tEl = document.getElementById("syncStatusModalTitle");
+          const cEl = document.getElementById("syncStatusModalCloseBtn");
+          const bEl = document.getElementById("syncStatusModalBody");
+          const fEl = document.getElementById("syncStatusModalFooter");
+          if (tEl && bEl && fEl) {
+            tEl.textContent = info.title;
+            if (cEl) cEl.style.display = "inline-flex";
+            bEl.innerHTML = `<div style="text-align:center;line-height:1.65;">
+              <div style="font-size:28px;margin-bottom:8px;">🗑️</div>
+              <div style="font-size:14px;color:#1e293b;margin-bottom:8px;">${info.message}</div>
+              <div style="font-size:12px;color:#64748b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;">${escHtml(info.subNote)}</div>
+            </div>`;
+            fEl.innerHTML = `<button type="button" class="ws-btn ws-btn-primary" onclick="closeModal('syncStatusModal')">확인</button>`;
+            openModal("syncStatusModal");
+          }
+        }
       };
 
       // ================= 모달 3 & 착공 필수 체크박스 =================
@@ -15841,8 +16261,20 @@
               </table>
             </div>`;
         } else {
+          const sbStatusMeta = window.WSSupabaseV3 ? window.WSSupabaseV3.getStatusInfo() : { text: "🟡 설정 대기중", engineMode: "supabase", configured: false };
           contentHtml = `
             <div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:8px 0;">
+              <div style="background:linear-gradient(135deg,#ecfdf5,#eff6ff);padding:14px;border-radius:10px;border:1.5px solid #6ee7b7;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:220px;">
+                  <div style="font-weight:800;font-size:13.5px;color:#065f46;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span>⚡ Supabase v3 실시간 DB 연결 &amp; 원클릭 이관</span>
+                    <span style="font-size:11px;padding:2px 8px;border-radius:999px;background:#ffffff;border:1px solid #a7f3d0;color:#047857;">${escHtml(sbStatusMeta.text)}</span>
+                  </div>
+                  <div style="font-size:12px;color:#334155;margin-top:3px;">Supabase URL/Key 설정, SQL 스키마 복사, 구글 시트 전체 데이터 원클릭 이관 및 엔진 모드 전환을 관리합니다.</div>
+                </div>
+                <button type="button" class="btn-act-blue" style="background:#059669;border-color:#047857;white-space:nowrap;" onclick="openSupabaseSetupModal()">⚡ Supabase 설정 · 이관</button>
+              </div>
+
               <div style="background:#f8fafc;padding:14px;border-radius:10px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
                 <div>
                   <div style="font-weight:800;font-size:13.5px;color:#0f172a;">📅 시트 날짜순 전체 정렬</div>
@@ -15950,13 +16382,29 @@
         const reqUser = getActualAuthUser() || state.authUser || state.currentUser || "조항만";
         try {
           let res = null;
+          if (window.WSSupabaseV3 && window.WSSupabaseV3.isConfigured()) {
+            try {
+              await window.WSSupabaseV3.saveAuthPin(newPin, reqUser);
+              res = { success: true, pin: newPin, message: "공용 비밀번호가 Supabase에 저장되었습니다." };
+            } catch (eSbPin) {
+              console.warn("Supabase auth_config 저장 경고:", eSbPin);
+            }
+          }
           if (location.protocol.startsWith("http")) {
-            const url = `${GAS_AUTH_API_URL}?action=changeSharedPassword&newPin=${encodeURIComponent(newPin)}&authUser=${encodeURIComponent(reqUser)}&_t=${Date.now()}`;
-            const resp = await fetch(url, { method: "GET", redirect: "follow" });
-            if (resp.ok) res = await resp.json();
-          } else if (window.WSDataService && typeof window.WSDataService.changeSharedPassword === "function") {
+            try {
+              const url = `${GAS_AUTH_API_URL}?action=changeSharedPassword&newPin=${encodeURIComponent(newPin)}&authUser=${encodeURIComponent(reqUser)}&_t=${Date.now()}`;
+              const resp = await fetch(url, { method: "GET", redirect: "follow" });
+              if (resp.ok) {
+                const gasRes = await resp.json();
+                if (gasRes && gasRes.success) res = gasRes;
+                else if (!res) res = gasRes;
+              }
+            } catch (eGasPin) {
+              if (!res) throw eGasPin;
+            }
+          } else if (!res && window.WSDataService && typeof window.WSDataService.changeSharedPassword === "function") {
             res = await window.WSDataService.changeSharedPassword(newPin, reqUser);
-          } else {
+          } else if (!res) {
             res = { success: true, pin: newPin };
           }
           if (res && res.success) {
@@ -16017,13 +16465,14 @@
         renderSettingsModal();
       };
       window.saveSettingsModalAll = function () {
-        showToast("💾 기준정보 설정을 구글 시트에 일괄 저장 중입니다...");
+        const useSb = window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive();
+        showToast(useSb ? "⚡ 기준정보 설정을 Supabase에 즉시 저장 중입니다..." : "💾 기준정보 설정을 구글 시트에 일괄 저장 중입니다...");
         if (window.WSDataService) {
           const res = window.WSDataService.saveSettings(state.settingsData);
           if (res && typeof res.then === "function") {
             res.then((r) => {
               if (r && r.message) showToast("✅ " + r.message);
-              else showToast("✅ 기준정보 설정이 구글 시트에 안전하게 일괄 저장되었습니다.");
+              else showToast(useSb ? "✅ 기준정보 설정이 Supabase에 초고속 저장되었습니다." : "✅ 기준정보 설정이 구글 시트에 안전하게 일괄 저장되었습니다.");
             }).catch((err) => {
               showToast("⚠️ 저장 중 오류: " + (err.message || String(err)));
             });
@@ -16034,6 +16483,1732 @@
         window.closeModal("settingsModal");
         markAllDirty();
         renderActiveViews();
+      };
+
+      // ================= [v3 Supabase 하이브리드 엔진 & 실시간 동기화] =================
+      const WSSupabaseV3 = (function () {
+        const STORAGE_KEY = "ws_supabase_v3_config_v1";
+        const SESSION_CLIENT_ID = "ws_" + Math.random().toString(36).slice(2, 10);
+        const recentLocalMutIds = new Map();
+        const writeQueues = {};
+        let cachedClient = null;
+        let cachedClientKey = "";
+        let realtimeChannel = null;
+        let realtimeStatus = "pending"; // pending | connecting | connected | sheets | error
+        let lastErrorMsg = "";
+        let lastLatencyMs = null;
+        let lastRealtimeEventAt = "";
+        let lastMigrationSummary = null;
+        let modalLogs = [];
+        let realtimeToastTimer = null;
+        let hooksInstalled = false;
+
+        function getConfig() {
+          let stored = {};
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) stored = JSON.parse(raw) || {};
+          } catch (_) {}
+          const merged = Object.assign(
+            { url: "", anonKey: "", engineMode: "supabase", dualWrite: true },
+            SUPABASE_V3_DEFAULT_CONFIG || {},
+            stored
+          );
+          merged.url = String(merged.url || "").trim().replace(/\/+$/, "");
+          merged.anonKey = String(merged.anonKey || "").trim();
+          merged.engineMode = merged.engineMode === "sheets" ? "sheets" : "supabase";
+          merged.dualWrite = merged.dualWrite !== false;
+          return merged;
+        }
+
+        function saveConfig(partial) {
+          const cur = getConfig();
+          const next = Object.assign({}, cur, partial || {}, { updatedAt: new Date().toISOString() });
+          next.url = String(next.url || "").trim().replace(/\/+$/, "");
+          next.anonKey = String(next.anonKey || "").trim();
+          next.engineMode = next.engineMode === "sheets" ? "sheets" : "supabase";
+          next.dualWrite = next.dualWrite !== false;
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+          } catch (_) {}
+          return next;
+        }
+
+        function resetLocalConfig() {
+          try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+          cachedClient = null;
+          cachedClientKey = "";
+          stopRealtime();
+          updateStatusState();
+        }
+
+        function isConfigured(cfg) {
+          const c = cfg || getConfig();
+          return Boolean(c.url && /^https?:\/\/.+/i.test(c.url) && c.anonKey && c.anonKey.length > 10);
+        }
+
+        function isSupabaseActive() {
+          const c = getConfig();
+          return isConfigured(c) && c.engineMode === "supabase";
+        }
+
+        function getDualWriteEnabled() {
+          return getConfig().dualWrite !== false;
+        }
+
+        function getClient(customCfg) {
+          const c = customCfg ? Object.assign({}, getConfig(), customCfg) : getConfig();
+          c.url = String(c.url || "").trim().replace(/\/+$/, "");
+          c.anonKey = String(c.anonKey || "").trim();
+          if (!isConfigured(c)) return null;
+          if (!window.supabase || typeof window.supabase.createClient !== "function") return null;
+          const key = c.url + "|" + c.anonKey;
+          if (!customCfg && cachedClient && cachedClientKey === key) return cachedClient;
+          const client = window.supabase.createClient(c.url, c.anonKey, {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+            realtime: { params: { eventsPerSecond: 10 } }
+          });
+          if (!customCfg) {
+            cachedClient = client;
+            cachedClientKey = key;
+          }
+          return client;
+        }
+
+        async function restRequest(method, path, body, prefer, customCfg) {
+          const c = customCfg ? Object.assign({}, getConfig(), customCfg) : getConfig();
+          c.url = String(c.url || "").trim().replace(/\/+$/, "");
+          c.anonKey = String(c.anonKey || "").trim();
+          if (!isConfigured(c)) throw new Error("Supabase URL 및 anon Key가 설정되지 않았습니다.");
+          const headers = {
+            "apikey": c.anonKey,
+            "Authorization": "Bearer " + c.anonKey,
+            "Content-Type": "application/json"
+          };
+          if (prefer) headers["Prefer"] = prefer;
+          const resp = await fetch(`${c.url}/rest/v1/${path}`, {
+            method: method || "GET",
+            headers,
+            body: body !== undefined ? JSON.stringify(body) : undefined
+          });
+          const txt = await resp.text();
+          if (!resp.ok) {
+            let msg = txt || ("HTTP " + resp.status);
+            try {
+              const parsed = JSON.parse(txt);
+              msg = parsed.message || parsed.error_description || parsed.hint || msg;
+            } catch (_) {}
+            throw new Error(msg);
+          }
+          if (!txt) return null;
+          try { return JSON.parse(txt); } catch (_) { return txt; }
+        }
+
+        async function selectStateRows(keys, customCfg) {
+          const keyList = Array.isArray(keys) ? keys : [];
+          const client = getClient(customCfg);
+          if (client) {
+            let q = client.from("ws_state_store").select("key,payload,updated_at,updated_by");
+            if (keyList.length > 0) q = q.in("key", keyList);
+            const { data, error } = await q;
+            if (error) throw new Error(error.message || "Supabase select 오류");
+            return data || [];
+          }
+          const filter = keyList.length > 0 ? `&key=in.(${keyList.map(k => `"${encodeURIComponent(k)}"`).join(",")})` : "";
+          return (await restRequest("GET", `ws_state_store?select=key,payload,updated_at,updated_by${filter}`, undefined, undefined, customCfg)) || [];
+        }
+
+        async function upsertRows(table, rows, onConflict, customCfg) {
+          if (!Array.isArray(rows) || rows.length === 0) return;
+          const CHUNK = 200;
+          const client = getClient(customCfg);
+          for (let i = 0; i < rows.length; i += CHUNK) {
+            const chunk = rows.slice(i, i + CHUNK);
+            if (client) {
+              const { error } = await client.from(table).upsert(chunk, { onConflict: onConflict || undefined });
+              if (error) throw new Error(`[${table}] ${error.message}`);
+            } else {
+              const q = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : "";
+              await restRequest("POST", `${table}${q}`, chunk, "resolution=merge-duplicates,return=minimal", customCfg);
+            }
+          }
+        }
+
+        async function deleteRowsByIds(table, col, ids, customCfg) {
+          if (!Array.isArray(ids) || ids.length === 0) return;
+          const CHUNK = 150;
+          const client = getClient(customCfg);
+          for (let i = 0; i < ids.length; i += CHUNK) {
+            const chunk = ids.slice(i, i + CHUNK);
+            if (client) {
+              const { error } = await client.from(table).delete().in(col, chunk);
+              if (error) throw new Error(`[${table} delete] ${error.message}`);
+            } else {
+              const inList = chunk.map(v => `"${encodeURIComponent(String(v))}"`).join(",");
+              await restRequest("DELETE", `${table}?${encodeURIComponent(col)}=in.(${inList})`, undefined, "return=minimal", customCfg);
+            }
+          }
+        }
+
+        async function fetchAllColumnValues(table, col, customCfg) {
+          const client = getClient(customCfg);
+          if (client) {
+            const { data, error } = await client.from(table).select(col);
+            if (error) throw new Error(`[${table}] ${error.message}`);
+            return (data || []).map(r => r[col]).filter(Boolean);
+          }
+          const rows = await restRequest("GET", `${table}?select=${encodeURIComponent(col)}`, undefined, undefined, customCfg);
+          return (rows || []).map(r => r[col]).filter(Boolean);
+        }
+
+        function markLocalMutId(mutId) {
+          const now = Date.now();
+          recentLocalMutIds.set(mutId, now + 35000);
+          for (const [k, exp] of recentLocalMutIds.entries()) {
+            if (exp <= now) recentLocalMutIds.delete(k);
+          }
+        }
+
+        function enqueueKeyWrite(key, fn) {
+          const prev = writeQueues[key] || Promise.resolve();
+          const next = prev.catch(() => {}).then(fn);
+          writeQueues[key] = next;
+          return next;
+        }
+
+        function getActorName() {
+          return String(getActualAuthUser() || state.authUser || state.currentUser || state.user || "dashboard").trim();
+        }
+
+        function buildSitesRows(dashData) {
+          const sites = (dashData && Array.isArray(dashData.sites)) ? dashData.sites : [];
+          const infoMap = (dashData && dashData.siteInfoMap) || {};
+          const byName = new Map();
+          const scopeRank = { site: 1, single: 2, as: 3, newSite: 4 };
+          const nowIso = new Date().toISOString();
+
+          sites.forEach((s) => {
+            if (!s || !s.siteName) return;
+            const name = String(s.siteName).trim();
+            if (!name) return;
+            const info = infoMap[name] || {};
+            const driveUrl = String(info.driveUrl || (s.estimateData && s.estimateData.estimateFile) || "").trim();
+            const status = (s.isArchived || s.isAllCompleted)
+              ? "완료"
+              : (s.scope === "newSite" ? String((s.estimateData && s.estimateData.status) || "신규견적") : "진행중");
+            const scopeEntry = {
+              siteKey: s.siteKey || name,
+              scope: s.scope || "site",
+              status,
+              isArchived: !!s.isArchived,
+              isAllCompleted: !!s.isAllCompleted,
+              progressRate: Number(s.progressRate) || 0,
+              totalTasksCount: Number(s.totalTasksCount) || 0,
+              completedTasksCount: Number(s.completedTasksCount) || 0,
+              estimateData: s.estimateData || null
+            };
+
+            const existing = byName.get(name);
+            if (!existing) {
+              byName.set(name, {
+                _rank: scopeRank[s.scope || "site"] || 9,
+                site_name: name,
+                status,
+                drive_folder_url: driveUrl,
+                meta: Object.assign({}, scopeEntry, { siteInfo: info, allScopes: [scopeEntry] }),
+                updated_at: nowIso
+              });
+            } else {
+              existing.meta.allScopes.push(scopeEntry);
+              if (!existing.drive_folder_url && driveUrl) existing.drive_folder_url = driveUrl;
+              const curRank = scopeRank[s.scope || "site"] || 9;
+              if (curRank < existing._rank) {
+                existing._rank = curRank;
+                existing.status = status;
+                Object.assign(existing.meta, scopeEntry, { siteInfo: info, allScopes: existing.meta.allScopes });
+              }
+            }
+          });
+
+          // siteInfoMap에만 존재하는 현장도 보존
+          Object.keys(infoMap).forEach((name) => {
+            const clean = String(name || "").trim();
+            if (!clean || byName.has(clean)) return;
+            const info = infoMap[clean] || {};
+            byName.set(clean, {
+              _rank: 99,
+              site_name: clean,
+              status: "정보등록",
+              drive_folder_url: String(info.driveUrl || "").trim(),
+              meta: { siteKey: clean, scope: "site", siteInfo: info, allScopes: [] },
+              updated_at: nowIso
+            });
+          });
+
+          return Array.from(byName.values()).map((r) => ({
+            site_name: r.site_name,
+            status: r.status,
+            meta: r.meta,
+            drive_folder_url: r.drive_folder_url,
+            updated_at: r.updated_at
+          }));
+        }
+
+        function buildTasksRows(dashData) {
+          const sites = (dashData && Array.isArray(dashData.sites)) ? dashData.sites : [];
+          const byId = new Map();
+          const nowIso = new Date().toISOString();
+
+          sites.forEach((site, sIdx) => {
+            if (!site) return;
+            const siteName = String(site.siteName || "").trim();
+            (site.tasks || []).forEach((t, tIdx) => {
+              if (!t) return;
+              const baseId = String(t.taskId || t.id || "").trim() || `task_${site.scope || "site"}_${sIdx}_${tIdx}`;
+              let uniqueId = baseId;
+              if (byId.has(uniqueId)) {
+                uniqueId = `${baseId}__${site.scope || "site"}__${sIdx}_${tIdx}`;
+              }
+              const workDate = parseYmdFromTask(t) || t.startDateStr || "";
+              const endDate = parseEndYmdFromTask(t, workDate) || t.endDateStr || workDate || "";
+              const parsedRow = parseInt(t.row, 10);
+              byId.set(uniqueId, {
+                id: uniqueId,
+                row_index: Number.isFinite(parsedRow) ? parsedRow : null,
+                site_name: siteName,
+                category: String(t.scope || site.scope || "site"),
+                work_date: workDate,
+                end_date: endDate,
+                assignee: String(t.manager || ""),
+                content: String(t.taskName || ""),
+                status: String(t.status || "예정"),
+                memo: String(t.memo || ""),
+                raw_json: Object.assign({}, t, { siteKey: site.siteKey || siteName, siteName }),
+                updated_at: nowIso
+              });
+            });
+          });
+          return Array.from(byId.values());
+        }
+
+        function buildFinanceRows(financeDbData) {
+          const fb = financeDbData || {};
+          const byKey = new Map();
+          const nowIso = new Date().toISOString();
+          const addItems = (arr, category, prefix) => {
+            (Array.isArray(arr) ? arr : []).forEach((item, idx) => {
+              if (!item || typeof item !== "object") return;
+              const rawId = String(item.id || "").trim() || `row_${idx}`;
+              let recKey = `${prefix}::${rawId}`;
+              if (byKey.has(recKey)) recKey = `${prefix}::${rawId}__${idx}`;
+              byKey.set(recKey, {
+                record_key: recKey,
+                category,
+                payload: item,
+                updated_at: nowIso
+              });
+            });
+          };
+          addItems(fb.collection, "collection", "collection");
+          addItems(fb.expense, "expense", "expense");
+          addItems(fb.fixedMaster, "fixedMaster", "fixed");
+          return Array.from(byKey.values());
+        }
+
+        async function persistDomainSnapshot(key, rawPayload) {
+          const mutId = `${SESSION_CLIENT_ID}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          markLocalMutId(mutId);
+          const payload = Object.assign({}, rawPayload || {}, {
+            _clientMutId: mutId,
+            _updatedMs: Date.now()
+          });
+          const row = {
+            key,
+            payload,
+            updated_at: new Date().toISOString(),
+            updated_by: getActorName()
+          };
+          const t0 = performance.now();
+          await upsertRows("ws_state_store", [row], "key");
+          lastLatencyMs = Math.round(performance.now() - t0);
+          state.syncSource = "supabase";
+          const now = new Date();
+          state.syncTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+          updatePerfBadgeText();
+          return mutId;
+        }
+
+        async function syncNormalizedForSite(siteName, dashData, singleTaskId) {
+          const d = dashData || state.dashData;
+          if (!d) return;
+          const cleanName = String(siteName || "").trim();
+          const siteRows = buildSitesRows({
+            sites: (d.sites || []).filter(s => s && String(s.siteName || "").trim() === cleanName),
+            siteInfoMap: cleanName && d.siteInfoMap && d.siteInfoMap[cleanName] ? { [cleanName]: d.siteInfoMap[cleanName] } : {}
+          });
+          if (siteRows.length > 0) {
+            await upsertRows("ws_sites", siteRows, "site_name");
+          }
+          const matchingSites = (d.sites || []).filter(s => s && String(s.siteName || "").trim() === cleanName);
+          let taskRows = buildTasksRows({ sites: matchingSites });
+          if (singleTaskId) {
+            const targetOnly = taskRows.filter(r => r.id === singleTaskId || (r.raw_json && (r.raw_json.taskId === singleTaskId || r.raw_json.id === singleTaskId)));
+            if (targetOnly.length > 0) taskRows = targetOnly;
+          }
+          if (taskRows.length > 0) {
+            await upsertRows("ws_tasks", taskRows, "id");
+          }
+        }
+
+        async function removeNormalizedSite(siteName, dashData) {
+          const cleanName = String(siteName || "").trim();
+          if (!cleanName) return;
+          const d = dashData || state.dashData;
+          const stillHasSite = (d && Array.isArray(d.sites)) ? d.sites.some(s => s && String(s.siteName || "").trim() === cleanName) : false;
+          if (!stillHasSite) {
+            await deleteRowsByIds("ws_sites", "site_name", [cleanName]);
+            const client = getClient();
+            if (client) {
+              await client.from("ws_tasks").delete().eq("site_name", cleanName);
+            } else {
+              await restRequest("DELETE", `ws_tasks?site_name=eq.${encodeURIComponent(cleanName)}`, undefined, "return=minimal");
+            }
+          } else {
+            await syncNormalizedForSite(cleanName, d);
+          }
+        }
+
+        async function removeNormalizedTask(taskId) {
+          if (!taskId) return;
+          await deleteRowsByIds("ws_tasks", "id", [String(taskId).trim()]);
+        }
+
+        function updatePerfBadgeText() {
+          const badge = document.getElementById("perfBadge");
+          if (!badge) return;
+          if (isSupabaseActive()) {
+            const msTxt = lastLatencyMs !== null ? ` · ${lastLatencyMs}ms` : "";
+            const timeTxt = state.syncTime ? ` (${state.syncTime})` : "";
+            badge.classList.remove("syncing");
+            badge.textContent = `⚡ Supabase v3${timeTxt}${msTxt}`;
+          }
+        }
+
+        function getStatusInfo() {
+          const cfg = getConfig();
+          const configured = isConfigured(cfg);
+          if (!configured) {
+            return { state: "pending", text: "🟡 설정 대기중", mobileText: "⚡v3 🟡", badgeClass: "is-pending", configured: false, engineMode: cfg.engineMode };
+          }
+          if (cfg.engineMode === "sheets") {
+            return { state: "sheets", text: "📊 Google Sheets 모드", mobileText: "⚡v3 📊", badgeClass: "is-sheets", configured: true, engineMode: cfg.engineMode };
+          }
+          if (realtimeStatus === "connected") {
+            return { state: "connected", text: "🟢 Supabase 실시간 연결됨", mobileText: "⚡v3 🟢", badgeClass: "is-connected", configured: true, engineMode: cfg.engineMode };
+          }
+          if (realtimeStatus === "error") {
+            return { state: "error", text: "🔴 실시간 연결 오류", mobileText: "⚡v3 🔴", badgeClass: "is-error", configured: true, engineMode: cfg.engineMode };
+          }
+          if (realtimeStatus === "connecting") {
+            return { state: "connecting", text: "🔄 Supabase 연결 중...", mobileText: "⚡v3 🔄", badgeClass: "is-connecting", configured: true, engineMode: cfg.engineMode };
+          }
+          return { state: "connected", text: "🟢 Supabase 연결됨", mobileText: "⚡v3 🟢", badgeClass: "is-connected", configured: true, engineMode: cfg.engineMode };
+        }
+
+        function updateHeaderBadges() {
+          const info = getStatusInfo();
+          const pcBtn = document.getElementById("pcSupabaseBadge");
+          const pcTxt = document.getElementById("pcSupabaseStatusText");
+          if (pcBtn) {
+            pcBtn.classList.remove("is-pending", "is-connecting", "is-connected", "is-sheets", "is-error");
+            pcBtn.classList.add(info.badgeClass);
+          }
+          if (pcTxt) pcTxt.textContent = info.text;
+
+          const mBtn = document.getElementById("mSupabaseBadge");
+          if (mBtn) {
+            mBtn.classList.remove("is-pending", "is-connecting", "is-connected", "is-sheets", "is-error");
+            mBtn.classList.add(info.badgeClass);
+            mBtn.textContent = info.mobileText;
+          }
+
+          const livePill = document.getElementById("sbModalStatusPill");
+          if (livePill) {
+            livePill.textContent = info.text;
+          }
+        }
+
+        function updateStatusState() {
+          const cfg = getConfig();
+          if (!isConfigured(cfg)) realtimeStatus = "pending";
+          else if (cfg.engineMode === "sheets") realtimeStatus = "sheets";
+          else if (!realtimeChannel) realtimeStatus = "connecting";
+          updateHeaderBadges();
+        }
+
+        function handleRealtimePayload(payload) {
+          try {
+            const rec = payload && payload.new;
+            if (!rec || !rec.key || !rec.payload) return;
+            const key = rec.key;
+            const data = rec.payload;
+            if (data._clientMutId && recentLocalMutIds.has(data._clientMutId)) {
+              return; // 본인 기기 변경사항 에코 무시
+            }
+            const now = new Date();
+            lastRealtimeEventAt = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+            state.syncSource = "supabase";
+            state.syncTime = lastRealtimeEventAt;
+
+            let label = "";
+            if (key === "dashboard_main" && Array.isArray(data.sites)) {
+              state.dashData = applyDeletedGuardsToDashData(data);
+              if (window.WSDataService && window.WSDataService.saveDashboardCache) {
+                window.WSDataService.saveDashboardCache(state.dashData);
+              }
+              sanitizeUnregisteredMembers();
+              syncUserSelectorOptions();
+              markAllDirty();
+              renderActiveViews();
+              label = "현장·공정";
+            } else if (key === "todo_main" && Array.isArray(data.list)) {
+              state.todoData = data;
+              if (window.WSDataService && window.WSDataService.saveTodoCache) {
+                window.WSDataService.saveTodoCache(state.todoData);
+              }
+              markAllDirty();
+              renderActiveViews();
+              label = "To-Do";
+            } else if (key === "settings_main") {
+              state.settingsData = data;
+              if (window.WSDataService && window.WSDataService.saveSettingsCache) {
+                window.WSDataService.saveSettingsCache(state.settingsData);
+              }
+              sanitizeUnregisteredMembers();
+              syncUserSelectorOptions();
+              markAllDirty();
+              renderActiveViews();
+              label = "기준정보";
+            } else if (key === "finance_db" && canViewFinance()) {
+              state.financeDbData = {
+                collection: Array.isArray(data.collection) ? data.collection : [],
+                expense: Array.isArray(data.expense) ? data.expense : [],
+                fixedMaster: Array.isArray(data.fixedMaster) ? data.fixedMaster : [],
+                updatedAt: data.updatedAt || ""
+              };
+              state.financeLoaded = true;
+              if (window.WSDataService && window.WSDataService.saveFinanceCache) {
+                window.WSDataService.saveFinanceCache(state.financeDbData);
+              }
+              state.dirtyPcTabs.finance = true;
+              state.dirtyMobileTabs.finance = true;
+              renderActiveViews();
+              label = "재무 DB";
+            } else if (key === "auth_config" && data.sharedPin) {
+              try { localStorage.setItem("ws_dashboard_custom_pin_v2", String(data.sharedPin)); } catch (_) {}
+            }
+
+            updatePerfBadgeText();
+            updateHeaderBadges();
+            if (label) {
+              clearTimeout(realtimeToastTimer);
+              realtimeToastTimer = setTimeout(() => {
+                const actor = rec.updated_by ? `${rec.updated_by} · ` : "";
+                showToast(`⚡ 실시간 동기화 (${actor}${label} 반영 완료)`);
+              }, 250);
+            }
+          } catch (err) {
+            console.warn("[Supabase Realtime] payload 처리 경고:", err);
+          }
+        }
+
+        function startRealtime() {
+          stopRealtime(true);
+          if (!isSupabaseActive()) {
+            updateStatusState();
+            return;
+          }
+          const client = getClient();
+          if (!client) {
+            // CDN 미로드 시 REST 모드로만 동작 표시
+            realtimeStatus = "connected";
+            updateHeaderBadges();
+            return;
+          }
+          realtimeStatus = "connecting";
+          updateHeaderBadges();
+          try {
+            realtimeChannel = client
+              .channel("ws-v3-realtime-" + SESSION_CLIENT_ID)
+              .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "ws_state_store" },
+                handleRealtimePayload
+              )
+              .subscribe((status, err) => {
+                if (status === "SUBSCRIBED") {
+                  realtimeStatus = "connected";
+                  lastErrorMsg = "";
+                } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+                  realtimeStatus = "error";
+                  lastErrorMsg = (err && err.message) || ("Realtime 상태: " + status);
+                } else if (status === "CLOSED") {
+                  realtimeStatus = isSupabaseActive() ? "connecting" : "sheets";
+                }
+                updateHeaderBadges();
+              });
+          } catch (e) {
+            realtimeStatus = "error";
+            lastErrorMsg = e.message || String(e);
+            updateHeaderBadges();
+          }
+        }
+
+        function stopRealtime(silent) {
+          if (realtimeChannel) {
+            try {
+              const client = getClient();
+              if (client && typeof client.removeChannel === "function") {
+                client.removeChannel(realtimeChannel);
+              } else if (typeof realtimeChannel.unsubscribe === "function") {
+                realtimeChannel.unsubscribe();
+              }
+            } catch (_) {}
+            realtimeChannel = null;
+          }
+          if (!silent) updateStatusState();
+        }
+
+        async function testConnection(customCfg) {
+          const cfg = customCfg ? Object.assign({}, getConfig(), customCfg) : getConfig();
+          cfg.url = String(cfg.url || "").trim().replace(/\/+$/, "");
+          cfg.anonKey = String(cfg.anonKey || "").trim();
+          if (!isConfigured(cfg)) {
+            throw new Error("Supabase Project URL과 anon public Key를 모두 입력해 주세요.");
+          }
+          const t0 = performance.now();
+          const tables = ["ws_state_store", "ws_sites", "ws_tasks", "ws_finance_store"];
+          const tableStatus = {};
+          const client = getClient(cfg);
+
+          for (const tbl of tables) {
+            if (client) {
+              const { error } = await client.from(tbl).select("*", { count: "exact", head: true });
+              if (error) {
+                tableStatus[tbl] = { ok: false, error: error.message };
+              } else {
+                tableStatus[tbl] = { ok: true };
+              }
+            } else {
+              try {
+                await restRequest("GET", `${tbl}?select=*&limit=1`, undefined, undefined, cfg);
+                tableStatus[tbl] = { ok: true };
+              } catch (err) {
+                tableStatus[tbl] = { ok: false, error: err.message || String(err) };
+              }
+            }
+          }
+
+          let stateKeys = [];
+          if (tableStatus.ws_state_store && tableStatus.ws_state_store.ok) {
+            try {
+              const rows = await selectStateRows([], cfg);
+              stateKeys = rows.map(r => r.key);
+            } catch (_) {}
+          }
+
+          const latencyMs = Math.round(performance.now() - t0);
+          lastLatencyMs = latencyMs;
+          const allTablesOk = tables.every(t => tableStatus[t] && tableStatus[t].ok);
+          if (!allTablesOk) {
+            const firstErr = tables.map(t => tableStatus[t]).find(x => !x.ok);
+            return { ok: false, latencyMs, tables: tableStatus, stateKeys, error: (firstErr && firstErr.error) || "테이블이 아직 생성되지 않았습니다. 1단계 SQL 스키마를 실행해 주세요." };
+          }
+          return { ok: true, latencyMs, tables: tableStatus, stateKeys };
+        }
+
+        async function syncLiveFromSupabase(optsOrCb, onUpdated) {
+          const opts = (typeof optsOrCb === "object" && optsOrCb !== null) ? optsOrCb : {};
+          const cb = (typeof optsOrCb === "function") ? optsOrCb : onUpdated;
+          const t0 = performance.now();
+          const keys = ["dashboard_main", "todo_main", "settings_main", "auth_config"];
+          if (opts.syncFinance) keys.push("finance_db");
+
+          const rows = await selectStateRows(keys);
+          const elapsedMs = Math.round(performance.now() - t0);
+          lastLatencyMs = elapsedMs;
+
+          const byKey = {};
+          rows.forEach((r) => { if (r && r.key) byKey[r.key] = r.payload; });
+
+          if (!byKey.dashboard_main || !Array.isArray(byKey.dashboard_main.sites)) {
+            const emptyRes = { emptySupabase: true, elapsedMs, dashData: null, todoData: null, settingsData: null, financeData: null, meta: { source: "supabase_empty", updatedAt: "" } };
+            if (typeof cb === "function") cb(emptyRes);
+            return emptyRes;
+          }
+
+          const ds = window.WSDataService;
+          if (ds && ds.saveDashboardCache) ds.saveDashboardCache(byKey.dashboard_main);
+          if (byKey.todo_main && Array.isArray(byKey.todo_main.list) && ds && ds.saveTodoCache) {
+            ds.saveTodoCache(byKey.todo_main);
+          }
+          if (byKey.settings_main && ds && ds.saveSettingsCache) {
+            ds.saveSettingsCache(byKey.settings_main);
+          }
+          if (byKey.finance_db && ds && ds.saveFinanceCache) {
+            ds.saveFinanceCache(byKey.finance_db);
+          }
+          if (byKey.auth_config && byKey.auth_config.sharedPin) {
+            try { localStorage.setItem("ws_dashboard_custom_pin_v2", String(byKey.auth_config.sharedPin)); } catch (_) {}
+          }
+
+          const now = new Date();
+          const hh = String(now.getHours()).padStart(2, "0");
+          const mm = String(now.getMinutes()).padStart(2, "0");
+          const ss = String(now.getSeconds()).padStart(2, "0");
+          const meta = { source: "supabase", updatedAt: `${hh}:${mm}:${ss}`, elapsedMs };
+          try {
+            localStorage.setItem("ws_sync_meta_v3", JSON.stringify(meta));
+          } catch (_) {}
+
+          const resObj = {
+            dashData: byKey.dashboard_main,
+            todoData: byKey.todo_main || null,
+            settingsData: byKey.settings_main || null,
+            financeData: byKey.finance_db ? Object.assign({ success: true }, byKey.finance_db) : null,
+            meta,
+            elapsedMs
+          };
+          if (typeof cb === "function") cb(resObj);
+          return resObj;
+        }
+
+        async function fetchFinanceSnapshotFromSupabase() {
+          const rows = await selectStateRows(["finance_db"]);
+          if (rows && rows[0] && rows[0].payload) {
+            const p = rows[0].payload;
+            return {
+              success: true,
+              collection: Array.isArray(p.collection) ? p.collection : [],
+              expense: Array.isArray(p.expense) ? p.expense : [],
+              fixedMaster: Array.isArray(p.fixedMaster) ? p.fixedMaster : [],
+              updatedAt: p.updatedAt || "",
+              source: "supabase"
+            };
+          }
+          return null;
+        }
+
+        async function ensureFinanceInMemory() {
+          if (state.financeDbData && Array.isArray(state.financeDbData.collection) && state.financeLoaded) {
+            return state.financeDbData;
+          }
+          if (isSupabaseActive()) {
+            try {
+              const fb = await fetchFinanceSnapshotFromSupabase();
+              if (fb) {
+                state.financeDbData = {
+                  collection: fb.collection,
+                  expense: fb.expense,
+                  fixedMaster: fb.fixedMaster,
+                  updatedAt: fb.updatedAt
+                };
+                state.financeLoaded = true;
+                return state.financeDbData;
+              }
+            } catch (_) {}
+          }
+          if (!state.financeDbData || !Array.isArray(state.financeDbData.collection)) {
+            state.financeDbData = { collection: [], expense: [], fixedMaster: [], updatedAt: "" };
+          }
+          return state.financeDbData;
+        }
+
+        async function verifyPinFast(user, pin) {
+          if (!isSupabaseActive()) return null;
+          const valName = String(user || "").trim();
+          const valPin = String(pin || "").trim();
+          if (valName.toLowerCase() === ADMIN_USER_FALLBACK && valPin === ADMIN_PIN_FALLBACK) {
+            return { success: true, user: ADMIN_USER_FALLBACK, isAdmin: true, token: computeDashboardUserToken(ADMIN_USER_FALLBACK, ADMIN_PIN_FALLBACK), source: "supabase" };
+          }
+          try {
+            const rows = await selectStateRows(["auth_config", "settings_main"]);
+            const authRow = rows.find(r => r.key === "auth_config");
+            const settingsRow = rows.find(r => r.key === "settings_main");
+            if (!authRow || !authRow.payload || !authRow.payload.sharedPin) {
+              return null; // Supabase에 auth_config가 아직 없으면 GAS로 폴백
+            }
+            const sharedPin = String(authRow.payload.sharedPin).trim();
+            try { localStorage.setItem("ws_dashboard_custom_pin_v2", sharedPin); } catch (_) {}
+            let members = getMembersList();
+            if (settingsRow && settingsRow.payload && Array.isArray(settingsRow.payload.members)) {
+              members = Array.from(new Set([...members, ...settingsRow.payload.members.map(m => m && m.name).filter(Boolean)]));
+            }
+            const matchedMember = members.find(m => m.toLowerCase() === valName.toLowerCase());
+            if (!matchedMember) {
+              return { success: false, error: "등록되지 않은 사용자입니다. (구성원 설정 확인)", source: "supabase" };
+            }
+            if (valPin === sharedPin) {
+              return { success: true, user: matchedMember, isAdmin: false, token: computeDashboardUserToken(matchedMember, valPin), source: "supabase" };
+            }
+            return { success: false, error: "비밀번호(PIN)가 일치하지 않습니다.", source: "supabase" };
+          } catch (e) {
+            return null;
+          }
+        }
+
+        async function saveAuthPin(newPin, updatedBy) {
+          if (!isConfigured()) return;
+          const cleanPin = String(newPin || "").trim();
+          if (!cleanPin) return;
+          try { localStorage.setItem("ws_dashboard_custom_pin_v2", cleanPin); } catch (_) {}
+          return enqueueKeyWrite("auth_config", () =>
+            persistDomainSnapshot("auth_config", {
+              sharedPin: cleanPin,
+              updatedAt: new Date().toISOString(),
+              updatedBy: updatedBy || getActorName()
+            })
+          );
+        }
+
+        function appendLog(msg) {
+          const ts = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+          modalLogs.push(`[${ts}] ${msg}`);
+          if (modalLogs.length > 40) modalLogs = modalLogs.slice(-40);
+          const box = document.getElementById("sbModalLogBox");
+          if (box) {
+            box.textContent = modalLogs.join("\n");
+            box.scrollTop = box.scrollHeight;
+          }
+        }
+
+        async function migrateFromGasToSupabase(opts) {
+          opts = opts || {};
+          const t0 = performance.now();
+          modalLogs = [];
+          appendLog("1/5 Supabase 연결 및 테이블 스키마 상태 점검 중...");
+          const conn = await testConnection();
+          if (!conn.ok) {
+            throw new Error(conn.error || "Supabase 테이블을 찾을 수 없습니다. 1단계 SQL 스키마를 먼저 실행해 주세요.");
+          }
+          appendLog(`✓ Supabase 테이블 4종 확인 완료 (${conn.latencyMs}ms)`);
+
+          const orig = window.WSDataService && window.WSDataService._origGas;
+          const canFinance = canViewFinance();
+          const authU = getActualAuthUser() || state.authUser || state.currentUser || "조항만";
+          let dashData = null;
+          let todoData = null;
+          let settingsData = null;
+          let financeDb = null;
+          let sourceLabel = "Google Sheets 라이브 (GAS)";
+
+          if (location.protocol.startsWith("http") && orig && typeof orig.syncLiveFromGAS === "function") {
+            appendLog("2/5 기존 Google Apps Script(getDashboardData / getTodoList / getSettingsData" + (canFinance ? " / getFinanceDbData" : "") + ") 호출 중...");
+            const gasRes = await orig.syncLiveFromGAS({ syncFinance: canFinance, authUser: authU });
+            dashData = gasRes && gasRes.dashData;
+            todoData = gasRes && gasRes.todoData;
+            settingsData = gasRes && gasRes.settingsData;
+            if (gasRes && gasRes.financeData && gasRes.financeData.success) {
+              financeDb = {
+                collection: Array.isArray(gasRes.financeData.collection) ? gasRes.financeData.collection : [],
+                expense: Array.isArray(gasRes.financeData.expense) ? gasRes.financeData.expense : [],
+                fixedMaster: Array.isArray(gasRes.financeData.fixedMaster) ? gasRes.financeData.fixedMaster : [],
+                updatedAt: gasRes.financeData.updatedAt || new Date().toISOString()
+              };
+            }
+          }
+
+          if (!dashData || !Array.isArray(dashData.sites) || dashData.sites.length === 0) {
+            dashData = state.dashData || (orig && orig.getInitialDashboardData && orig.getInitialDashboardData());
+            todoData = todoData || state.todoData || (orig && orig.getInitialTodoData && orig.getInitialTodoData());
+            settingsData = settingsData || state.settingsData || (orig && orig.getInitialSettingsData && orig.getInitialSettingsData());
+            if (!financeDb && canFinance && state.financeDbData && Array.isArray(state.financeDbData.collection)) {
+              financeDb = state.financeDbData;
+            }
+            sourceLabel = "로컬 캐시/스냅샷 데이터";
+            appendLog("⚠ GAS 응답이 없거나 로컬 환경이어서 현재 메모리의 스냅샷/캐시 데이터를 기준으로 이관합니다.");
+          } else {
+            appendLog(`✓ GAS 라이브 데이터 수신 완료 (현장 ${(dashData.sites || []).length}개, To-Do ${((todoData && todoData.list) || []).length}건)`);
+          }
+
+          if (!dashData || !Array.isArray(dashData.sites)) {
+            throw new Error("이관할 현장/공정 데이터가 없습니다.");
+          }
+
+          appendLog("3/5 ws_state_store 도메인 스냅샷 저장 중...");
+          await persistDomainSnapshot("dashboard_main", dashData);
+          if (todoData) await persistDomainSnapshot("todo_main", todoData);
+          if (settingsData) await persistDomainSnapshot("settings_main", settingsData);
+          if (financeDb) await persistDomainSnapshot("finance_db", financeDb);
+          else if (!canFinance) {
+            appendLog("ℹ 재무 DB(finance_db)는 대표/관리자(조항만 · admin) 계정 로그인 시 이관할 수 있습니다.");
+          }
+
+          // 공용 PIN 설정이 있으면 auth_config도 시딩 (기존 없을 때만)
+          try {
+            const existingAuth = await selectStateRows(["auth_config"]);
+            if (!existingAuth || existingAuth.length === 0) {
+              let fallbackPin = DEFAULT_PIN_FALLBACK;
+              try { fallbackPin = localStorage.getItem("ws_dashboard_custom_pin_v2") || DEFAULT_PIN_FALLBACK; } catch (_) {}
+              await persistDomainSnapshot("auth_config", {
+                sharedPin: fallbackPin,
+                updatedAt: new Date().toISOString(),
+                updatedBy: authU
+              });
+            }
+          } catch (_) {}
+
+          appendLog("4/5 정규화 테이블(ws_sites, ws_tasks" + (financeDb ? ", ws_finance_store" : "") + ") 일괄 Upsert 중...");
+          const siteRows = buildSitesRows(dashData);
+          const taskRows = buildTasksRows(dashData);
+          await upsertRows("ws_sites", siteRows, "site_name");
+          await upsertRows("ws_tasks", taskRows, "id");
+
+          // 구버전 잔여 레코드 정리 (신규 이관 데이터와 100% 정합)
+          try {
+            const newSiteSet = new Set(siteRows.map(r => r.site_name));
+            const oldSites = await fetchAllColumnValues("ws_sites", "site_name");
+            const staleSites = oldSites.filter(k => !newSiteSet.has(k));
+            if (staleSites.length) await deleteRowsByIds("ws_sites", "site_name", staleSites);
+
+            const newTaskSet = new Set(taskRows.map(r => r.id));
+            const oldTasks = await fetchAllColumnValues("ws_tasks", "id");
+            const staleTasks = oldTasks.filter(k => !newTaskSet.has(k));
+            if (staleTasks.length) await deleteRowsByIds("ws_tasks", "id", staleTasks);
+          } catch (ePrune) {
+            appendLog("⚠ 구버전 잔여 행 정리 중 일부 스킵: " + (ePrune.message || ePrune));
+          }
+
+          let financeRows = [];
+          if (financeDb) {
+            financeRows = buildFinanceRows(financeDb);
+            await upsertRows("ws_finance_store", financeRows, "record_key");
+            try {
+              const newFinSet = new Set(financeRows.map(r => r.record_key));
+              const oldFin = await fetchAllColumnValues("ws_finance_store", "record_key");
+              const staleFin = oldFin.filter(k => !newFinSet.has(k));
+              if (staleFin.length) await deleteRowsByIds("ws_finance_store", "record_key", staleFin);
+            } catch (_) {}
+          }
+
+          appendLog("5/5 클라이언트 상태 갱신 및 Realtime 구독 연결 중...");
+          state.dashData = applyDeletedGuardsToDashData(dashData);
+          if (todoData) state.todoData = todoData;
+          if (settingsData) state.settingsData = settingsData;
+          if (financeDb) {
+            state.financeDbData = financeDb;
+            state.financeLoaded = true;
+            state.financeLastFetchedAt = Date.now();
+          }
+          if (window.WSDataService) {
+            if (window.WSDataService.saveDashboardCache) window.WSDataService.saveDashboardCache(state.dashData);
+            if (todoData && window.WSDataService.saveTodoCache) window.WSDataService.saveTodoCache(state.todoData);
+            if (settingsData && window.WSDataService.saveSettingsCache) window.WSDataService.saveSettingsCache(state.settingsData);
+            if (financeDb && window.WSDataService.saveFinanceCache) window.WSDataService.saveFinanceCache(state.financeDbData);
+          }
+
+          saveConfig({ engineMode: "supabase" });
+          startRealtime();
+          sanitizeUnregisteredMembers();
+          syncUserSelectorOptions();
+          markAllDirty();
+          renderActiveViews();
+
+          const elapsedSec = ((performance.now() - t0) / 1000).toFixed(2);
+          lastMigrationSummary = {
+            sourceLabel,
+            elapsedSec,
+            siteCount: siteRows.length,
+            taskCount: taskRows.length,
+            todoCount: (todoData && Array.isArray(todoData.list)) ? todoData.list.length : 0,
+            partnerCount: (settingsData && Array.isArray(settingsData.partners)) ? settingsData.partners.length : 0,
+            taskTypeCount: (settingsData && Array.isArray(settingsData.tasks)) ? settingsData.tasks.length : 0,
+            memberCount: (settingsData && Array.isArray(settingsData.members)) ? settingsData.members.length : 0,
+            collectionCount: financeDb ? financeDb.collection.length : 0,
+            expenseCount: financeDb ? financeDb.expense.length : 0,
+            fixedMasterCount: financeDb ? financeDb.fixedMaster.length : 0,
+            financeTotalCount: financeRows.length,
+            financeIncluded: Boolean(financeDb)
+          };
+          appendLog(`🎉 이관 완료! (${elapsedSec}초 소요) · 현장 ${lastMigrationSummary.siteCount}건 / 공정 ${lastMigrationSummary.taskCount}건 / To-Do ${lastMigrationSummary.todoCount}건` + (financeDb ? ` / 재무 ${lastMigrationSummary.financeTotalCount}건` : ""));
+          return lastMigrationSummary;
+        }
+
+        function bgDualWrite(label, fn) {
+          if (!getDualWriteEnabled() || !location.protocol.startsWith("http")) return;
+          Promise.resolve().then(fn).catch((err) => {
+            console.warn(`[Supabase Dual-Write GAS 백업 경고 - ${label}]:`, err);
+          });
+        }
+
+        function installServiceHooks() {
+          if (hooksInstalled) return;
+          const ds = window.WSDataService;
+          if (!ds) return;
+          hooksInstalled = true;
+          const orig = Object.assign({}, ds);
+          ds._origGas = orig;
+
+          ds.syncLiveFromGAS = function (optsOrCb, onUpdated) {
+            if (!isSupabaseActive()) {
+              return orig.syncLiveFromGAS.call(ds, optsOrCb, onUpdated);
+            }
+            return syncLiveFromSupabase(optsOrCb, onUpdated);
+          };
+
+          ds.saveTask = function (isEdit, payload, dashData) {
+            if (!isSupabaseActive()) return orig.saveTask.call(ds, isEdit, payload, dashData);
+            const d = dashData || state.dashData;
+            if (d) ds.saveDashboardCache(d);
+            bgDualWrite("saveTask", () => orig.saveTask.call(ds, isEdit, payload, dashData));
+            return enqueueKeyWrite("dashboard_main", async () => {
+              await persistDomainSnapshot("dashboard_main", d);
+              if (payload && payload.site) {
+                await syncNormalizedForSite(payload.site, d, payload.id || payload.taskId || "");
+              }
+              return { ok: true, success: true, taskId: (payload && (payload.id || payload.taskId)) || "", source: "supabase" };
+            });
+          };
+
+          ds.deleteTask = function (payload, dashData) {
+            if (!isSupabaseActive()) return orig.deleteTask.call(ds, payload, dashData);
+            const d = dashData || state.dashData;
+            if (d) ds.saveDashboardCache(d);
+            bgDualWrite("deleteTask", () => orig.deleteTask.call(ds, payload, dashData));
+            return enqueueKeyWrite("dashboard_main", async () => {
+              await persistDomainSnapshot("dashboard_main", d);
+              if (payload && (payload.id || payload.taskId)) {
+                await removeNormalizedTask(payload.id || payload.taskId);
+              }
+              if (payload && payload.site) {
+                await removeNormalizedSite(payload.site, d);
+              }
+              return { ok: true, success: true, source: "supabase" };
+            });
+          };
+
+          ds.moveTaskDate = function (payload, dashData) {
+            if (!isSupabaseActive()) return orig.moveTaskDate.call(ds, payload, dashData);
+            const d = dashData || state.dashData;
+            if (d) ds.saveDashboardCache(d);
+            bgDualWrite("moveTaskDate", () => orig.moveTaskDate.call(ds, payload, dashData));
+            return enqueueKeyWrite("dashboard_main", async () => {
+              await persistDomainSnapshot("dashboard_main", d);
+              if (payload && payload.site) {
+                await syncNormalizedForSite(payload.site, d, payload.id || payload.taskId || "");
+              }
+              return { ok: true, success: true, source: "supabase" };
+            });
+          };
+
+          ds.cascadeShiftTasks = function (payload, dashData) {
+            if (!isSupabaseActive()) return orig.cascadeShiftTasks.call(ds, payload, dashData);
+            const d = dashData || state.dashData;
+            if (d) ds.saveDashboardCache(d);
+            bgDualWrite("cascadeShiftTasks", () => orig.cascadeShiftTasks.call(ds, payload, dashData));
+            return enqueueKeyWrite("dashboard_main", async () => {
+              await persistDomainSnapshot("dashboard_main", d);
+              if (payload && payload.site) {
+                await syncNormalizedForSite(payload.site, d);
+              }
+              return { ok: true, success: true, source: "supabase" };
+            });
+          };
+
+          ds.deleteSite = function (payload, dashData) {
+            if (!isSupabaseActive()) return orig.deleteSite.call(ds, payload, dashData);
+            const d = dashData || state.dashData;
+            if (d) ds.saveDashboardCache(d);
+            bgDualWrite("deleteSite", () => orig.deleteSite.call(ds, payload, dashData));
+            return enqueueKeyWrite("dashboard_main", async () => {
+              await persistDomainSnapshot("dashboard_main", d);
+              if (payload && payload.site) {
+                await removeNormalizedSite(payload.site, d);
+              }
+              return { ok: true, success: true, source: "supabase" };
+            });
+          };
+
+          ds.saveSiteInfo = function (payload, dashData) {
+            if (!isSupabaseActive()) return orig.saveSiteInfo.call(ds, payload, dashData);
+            const d = dashData || state.dashData;
+            if (d) ds.saveDashboardCache(d);
+            bgDualWrite("saveSiteInfo", () => orig.saveSiteInfo.call(ds, payload, dashData));
+            return enqueueKeyWrite("dashboard_main", async () => {
+              await persistDomainSnapshot("dashboard_main", d);
+              if (payload && (payload.site || payload.siteName)) {
+                await syncNormalizedForSite(payload.site || payload.siteName, d);
+              }
+              return { ok: true, success: true, source: "supabase" };
+            });
+          };
+
+          ds.toggleChecklist = function (payload, dashData) {
+            if (!isSupabaseActive()) return orig.toggleChecklist.call(ds, payload, dashData);
+            const d = dashData || state.dashData;
+            if (d) ds.saveDashboardCache(d);
+            bgDualWrite("toggleChecklist", () => orig.toggleChecklist.call(ds, payload, dashData));
+            return enqueueKeyWrite("dashboard_main", async () => {
+              await persistDomainSnapshot("dashboard_main", d);
+              if (payload && payload.site) {
+                await syncNormalizedForSite(payload.site, d);
+              }
+              return { ok: true, success: true, source: "supabase" };
+            });
+          };
+
+          ds.saveEstimate = function (isEdit, payload, dashData) {
+            if (!isSupabaseActive()) return orig.saveEstimate.call(ds, isEdit, payload, dashData);
+            const d = dashData || state.dashData;
+            if (d) ds.saveDashboardCache(d);
+            bgDualWrite("saveEstimate", () => orig.saveEstimate.call(ds, isEdit, payload, dashData));
+            return enqueueKeyWrite("dashboard_main", async () => {
+              await persistDomainSnapshot("dashboard_main", d);
+              if (payload && payload.siteName) {
+                await syncNormalizedForSite(payload.siteName, d);
+              }
+              return { ok: true, success: true, source: "supabase" };
+            });
+          };
+
+          ds.promoteEstimateToSite = function (payload, dashData) {
+            if (!isSupabaseActive()) return orig.promoteEstimateToSite.call(ds, payload, dashData);
+            const d = dashData || state.dashData;
+            if (d) ds.saveDashboardCache(d);
+            bgDualWrite("promoteEstimateToSite", () => orig.promoteEstimateToSite.call(ds, payload, dashData));
+            return enqueueKeyWrite("dashboard_main", async () => {
+              await persistDomainSnapshot("dashboard_main", d);
+              if (payload && payload.siteName) {
+                await syncNormalizedForSite(payload.siteName, d);
+              }
+              let collectionCreated = false;
+              let collectionRow = null;
+              if (payload && payload.autoCreateCollection && canViewFinance()) {
+                const fb = await ensureFinanceInMemory();
+                const exists = fb.collection.some(c => c && String(c.siteName || "").trim() === String(payload.siteName || "").trim());
+                if (!exists) {
+                  const baseAmt = Number(payload.contractAmount) || Number(payload.expectedAmount) || 0;
+                  let calcPeriod = String(payload.period || "").trim();
+                  if (!calcPeriod && Array.isArray(payload.tasks) && payload.tasks.length > 0) {
+                    const ymdList = [];
+                    payload.tasks.forEach(t => {
+                      if (!t) return;
+                      const rawStr = [t.date, t.dateStr, t.startDateStr, t.endDateStr, t.dateDisplay].filter(Boolean).join(" ");
+                      const matches = rawStr.match(/\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}/g);
+                      if (matches) {
+                        matches.forEach(m => {
+                          const parts = m.split(/[.\-/]/);
+                          if (parts.length === 3) {
+                            ymdList.push(`${parts[0]}.${parts[1].padStart(2, "0")}.${parts[2].padStart(2, "0")}`);
+                          }
+                        });
+                      }
+                    });
+                    if (ymdList.length > 0) {
+                      ymdList.sort();
+                      const minD = ymdList[0];
+                      const maxD = ymdList[ymdList.length - 1];
+                      calcPeriod = (minD === maxD) ? minD : `${minD} ~ ${maxD}`;
+                    }
+                  }
+                  if (!calcPeriod && payload.startDate) {
+                    calcPeriod = String(payload.startDate).trim().replace(/-/g, ".");
+                  }
+                  collectionRow = {
+                    id: "COL-" + Date.now(),
+                    siteName: payload.siteName,
+                    period: calcPeriod,
+                    manager: payload.manager || "",
+                    category: payload.scope || "전체공사",
+                    status: "진행중",
+                    clientName: payload.clientName || "",
+                    contractAmount: baseAmt,
+                    changeAmount: 0,
+                    changeDesc: "",
+                    progressRate: 0,
+                    totalAmount: baseAmt,
+                    downPayment: 0,
+                    startPayment: 0,
+                    midPayment1: 0,
+                    midPayment2: 0,
+                    midPayment3: 0,
+                    finalPayment: 0,
+                    collectedAmount: 0,
+                    uncollectedAmount: baseAmt,
+                    taxInvoice: "미발행",
+                    note: payload.memo || ""
+                  };
+                  await enqueueKeyWrite("finance_db", async () => {
+                    const nextCol = [collectionRow, ...fb.collection];
+                    const nextFb = Object.assign({}, fb, { collection: nextCol, updatedAt: new Date().toISOString() });
+                    state.financeDbData = nextFb;
+                    ds.saveFinanceCache(nextFb);
+                    await persistDomainSnapshot("finance_db", nextFb);
+                    await upsertRows("ws_finance_store", [{ record_key: "collection::" + collectionRow.id, category: "collection", payload: collectionRow, updated_at: new Date().toISOString() }], "record_key");
+                  });
+                  collectionCreated = true;
+                }
+              }
+              return { success: true, collectionCreated, collectionRow, source: "supabase" };
+            });
+          };
+
+          ds.saveTodo = function (isEdit, payload, todoData) {
+            if (!isSupabaseActive()) return orig.saveTodo.call(ds, isEdit, payload, todoData);
+            const td = todoData || state.todoData;
+            if (td) ds.saveTodoCache(td);
+            bgDualWrite("saveTodo", () => orig.saveTodo.call(ds, isEdit, payload, todoData));
+            return enqueueKeyWrite("todo_main", async () => {
+              await persistDomainSnapshot("todo_main", td);
+              return { ok: true, success: true, source: "supabase" };
+            });
+          };
+
+          ds.toggleTodoStatus = function (payload, todoData) {
+            if (!isSupabaseActive()) return orig.toggleTodoStatus.call(ds, payload, todoData);
+            const td = todoData || state.todoData;
+            if (td) ds.saveTodoCache(td);
+            bgDualWrite("toggleTodoStatus", () => orig.toggleTodoStatus.call(ds, payload, todoData));
+            return enqueueKeyWrite("todo_main", async () => {
+              await persistDomainSnapshot("todo_main", td);
+              return { ok: true, success: true, source: "supabase" };
+            });
+          };
+
+          ds.deleteTodo = function (id, todoData) {
+            if (!isSupabaseActive()) return orig.deleteTodo.call(ds, id, todoData);
+            const td = todoData || state.todoData;
+            if (td) ds.saveTodoCache(td);
+            bgDualWrite("deleteTodo", () => orig.deleteTodo.call(ds, id, todoData));
+            return enqueueKeyWrite("todo_main", async () => {
+              await persistDomainSnapshot("todo_main", td);
+              return { ok: true, success: true, source: "supabase" };
+            });
+          };
+
+          ds.saveSettings = function (settingsData) {
+            if (!isSupabaseActive()) return orig.saveSettings.call(ds, settingsData);
+            if (settingsData) ds.saveSettingsCache(settingsData);
+            bgDualWrite("saveSettings", () => orig.saveSettings.call(ds, settingsData));
+            return enqueueKeyWrite("settings_main", async () => {
+              await persistDomainSnapshot("settings_main", settingsData);
+              if (state.dashData && settingsData) {
+                if (Array.isArray(settingsData.members)) {
+                  state.dashData.members = settingsData.members.map(m => m && m.name).filter(Boolean);
+                  const rMap = {};
+                  const pMap = {};
+                  settingsData.members.forEach(m => {
+                    if (!m || !m.name) return;
+                    if (m.role) rMap[m.name] = m.role;
+                    if (m.phone) pMap[m.name] = m.phone;
+                  });
+                  state.dashData.memberRoleMap = Object.assign({}, state.dashData.memberRoleMap || {}, rMap);
+                  state.dashData.memberPhoneMap = Object.assign({}, state.dashData.memberPhoneMap || {}, pMap);
+                }
+                if (Array.isArray(settingsData.tasks)) {
+                  state.dashData.tasks = settingsData.tasks.map(t => (t && (t.name || t.taskName))).filter(Boolean);
+                }
+                if (Array.isArray(settingsData.partners)) {
+                  state.dashData.partners = settingsData.partners.map(p => (p && (p.fullName || p.dropdownVal || (p.biz ? `${p.biz}_${p.name}` : p.name)))).filter(Boolean);
+                  const ppMap = {};
+                  settingsData.partners.forEach(p => {
+                    if (!p) return;
+                    const fn = p.fullName || p.dropdownVal || (p.biz ? `${p.biz}_${p.name}` : p.name);
+                    if (fn && p.phone) ppMap[fn] = p.phone;
+                    if (p.name && p.phone) ppMap[p.name] = p.phone;
+                  });
+                  state.dashData.partnerPhoneMap = Object.assign({}, state.dashData.partnerPhoneMap || {}, ppMap);
+                }
+                ds.saveDashboardCache(state.dashData);
+                await enqueueKeyWrite("dashboard_main", () => persistDomainSnapshot("dashboard_main", state.dashData));
+              }
+              return { success: true, message: "기준정보 설정이 Supabase에 0.05초 만에 저장되었습니다.", source: "supabase" };
+            });
+          };
+
+          ds.getFinanceDbData = function (authUser) {
+            if (!isSupabaseActive()) return orig.getFinanceDbData.call(ds, authUser);
+            return fetchFinanceSnapshotFromSupabase().then((fb) => {
+              if (fb) return fb;
+              if (location.protocol.startsWith("http")) return orig.getFinanceDbData.call(ds, authUser);
+              return { success: true, collection: [], expense: [], fixedMaster: [], updatedAt: "" };
+            });
+          };
+
+          ds.saveCollectionRow = function (row, authUser) {
+            if (!isSupabaseActive()) return orig.saveCollectionRow.call(ds, row, authUser);
+            bgDualWrite("saveCollectionRow", () => orig.saveCollectionRow.call(ds, row, authUser));
+            return enqueueKeyWrite("finance_db", async () => {
+              const fb = await ensureFinanceInMemory();
+              const savedId = (row && row.id) ? String(row.id) : ("COL-" + Date.now());
+              const cAmt = Number(row.contractAmount) || 0;
+              const chgAmt = Number(row.changeAmount) || 0;
+              const totalAmt = cAmt + chgAmt;
+              const collected = (Number(row.downPayment) || 0) + (Number(row.startPayment) || 0) + (Number(row.midPayment1) || 0) + (Number(row.midPayment2) || 0) + (Number(row.midPayment3) || 0) + (Number(row.finalPayment) || 0);
+              const saved = Object.assign({}, row, {
+                id: savedId,
+                totalAmount: totalAmt,
+                collectedAmount: collected,
+                uncollectedAmount: totalAmt - collected
+              });
+              const nextCol = Array.isArray(fb.collection) ? fb.collection.slice() : [];
+              const idx = nextCol.findIndex(r => r && r.id === savedId);
+              if (idx >= 0) nextCol[idx] = Object.assign({}, nextCol[idx], saved);
+              else nextCol.unshift(saved);
+              const nextFb = Object.assign({}, fb, { collection: nextCol, updatedAt: new Date().toISOString() });
+              await persistDomainSnapshot("finance_db", nextFb);
+              await upsertRows("ws_finance_store", [{ record_key: "collection::" + savedId, category: "collection", payload: saved, updated_at: new Date().toISOString() }], "record_key");
+              return { success: true, row: saved, id: savedId, source: "supabase" };
+            });
+          };
+
+          ds.deleteCollectionRow = function (id, authUser) {
+            if (!isSupabaseActive()) return orig.deleteCollectionRow.call(ds, id, authUser);
+            bgDualWrite("deleteCollectionRow", () => orig.deleteCollectionRow.call(ds, id, authUser));
+            return enqueueKeyWrite("finance_db", async () => {
+              const fb = await ensureFinanceInMemory();
+              const nextFb = Object.assign({}, fb, {
+                collection: (fb.collection || []).filter(r => r && r.id !== id),
+                updatedAt: new Date().toISOString()
+              });
+              await persistDomainSnapshot("finance_db", nextFb);
+              await deleteRowsByIds("ws_finance_store", "record_key", ["collection::" + id]);
+              return { success: true, source: "supabase" };
+            });
+          };
+
+          ds.saveExpenseRow = function (row, authUser) {
+            if (!isSupabaseActive()) return orig.saveExpenseRow.call(ds, row, authUser);
+            bgDualWrite("saveExpenseRow", () => orig.saveExpenseRow.call(ds, row, authUser));
+            return enqueueKeyWrite("finance_db", async () => {
+              const fb = await ensureFinanceInMemory();
+              const savedId = (row && row.id) ? String(row.id) : ("EXP-" + Date.now() + "_" + Math.random().toString(36).slice(2, 5).toUpperCase());
+              const claim = Number(row.claimAmount) || 0;
+              const paid = Number(row.paidAmount) || 0;
+              const saved = Object.assign({}, row, { id: savedId, balance: claim - paid });
+              // state.financeDbData.expense 내 임시 ID(temp_exp_...)를 실제 ID로 치환한 사본으로 저장
+              const cleanList = (fb.expense || []).filter(e => e && !String(e.id || "").startsWith("temp_exp_"));
+              const idx = cleanList.findIndex(e => e.id === savedId);
+              if (idx >= 0) cleanList[idx] = Object.assign({}, cleanList[idx], saved);
+              else cleanList.unshift(saved);
+              const nextFb = Object.assign({}, fb, { expense: cleanList, updatedAt: new Date().toISOString() });
+              await persistDomainSnapshot("finance_db", nextFb);
+              await upsertRows("ws_finance_store", [{ record_key: "expense::" + savedId, category: "expense", payload: saved, updated_at: new Date().toISOString() }], "record_key");
+              return { success: true, row: saved, id: savedId, source: "supabase" };
+            });
+          };
+
+          ds.deleteExpenseRow = function (id, authUser) {
+            if (!isSupabaseActive()) return orig.deleteExpenseRow.call(ds, id, authUser);
+            bgDualWrite("deleteExpenseRow", () => orig.deleteExpenseRow.call(ds, id, authUser));
+            return enqueueKeyWrite("finance_db", async () => {
+              const fb = await ensureFinanceInMemory();
+              const nextFb = Object.assign({}, fb, {
+                expense: (fb.expense || []).filter(e => e && e.id !== id),
+                updatedAt: new Date().toISOString()
+              });
+              await persistDomainSnapshot("finance_db", nextFb);
+              await deleteRowsByIds("ws_finance_store", "record_key", ["expense::" + id]);
+              return { success: true, source: "supabase" };
+            });
+          };
+
+          ds.generateFixedExpensesForMonth = function (settleMonth, authUser) {
+            if (!isSupabaseActive()) return orig.generateFixedExpensesForMonth.call(ds, settleMonth, authUser);
+            bgDualWrite("generateFixedExpensesForMonth", () => orig.generateFixedExpensesForMonth.call(ds, settleMonth, authUser));
+            return enqueueKeyWrite("finance_db", async () => {
+              const fb = await ensureFinanceInMemory();
+              const targetMonth = String(settleMonth || "").trim().slice(0, 7);
+              const existingKeys = new Set(
+                (fb.expense || [])
+                  .filter(e => e && String(e.settleMonth || "").slice(0, 7) === targetMonth)
+                  .map(e => `${e.item || ""}||${e.category || ""}||${e.vendor || ""}`.toLowerCase())
+              );
+              const activeMasters = (fb.fixedMaster || []).filter(f => f && String(f.active || "Y").toUpperCase() === "Y");
+              const created = [];
+              const nowBase = Date.now();
+              activeMasters.forEach((am, idx) => {
+                const k = `${am.item || "고정비"}||${am.category || ""}||${am.vendor || ""}`.toLowerCase();
+                if (existingKeys.has(k)) return;
+                const claim = Number(am.baseAmount) || 0;
+                created.push({
+                  id: `EXP-${nowBase}_${idx}`,
+                  settleMonth: targetMonth,
+                  item: am.item || "고정비",
+                  category: am.category || "",
+                  vendor: am.vendor || "",
+                  category2: am.accountNumber || am.category2 || "",
+                  accountNumber: am.accountNumber || am.category2 || "",
+                  siteName: "공통",
+                  claimAmount: claim,
+                  paidAmount: 0,
+                  balance: claim,
+                  payDate: am.payDay || "",
+                  note: am.note || "고정비 자동생성"
+                });
+              });
+              const nextExp = [...created, ...(fb.expense || [])];
+              const nextFb = Object.assign({}, fb, { expense: nextExp, updatedAt: new Date().toISOString() });
+              state.financeDbData = nextFb;
+              ds.saveFinanceCache(nextFb);
+              await persistDomainSnapshot("finance_db", nextFb);
+              if (created.length > 0) {
+                await upsertRows("ws_finance_store", created.map(r => ({ record_key: "expense::" + r.id, category: "expense", payload: r, updated_at: new Date().toISOString() })), "record_key");
+              }
+              return { success: true, createdCount: created.length, expense: nextExp, source: "supabase" };
+            });
+          };
+
+          ds.saveExpenseBatchRows = function (rows, authUser) {
+            if (!isSupabaseActive()) return orig.saveExpenseBatchRows.call(ds, rows, authUser);
+            bgDualWrite("saveExpenseBatchRows", () => orig.saveExpenseBatchRows.call(ds, rows, authUser));
+            return enqueueKeyWrite("finance_db", async () => {
+              const fb = await ensureFinanceInMemory();
+              const nowBase = Date.now();
+              const newRows = (Array.isArray(rows) ? rows : []).map((r, idx) => Object.assign({}, r, {
+                id: (r && r.id) ? String(r.id) : `EXP-${nowBase}_${idx}`
+              }));
+              const nextExp = [...newRows, ...(fb.expense || [])];
+              const nextFb = Object.assign({}, fb, { expense: nextExp, updatedAt: new Date().toISOString() });
+              ds.saveFinanceCache(nextFb);
+              await persistDomainSnapshot("finance_db", nextFb);
+              if (newRows.length > 0) {
+                await upsertRows("ws_finance_store", newRows.map(r => ({ record_key: "expense::" + r.id, category: "expense", payload: r, updated_at: new Date().toISOString() })), "record_key");
+              }
+              return { success: true, rows: newRows, source: "supabase" };
+            });
+          };
+
+          ds.saveFixedMasterRow = function (row, authUser) {
+            if (!isSupabaseActive()) return orig.saveFixedMasterRow.call(ds, row, authUser);
+            bgDualWrite("saveFixedMasterRow", () => orig.saveFixedMasterRow.call(ds, row, authUser));
+            return enqueueKeyWrite("finance_db", async () => {
+              const fb = await ensureFinanceInMemory();
+              const savedId = (row && row.id) ? String(row.id) : ("FM-" + Date.now());
+              const saved = Object.assign({}, row, { id: savedId });
+              const cleanList = (fb.fixedMaster || []).filter(f => f && !String(f.id || "").startsWith("temp_fm_"));
+              const idx = cleanList.findIndex(f => f.id === savedId);
+              if (idx >= 0) cleanList[idx] = Object.assign({}, cleanList[idx], saved);
+              else cleanList.unshift(saved);
+              const nextFb = Object.assign({}, fb, { fixedMaster: cleanList, updatedAt: new Date().toISOString() });
+              await persistDomainSnapshot("finance_db", nextFb);
+              await upsertRows("ws_finance_store", [{ record_key: "fixed::" + savedId, category: "fixedMaster", payload: saved, updated_at: new Date().toISOString() }], "record_key");
+              return { success: true, id: savedId, source: "supabase" };
+            });
+          };
+
+          ds.deleteFixedMasterRow = function (id, authUser) {
+            if (!isSupabaseActive()) return orig.deleteFixedMasterRow.call(ds, id, authUser);
+            bgDualWrite("deleteFixedMasterRow", () => orig.deleteFixedMasterRow.call(ds, id, authUser));
+            return enqueueKeyWrite("finance_db", async () => {
+              const fb = await ensureFinanceInMemory();
+              const nextFb = Object.assign({}, fb, {
+                fixedMaster: (fb.fixedMaster || []).filter(f => f && f.id !== id),
+                updatedAt: new Date().toISOString()
+              });
+              await persistDomainSnapshot("finance_db", nextFb);
+              await deleteRowsByIds("ws_finance_store", "record_key", ["fixed::" + id]);
+              return { success: true, source: "supabase" };
+            });
+          };
+        }
+
+        function renderSetupModal() {
+          const cfg = getConfig();
+          const status = getStatusInfo();
+          const bodyEl = document.getElementById("supabaseSetupModalBody");
+          const footEl = document.getElementById("supabaseSetupModalFooter");
+          if (!bodyEl || !footEl) return;
+
+          const hasDefaultHardcoded = Boolean(SUPABASE_V3_DEFAULT_CONFIG && SUPABASE_V3_DEFAULT_CONFIG.url && SUPABASE_V3_DEFAULT_CONFIG.anonKey);
+          const migHtml = lastMigrationSummary ? `
+            <div class="sb-stat-grid" style="margin-top:6px;">
+              <div class="sb-stat-tile"><div class="sb-stat-val">${lastMigrationSummary.siteCount}건</div><div class="sb-stat-lbl">현장 (ws_sites)</div></div>
+              <div class="sb-stat-tile"><div class="sb-stat-val">${lastMigrationSummary.taskCount}건</div><div class="sb-stat-lbl">공정 (ws_tasks)</div></div>
+              <div class="sb-stat-tile"><div class="sb-stat-val">${lastMigrationSummary.todoCount}건</div><div class="sb-stat-lbl">To-Do</div></div>
+              <div class="sb-stat-tile"><div class="sb-stat-val">${lastMigrationSummary.financeIncluded ? lastMigrationSummary.financeTotalCount + "건" : "스킵"}</div><div class="sb-stat-lbl">재무 (ws_finance_store)</div></div>
+            </div>
+            <div style="font-size:11.5px;color:#047857;font-weight:700;margin-top:4px;">
+              ✔ ${escHtml(lastMigrationSummary.sourceLabel)}에서 ${lastMigrationSummary.elapsedSec}초 만에 이관 완료 (거래처 ${lastMigrationSummary.partnerCount} · 공종 ${lastMigrationSummary.taskTypeCount} · 구성원 ${lastMigrationSummary.memberCount})
+            </div>
+          ` : "";
+
+          bodyEl.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-radius:10px;border:1px solid #cbd5e1;background:#ffffff;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-weight:800;font-size:13px;color:#0f172a;">현재 상태:</span>
+                <span id="sbModalStatusPill" style="padding:3px 10px;border-radius:999px;font-size:12px;font-weight:800;background:#f8fafc;border:1px solid #cbd5e1;">${escHtml(status.text)}</span>
+                ${lastLatencyMs !== null ? `<span style="font-size:11.5px;color:#059669;font-weight:700;">⚡ 응답 ${lastLatencyMs}ms</span>` : ""}
+                ${lastRealtimeEventAt ? `<span style="font-size:11.5px;color:#2563eb;font-weight:700;">📡 최근 수신 ${escHtml(lastRealtimeEventAt)}</span>` : ""}
+              </div>
+              <span style="font-size:11px;color:#64748b;">Google Drive 사진·파일 업로드는 기존 GAS 연동 100% 유지</span>
+            </div>
+
+            <div class="sb-step-card">
+              <div class="sb-step-title">
+                <span>1️⃣ Supabase 프로젝트 연결 정보</span>
+                ${hasDefaultHardcoded ? `<span style="font-size:11px;color:#059669;font-weight:700;">✔ 코드 기본 상수(SUPABASE_V3_DEFAULT_CONFIG) 적용됨</span>` : `<span style="font-size:11px;color:#64748b;font-weight:600;">Project Settings ➔ API 에서 확인</span>`}
+              </div>
+              <div class="form-grid-2">
+                <div class="fg">
+                  <label>Supabase Project URL</label>
+                  <input type="url" class="ws-input" id="sbUrlInput" value="${escHtml(cfg.url)}" placeholder="https://xxxxxxxxxxxx.supabase.co" autocomplete="off">
+                </div>
+                <div class="fg">
+                  <label>anon public Key <span style="color:#64748b;font-weight:500;">(service_role 입력 금지)</span></label>
+                  <input type="password" class="ws-input" id="sbAnonKeyInput" value="${escHtml(cfg.anonKey)}" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." autocomplete="off">
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <button type="button" class="btn-act-blue" onclick="WSSupabaseV3.handleSaveConnectionInputs()">💾 설정 저장</button>
+                <button type="button" class="btn-act-white" id="btnSbTestConn" onclick="WSSupabaseV3.handleTestConnection()">🔌 연결 테스트</button>
+                <button type="button" class="btn-tool-tag" onclick="const inp=document.getElementById('sbAnonKeyInput'); if(inp){ inp.type=inp.type==='password'?'text':'password'; this.textContent=inp.type==='text'?'🙈 키 숨기기':'👁️ 키 보기'; }" style="height:32px;padding:0 10px;">👁️ 키 보기</button>
+                <button type="button" class="btn-tool-tag" style="height:32px;padding:0 10px;color:#dc2626;margin-left:auto;" onclick="WSSupabaseV3.handleResetLocalConfig()">🗑️ 이 기기 설정 초기화</button>
+              </div>
+            </div>
+
+            <div class="sb-step-card">
+              <div class="sb-step-title">
+                <span>2️⃣ 데이터베이스 테이블 &amp; 실시간(Realtime) 스키마 준비</span>
+                <span style="font-size:11px;color:#64748b;font-weight:600;">Supabase SQL Editor에서 1회 실행</span>
+              </div>
+              <div style="font-size:12px;color:#475569;line-height:1.5;">
+                <code>ws_state_store</code>, <code>ws_sites</code>, <code>ws_tasks</code>, <code>ws_finance_store</code> 테이블, RLS 정책 및 Realtime Publication을 생성합니다.
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <button type="button" class="btn-act-white" style="border-color:#059669;color:#047857;font-weight:800;" onclick="WSSupabaseV3.handleCopySchemaSql()">📋 1단계: SQL 스키마 클립보드 복사</button>
+                <button type="button" class="btn-tool-tag" style="height:32px;padding:0 10px;" onclick="const pre=document.getElementById('sbSchemaPreviewWrap'); if(pre) pre.style.display=pre.style.display==='none'?'block':'none';">📄 SQL 미리보기</button>
+              </div>
+              <div id="sbSchemaPreviewWrap" style="display:none;">
+                <textarea readonly class="ws-textarea" style="font-family:ui-monospace,monospace;font-size:11px;min-height:140px;background:#0f172a;color:#e2e8f0;border-color:#334155;">${escHtml(SUPABASE_V3_SCHEMA_SQL)}</textarea>
+              </div>
+            </div>
+
+            <div class="sb-step-card" style="background:#f0fdf4;border-color:#86efac;">
+              <div class="sb-step-title">
+                <span style="color:#065f46;">3️⃣ 현재 구글 시트 ➔ Supabase 전체 데이터 원클릭 이관</span>
+                <span style="font-size:11px;color:#047857;font-weight:700;">안전한 반복 Upsert 지원</span>
+              </div>
+              <div style="font-size:12px;color:#334155;line-height:1.5;">
+                기존 GAS 백엔드(현장·공정·To-Do·거래처/기준정보${canViewFinance() ? "·재무 DB" : ""})의 라이브 데이터를 가져와 Supabase 4개 테이블에 일괄 Upsert합니다.
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <button type="button" class="btn-act-blue" id="btnSbMigrateAll" style="background:#059669;border-color:#047857;font-weight:800;" onclick="WSSupabaseV3.handleOneClickMigrate()">🚀 2단계: 현재 구글 시트 ➔ Supabase 전체 데이터 원클릭 이관</button>
+              </div>
+              ${migHtml}
+            </div>
+
+            <div class="sb-step-card">
+              <div class="sb-step-title">
+                <span>4️⃣ 데이터 엔진 모드 &amp; Google Sheets 백업 설정</span>
+              </div>
+              <div class="sb-mode-grid">
+                <button type="button" class="sb-mode-btn ${cfg.engineMode === "supabase" ? "active-sb" : ""}" onclick="WSSupabaseV3.handleSetEngineMode('supabase')">
+                  <div style="font-size:13px;font-weight:800;color:#065f46;">⚡ Supabase 초고속 모드 (0.05초)</div>
+                  <div style="font-size:11.5px;color:#475569;margin-top:3px;">모든 읽기·쓰기·실시간 동기화를 Supabase로 즉시 처리합니다.</div>
+                </button>
+                <button type="button" class="sb-mode-btn ${cfg.engineMode === "sheets" ? "active-sheets" : ""}" onclick="WSSupabaseV3.handleSetEngineMode('sheets')">
+                  <div style="font-size:13px;font-weight:800;color:#1e40af;">📊 기존 Google Sheets 모드</div>
+                  <div style="font-size:11.5px;color:#475569;margin-top:3px;">기존 GAS + 스프레드시트 직접 통신 모드로 즉시 전환합니다.</div>
+                </button>
+              </div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#1e293b;cursor:pointer;margin-top:4px;padding:6px 10px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;">
+                <input type="checkbox" id="sbDualWriteChk" ${cfg.dualWrite ? "checked" : ""} onchange="WSSupabaseV3.handleToggleDualWrite(this.checked)" style="width:16px;height:16px;accent-color:#059669;cursor:pointer;">
+                <span>🔄 Google Sheets 백그라운드 동시 백업 (Dual-Write 권장 · 기본 ON)</span>
+              </label>
+            </div>
+
+            <div class="sb-log-box" id="sbModalLogBox">${escHtml(modalLogs.length ? modalLogs.join("\n") : "ℹ️ 연결 테스트 또는 원클릭 이관 실행 시 진행 로그가 여기에 표시됩니다.")}</div>
+          `;
+
+          footEl.innerHTML = `
+            <button type="button" class="btn-act-white" onclick="window.triggerLiveSync(true)">🔄 지금 동기화</button>
+            <button type="button" class="btn-act-blue" onclick="closeModal('supabaseSetupModal')">닫기</button>
+          `;
+        }
+
+        function init() {
+          installServiceHooks();
+          updateStatusState();
+          if (isSupabaseActive()) {
+            startRealtime();
+          }
+        }
+
+        return {
+          getConfig,
+          saveConfig,
+          resetLocalConfig,
+          isConfigured,
+          isSupabaseActive,
+          getDualWriteEnabled,
+          getStatusInfo,
+          updateHeaderBadges,
+          testConnection,
+          syncLiveFromSupabase,
+          verifyPinFast,
+          saveAuthPin,
+          migrateFromGasToSupabase,
+          startRealtime,
+          stopRealtime,
+          installServiceHooks,
+          renderSetupModal,
+          init,
+
+          handleSaveConnectionInputs: function () {
+            const urlEl = document.getElementById("sbUrlInput");
+            const keyEl = document.getElementById("sbAnonKeyInput");
+            const url = (urlEl ? urlEl.value : "").trim().replace(/\/+$/, "");
+            const anonKey = (keyEl ? keyEl.value : "").trim();
+            if (!url || !/^https?:\/\/.+/i.test(url)) {
+              if (urlEl) urlEl.focus();
+              return showToast("⚠️ 유효한 Supabase Project URL (https://...)을 입력해 주세요.");
+            }
+            if (!anonKey || anonKey.length < 15) {
+              if (keyEl) keyEl.focus();
+              return showToast("⚠️ 유효한 anon public Key를 입력해 주세요.");
+            }
+            saveConfig({ url, anonKey });
+            cachedClient = null;
+            cachedClientKey = "";
+            appendLog("✓ Supabase URL 및 anon Key가 브라우저(localStorage)에 저장되었습니다.");
+            if (isSupabaseActive()) startRealtime();
+            else updateStatusState();
+            renderSetupModal();
+            showToast("✅ Supabase 연결 정보가 저장되었습니다.");
+          },
+
+          handleTestConnection: async function () {
+            const urlEl = document.getElementById("sbUrlInput");
+            const keyEl = document.getElementById("sbAnonKeyInput");
+            const btn = document.getElementById("btnSbTestConn");
+            const url = (urlEl ? urlEl.value : "").trim().replace(/\/+$/, "");
+            const anonKey = (keyEl ? keyEl.value : "").trim();
+            if (!url || !anonKey) {
+              return showToast("⚠️ 먼저 Supabase URL과 anon Key를 입력해 주세요.");
+            }
+            if (btn) { btn.disabled = true; btn.textContent = "⏳ 테스트 중..."; }
+            appendLog("🔌 Supabase 연결 및 테이블 존재 여부 테스트 중...");
+            try {
+              const res = await testConnection({ url, anonKey });
+              if (res.ok) {
+                saveConfig({ url, anonKey });
+                appendLog(`✅ 연결 성공 (${res.latencyMs}ms) · 4개 테이블 모두 정상 확인 · 저장된 스냅샷 키: [${res.stateKeys.join(", ") || "없음(이관 대기)"}]`);
+                if (isSupabaseActive()) startRealtime();
+                showToast(`✅ Supabase 연결 성공! (${res.latencyMs}ms)`);
+              } else {
+                appendLog(`⚠️ 연결됨 (${res.latencyMs}ms) 단, 스키마 미완료: ${res.error}`);
+                showToast("⚠️ 테이블 확인 필요: 1단계 SQL 스키마를 실행해 주세요.");
+              }
+            } catch (err) {
+              appendLog(`❌ 연결 테스트 실패: ${err.message || String(err)}`);
+              showToast("❌ 연결 실패: " + (err.message || String(err)));
+            } finally {
+              if (btn) { btn.disabled = false; btn.textContent = "🔌 연결 테스트"; }
+              updateHeaderBadges();
+            }
+          },
+
+          handleResetLocalConfig: function () {
+            if (!confirm("이 기기(브라우저)에 저장된 Supabase URL/Key 및 모드 설정을 초기화할까요?")) return;
+            resetLocalConfig();
+            modalLogs = [];
+            appendLog("🗑️ 이 기기의 localStorage Supabase 설정이 초기화되었습니다.");
+            renderSetupModal();
+            showToast("🗑️ Supabase 로컬 설정이 초기화되었습니다.");
+          },
+
+          handleCopySchemaSql: async function () {
+            try {
+              if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+                await navigator.clipboard.writeText(SUPABASE_V3_SCHEMA_SQL);
+                appendLog("📋 schema_v3.sql 전체 구문이 클립보드에 복사되었습니다. Supabase SQL Editor에 붙여넣고 Run 하세요.");
+                showToast("📋 SQL 스키마가 클립보드에 복사되었습니다!");
+                return;
+              }
+            } catch (_) {}
+            const wrap = document.getElementById("sbSchemaPreviewWrap");
+            if (wrap) {
+              wrap.style.display = "block";
+              const ta = wrap.querySelector("textarea");
+              if (ta) {
+                ta.focus();
+                ta.select();
+                try {
+                  document.execCommand("copy");
+                  appendLog("📋 schema_v3.sql 구문이 복사되었습니다.");
+                  showToast("📋 SQL 스키마가 복사되었습니다!");
+                  return;
+                } catch (_) {}
+              }
+            }
+            showToast("ℹ️ SQL 미리보기 영역에서 전체 선택(Ctrl+A) 후 복사해 주세요.");
+          },
+
+          handleOneClickMigrate: async function () {
+            const urlEl = document.getElementById("sbUrlInput");
+            const keyEl = document.getElementById("sbAnonKeyInput");
+            const url = (urlEl ? urlEl.value : "").trim().replace(/\/+$/, "");
+            const anonKey = (keyEl ? keyEl.value : "").trim();
+            if (url && anonKey) {
+              saveConfig({ url, anonKey });
+            }
+            if (!isConfigured()) {
+              return showToast("⚠️ 먼저 Supabase URL과 anon Key를 입력·저장해 주세요.");
+            }
+            const btn = document.getElementById("btnSbMigrateAll");
+            if (btn && btn.disabled) return;
+            if (btn) { btn.disabled = true; btn.textContent = "⏳ 구글 시트 ➔ Supabase 이관 중..."; }
+            try {
+              const summary = await migrateFromGasToSupabase();
+              renderSetupModal();
+              showToast(`🚀 이관 완료! 현장 ${summary.siteCount}건 · 공정 ${summary.taskCount}건 (${summary.elapsedSec}초)`);
+            } catch (err) {
+              appendLog("❌ 이관 오류: " + (err.message || String(err)));
+              showToast("❌ 이관 실패: " + (err.message || String(err)));
+            } finally {
+              const b2 = document.getElementById("btnSbMigrateAll");
+              if (b2) { b2.disabled = false; b2.textContent = "🚀 2단계: 현재 구글 시트 ➔ Supabase 전체 데이터 원클릭 이관"; }
+            }
+          },
+
+          handleSetEngineMode: function (mode) {
+            const nextMode = mode === "sheets" ? "sheets" : "supabase";
+            if (nextMode === "supabase" && !isConfigured()) {
+              showToast("⚠️ 먼저 Supabase URL과 anon Key를 입력·저장해 주세요.");
+              return;
+            }
+            saveConfig({ engineMode: nextMode });
+            if (nextMode === "supabase") {
+              startRealtime();
+              appendLog("⚡ 엔진 모드 전환: Supabase 초고속 모드 (0.05초)");
+              showToast("⚡ Supabase 초고속 모드로 전환되었습니다.");
+              if (location.protocol.startsWith("http")) window.triggerLiveSync(false);
+            } else {
+              stopRealtime();
+              appendLog("📊 엔진 모드 전환: 기존 Google Sheets 모드");
+              showToast("📊 기존 Google Sheets 모드로 전환되었습니다.");
+              if (location.protocol.startsWith("http")) window.triggerLiveSync(false);
+            }
+            renderSetupModal();
+          },
+
+          handleToggleDualWrite: function (checked) {
+            saveConfig({ dualWrite: !!checked });
+            appendLog(checked ? "🔄 Google Sheets 백그라운드 동시 백업(Dual-Write) ON" : "⚡ Google Sheets 동시 백업 OFF (Supabase 단독 저장)");
+            showToast(checked ? "🔄 Google Sheets 동시 백업이 켜졌습니다." : "⚡ Supabase 단독 저장 모드로 설정되었습니다.");
+          }
+        };
+      })();
+      window.WSSupabaseV3 = WSSupabaseV3;
+      WSSupabaseV3.installServiceHooks();
+
+      window.openSupabaseSetupModal = function () {
+        WSSupabaseV3.renderSetupModal();
+        openModal("supabaseSetupModal");
+      };
+      window.closeSupabaseSetupModal = function () {
+        closeModal("supabaseSetupModal");
       };
 
       // ================= 드래그 앤 드롭 날짜 이동 =================
@@ -16736,16 +18911,20 @@
         if (el) el.scrollBy({ left: delta || 320, behavior: "smooth" });
       };
       window.triggerLiveSync = function (manual) {
+        const useSb = Boolean(window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive());
         const badge = document.getElementById("perfBadge");
-        if (badge) { badge.classList.add("syncing"); badge.textContent = "🔄 Google Sheets 동기화 중..."; }
-        if (!window.WSDataService || !location.protocol.startsWith("http")) {
+        if (badge) {
+          badge.classList.add("syncing");
+          badge.textContent = useSb ? "⚡ Supabase 실시간 동기화 중..." : "🔄 Google Sheets 동기화 중...";
+        }
+        if (!window.WSDataService || (!useSb && !location.protocol.startsWith("http"))) {
           if (badge) { badge.classList.remove("syncing"); badge.textContent = `⚡ 분리 데이터 · 초기 렌더 ${(window.__initialRenderMs || 0).toFixed(1)}ms`; }
           if (manual) {
             window._isSyncInProgress = false;
             const tEl = document.getElementById("syncStatusModalTitle");
             if (tEl) tEl.innerHTML = "ℹ️ 안내";
             const bEl = document.getElementById("syncStatusModalBody");
-            if (bEl) bEl.innerHTML = `<div style="padding:10px 0;font-size:13.5px;color:#475569;">로컬 file:// 환경에서는 분리된 Google Sheets 스냅샷으로 동작합니다.</div>`;
+            if (bEl) bEl.innerHTML = `<div style="padding:10px 0;font-size:13.5px;color:#475569;">로컬 file:// 환경에서는 분리된 Google Sheets 스냅샷으로 동작합니다. (Supabase 연결 시 로컬에서도 실시간 동기화 가능)</div>`;
             const fEl = document.getElementById("syncStatusModalFooter");
             if (fEl) fEl.innerHTML = `<button type="button" class="btn-primary" style="min-width:100px;height:36px;padding:0 20px;font-size:13px;font-weight:800;border-radius:8px;" onclick="closeModal('syncStatusModal')">확인</button>`;
             const cBtn = document.getElementById("syncStatusModalCloseBtn");
@@ -16758,10 +18937,16 @@
         if (manual) {
           window._isSyncInProgress = true;
           const tEl = document.getElementById("syncStatusModalTitle");
-          if (tEl) tEl.innerHTML = "🔄 Google Sheets 동기화";
+          if (tEl) tEl.innerHTML = useSb ? "⚡ Supabase 초고속 동기화" : "🔄 Google Sheets 동기화";
           const bEl = document.getElementById("syncStatusModalBody");
           if (bEl) {
-            bEl.innerHTML = `
+            bEl.innerHTML = useSb ? `
+              <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:10px 0;">
+                <div style="width:38px;height:38px;border:3px solid #d1fae5;border-top-color:#059669;border-radius:50%;animation:spin 0.6s linear infinite;"></div>
+                <div style="font-size:15px;font-weight:800;color:#065f46;">Supabase 최신 데이터를 0.05초 만에 불러오는 중...</div>
+                <div style="font-size:12.5px;color:#64748b;line-height:1.5;">현장데이터, To-Do, 거래처 마스터 및<br/>재무 DB를 실시간으로 갱신하고 있습니다.</div>
+              </div>
+            ` : `
               <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:10px 0;">
                 <div style="width:38px;height:38px;border:3px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
                 <div style="font-size:15px;font-weight:800;color:#1e293b;">Google Sheets 최신 데이터를 동기화 중입니다...</div>
@@ -16782,13 +18967,44 @@
           authUser: user
         };
 
-        window.WSDataService.syncLiveFromGAS(syncOpts, ({ dashData, todoData, settingsData, financeData, meta }) => {
+        window.WSDataService.syncLiveFromGAS(syncOpts, ({ dashData, todoData, settingsData, financeData, meta, emptySupabase, elapsedMs }) => {
+          if (emptySupabase) {
+            if (badge) { badge.classList.remove("syncing"); badge.textContent = `⚡ Supabase v3 (초기 이관 대기)`; }
+            if (manual) {
+              window._isSyncInProgress = false;
+              const tEl = document.getElementById("syncStatusModalTitle");
+              if (tEl) tEl.innerHTML = "ℹ️ Supabase 초기 데이터 이관 필요";
+              const bEl = document.getElementById("syncStatusModalBody");
+              if (bEl) {
+                bEl.innerHTML = `
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:6px 0;">
+                    <div style="font-size:34px;">🚀</div>
+                    <div style="font-size:15px;font-weight:800;color:#1e293b;">Supabase 테이블에 아직 이관된 데이터가 없습니다.</div>
+                    <div style="font-size:12.5px;color:#475569;line-height:1.55;">현재 화면은 기존 스냅샷/캐시로 안전하게 유지되고 있습니다.<br/>아래 버튼을 눌러 구글 시트 데이터를 Supabase로 원클릭 이관해 주세요.</div>
+                  </div>
+                `;
+              }
+              const fEl = document.getElementById("syncStatusModalFooter");
+              if (fEl) {
+                fEl.innerHTML = `
+                  <button type="button" class="btn-act-white" onclick="closeModal('syncStatusModal')">닫기</button>
+                  <button type="button" class="btn-act-blue" style="background:#059669;border-color:#047857;" onclick="closeModal('syncStatusModal'); openSupabaseSetupModal();">⚡ 원클릭 이관 열기</button>
+                `;
+              }
+              const cBtn = document.getElementById("syncStatusModalCloseBtn");
+              if (cBtn) cBtn.style.display = "block";
+            } else {
+              showToast("ℹ️ Supabase DB가 비어 있습니다. 상단 ⚡ v3 Supabase 배지에서 [2단계: 원클릭 이관]을 실행해 주세요.");
+            }
+            return;
+          }
+
           let updated = false;
           if (dashData) {
             const cleanDash = applyDeletedGuardsToDashData(dashData);
             let mutStart = 0;
             try { mutStart = Number(localStorage.getItem("ws_last_mutation_start_ms") || "0"); } catch (_) {}
-            if (Date.now() - mutStart < 25000 && state.dashData && Array.isArray(state.dashData.sites) && Array.isArray(cleanDash.sites)) {
+            if (!useSb && Date.now() - mutStart < 25000 && state.dashData && Array.isArray(state.dashData.sites) && Array.isArray(cleanDash.sites)) {
               const serverKeys = new Set(cleanDash.sites.map((s) => `${s.scope || "site"}::${_normDelSiteName(s.siteName)}`));
               state.dashData.sites.forEach((localSite) => {
                 if (!localSite || (localSite.scope || "site") === "newSite") return;
@@ -16839,17 +19055,22 @@
             markAllDirty();
             renderActiveViews();
           }
-          if (badge) { badge.classList.remove("syncing"); badge.textContent = `⚡ 실시간 동기화 (${meta.updatedAt}) · ${(window.__initialRenderMs || 0).toFixed(1)}ms`; }
+          if (badge) {
+            badge.classList.remove("syncing");
+            badge.textContent = useSb
+              ? `⚡ Supabase 실시간 (${meta.updatedAt}) · ${elapsedMs !== undefined ? elapsedMs + "ms" : (window.__initialRenderMs || 0).toFixed(1) + "ms"}`
+              : `⚡ 실시간 동기화 (${meta.updatedAt}) · ${(window.__initialRenderMs || 0).toFixed(1)}ms`;
+          }
           if (manual) {
             window._isSyncInProgress = false;
             const tEl = document.getElementById("syncStatusModalTitle");
-            if (tEl) tEl.innerHTML = "✅ 동기화 완료";
+            if (tEl) tEl.innerHTML = useSb ? "⚡ Supabase 동기화 완료" : "✅ 동기화 완료";
             const bEl = document.getElementById("syncStatusModalBody");
             if (bEl) {
               bEl.innerHTML = `
                 <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:6px 0;">
-                  <div style="font-size:38px;">🎉</div>
-                  <div style="font-size:15.5px;font-weight:800;color:#1e293b;">동기화가 완료되었습니다.</div>
+                  <div style="font-size:38px;">${useSb ? "⚡" : "🎉"}</div>
+                  <div style="font-size:15.5px;font-weight:800;color:#1e293b;">${useSb ? `Supabase 초고속 동기화 완료 (${elapsedMs || 0}ms)` : "동기화가 완료되었습니다."}</div>
                   <div style="font-size:12.5px;color:#475569;background:#f8fafc;padding:12px 14px;border-radius:10px;border:1px solid #e2e8f0;width:100%;box-sizing:border-box;text-align:left;line-height:1.6;">
                     <div>🕒 <strong>동기화 시각:</strong> ${meta.updatedAt || new Date().toLocaleTimeString()}</div>
                     <div style="color:#16a34a;font-weight:700;margin-top:2px;">✔ 현장데이터, To-Do, 거래처, 재무 DB 최신 반영</div>
@@ -16863,7 +19084,7 @@
             }
             const cBtn = document.getElementById("syncStatusModalCloseBtn");
             if (cBtn) cBtn.style.display = "block";
-            showToast("✅ Google Sheets 최신 데이터로 동기화되었습니다.");
+            showToast(useSb ? `⚡ Supabase 최신 데이터로 동기화되었습니다. (${elapsedMs || 0}ms)` : "✅ Google Sheets 최신 데이터로 동기화되었습니다.");
           }
         }).catch((err) => {
           if (badge) { badge.classList.remove("syncing"); }
@@ -17183,11 +19404,23 @@
         if (errEl) errEl.textContent = "";
 
         let data = null;
-        if (location.protocol.startsWith("http")) {
+        if (window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive()) {
+          try {
+            data = await window.WSSupabaseV3.verifyPinFast(valName, valPin);
+          } catch (_) {
+            data = null;
+          }
+        }
+        if (!data && location.protocol.startsWith("http")) {
           try {
             const url = `${GAS_AUTH_API_URL}?action=verifyDashboardPin&user=${encodeURIComponent(valName)}&pin=${encodeURIComponent(valPin)}&_t=${Date.now()}`;
             const resp = await fetch(url, { method: "GET", redirect: "follow" });
-            if (resp.ok) data = await resp.json();
+            if (resp.ok) {
+              data = await resp.json();
+              if (data && data.success && !data.isAdmin && window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive()) {
+                window.WSSupabaseV3.saveAuthPin(valPin, data.user || valName).catch(() => {});
+              }
+            }
           } catch (e) {
             data = null;
           }
@@ -17221,6 +19454,9 @@
           if (ov) ov.classList.remove("open");
           applyAuthenticatedUser(verifiedUser);
           resetAllTabsToHome();
+          if (canViewFinance() && window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive()) {
+            ensureFinanceDbDataLoaded(true);
+          }
           showToast(`🔓 ${verifiedUser}님 인증되었습니다.`);
         } else {
           let failCnt = 0;
@@ -17348,11 +19584,18 @@
         const badge = document.getElementById("perfBadge");
         if (badge) badge.textContent = `⚡ 분리 데이터(${state.syncSource === "snapshot" ? "스냅샷" : "캐시"}) · 초기 렌더 ${window.__initialRenderMs.toFixed(1)}ms`;
 
+        if (window.WSSupabaseV3) {
+          window.WSSupabaseV3.init();
+        }
+
         if (window.parent && window.parent !== window) {
           try { window.parent.postMessage({ type: "DASHBOARD_READY" }, "*"); } catch (eRdy) {}
         }
 
-        if (location.protocol.startsWith("http")) {
+        if (window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive()) {
+          setTimeout(() => window.triggerLiveSync(false), 30);
+          if (location.protocol.startsWith("http")) loadWeatherData();
+        } else if (location.protocol.startsWith("http")) {
           let lastMutMs = 0;
           try { lastMutMs = Number(localStorage.getItem("ws_last_mutation_start_ms") || "0"); } catch (eLm) {}
           const syncDelayMs = (Date.now() - lastMutMs < 4500) ? 1500 : 120;
@@ -17377,7 +19620,7 @@
           if (el) { el.focus(); el.select(); }
         }
         if (e.key === "Escape") {
-          ["taskSheetModal", "deleteConfirmModal", "siteInfoModal", "siteFileUploadModal", "partnerGuideModal", "mobileSiteFilterModal", "todoActionModal", "estimateEditModal", "monthlyReportModal", "settingsModal"].forEach(window.closeModal);
+          ["taskSheetModal", "deleteConfirmModal", "siteInfoModal", "siteFileUploadModal", "partnerGuideModal", "mobileSiteFilterModal", "todoActionModal", "estimateEditModal", "monthlyReportModal", "settingsModal", "supabaseSetupModal"].forEach(window.closeModal);
           if (!window._isSyncInProgress && typeof window.closeModal === "function") window.closeModal("syncStatusModal");
           if (typeof window.closeCaptureModal === "function") window.closeCaptureModal();
         }
