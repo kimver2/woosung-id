@@ -2245,6 +2245,8 @@
 
     #supabaseSetupModal { z-index: 10130; }
     #supabaseSetupModal .ws-modal-card.wide { max-width: 780px; }
+    #supabaseSetupModal .sb-step-card,
+    #supabaseSetupModal .sb-log-box { flex-shrink: 0; }
     .sb-step-card {
       background: #f8fafc;
       border: 1px solid #e2e8f0;
@@ -2295,8 +2297,9 @@
       font-size: 11.5px;
       line-height: 1.55;
       border-radius: 8px;
-      padding: 10px 12px;
-      max-height: 160px;
+      padding: 12px 14px;
+      min-height: 76px;
+      max-height: 180px;
       overflow-y: auto;
       white-space: pre-wrap;
       word-break: break-word;
@@ -2379,10 +2382,6 @@
           <div class="brand-logo" onclick="switchMainTab('home')">
             🏢 우성아이디
           </div>
-          <button type="button" id="pcSupabaseBadge" class="ws-v3-sb-badge is-pending" onclick="openSupabaseSetupModal()" title="클릭하여 Supabase v3 연결 설정 및 데이터 이관 모달 열기">
-            <span class="sb-brand-tag">⚡ v3 Supabase</span>
-            <span id="pcSupabaseStatusText">🟡 설정 대기중</span>
-          </button>
 
           <nav class="header-nav-tabs">
             <button type="button" class="nav-tab-item active" data-tab="home" onclick="switchMainTab('home')">🏠 홈</button>
@@ -2454,7 +2453,6 @@
               <span>우성아이디</span>
               <span id="mSyncDot" style="width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;" title="데이터 준비 완료"></span>
             </div>
-            <button type="button" id="mSupabaseBadge" class="ws-v3-sb-mbadge is-pending" onclick="openSupabaseSetupModal()" title="Supabase v3 연결 설정 및 상태">⚡v3 🟡</button>
           </div>
 
           <div style="display:flex;align-items:center;gap:6px;">
@@ -16264,6 +16262,7 @@ end $$;`;
           const sbStatusMeta = window.WSSupabaseV3 ? window.WSSupabaseV3.getStatusInfo() : { text: "🟡 설정 대기중", engineMode: "supabase", configured: false };
           contentHtml = `
             <div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:8px 0;">
+              ${canManageSharedPassword() ? `
               <div style="background:linear-gradient(135deg,#ecfdf5,#eff6ff);padding:14px;border-radius:10px;border:1.5px solid #6ee7b7;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
                 <div style="flex:1;min-width:220px;">
                   <div style="font-weight:800;font-size:13.5px;color:#065f46;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -16274,6 +16273,7 @@ end $$;`;
                 </div>
                 <button type="button" class="btn-act-blue" style="background:#059669;border-color:#047857;white-space:nowrap;" onclick="openSupabaseSetupModal()">⚡ Supabase 설정 · 이관</button>
               </div>
+              ` : ""}
 
               <div style="background:#f8fafc;padding:14px;border-radius:10px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
                 <div>
@@ -18204,6 +18204,9 @@ end $$;`;
       WSSupabaseV3.installServiceHooks();
 
       window.openSupabaseSetupModal = function () {
+        if (typeof canManageSharedPassword === "function" && !canManageSharedPassword()) {
+          return showToast("🔒 관리자(조항만 · admin) 전용 메뉴입니다.");
+        }
         WSSupabaseV3.renderSetupModal();
         openModal("supabaseSetupModal");
       };
