@@ -6576,15 +6576,28 @@ end $$;`;
 
       // [1-3] 증빙 구분 파싱 및 태그 헬퍼
       function parseExpenseTaxProof(note) {
-        const m = String(note || "").match(/\[증빙:(세금계산서|현금영수증|카드|무증빙)\]/);
+        const m = String(note || "").match(/\[증빙:(세금계산서|현금영수증|3\.3%원천징수|카드|무증빙)\]/);
         return m ? m[1] : "";
       }
       window.parseExpenseTaxProof = parseExpenseTaxProof;
 
       function stripExpenseTaxProof(note) {
-        return String(note || "").replace(/\[증빙:(세금계산서|현금영수증|카드|무증빙)\]/g, "").trim();
+        return String(note || "").replace(/\[증빙:(세금계산서|현금영수증|3\.3%원천징수|카드|무증빙)\]/g, "").trim();
       }
       window.stripExpenseTaxProof = stripExpenseTaxProof;
+
+      function getExpenseRowBalance(e) {
+        if (!e) return 0;
+        const claim = Number(e.claimAmount) || 0;
+        const paid = Number(e.paidAmount) || 0;
+        const proof = parseExpenseTaxProof(e.note);
+        if (proof === "3.3%원천징수" || /3\.3%\s*공제/.test(String(e.note || ""))) {
+          const netTarget = claim - Math.round(claim * 0.033);
+          return Math.max(netTarget - paid, 0);
+        }
+        return (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : Math.max(claim - paid, 0);
+      }
+      window.getExpenseRowBalance = getExpenseRowBalance;
 
       function buildExpenseNoteWithTaxProof(rawNote, proof) {
         const base = stripExpenseTaxProof(rawNote);
@@ -8129,7 +8142,7 @@ end $$;`;
             </div>
             <div>
               <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">증빙 구분 <button type="button" onclick="window.applyExpense33Withholding()" style="margin-left:6px;padding:1px 6px;font-size:10.5px;font-weight:800;border-radius:4px;border:1px solid #fcd34d;background:#fef3c7;color:#b45309;cursor:pointer;" title="청구금액에서 3.3% 원천징수 공제 후 실지급액 자동 계산">⚡ 3.3% 공제</button></label>
-              <select id="expTaxProof" style="width:100%;height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;">
+              <select id="expTaxProof" onchange="window.calcExpenseModalBalance()" style="width:100%;height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;">
                 <option value="" ${!parseExpenseTaxProof(rData.note) ? "selected" : ""}>미선택</option>
                 <option value="세금계산서" ${parseExpenseTaxProof(rData.note) === "세금계산서" ? "selected" : ""}>🧾 세금계산서</option>
                 <option value="현금영수증" ${parseExpenseTaxProof(rData.note) === "현금영수증" ? "selected" : ""}>🧾 현금영수증</option>
@@ -8181,10 +8194,14 @@ end $$;`;
       window.calcExpenseModalBalance = function() {
         const claim = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const paid = Number(String(document.getElementById("expPaidAmount")?.value || "").replace(/,/g, "").trim()) || 0;
-        const bal = claim - paid;
+        const proof = document.getElementById("expTaxProof")?.value || "";
+        const tax33 = proof === "3.3%원천징수" ? Math.round(claim * 0.033) : 0;
+        const bal = (claim - tax33) - paid;
         const balEl = document.getElementById("expBalanceDisplay");
         if (balEl) {
-          balEl.value = bal.toLocaleString("ko-KR") + "원";
+          balEl.value = (bal === 0 && tax33 > 0)
+            ? `0원 (3.3% 공제)`
+            : bal.toLocaleString("ko-KR") + "원";
           balEl.style.color = bal > 0 ? "#dc2626" : (bal === 0 ? "#15803d" : "#2563eb");
           balEl.style.background = bal > 0 ? "#fff5f5" : (bal === 0 ? "#f0fdf4" : "#eff6ff");
         }
@@ -8192,8 +8209,10 @@ end $$;`;
 
       window.setExpenseFullPaid = function() {
         const claim = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
+        const proof = document.getElementById("expTaxProof")?.value || "";
+        const target = proof === "3.3%원천징수" ? (claim - Math.round(claim * 0.033)) : claim;
         const paidEl = document.getElementById("expPaidAmount");
-        if (paidEl) paidEl.value = claim > 0 ? claim.toLocaleString("ko-KR") : "0";
+        if (paidEl) paidEl.value = target > 0 ? target.toLocaleString("ko-KR") : "0";
         const dateEl = document.getElementById("expPayDate");
         if (dateEl && !dateEl.value) dateEl.value = getTodayYmd();
         calcExpenseModalBalance();
@@ -8262,9 +8281,10 @@ end $$;`;
         const category2 = (document.getElementById("expCategory2")?.value || "").trim();
         const claimAmount = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const paidAmount = Number(String(document.getElementById("expPaidAmount")?.value || "").replace(/,/g, "").trim()) || 0;
-        const balance = claimAmount - paidAmount;
         const payDate = (document.getElementById("expPayDate")?.value || "").trim();
         const expTaxProof = (document.getElementById("expTaxProof")?.value || "").trim();
+        const tax33 = expTaxProof === "3.3%원천징수" ? Math.round(claimAmount * 0.033) : 0;
+        const balance = Math.max((claimAmount - tax33) - paidAmount, 0);
         let rawNote = (document.getElementById("expNote")?.value || "").trim();
         const note = (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) ? buildExpenseNoteWithTaxProof(rawNote, expTaxProof) : rawNote;
 
@@ -10966,7 +10986,7 @@ end $$;`;
           const ym = normalizeMonthStr(e.settleMonth);
           const claim = Number(e.claimAmount) || 0;
           const paid = Number(e.paidAmount) || 0;
-          const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : Math.max(claim - paid, 0);
+          const bal = getExpenseRowBalance(e);
           if (ym.startsWith(curYear + "-")) {
             const mIdx = (parseInt(ym.slice(5, 7), 10) || 0) - 1;
             if (mIdx >= 0 && mIdx < 12) monthlyStats[mIdx].exp += claim;
@@ -11413,7 +11433,7 @@ end $$;`;
           const rowsHtml = filtered.map(e => {
             const claim = Number(e.claimAmount) || 0;
             const paid = Number(e.paidAmount) || 0;
-            const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
+            const bal = getExpenseRowBalance(e);
 
             let itemBadgeBg = "#f1f5f9";
             let itemBadgeColor = "#334155";
@@ -11426,6 +11446,7 @@ end $$;`;
             let proofBadge = "";
             if (proof === "세금계산서") proofBadge = '<span style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#f0f9ff;color:#0284c7;border:1px solid #bae6fd;margin-right:4px;">🧾 계산서</span>';
             else if (proof === "현금영수증") proofBadge = '<span style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;margin-right:4px;">🧾 영수증</span>';
+            else if (proof === "3.3%원천징수") proofBadge = '<span style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#fef3c7;color:#b45309;border:1px solid #fcd34d;margin-right:4px;">⚡ 3.3%원천</span>';
             else if (proof === "카드") proofBadge = '<span style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;margin-right:4px;">💳 카드</span>';
             else if (proof === "무증빙") proofBadge = '<span style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#fef3c7;color:#b45309;border:1px solid #fde68a;margin-right:4px;">⚠️ 무증빙</span>';
             const cleanNote = (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) ? stripExpenseTaxProof(e.note) : (e.note || "");
@@ -13595,7 +13616,7 @@ end $$;`;
           const cardsHtml = filtered.map(e => {
             const claim = Number(e.claimAmount) || 0;
             const paid = Number(e.paidAmount) || 0;
-            const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
+            const bal = getExpenseRowBalance(e);
 
             let itemBadgeBg = "#f1f5f9";
             let itemBadgeColor = "#334155";
@@ -13608,6 +13629,7 @@ end $$;`;
             let proofBadge = "";
             if (proof === "세금계산서") proofBadge = '<span style="padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:700;background:#f0f9ff;color:#0284c7;border:1px solid #bae6fd;">🧾 계산서</span>';
             else if (proof === "현금영수증") proofBadge = '<span style="padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:700;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;">🧾 영수증</span>';
+            else if (proof === "3.3%원천징수") proofBadge = '<span style="padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:700;background:#fef3c7;color:#b45309;border:1px solid #fcd34d;">⚡ 3.3%원천</span>';
             else if (proof === "카드") proofBadge = '<span style="padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:700;background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;">💳 카드</span>';
             else if (proof === "무증빙") proofBadge = '<span style="padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:700;background:#fef3c7;color:#b45309;border:1px solid #fde68a;">⚠️ 무증빙</span>';
             const cleanNote = (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) ? stripExpenseTaxProof(e.note) : (e.note || "");
