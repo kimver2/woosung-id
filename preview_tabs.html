@@ -15454,16 +15454,12 @@ end $$;`;
 
       window.copyTaskToNewModal = function (taskId) {
         const found = findTaskById(taskId);
-        if (!found || !found.task || !found.site) return showToast("⚠️ 복사할 공정 정보를 찾을 수 없습니다.");
-        const { site, task } = found;
-        const mgrs = filterRegisteredManagers(task.manager);
-        const effScope = site.scope || (/^\[단건\]/i.test(site.siteName) ? "single" : /^\[AS\]/i.test(site.siteName) ? "as" : "site");
-        window.openNewTaskModal(site.siteName, getTodayYmd(), effScope, {
+        if (!found || !found.task) return showToast("⚠️ 복사할 공정 정보를 찾을 수 없습니다.");
+        const { task } = found;
+        window.openNewTaskModal("", "", "", {
           taskName: task.taskName || "",
           partner: task.partner || "",
-          partnerPhone: lookupPartnerPhone(task.partner || "") || "",
-          manager1: mgrs[0] || state.user || "조항만",
-          manager2: mgrs[1] || ""
+          partnerPhone: lookupPartnerPhone(task.partner || "") || ""
         });
       };
 
