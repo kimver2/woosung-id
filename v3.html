@@ -17941,16 +17941,30 @@ end $$;`;
           <div class="form-grid-2">
             <div class="fg"><label>마감일</label><input type="date" class="ws-input" id="tdDue" value="${escHtml((d.dueDate || "").replace(/\./g, "-").slice(0, 10))}"></div>
             <div class="fg"><label>담당자</label>
-              <select class="ws-select" id="tdManager">
-                <option value="">미지정</option>
-                ${members.map((m) => `<option value="${escHtml(m)}" ${d.manager === m ? "selected" : ""}>${escHtml(m)}</option>`).join("")}
-              </select>
+              ${renderWsCustomDropdownHtml({
+                id: "tdMgrDrop",
+                hiddenInputId: "tdManager",
+                value: d.manager || "",
+                displayText: d.manager || "미지정",
+                placeholder: "담당자 선택",
+                searchable: false,
+                items: [{ value: "", label: "미지정" }, ...members.map((m) => ({ value: m, label: m }))]
+              })}
             </div>
           </div>
           <div class="form-grid-2">
             <div class="fg"><label>관련 현장</label>
-              <input class="ws-input" list="tdSiteDl" id="tdSite" value="${escHtml(d.siteName || "")}" placeholder="현장명 (선택)">
-              ${buildDatalistHtml("tdSiteDl", siteNames)}
+              ${renderWsCustomDropdownHtml({
+                id: "tdSiteDrop",
+                hiddenInputId: "tdSite",
+                value: d.siteName || "",
+                displayText: d.siteName || "",
+                placeholder: "🔍 현장 검색 / 선택 (선택)",
+                searchable: true,
+                clearable: true,
+                allowDirectInput: true,
+                items: siteNames.map((s) => ({ value: s, label: s }))
+              })}
             </div>
             <div class="fg"><label>분류 태그</label><input class="ws-input" id="tdTag" value="${escHtml(d.tag || "")}" placeholder="예: 발주, 정산, 고객응대"></div>
           </div>
@@ -17977,6 +17991,13 @@ end $$;`;
       }
       window.setTodoDraftStatus = function (st, imp) {
         if (!state._todoDraft) return;
+        const gv = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : undefined; };
+        if (gv("tdTitle") !== undefined) state._todoDraft.title = gv("tdTitle");
+        if (gv("tdDue") !== undefined) state._todoDraft.dueDate = gv("tdDue");
+        if (gv("tdManager") !== undefined) state._todoDraft.manager = gv("tdManager");
+        if (gv("tdSite") !== undefined) state._todoDraft.siteName = gv("tdSite");
+        if (gv("tdTag") !== undefined) state._todoDraft.tag = gv("tdTag");
+        if (gv("tdDetail") !== undefined) state._todoDraft.detail = gv("tdDetail");
         state._todoDraft.status = st;
         state._todoDraft.isImportant = !!imp;
         renderTodoModal();
