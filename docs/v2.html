@@ -13431,8 +13431,9 @@ end $$;`;
               ${task.memo ? `<div style="font-size:11px;color:var(--text-sub);margin-top:2px;">📝 ${escHtml(task.memo)}</div>` : ""}
               ${info ? `<div style="font-size:11px;color:var(--text-sub);margin-top:3px;">📍 ${escHtml(info.address || "-")} · 🔑 ${escHtml(info.doorPassword || "-")}</div>` : ""}
               <div style="display:flex;gap:6px;margin-top:8px;" onclick="event.stopPropagation();">
-                ${phone ? `<a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" class="m-call-btn-large" style="flex:2;margin-top:0;">📞 ${escHtml(task.partner || task.manager)} (${escHtml(phone)})</a>` : `<button type="button" class="m-call-btn-large" style="flex:2;margin-top:0;border:none;background:#1e40af;" onclick="openTaskEditModal('${escJs(tid)}')">✏️ 공정 수정/완료</button>`}
-                ${info && info.doorPassword ? `<button type="button" onclick="copyText('${escJs(info.doorPassword)}')" style="flex:1;border:1px solid #cbd5e1;background:#fff;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">📋 비번</button>` : ""}
+                ${phone
+                  ? `<a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" class="m-call-btn-large" style="flex:2;margin-top:0;">📞 ${escHtml(task.partner || task.manager)} (${escHtml(phone)})</a><button type="button" onclick="openTaskEditModal('${escJs(tid)}')" style="flex:1;border:1px solid #cbd5e1;background:#fff;color:#1e293b;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;">✏️ 수정</button>`
+                  : `<button type="button" class="m-call-btn-large" style="flex:1;margin-top:0;border:none;background:#1e40af;" onclick="openTaskEditModal('${escJs(tid)}')">✏️ 공정 수정/완료</button>`}
               </div>
             </div>`;
         }).join("") || `<div class="m-card-box" style="text-align:center;color:var(--text-muted);font-size:12px;">선택한 날짜(${escHtml(state.selectedDayStr)})에 표시할 공정이 없습니다.</div>`;
