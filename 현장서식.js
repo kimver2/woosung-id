@@ -7618,12 +7618,22 @@ function resolveActualSheetRow(sheet, rowNumber, siteName, taskName, dateStr, or
   } catch (eVals) {}
   if (!Array.isArray(allVals) || allVals.length === 0) return rowNum;
 
-  // 0순위: 공종 고유 ID (Task ID, J열/10열) 1:1 완벽 일치 탐색
-  if (cleanTaskId && cleanTaskId !== "undefined" && cleanTaskId !== "null") {
+  var stripScopePrefix_ = function(s) {
+    return String(s || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
+  };
+  var isSameSiteName_ = function(a, b) {
+    if (!a || !b) return false;
+    return a === b || stripScopePrefix_(a) === stripScopePrefix_(b);
+  };
+  var isSyntheticRowId_ = /^(as|single|task|comp|estimate)_row_/i.test(cleanTaskId);
+
+  // 0순위: 공종 고유 ID (Task ID, I열/9열 및 J열/10열 양쪽) 1:1 완벽 일치 탐색
+  if (cleanTaskId && !isSyntheticRowId_ && cleanTaskId !== "undefined" && cleanTaskId !== "null") {
     var idColIdx = (colCount >= 11) ? 9 : 8; // 10열 (0-index: 9)
     for (var ti = 0; ti < allVals.length; ti++) {
-      var cellId = String(allVals[ti][idColIdx] || "").trim();
-      if (cellId && cellId === cleanTaskId) {
+      var cellIdPrimary = String(allVals[ti][idColIdx] || "").trim();
+      var cellIdAlt = String(allVals[ti][idColIdx === 9 ? 8 : 9] || "").trim();
+      if ((cellIdPrimary && cellIdPrimary === cleanTaskId) || (cellIdAlt && cellIdAlt === cleanTaskId)) {
         return ti + 2;
       }
     }
@@ -7687,7 +7697,7 @@ function resolveActualSheetRow(sheet, rowNumber, siteName, taskName, dateStr, or
   var curRowSiteTaskOk = false;
   if (rowNum >= 2 && rowNum <= lastRow) {
     var cur = rowMeta[rowNum - 2];
-    if (cur && (!cleanSite || cur.site === cleanSite) && (!cleanTask || cur.task === cleanTask)) {
+    if (cur && (!cleanSite || isSameSiteName_(cur.site, cleanSite)) && (!cleanTask || cur.task === cleanTask)) {
       curRowSiteTaskOk = true;
       if (!normTargetDate || !cur.dateNorm || isDateMatch(cur.dateNorm)) {
         return rowNum;
@@ -7700,7 +7710,7 @@ function resolveActualSheetRow(sheet, rowNumber, siteName, taskName, dateStr, or
   for (var j = 0; j < rowMeta.length; j++) {
     var m = rowMeta[j];
     if (!m.site && !m.task) continue;
-    var siteOk = !cleanSite || m.site === cleanSite;
+    var siteOk = !cleanSite || isSameSiteName_(m.site, cleanSite);
     var taskOk = !cleanTask || m.task === cleanTask;
     if (siteOk && taskOk) {
       siteTaskMatches.push(m);
@@ -7972,8 +7982,11 @@ function updateScheduleStatusFromWeb(row, newStatus, newShared, newMemo, newDate
 function deleteScheduleTaskFromWeb(row, siteName, taskName, eventId, isArchived) {
   if (!__woosungWriteLockHeld_) return runWithWriteLock_(deleteScheduleTaskFromWeb, this, arguments);
   var targetSheetName = arguments[5];
-  var rowNum = parseInt(row, 10);
-  if (!rowNum || rowNum < 2) {
+  var origDateForDel = (arguments.length > 6 && arguments[6] !== undefined && arguments[6] !== null) ? String(arguments[6]) : "";
+  var origMgrForDel = (arguments.length > 7 && arguments[7] !== undefined && arguments[7] !== null) ? String(arguments[7]) : "";
+  var taskIdForDel = (arguments.length > 8 && arguments[8] !== undefined && arguments[8] !== null) ? String(arguments[8]) : (eventId || "");
+  var rowNum = parseInt(row, 10) || -1;
+  if (rowNum < 2 && !siteName && !taskName && !taskIdForDel) {
     return { success: false, error: "유효하지 않은 행 번호입니다. (" + row + ")" };
   }
 
@@ -7997,16 +8010,26 @@ function deleteScheduleTaskFromWeb(row, siteName, taskName, eventId, isArchived)
     }
 
     var lastRow = sheet.getLastRow();
-    if (lastRow < 2) {
-      return { success: false, error: "삭제할 데이터가 없습니다." };
-    }
-
-    // 1단계: 행 번호 실시간 자동 보정 (정렬 또는 행 변동 대비)
-    var origDateForDel = (arguments.length > 6 && arguments[6] !== undefined && arguments[6] !== null) ? String(arguments[6]) : "";
-    var origMgrForDel = (arguments.length > 7 && arguments[7] !== undefined && arguments[7] !== null) ? String(arguments[7]) : "";
-    var taskIdForDel = (arguments.length > 8 && arguments[8] !== undefined && arguments[8] !== null) ? String(arguments[8]) : (eventId || "");
+    // 1단계: 행 번호 실시간 자동 보정 (정렬, 행 변동 또는 빈 row 번호 대비)
     if (siteName || taskName || taskIdForDel) {
-      rowNum = resolveActualSheetRow(sheet, rowNum, siteName, taskName, origDateForDel, origMgrForDel, taskIdForDel);
+      rowNum = (lastRow >= 2) ? resolveActualSheetRow(sheet, rowNum, siteName, taskName, origDateForDel, origMgrForDel, taskIdForDel) : -1;
+      // 지정된 시트에서 찾지 못한 경우 다른 일정 시트(AS/단건/현장데이터/완료현장) 교차 폴백 탐색
+      if (rowNum < 2 || rowNum > sheet.getLastRow()) {
+        var fallbackSheets = [findAsSheet(ss, false), findSingleTaskSheet(ss, false), findSiteScheduleSheet(ss), findCompletedSitesSheet(ss, false)];
+        for (var fsi = 0; fsi < fallbackSheets.length; fsi++) {
+          var candSheet = fallbackSheets[fsi];
+          if (!candSheet || candSheet === sheet || candSheet.getLastRow() < 2) continue;
+          var candRow = resolveActualSheetRow(candSheet, -1, siteName, taskName, origDateForDel, origMgrForDel, taskIdForDel);
+          if (candRow >= 2 && candRow <= candSheet.getLastRow()) {
+            sheet = candSheet;
+            rowNum = candRow;
+            break;
+          }
+        }
+      }
+    }
+    if (sheet.getLastRow() < 2) {
+      return { success: false, error: "삭제할 데이터가 없습니다." };
     }
     if (rowNum < 2 || rowNum > sheet.getLastRow()) {
       return { success: false, error: "삭제할 해당 일정을 시트에서 찾을 수 없습니다." };
@@ -8175,10 +8198,15 @@ function deleteSiteFromWeb(siteName, scope) {
     if (lastRow < 2) return { success: true, count: 0, message: "삭제할 데이터가 없습니다." };
 
     var rowsToDelete = [];
+    var stripPrefixSite_ = function(s) {
+      return String(s || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
+    };
+    var cleanSiteStripped = stripPrefixSite_(cleanSite);
     if (scope === "newSite" || scope === "신규현장" || scope === "신규견적") {
       var estVals = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
       for (var ei = 0; ei < estVals.length; ei++) {
-        if (String(estVals[ei][0] || "").trim() === cleanSite) {
+        var es = String(estVals[ei][0] || "").trim();
+        if (es === cleanSite || stripPrefixSite_(es) === cleanSiteStripped) {
           rowsToDelete.push(ei + 2);
         }
       }
@@ -8190,7 +8218,7 @@ function deleteSiteFromWeb(siteName, scope) {
         if (rSite) lastKnown = rSite;
         var effSite = rSite || lastKnown;
         var hasData = Boolean(String(vals[i][1] || "").trim() || String(vals[i][2] || "").trim());
-        if (effSite === cleanSite && hasData) {
+        if ((effSite === cleanSite || stripPrefixSite_(effSite) === cleanSiteStripped) && hasData) {
           rowsToDelete.push(i + 2);
         }
       }
@@ -10019,28 +10047,62 @@ function verifyDashboardAccessPinFromWeb(inputPin, inputUser) {
 }
 
 /**
- * [대시보드 보안 잠금] 관리자 공용 비밀번호 변경 (스프레드시트 전용)
+ * [대시보드 보안 잠금] 공용 비밀번호 변경 (조항만 · admin 전용)
+ * - Google Apps Script PropertiesService 영구 저장 및 전체 서버 캐시 무효화
  */
-function updateDashboardAccessPinFromWeb(newPin) {
+function changeSharedPasswordFromWeb(newPin, requestingUser) {
+  var cleanUser = String(requestingUser || "").replace(/\s+/g, "").trim().toLowerCase();
+  if (cleanUser !== "조항만" && cleanUser !== "admin") {
+    return {
+      success: false,
+      error: "공용 비밀번호 변경 권한이 없습니다. (조항만 · admin 전용)"
+    };
+  }
   var cleanNew = String(newPin || "").trim();
   if (!cleanNew || cleanNew.length < 4) {
-    return { success: false, error: "비밀번호는 최소 4자리 이상 입력해 주세요." };
+    return {
+      success: false,
+      error: "새 비밀번호는 최소 4자리 이상 입력해 주세요."
+    };
   }
   try {
+    var lock = LockService.getScriptLock();
+    if (lock && typeof lock.tryLock === "function") {
+      try { lock.tryLock(5000); } catch (eLk1) {}
+    }
     var props = PropertiesService.getScriptProperties();
     if (props && typeof props.setProperty === "function") {
       props.setProperty("DASHBOARD_ACCESS_PIN", cleanNew);
     }
+    if (lock && typeof lock.releaseLock === "function") {
+      try { lock.releaseLock(); } catch (eLk2) {}
+    }
     invalidateDashboardServerCache();
+
+    var tokenUser = cleanUser === "admin" ? HIDDEN_ADMIN_AUTH_USER : "조항만";
+    var tokenPin = cleanUser === "admin" ? HIDDEN_ADMIN_AUTH_PIN : cleanNew;
+    var newToken = computeDashboardUserToken(tokenUser, tokenPin);
+
     return {
       success: true,
       pin: cleanNew,
-      token: computeDashboardPinToken(cleanNew),
-      message: "공용 접속 비밀번호가 변경되었습니다. 기존에 인증된 다른 기기들은 새 비밀번호를 1회 다시 입력해야 접속됩니다."
+      token: newToken,
+      user: tokenUser,
+      message: "대시보드 공용 접속 비밀번호가 성공적으로 변경되었습니다. (모든 기기 동기화 적용)"
     };
   } catch (err) {
-    return { success: false, error: "비밀번호 저장 중 오류: " + (err.message || err) };
+    return {
+      success: false,
+      error: "비밀번호 저장 중 오류: " + (err.message || err)
+    };
   }
+}
+
+/**
+ * [대시보드 보안 잠금] 관리자 공용 비밀번호 변경 (스프레드시트 전용)
+ */
+function updateDashboardAccessPinFromWeb(newPin) {
+  return changeSharedPasswordFromWeb(newPin, "admin");
 }
 
 /**
@@ -13189,6 +13251,10 @@ function doGet(e) {
       ? verifyDashboardAccessPinFromWeb(p.pin || "", p.user || "")
       : verifyDashboardAccessPinFromWeb(p.pin || "");
     return ContentService.createTextOutput(JSON.stringify(vPinRes)).setMimeType(ContentService.MimeType.JSON);
+  }
+  if (action === "changeSharedPassword" || action === "updateDashboardPin") {
+    var cPinRes = changeSharedPasswordFromWeb(p.newPin || p.pin || "", p.authUser || p.user || "");
+    return ContentService.createTextOutput(JSON.stringify(cPinRes)).setMimeType(ContentService.MimeType.JSON);
   }
 
   // 0-0-0-Repair) 현장 아코디언 그룹 무결성 즉시 복구 요청 (action=repairSiteGroups)
@@ -19587,6 +19653,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    else if (action === "updateMember") runner.updateMemberItemFromWeb(params.row, params.data);\n';
   html += '    else if (action === "deleteMember") runner.deleteMemberItemFromWeb(params.row, params.name);\n';
   html += '    else if (action === "reorderMember") runner.reorderMemberItemFromWeb(params.row, params.direction);\n';
+  html += '    else if (action === "changeSharedPassword") runner.changeSharedPasswordFromWeb(params.newPin, params.authUser || params.user);\n';
   html += '  } else {\n';
   html += '    var apiUrl = (typeof SCRIPT_URL !== "undefined" ? SCRIPT_URL : (window.location.href.split("?")[0]));\n';
   html += '    var qs = "?action=" + encodeURIComponent(action);\n';

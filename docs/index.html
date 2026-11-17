@@ -13131,16 +13131,93 @@
         openModal("deleteConfirmModal");
       };
 
+      const __wsDeletedTaskGuards = new Map();
+      const __wsDeletedSiteGuards = new Map();
+      const __WS_DELETE_GUARD_TTL_MS = 45000;
+      function _normDelSiteName(s) {
+        return String(s || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
+      }
+      function _makeTaskSemanticKey(siteName, taskName, ymd, scopeOrSheet) {
+        return `${String(scopeOrSheet || "").toLowerCase()}::${_normDelSiteName(siteName)}::${String(taskName || "").trim()}::${String(ymd || "").trim()}`;
+      }
+      function recordDeletedTaskGuard(site, task) {
+        const exp = Date.now() + __WS_DELETE_GUARD_TTL_MS;
+        const tid = String((task && (task.taskId || task.id)) || "").trim();
+        if (tid && !/^(as|single|task|comp|estimate)_row_/i.test(tid)) {
+          __wsDeletedTaskGuards.set("ID::" + tid, exp);
+        }
+        const ymd = parseYmdFromTask(task) || task.startDateStr || "";
+        const effScope = (task && task.scope) || (site && site.scope) || "site";
+        const semKey = _makeTaskSemanticKey(site && site.siteName, task && task.taskName, ymd, effScope);
+        __wsDeletedTaskGuards.set("SEM::" + semKey, exp);
+      }
+      function recordDeletedSiteGuard(site) {
+        if (!site) return;
+        const exp = Date.now() + __WS_DELETE_GUARD_TTL_MS;
+        if (site.siteKey) __wsDeletedSiteGuards.set("KEY::" + site.siteKey, exp);
+        const effScope = site.scope || "site";
+        __wsDeletedSiteGuards.set("NAME::" + effScope + "::" + _normDelSiteName(site.siteName), exp);
+      }
+      function applyDeletedGuardsToDashData(dashData) {
+        if (!dashData || !Array.isArray(dashData.sites)) return dashData;
+        const now = Date.now();
+        for (const [k, exp] of __wsDeletedTaskGuards.entries()) {
+          if (exp <= now) __wsDeletedTaskGuards.delete(k);
+        }
+        for (const [k, exp] of __wsDeletedSiteGuards.entries()) {
+          if (exp <= now) __wsDeletedSiteGuards.delete(k);
+        }
+        if (__wsDeletedTaskGuards.size === 0 && __wsDeletedSiteGuards.size === 0) return dashData;
+
+        dashData.sites = dashData.sites.filter((s) => {
+          if (!s) return false;
+          const effScope = s.scope || "site";
+          if (__wsDeletedSiteGuards.has("KEY::" + s.siteKey) || __wsDeletedSiteGuards.has("NAME::" + effScope + "::" + _normDelSiteName(s.siteName))) {
+            return false;
+          }
+          if (Array.isArray(s.tasks)) {
+            s.tasks = s.tasks.filter((t) => {
+              if (!t) return false;
+              const tid = String(t.taskId || t.id || "").trim();
+              if (tid && __wsDeletedTaskGuards.has("ID::" + tid)) return false;
+              const ymd = parseYmdFromTask(t) || t.startDateStr || "";
+              const tScope = t.scope || effScope;
+              const semKey = _makeTaskSemanticKey(s.siteName, t.taskName, ymd, tScope);
+              if (__wsDeletedTaskGuards.has("SEM::" + semKey)) return false;
+              return true;
+            });
+            if (s.tasks.length === 0 && effScope !== "newSite") return false;
+          }
+          return true;
+        });
+        return dashData;
+      }
+
       window.executeDelete = function (type, targetId) {
         if (type === "task") {
           const found = findTaskById(targetId);
           if (found) {
             const { site, task } = found;
+            recordDeletedTaskGuard(site, task);
             const wasArchived = Boolean(task.isArchived || site.isArchived || task.sheetName === "완료현장");
+            const effSheetName = task.sheetName || (site.scope === "as" ? "AS" : site.scope === "single" ? "단건" : wasArchived ? "완료현장" : "현장데이터");
+            const deletedRowNum = parseInt(task.row, 10) || 0;
             const origDate = task.dateDisplay || task.startDateStr || "";
             const origMgr = task.manager || "";
             const delTaskId = task.taskId || task.id;
             site.tasks = (site.tasks || []).filter((t) => (t.id || t.taskId) !== (task.id || task.taskId));
+            // 동일 시트 내 아래쪽 행들의 클라이언트 row 번호를 -1 즉시 보정하여 연속 삭제 시 행 밀림 오차 방지
+            if (deletedRowNum >= 2) {
+              getAllSites().forEach((sObj) => {
+                (sObj.tasks || []).forEach((tObj) => {
+                  const tSheet = tObj.sheetName || (sObj.scope === "as" ? "AS" : sObj.scope === "single" ? "단건" : (tObj.isArchived || sObj.isArchived) ? "완료현장" : "현장데이터");
+                  const rNum = parseInt(tObj.row, 10) || 0;
+                  if (tSheet === effSheetName && rNum > deletedRowNum) {
+                    tObj.row = rNum - 1;
+                  }
+                });
+              });
+            }
             if (site.tasks.length === 0 && (site.scope || "site") !== "newSite") {
               const sIdx = state.dashData.sites.findIndex((s) => s.siteKey === site.siteKey);
               if (sIdx > -1) state.dashData.sites.splice(sIdx, 1);
@@ -13151,8 +13228,8 @@
             }
             if (window.WSDataService) {
               window.WSDataService.deleteTask({
-                row: task.row || "", site: site.siteName, task: task.taskName, id: delTaskId, taskId: delTaskId,
-                sheetName: task.sheetName || "현장데이터", isArchived: wasArchived, origDate, origMgr
+                row: deletedRowNum || "", site: site.siteName, task: task.taskName, id: delTaskId, taskId: delTaskId,
+                sheetName: effSheetName, isArchived: wasArchived, origDate, origMgr
               }, state.dashData);
             }
           }
@@ -13161,6 +13238,8 @@
           const idx = state.dashData.sites.findIndex((s) => s.siteKey === targetId);
           if (idx > -1) {
             const s = state.dashData.sites[idx];
+            recordDeletedSiteGuard(s);
+            (s.tasks || []).forEach((t) => recordDeletedTaskGuard(s, t));
             state.dashData.sites.splice(idx, 1);
             if (state.selectedSiteKey === targetId) state.selectedSiteKey = null;
             if (state.selectedQuoteKey === targetId) state.selectedQuoteKey = null;
@@ -16094,7 +16173,13 @@
 
         window.WSDataService.syncLiveFromGAS(syncOpts, ({ dashData, todoData, settingsData, financeData, meta }) => {
           let updated = false;
-          if (dashData) { state.dashData = dashData; updated = true; }
+          if (dashData) {
+            state.dashData = applyDeletedGuardsToDashData(dashData);
+            if (window.WSDataService && typeof window.WSDataService.saveDashboardCache === "function") {
+              window.WSDataService.saveDashboardCache(state.dashData);
+            }
+            updated = true;
+          }
           if (todoData) { state.todoData = todoData; updated = true; }
           if (settingsData) {
             state.settingsData = settingsData;
