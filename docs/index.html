@@ -10499,14 +10499,6 @@ end $$;`;
               <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:800;display:inline-flex;align-items:center;gap:4px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" onclick="window.openTaxAccountantBundleModal('${escJs(selectedYear)}')" title="매입장·거래처합계·3.3%인건비·수금내역 한 번에 출력/복사">
                 🧾 세무사 전달 묶음
               </button>
-              ${FINANCE_EXT_FLAGS.reportCapturePrint ? `
-                <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.captureFinanceReport('monthly')" title="월간집계 리포트 이미지 저장">
-                  📸 이미지 저장
-                </button>
-                <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.printFinanceReport()" title="월간집계 리포트 인쇄">
-                  🖨️ 인쇄/PDF
-                </button>
-              ` : ""}
               <button type="button" class="btn-act-blue" style="height:34px;padding:0 14px;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;border-radius:8px;" onclick="openMonthlyReportModal()">
                 📊 월간 공정·업체 리포트 창 열기
               </button>
@@ -11127,14 +11119,6 @@ end $$;`;
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
               <span style="font-size:12px;color:var(--text-muted);">${state.financeDbData && state.financeDbData.updatedAt ? "동기화: " + escHtml(state.financeDbData.updatedAt) : ""}</span>
-              ${FINANCE_EXT_FLAGS.reportCapturePrint ? `
-                <button type="button" class="btn-tool-tag" style="height:32px;padding:0 10px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.captureFinanceReport()" title="현재 화면 이미지(PNG) 저장">
-                  📸 이미지 저장
-                </button>
-                <button type="button" class="btn-tool-tag" style="height:32px;padding:0 10px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.printFinanceReport()" title="현재 리포트 인쇄 / PDF 저장">
-                  🖨️ 인쇄/PDF
-                </button>
-              ` : ""}
               <button type="button" class="btn-act-blue" style="height:32px;padding:0 12px;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;" onclick="openMonthlyReportModal()">📊 월간집계 리포트</button>
             </div>
           </div>
@@ -13336,10 +13320,6 @@ end $$;`;
             </div>
             <div style="display:flex;gap:4px;align-items:center;">
               <button type="button" onclick="openMonthlyReportModal()" style="border:none;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:800;padding:5px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;">📊 리포트</button>
-              ${FINANCE_EXT_FLAGS.reportCapturePrint ? `
-                <button type="button" onclick="window.captureFinanceReport()" style="border:1px solid #cbd5e1;background:#fff;color:#334155;font-size:11px;font-weight:700;padding:5px 7px;border-radius:6px;cursor:pointer;white-space:nowrap;" title="화면 캡처">📸</button>
-                <button type="button" onclick="window.printFinanceReport()" style="border:1px solid #cbd5e1;background:#fff;color:#334155;font-size:11px;font-weight:700;padding:5px 7px;border-radius:6px;cursor:pointer;white-space:nowrap;" title="인쇄">🖨️</button>
-              ` : ""}
             </div>
           </div>
         `;
