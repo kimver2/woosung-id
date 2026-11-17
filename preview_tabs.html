@@ -12360,12 +12360,13 @@ end $$;`;
 
       // ================= 모달 1: 공정 상세 / 수정 / 신규 등록 통합 모달 =================
       let _modalHistoryDepth = 0;
-      let _ignoreNextModalPopstate = false;
+      let _ignorePopstateCount = 0;
       let _modalTopZIndex = 10000;
-      function openModal(id) {
+      function openModal(id, opts) {
         const el = document.getElementById(id);
         if (!el) return;
         const wasOpen = el.classList.contains("open");
+        const skipHistory = Boolean(opts && opts.skipHistory);
 
         // 최상위 z-index 동적 부여: 열리는 모달을 항상 최상위 계층으로 올림
         _modalTopZIndex = Math.max(_modalTopZIndex + 10, 10000);
@@ -12379,7 +12380,8 @@ end $$;`;
         el.style.zIndex = _modalTopZIndex;
 
         el.classList.add("open");
-        if (!wasOpen) {
+        el.dataset.skipHistory = skipHistory ? "1" : "";
+        if (!wasOpen && !skipHistory) {
           try {
             if (window.history && typeof window.history.pushState === "function") {
               _modalHistoryDepth++;
@@ -12395,8 +12397,10 @@ end $$;`;
         const el = document.getElementById(id);
         if (!el) return;
         const wasOpen = el.classList.contains("open");
+        const hadSkipHistory = el.dataset.skipHistory === "1";
         el.classList.remove("open");
         el.style.zIndex = "";
+        el.dataset.skipHistory = "";
         if (id === "taskSheetModal") {
           const drawer = document.getElementById("pcCalDetailDrawer");
           if (drawer) drawer.style.display = "none";
@@ -12415,11 +12419,11 @@ end $$;`;
         if (!openModals || openModals.length === 0) {
           _modalTopZIndex = 10000;
         }
-        if (wasOpen && !fromPopstate && _modalHistoryDepth > 0) {
+        if (wasOpen && !fromPopstate && !hadSkipHistory && _modalHistoryDepth > 0) {
           _modalHistoryDepth--;
           try {
             if (window.history && typeof window.history.back === "function") {
-              _ignoreNextModalPopstate = true;
+              _ignorePopstateCount++;
               window.history.back();
             }
           } catch (eBack) {}
@@ -12463,8 +12467,8 @@ end $$;`;
         }
       });
       window.addEventListener("popstate", () => {
-        if (_ignoreNextModalPopstate) {
-          _ignoreNextModalPopstate = false;
+        if (_ignorePopstateCount > 0) {
+          _ignorePopstateCount--;
           return;
         }
         const last = getTopmostOpenModal();
@@ -14275,7 +14279,10 @@ end $$;`;
             if (site.tasks.length === 0 && (site.scope || "site") !== "newSite") {
               const sIdx = state.dashData.sites.findIndex((s) => s.siteKey === site.siteKey);
               if (sIdx > -1) state.dashData.sites.splice(sIdx, 1);
-              if (state.selectedSiteKey === site.siteKey) state.selectedSiteKey = null;
+              if (state.selectedSiteKey === site.siteKey) {
+                const remainSite = getAllSites().find((s) => s.scope === (site.scope || state.scope) && Boolean(isSiteCompleted(s)) === Boolean(state.showArchivedSites));
+                state.selectedSiteKey = remainSite ? remainSite.siteKey : null;
+              }
               recalcDashMeta();
             } else {
               recalcSiteStats(site);
@@ -14301,8 +14308,14 @@ end $$;`;
             recordDeletedSiteGuard(s);
             (s.tasks || []).forEach((t) => recordDeletedTaskGuard(s, t));
             state.dashData.sites.splice(idx, 1);
-            if (state.selectedSiteKey === targetId) state.selectedSiteKey = null;
-            if (state.selectedQuoteKey === targetId) state.selectedQuoteKey = null;
+            if (state.selectedSiteKey === targetId) {
+              const remainPool = s.scope === "newSite" ? [] : getAllSites().filter((x) => x.scope === (s.scope || state.scope) && Boolean(isSiteCompleted(x)) === Boolean(state.showArchivedSites));
+              state.selectedSiteKey = remainPool.length ? remainPool[0].siteKey : null;
+            }
+            if (state.selectedQuoteKey === targetId) {
+              const remainQuotes = getAllSites().filter((x) => x.scope === "newSite" && Boolean(x.isArchived || x.isAllCompleted) === Boolean(state.quoteShowArchived));
+              state.selectedQuoteKey = remainQuotes.length ? remainQuotes[0].siteKey : null;
+            }
             recalcDashMeta();
             const targetScope = (s.scope === "newSite" || s.scope === "single" || s.scope === "as") ? s.scope : (s.isArchived ? "완료현장" : s.scope);
             if (window.WSDataService) window.WSDataService.deleteSite({ site: s.siteName, scope: targetScope }, state.dashData);
@@ -14337,7 +14350,7 @@ end $$;`;
               <div style="font-size:12px;color:#64748b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;">${escHtml(info.subNote)}</div>
             </div>`;
             fEl.innerHTML = `<button type="button" class="ws-btn ws-btn-primary" onclick="closeModal('syncStatusModal')">확인</button>`;
-            openModal("syncStatusModal");
+            openModal("syncStatusModal", { skipHistory: true });
           }
         }
       };
