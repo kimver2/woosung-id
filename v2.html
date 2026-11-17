@@ -3841,8 +3841,8 @@ end $$;`;
         const result = [];
 
         const targetSites = isGlobalSearch
-          ? getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s))
-          : getActiveScopeSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
+          ? getAllSites().filter((s) => (s.scope || "site") !== "newSite" && (!isSiteCompleted(s) || (checked && checked.has(s.siteKey))))
+          : getAllSites().filter((s) => (s.scope || "site") !== "newSite" && s.scope === state.scope && (!isSiteCompleted(s) || (checked && checked.has(s.siteKey))));
 
         targetSites.forEach((site) => {
           if (!isGlobalSearch && checked && !checked.has(site.siteKey)) return;
