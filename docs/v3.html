@@ -5412,20 +5412,14 @@ end $$;`;
 
         const scopeProceedLbl = state.scope === "single" ? "⚡ 진행 단건" : state.scope === "as" ? "🔧 진행 A/S" : "🏗️ 진행 현장";
         pcSiteEl.innerHTML = `
-          <div class="site-carousel-controls">
-            <div style="display:flex;align-items:center;gap:8px;">
+          <div class="site-carousel-controls" style="justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <div class="pc-est-status-tabs">
                 <button type="button" class="pc-c-status-tab ${!state.showArchivedSites ? "active" : ""}" onclick="if(state.showArchivedSites) toggleArchivedSites()">${scopeProceedLbl} <span class="pc-badge-count">${activeCountAll}</span></button>
                 <button type="button" class="pc-c-status-tab done-tab ${state.showArchivedSites ? "active" : ""}" onclick="if(!state.showArchivedSites) toggleArchivedSites()">✅ 완료·보관 포함 <span class="pc-badge-count-done">${doneCountAll}</span></button>
               </div>
               <span id="${pfx}VisibleCount" style="font-size:12px;font-weight:700;color:var(--text-muted);">표시 ${visibleSites.length}개</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <div class="pc-page-search-wrap">
-                <span class="pc-page-search-icon">🔍</span>
-                <input type="text" id="${isQ ? "pcQuoteScopedSearchInput" : "pcSearchInput"}" class="pc-page-search-input" placeholder="현장, 공종, 담당자 검색 (Alt+S)" value="${escHtml(state.searchQuery)}" oninput="onGlobalSearch(this.value)">
-                ${state.searchQuery ? `<span class="pc-page-search-clear" onclick="clearGlobalSearch()" title="검색 초기화">✕</span>` : `<span class="search-shortcut-badge" style="position:absolute;right:6px;font-size:10px;padding:2px 4px;border-radius:4px;background:#f1f5f9;color:#64748b;pointer-events:none;">Alt+S</span>`}
-              </div>
+              <span style="width:1px;height:18px;background:#cbd5e1;display:inline-block;"></span>
               <div style="display:flex;gap:5px;align-items:center;">
                 ${state.showArchivedSites ? `
                   <button type="button" class="st-pill ${state.siteSortBy !== "name" ? "active" : ""}" onclick="setSiteSort('recent')">최근완료순</button>
@@ -5435,8 +5429,18 @@ end $$;`;
                   <button type="button" class="st-pill ${state.siteSortBy === "date" ? "active" : ""}" onclick="setSiteSort('date')">일정순</button>
                   <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
                 `}
-                ${isQ ? `<button type="button" class="btn-act-blue" style="height:29px;padding:0 11px;font-size:12px;" onclick="openEstimateModal(null)">+ ${state.scope === "single" ? "신규 단건 등록" : "신규 AS 등록"}</button>` : ""}
               </div>
+            </div>
+            <div style="flex:1;display:flex;justify-content:center;min-width:210px;">
+              <div class="pc-page-search-wrap" style="width:100%;max-width:300px;">
+                <span class="pc-page-search-icon">🔍</span>
+                <input type="text" id="${isQ ? "pcQuoteScopedSearchInput" : "pcSearchInput"}" class="pc-page-search-input" style="width:100%;" placeholder="현장, 공종, 담당자 검색 (Alt+S)" value="${escHtml(state.searchQuery)}" oninput="onGlobalSearch(this.value)">
+                ${state.searchQuery ? `<span class="pc-page-search-clear" onclick="clearGlobalSearch()" title="검색 초기화">✕</span>` : `<span class="search-shortcut-badge" style="position:absolute;right:6px;font-size:10px;padding:2px 4px;border-radius:4px;background:#f1f5f9;color:#64748b;pointer-events:none;">Alt+S</span>`}
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              ${isQ ? `<button type="button" class="btn-act-blue" style="height:29px;padding:0 11px;font-size:12px;" onclick="openEstimateModal(null)">+ ${state.scope === "single" ? "신규 단건 등록" : "신규 AS 등록"}</button>` : ""}
+              <button type="button" class="btn-tool-tag" style="height:29px;padding:0 11px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;color:#334155;" onclick="window.openSitesGuideModal()">📖 가이드</button>
             </div>
           </div>
           <div id="${pfx}BodyArea">
@@ -9828,6 +9832,112 @@ end $$;`;
                   - <b>🏗️ 현장</b>: <code>현장 목록</code> 및 <code>캘린더</code>에 착공 공정으로 등록되며, <code>✅ 현장 등록됨 → 해당 현장 보기</code>로 바로 이동할 수 있습니다.<br>
                   - <b>⚡ 단건 / 🔧 AS</b>: 승격 시 <b>정식 단건/AS 현장</b>으로 등록되는 동시에 <b><code>재무·원장</code>(수금현황·월별 비용마감)</b>에도 계약금액·원가·유/무상 내역이 자동 연동됩니다.
               </div>
+            </div>
+          </div>`;
+
+        fEl.innerHTML = `<button type="button" class="btn-act-white" onclick="closeModal('syncStatusModal')">닫기</button>`;
+        openModal("syncStatusModal");
+      };
+
+      window.openSitesGuideModal = function () {
+        const tEl = document.getElementById("syncStatusModalTitle");
+        const cEl = document.getElementById("syncStatusModalCloseBtn");
+        const bEl = document.getElementById("syncStatusModalBody");
+        const fEl = document.getElementById("syncStatusModalFooter");
+        if (!tEl || !bEl || !fEl) return;
+
+        tEl.textContent = "📖 현장 목록 탭 완전 활용 가이드";
+        if (cEl) cEl.style.display = "inline-flex";
+        const modalCard = document.querySelector("#syncStatusModal .ws-modal-card");
+        if (modalCard) modalCard.style.maxWidth = "920px";
+
+        const secStyle = "background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;";
+        const h4Style = "margin:0 0 8px;font-size:14.5px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:6px;";
+        const tblStyle = "width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;";
+        const thStyle = "background:#f8fafc;border:1px solid #cbd5e1;padding:6px 8px;text-align:left;font-weight:700;color:#334155;";
+        const tdStyle = "border:1px solid #e2e8f0;padding:6px 8px;vertical-align:top;line-height:1.5;color:#334155;";
+
+        bEl.innerHTML = `
+          <div style="display:flex;flex-direction:column;gap:12px;text-align:left;max-height:72vh;overflow-y:auto;padding-right:4px;" class="visible-scrollbar">
+            <div style="display:flex;flex-wrap:wrap;gap:6px;background:#f8fafc;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0;position:sticky;top:0;z-index:3;">
+              ${[
+                ["sgSec1", "🔍 1. 필터·정렬·검색"],
+                ["sgSec2", "🏗️ 2. 현장 상단 주요 버튼"],
+                ["sgSec3", "🛡️ 3. 착공체크·현장도구"],
+                ["sgSec4", "📊 4. 공정 요약·상태필터"],
+                ["sgSec5", "🛠️ 5. 공정표·복사·일괄처리"]
+              ].map(([id, lbl]) => `
+                <button type="button" class="btn-sub-chip" style="padding:4px 9px;font-size:11.5px;" onclick="document.getElementById('${id}')?.scrollIntoView({behavior:'smooth',block:'start'})">${lbl}</button>
+              `).join("")}
+            </div>
+
+            <div style="${secStyle}">
+              <h4 style="${h4Style}">0. 현장 목록 탭 역할</h4>
+              <div style="font-size:12.5px;color:#475569;line-height:1.6;">
+                • 착공된 정식 <code>현장</code>, <code>단건</code>, <code>AS</code>의 <b>전체 공정 일정, 협력업체 배정, 현장 기본정보(주소·비번·드라이브), 고객 공유, A4 견적서, 현장 정산</b>을 한 화면에서 관리하는 중심 워크스페이스입니다.
+              </div>
+            </div>
+
+            <div id="sgSec1" style="${secStyle}">
+              <h4 style="${h4Style}">1. 🔍 상단 필터 · 정렬 · 검색 &amp; 좌측 사이드바</h4>
+              <table style="${tblStyle}">
+                <thead><tr><th style="${thStyle}width:175px;">버튼 / 영역</th><th style="${thStyle}">기능 설명</th></tr></thead>
+                <tbody>
+                  <tr><td style="${tdStyle}"><b>진행 현장 / 완료·보관 포함</b></td><td style="${tdStyle}">현재 진행 중인 현장만 보거나, 모든 공정이 완료된 보관 현장까지 포함해 조회합니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>정렬 필터<br>(진행률순·일정순·가나다순)</b></td><td style="${tdStyle}">진행률 높은 순, 착공/예정 일정 순, 현장명 가나다 순(완료·보관 시 <code>최근완료순</code> / <code>가나다순</code>)으로 캐러셀과 목록을 정렬합니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>중앙 통합 검색 (Alt+S)</b></td><td style="${tdStyle}">현장명, 공종, 담당자를 입력하면 조건에 맞는 현장만 즉시 추려줍니다. 단축키 <code>Alt+S</code>로 바로 커서를 이동할 수 있습니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>좌측 사이드바</b></td><td style="${tdStyle}"><code>담당자 필터</code> 및 <code>현장 분류(현장/단건/AS)</code>로 원하는 범위만 좁혀 보고, 현장 클릭 시 우측 상세가 즉시 전환됩니다.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="sgSec2" style="${secStyle}">
+              <h4 style="${h4Style}">2. 🏗️ 현장 헤더 주요 액션 버튼</h4>
+              <table style="${tblStyle}">
+                <thead><tr><th style="${thStyle}width:165px;">버튼</th><th style="${thStyle}">동작 및 활용</th></tr></thead>
+                <tbody>
+                  <tr><td style="${tdStyle}"><b>💰 현장 정산 보기</b></td><td style="${tdStyle}">해당 현장의 계약금액, 수금 진행 내역, 공정별 외주·자재 지출 및 실질 마진율을 한눈에 보는 정산 상세 모달을 엽니다. (재무 열람 권한자 노출)</td></tr>
+                  <tr><td style="${tdStyle}"><b>📄 견적서</b></td><td style="${tdStyle}">현장 공정을 불러와 <b>A4 2페이지 견적서(갑지 + 세부내역서)</b>를 작성하고 <code>👁️ 미리보기</code> · <code>📥 PDF</code> · <code>🖨️ 인쇄</code>로 출력합니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>+ 새 공정 추가</b></td><td style="${tdStyle}">현재 선택된 현장이 자동 지정된 상태로 새 공정·일정 등록 모달을 엽니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>현장 삭제</b></td><td style="${tdStyle}">선택한 현장과 하위 공정을 삭제합니다. (확인 모달을 거쳐 안전하게 처리)</td></tr>
+                  <tr><td style="${tdStyle}"><b>📅 현장 캘린더 보기</b></td><td style="${tdStyle}">현재 현장만 선택 필터링된 상태로 <code>캘린더</code> 탭으로 바로 이동해 월간 일정을 확인합니다.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="sgSec3" style="${secStyle}">
+              <h4 style="${h4Style}">3. 🛡️ 착공 필수 체크 · 현장 도구 &amp; 메타 정보</h4>
+              <table style="${tblStyle}">
+                <thead><tr><th style="${thStyle}width:165px;">항목 / 버튼</th><th style="${thStyle}">기능 설명</th></tr></thead>
+                <tbody>
+                  <tr><td style="${tdStyle}"><b>🛡️ 착공 필수 체크</b></td><td style="${tdStyle}"><code>입주민 동의서</code> · <code>승강기 보양</code> · <code>관리실 신고</code> 완료 여부를 칩으로 표시합니다. (<code>✏️ 현장정보 수정</code>에서 체크)</td></tr>
+                  <tr><td style="${tdStyle}"><b>📂 현장 자료 / 드라이브 연결</b></td><td style="${tdStyle}">연결된 Google Drive 현장 폴더를 새 창으로 열거나, 미연결 시 바로 폴더 URL을 연결합니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>📤 파일 업로드</b></td><td style="${tdStyle}">현장 사진·도면·서류 파일을 드라이브로 업로드합니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>📋 안내문 확인</b></td><td style="${tdStyle}">현장 주소, 출입 비번, 주차/특이사항, 선택 공정을 조합해 협력업체 반장님에게 카톡으로 보낼 안내문을 생성·복사합니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>🔗 고객 공유</b></td><td style="${tdStyle}">고객 전용 읽기 링크(월간 캘린더, 진행률, 수금 현황, 담당자 연락처 포함 · <b>원가/협력업체 연락처/비번 자동 제외</b>)를 발급하고 카톡 안내문을 복사합니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>✏️ 현장정보 수정</b></td><td style="${tdStyle}">현장 주소, 도어락/공동현관 비번, 관리사무소 연락처, 특이사항/주차, 드라이브 링크, 착공 필수 체크를 수정합니다. (주소·비번은 카드에서 클릭 한 번으로 복사 가능)</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="sgSec4" style="${secStyle}">
+              <h4 style="${h4Style}">4. 📊 4단 공정 요약 타일 (클릭 필터)</h4>
+              <div style="font-size:12.5px;color:#475569;line-height:1.6;">
+                • <b><code>전체 공정 수</code> · <code>완료 공정</code> · <code>예정 · 진행 공정</code> · <code>공정 지연 ⚠️</code></b> 타일을 클릭하면 하단 공정 목록 표가 해당 상태의 공정만 즉시 필터링해 보여줍니다.
+              </div>
+            </div>
+
+            <div id="sgSec5" style="${secStyle}">
+              <h4 style="${h4Style}">5. 🛠️ 공정 상세 표 · 복사 등록 · 일괄 처리</h4>
+              <table style="${tblStyle}">
+                <thead><tr><th style="${thStyle}width:165px;">기능 / 버튼</th><th style="${thStyle}">사용 방법</th></tr></thead>
+                <tbody>
+                  <tr><td style="${tdStyle}"><b>표 상단 검색</b></td><td style="${tdStyle}"><code>공종 / 업체 / 메모 검색</code> 입력칸에서 현재 현장의 공정만 빠르게 필터링합니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>체크박스 일괄 처리</b></td><td style="${tdStyle}">좌측 체크박스로 여러 공정을 선택하면 상단에 <code>✓ 일괄 완료</code> · <code>↩️ 예정 복원</code> · <code>🟦 공유 ON</code> · <code>📋 선택 안내문 생성</code> 바가 나타납니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>상태 토글 / 📞 전화</b></td><td style="${tdStyle}">행 좌측 상태 배지 클릭 시 완료/예정 전환, 협력업체 옆 <code>📞</code> 클릭 시 바로 전화를 걸 수 있습니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>수정 / 복사 / 삭제</b></td><td style="${tdStyle}"><code>수정</code>은 해당 공정 편집(메모·사진 첨부 포함), <b><code>복사</code>는 동일 공종과 협력업체만 미리 채워진 새 공정 등록창 열기</b>, <code>삭제</code>는 해당 공정 삭제입니다.</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>`;
 
