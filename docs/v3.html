@@ -18528,7 +18528,7 @@ end $$;`;
           noticeText: String(shareCfg.noticeText !== undefined ? shareCfg.noticeText : buildDefaultClientShareNotice(siteName)),
           showPayment,
           payment,
-          driveUrl: shareCfg.showDrive !== false ? String(info.driveUrl || "") : "",
+          driveUrl: shareCfg.showDrive === true ? String(info.driveUrl || "") : "",
           progressRate,
           totalTasksCount,
           completedTasksCount,
@@ -18557,7 +18557,7 @@ end $$;`;
         const token = existing.token || generateClientShareToken();
         const enabled = existing.token ? (existing.enabled !== false) : true;
         const showPayment = existing.showPayment !== false;
-        const showDrive = existing.showDrive !== false;
+        const showDrive = existing.showDrive === true;
         const isLegacyAutoNotice = Boolean(
           !existing.noticeText
           || existing.noticeText === DEFAULT_CLIENT_SHARE_NOTICE
