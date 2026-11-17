@@ -16029,6 +16029,9 @@ end $$;`;
         const inp = document.getElementById("wsDropInput_" + id);
         if (drop) {
           drop.innerHTML = buildWsCustomDropItemsHtml(cfg, "");
+          if (cfg.isFixedPopover && inp) {
+            positionFixedDropPopover(inp, drop);
+          }
           drop.style.display = "block";
         }
         if (inp && cfg.searchable && typeof inp.select === "function") {
@@ -16047,8 +16050,12 @@ end $$;`;
         const cfg = window.wsDropRegistry[id];
         if (!cfg) return;
         const drop = document.getElementById("wsDropList_" + id);
+        const inp = document.getElementById("wsDropInput_" + id);
         if (drop) {
           drop.innerHTML = buildWsCustomDropItemsHtml(cfg, q);
+          if (cfg.isFixedPopover && inp) {
+            positionFixedDropPopover(inp, drop);
+          }
           drop.style.display = "block";
         }
         if (cfg.allowDirectInput) {
@@ -16089,6 +16096,121 @@ end $$;`;
           cfg.onSelect(val);
         }
       };
+
+      function positionFixedDropPopover(inp, drop) {
+        if (!inp || !drop) return;
+        const rect = inp.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const maxH = Math.min(240, Math.max(130, spaceBelow > 160 ? spaceBelow - 14 : rect.top - 14));
+        drop.style.position = "fixed";
+        drop.style.left = Math.max(8, rect.left) + "px";
+        drop.style.width = Math.max(rect.width, 130) + "px";
+        drop.style.right = "auto";
+        drop.style.maxHeight = maxH + "px";
+        drop.style.zIndex = "25000";
+        if (spaceBelow < 160 && rect.top > spaceBelow) {
+          drop.style.top = "auto";
+          drop.style.bottom = (window.innerHeight - rect.top + 3) + "px";
+        } else {
+          drop.style.bottom = "auto";
+          drop.style.top = (rect.bottom + 3) + "px";
+        }
+      }
+
+      let _wsEnhancedSeq = 0;
+      function enhanceWsSelects() {
+        const scopes = document.querySelectorAll("#pcFinanceMain select, #m-page-finance select, .ws-modal-body select, #pcSiteSidebar select, #pcQuoteSidebar select, #pcPartnersMain select, #m-page-partners select, #pcTodoMain select, #m-page-todo select, #mFilterBar select");
+        scopes.forEach((sel) => {
+          if (!sel || sel.dataset.wsEnhanced === "1" || sel.dataset.noEnhance === "1") return;
+          if (sel.multiple || (sel.size && sel.size > 1)) return;
+          if (sel.closest(".ws-custom-drop-wrap")) return;
+          sel.dataset.wsEnhanced = "1";
+
+          const dropId = "wsAutoSel_" + (++_wsEnhancedSeq);
+          const items = [];
+          Array.from(sel.children).forEach((ch) => {
+            if (ch.tagName === "OPTGROUP") {
+              const opts = Array.from(ch.children).filter((o) => o.tagName === "OPTION").map((o) => ({
+                value: o.value,
+                label: o.textContent.trim()
+              }));
+              if (opts.length) items.push({ group: ch.label || "목록", options: opts });
+            } else if (ch.tagName === "OPTION") {
+              items.push({ value: ch.value, label: ch.textContent.trim() });
+            }
+          });
+
+          const flatOpts = [];
+          items.forEach((it) => {
+            if (it.group && Array.isArray(it.options)) flatOpts.push(...it.options);
+            else flatOpts.push(it);
+          });
+          const curVal = sel.value || "";
+          const curOpt = flatOpts.find((o) => String(o.value) === String(curVal));
+          const curLabel = curOpt ? curOpt.label : (sel.options && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].textContent.trim() : "");
+          const isSearchable = flatOpts.length >= 12;
+
+          const cs = sel.style || {};
+          const wrap = document.createElement("div");
+          wrap.className = "sheet-partner-wrap ws-custom-drop-wrap ws-auto-sel-wrap";
+          wrap.setAttribute("data-drop-id", dropId);
+          if (cs.width) wrap.style.width = cs.width;
+          else if (sel.classList.contains("sidebar-select") || sel.classList.contains("ws-select")) wrap.style.width = "100%";
+          if (cs.flex) wrap.style.flex = cs.flex;
+          if (cs.minWidth) wrap.style.minWidth = cs.minWidth;
+          if (cs.maxWidth) wrap.style.maxWidth = cs.maxWidth;
+          wrap.style.display = cs.width === "100%" || sel.classList.contains("sidebar-select") || sel.classList.contains("ws-select") ? "block" : "inline-block";
+          wrap.style.verticalAlign = "middle";
+
+          const hVal = cs.height || (sel.classList.contains("m-filter-select") ? "28px" : "34px");
+          const fsVal = cs.fontSize || "12.5px";
+
+          window.wsDropRegistry[dropId] = {
+            id: dropId,
+            value: curVal,
+            displayText: curLabel,
+            searchable: isSearchable,
+            items: items,
+            isFixedPopover: true,
+            onSelect: (newVal) => {
+              sel.value = newVal;
+              sel.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+          };
+
+          wrap.innerHTML = `
+            <div class="sheet-partner-search-box" style="width:100%;">
+              <input type="text" id="wsDropInput_${dropId}" class="ws-input"
+                value="${escHtml(curLabel)}"
+                autocomplete="off"
+                ${isSearchable ? "" : "readonly"}
+                style="height:${escHtml(hVal)};font-size:${escHtml(fsVal)};padding:0 24px 0 9px;cursor:pointer;background:#ffffff;color:${curVal ? "#0f172a" : "#475569"};font-weight:${curVal ? "700" : "600"};width:100%;min-width:84px;box-sizing:border-box;text-overflow:ellipsis;"
+                onclick="window.openWsCustomDropdown('${dropId}')"
+                ${isSearchable ? `onfocus="window.openWsCustomDropdown('${dropId}')" oninput="window.filterWsCustomDropdown('${dropId}', this.value)"` : ""}>
+              <span class="sheet-partner-arrow" onclick="event.stopPropagation(); window.toggleWsCustomDropdown('${dropId}')" style="right:7px;">▼</span>
+            </div>
+            <div id="wsDropList_${dropId}" class="sheet-partner-dropdown-popover ws-custom-drop-list" data-drop-id="${dropId}" style="display:none;"></div>
+          `;
+
+          sel.style.display = "none";
+          sel.parentNode.insertBefore(wrap, sel.nextSibling);
+        });
+      }
+      window.enhanceWsSelects = enhanceWsSelects;
+
+      let _wsEnhanceTimer = null;
+      if (typeof MutationObserver !== "undefined") {
+        const _wsDropObs = new MutationObserver(() => {
+          if (_wsEnhanceTimer) return;
+          _wsEnhanceTimer = requestAnimationFrame(() => {
+            _wsEnhanceTimer = null;
+            enhanceWsSelects();
+          });
+        });
+        if (document.body) {
+          _wsDropObs.observe(document.body, { childList: true, subtree: true });
+        }
+      }
 
       window.openSheetPartnerDropdown = function () {
         const ctx = state.sheetCtx; if (!ctx) return;
