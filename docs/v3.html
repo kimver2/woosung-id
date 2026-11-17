@@ -9486,10 +9486,11 @@ end $$;`;
         unpaidAlerts.sort((a, b) => b.bal - a.bal);
 
         // 2. 현장별 마진율 & 올해 평균 마진
+        const normSiteKey = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
         const expBySite = {};
         allExp.forEach((e) => {
           if (!e || !e.siteName || e.siteName === "공통") return;
-          const k = normalizeSiteName(e.siteName);
+          const k = normSiteKey(e.siteName);
           expBySite[k] = (expBySite[k] || 0) + (Number(e.claimAmount) || 0);
         });
         const siteMargins = [];
@@ -9500,7 +9501,7 @@ end $$;`;
           const info = getCollectionPeriodInfo(r, mSite);
           if (info.year !== curYear) return;
           const fin = getCollectionRowFinancials(r);
-          const sExp = expBySite[normalizeSiteName(r.siteName)] || 0;
+          const sExp = expBySite[normSiteKey(r.siteName)] || 0;
           if (fin.total <= 0 && sExp <= 0) return;
           const base = fin.total > 0 ? fin.total : fin.collected;
           const margin = base > 0 ? Math.round(((base - sExp) / base) * 100) : 0;
