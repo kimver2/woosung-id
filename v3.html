@@ -2309,6 +2309,41 @@
       grid-template-columns: repeat(4, 1fr);
       gap: 8px;
     }
+    .pc-cal-detail-drawer {
+      width: 400px;
+      flex-shrink: 0;
+      background: #ffffff;
+      border-left: 1.5px solid #cbd5e1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      box-shadow: -6px 0 20px rgba(15, 23, 42, 0.08);
+      z-index: 5;
+    }
+    .pc-cal-detail-drawer .ws-modal-header {
+      padding: 13px 16px;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+      flex-shrink: 0;
+    }
+    .pc-cal-detail-drawer .ws-modal-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 14px 16px;
+    }
+    .pc-cal-detail-drawer .ws-modal-footer {
+      padding: 12px 16px;
+      border-top: 1px solid #e2e8f0;
+      background: #f8fafc;
+      flex-shrink: 0;
+    }
+    .cal-event-pill.is-drawer-selected {
+      outline: 2.5px solid #ef4444;
+      outline-offset: 1px;
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+    }
     @media (max-width: 640px) {
       .sb-mode-grid { grid-template-columns: 1fr; }
       .sb-stat-grid { grid-template-columns: repeat(2, 1fr); }
@@ -2423,6 +2458,14 @@
         <div class="page-container" id="page-calendar">
           <aside class="sidebar-panel" id="pcCalSidebar"></aside>
           <main class="calendar-workspace-view" id="pcCalMain"></main>
+          <aside class="pc-cal-detail-drawer" id="pcCalDetailDrawer" style="display:none;">
+            <div class="ws-modal-header">
+              <div class="ws-modal-title" id="pcCalDrawerTitle">📅 공정 상세</div>
+              <button type="button" class="ws-modal-close" onclick="closeModal('taskSheetModal')">✕</button>
+            </div>
+            <div class="ws-modal-body" id="pcCalDrawerBody"></div>
+            <div class="ws-modal-footer" id="pcCalDrawerFooter"></div>
+          </aside>
         </div>
         <div class="page-container" id="page-sites">
           <aside class="sidebar-panel" id="pcSiteSidebar"></aside>
@@ -12280,6 +12323,16 @@ end $$;`;
         const wasOpen = el.classList.contains("open");
         el.classList.remove("open");
         el.style.zIndex = "";
+        if (id === "taskSheetModal") {
+          const drawer = document.getElementById("pcCalDetailDrawer");
+          if (drawer) drawer.style.display = "none";
+          const db = document.getElementById("pcCalDrawerBody");
+          const df = document.getElementById("pcCalDrawerFooter");
+          if (db) db.innerHTML = "";
+          if (df) df.innerHTML = "";
+          state._calSelectedTaskId = null;
+          document.querySelectorAll(".cal-event-pill.is-drawer-selected").forEach((p) => p.classList.remove("is-drawer-selected"));
+        }
         if (id === "siteFinanceDetailModal") {
           window.currentDetailSiteName = null;
           window.currentDetailColId = null;
@@ -12381,6 +12434,38 @@ end $$;`;
         return `<datalist id="${id}">${items.map((x) => `<option value="${escHtml(x)}">`).join("")}</datalist>`;
       }
 
+      function isPcCalendarDrawerMode() {
+        return state.device === "pc" && state.pcTab === "calendar" && state.sheetCtx && state.sheetCtx.mode === "edit";
+      }
+
+      function syncCalDrawerSelectionHighlight() {
+        const selId = state._calSelectedTaskId || "";
+        document.querySelectorAll(".cal-event-pill.is-drawer-selected").forEach((el) => el.classList.remove("is-drawer-selected"));
+        if (!selId) return;
+        document.querySelectorAll(".cal-event-pill").forEach((el) => {
+          const oc = el.getAttribute("onclick") || "";
+          if (oc.includes(`'${selId}'`) || oc.includes(`"${selId}"`)) {
+            el.classList.add("is-drawer-selected");
+          }
+        });
+      }
+
+      function presentTaskSheet() {
+        if (isPcCalendarDrawerMode()) {
+          const modalEl = document.getElementById("taskSheetModal");
+          if (modalEl) modalEl.classList.remove("open");
+          state._calSelectedTaskId = state.sheetCtx.taskId || null;
+          renderTaskSheetModal();
+          const drawer = document.getElementById("pcCalDetailDrawer");
+          if (drawer) drawer.style.display = "flex";
+          syncCalDrawerSelectionHighlight();
+        } else {
+          state._calSelectedTaskId = null;
+          renderTaskSheetModal();
+          openModal("taskSheetModal");
+        }
+      }
+
       window.openTaskSheetModal = function (siteName, taskName, startYmd, endYmd, manager, colorHex, status, rowNumber, sheetName, memo, partner, isArchived) {
         if (arguments.length === 1 && typeof siteName === "string") {
           return openTaskEditModal(siteName);
@@ -12433,8 +12518,7 @@ end $$;`;
           sameDayList: [],
           sameDayIdx: 0
         };
-        renderTaskSheetModal();
-        openModal("taskSheetModal");
+        presentTaskSheet();
       };
 
       window.openTaskEditModal = function (taskId) {
@@ -12496,8 +12580,7 @@ end $$;`;
           sameDayList,
           sameDayIdx: sameIdx
         };
-        renderTaskSheetModal();
-        openModal("taskSheetModal");
+        presentTaskSheet();
       };
 
       window.openNewTaskModal = function (presetSiteName, presetDateYmd) {
@@ -12622,6 +12705,20 @@ end $$;`;
       function renderTaskSheetModal() {
         const ctx = state.sheetCtx;
         if (!ctx) return;
+        const useDrawer = isPcCalendarDrawerMode();
+        const titleEl = document.getElementById(useDrawer ? "pcCalDrawerTitle" : "taskSheetTitle");
+        const bodyEl = document.getElementById(useDrawer ? "pcCalDrawerBody" : "taskSheetBody");
+        const footEl = document.getElementById(useDrawer ? "pcCalDrawerFooter" : "taskSheetFooter");
+        const otherBody = document.getElementById(useDrawer ? "taskSheetBody" : "pcCalDrawerBody");
+        const otherFoot = document.getElementById(useDrawer ? "taskSheetFooter" : "pcCalDrawerFooter");
+        if (otherBody) otherBody.innerHTML = "";
+        if (otherFoot) otherFoot.innerHTML = "";
+        if (!useDrawer) {
+          const dEl = document.getElementById("pcCalDetailDrawer");
+          if (dEl) dEl.style.display = "none";
+        }
+        if (!titleEl || !bodyEl || !footEl) return;
+
         const members = getMembersList();
         const tasksMaster = getTasksMasterList();
         const partnersMaster = getPartnersMasterList();
@@ -12630,8 +12727,8 @@ end $$;`;
 
         if (ctx.mode === "create" && (ctx.scope === "newSite" || isQuote)) {
           ctx.scope = "newSite";
-          document.getElementById("taskSheetTitle").innerHTML = `📋 신규 현장(신규 견적) 등록`;
-          document.getElementById("taskSheetBody").innerHTML = `
+          titleEl.innerHTML = `📋 신규 현장(신규 견적) 등록`;
+          bodyEl.innerHTML = `
             <div class="fg">
               <label>등록 분류 선택</label>
               <div class="seg-row">
@@ -12641,7 +12738,7 @@ end $$;`;
             <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12.5px;">
               신규 문의/견적 파이프라인에 새 현장을 등록하려면 아래 버튼을 눌러 전체 견적 양식을 열어주세요.
             </div>`;
-          document.getElementById("taskSheetFooter").innerHTML = `
+          footEl.innerHTML = `
             <button type="button" class="btn-act-white" onclick="closeModal('taskSheetModal')">취소</button>
             <button type="button" class="btn-act-blue" onclick="closeModal('taskSheetModal'); openEstimateModal(null);">📋 신규 견적 양식 열기</button>`;
           return;
@@ -12652,7 +12749,7 @@ end $$;`;
         }
 
         const isEdit = ctx.mode === "edit";
-        document.getElementById("taskSheetTitle").innerHTML = isEdit
+        titleEl.innerHTML = isEdit
           ? `🛠️ <span style="color:#1e40af;">${escHtml(ctx.siteName)}</span> · ${escHtml(ctx.taskName)}`
           : `➕ 새 일정 등록`;
 
@@ -12739,7 +12836,7 @@ end $$;`;
           .sort(siteSortFn);
         const scopeTagMap = { site: "[현장] ", single: "[단독] ", as: "[A/S] " };
 
-        document.getElementById("taskSheetBody").innerHTML = `
+        bodyEl.innerHTML = `
           ${topActionsHtml}
           ${sameDayBarHtml}
           ${quickBannerHtml}
@@ -12923,7 +13020,7 @@ end $$;`;
           </div>
         `;
 
-        document.getElementById("taskSheetFooter").innerHTML = isEdit ? `
+        footEl.innerHTML = isEdit ? `
           <button type="button" class="btn-act-danger" onclick="closeModal('taskSheetModal'); openDeleteConfirm('task', '${escJs(ctx.taskId)}')">🗑️ 삭제</button>
           <div style="display:flex;gap:8px;">
             <button type="button" class="btn-act-white" onclick="closeModal('taskSheetModal')">취소</button>
