@@ -1979,8 +1979,9 @@
 
     .toast-banner {
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
-      background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      background: #1e293b; color: #fff; padding: 12px 18px; border-radius: 10px; font-size: 12.5px; font-weight: 600;
       box-shadow: 0 10px 25px rgba(0,0,0,0.3); z-index: 20000; opacity: 0; pointer-events: none; transition: all 0.25s;
+      white-space: pre-wrap; max-width: min(540px, 92vw); max-height: 50vh; overflow-y: auto; line-height: 1.5; text-align: left; word-break: break-word;
     }
     .toast-banner.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
@@ -3190,14 +3191,15 @@ end $$;`;
         el.textContent = msg;
         el.classList.add("show");
         clearTimeout(window.__toastTimer);
-        window.__toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+        const duration = String(msg || "").includes("\n") ? 4500 : 2600;
+        window.__toastTimer = setTimeout(() => el.classList.remove("show"), duration);
       }
       function copyText(txt) {
         if (!txt) return;
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(txt).then(() => showToast("📋 복사되었습니다: " + String(txt).slice(0, 30)));
+          navigator.clipboard.writeText(txt).then(() => showToast("📋 복사되었습니다:\n" + String(txt)));
         } else {
-          showToast("📋 복사 완료");
+          showToast("📋 복사되었습니다:\n" + String(txt));
         }
       }
       function formatKrw(num) {
@@ -7246,7 +7248,6 @@ end $$;`;
           lines.push(`입금 계좌: ${supplier.bankInfo}`);
         }
         copyText(lines.join("\n"));
-        showToast("📋 고객 안내용 결제 문구가 복사되었습니다.");
       };
 
       window.calcCollectionModalTotals = function() {
