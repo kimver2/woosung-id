@@ -18139,7 +18139,20 @@ end $$;`;
                 items: siteNames.map((s) => ({ value: s, label: s }))
               })}
             </div>
-            <div class="fg"><label>분류 태그</label><input class="ws-input" id="tdTag" value="${escHtml(d.tag || "")}" placeholder="예: 발주, 정산, 고객응대"></div>
+            <div class="fg">
+              <label>분류 태그</label>
+              ${renderWsCustomDropdownHtml({
+                id: "tdTagDrop",
+                hiddenInputId: "tdTag",
+                value: d.tag || "일반",
+                displayText: d.tag || "일반",
+                placeholder: "🔍 분류 선택 또는 직접 입력",
+                searchable: true,
+                clearable: true,
+                allowDirectInput: true,
+                items: ["일반", "현장", "발주", "정산", "고객응대", "실측·미팅", "A/S", "행정·서류", "기타"].map((t) => ({ value: t, label: t }))
+              })}
+            </div>
           </div>
           <div class="fg">
             <label>진행 상태 & 중요 표시</label>
