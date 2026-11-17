@@ -4480,8 +4480,8 @@ end $$;`;
                   <p>진행 중인 현장과 남은 업무만 간추려 한눈에 확인하세요.</p>
                   <div class="home-hero-chips">
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecTodo')">✅ 미완료 To-Do ${myPendingTodos.length}건</span>
-                    <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecTasks')">🔨 오늘 공정 ${todayTasks.length}건</span>
-                    ${delayedTasks.length > 0 ? `<span class="home-hero-chip" style="background:rgba(239,68,68,0.22);border-color:rgba(254,202,202,0.5);" onclick="openDelayedSitesFromHome(false)">⚠️ 지연 공정 ${delayedTasks.length}건</span>` : ""}
+                    <span class="home-hero-chip" onclick="state.homeTaskFilter='progress'; renderPcHomeTab(); scrollAndHighlightHomeSection('homeSecTasks');">🔨 오늘 공정 ${todayTasks.length}건</span>
+                    ${delayedTasks.length > 0 ? `<span class="home-hero-chip" style="background:rgba(239,68,68,0.22);border-color:rgba(254,202,202,0.5);" onclick="state.homeTaskFilter='delayed'; renderPcHomeTab(); scrollAndHighlightHomeSection('homeSecTasks');">⚠️ 지연 공정 ${delayedTasks.length}건</span>` : ""}
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecSites')">🏢 담당 현장 ${mySites.length}개소</span>
                     <span class="home-hero-chip" onclick="scrollAndHighlightHomeSection('homeSecQuotes')">📋 신규 견적 ${activeNewQuotes.length}건</span>
                     ${canViewFinance() ? `<span class="home-hero-chip" onclick="state.financeSubTab='dashboard'; switchMainTab('finance');">📊 재무 대시보드</span>` : ""}
