@@ -24130,6 +24130,14 @@ end $$;`;
         }
       });
 
+      // 모바일 PWA standalone 모드 세로 화면 고정 보조
+      try {
+        const isStandalonePwa = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+        if (isStandalonePwa && Math.min(window.screen.width || 9999, window.screen.height || 9999) <= 600 && screen.orientation && typeof screen.orientation.lock === 'function') {
+          screen.orientation.lock('portrait').catch(() => {});
+        }
+      } catch (e) {}
+
       // PWA 서비스 워커 등록 (HTTPS 및 localhost 환경)
       if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
         window.addEventListener('load', () => {
