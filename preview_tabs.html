@@ -11177,6 +11177,15 @@ end $$;`;
 
       window.buildFinanceMonthlyDashboardHtml = buildFinanceMonthlyDashboardHtml;
 
+      window.openDashboardVendorExpenses = function (vendorName) {
+        state.expenseAllMonths = true;
+        state.expenseItemFilter = "all";
+        state.expenseStatusFilter = "all";
+        state.expenseTaxFilter = "all";
+        state.expenseSearchQuery = String(vendorName || "").trim();
+        window.setFinanceSubTab("expense");
+      };
+
       function buildFinanceDashboardHtml(isMobile) {
         const fb = state.financeDbData || { collection: [], expense: [], fixedMaster: [] };
         const allCol = Array.isArray(fb.collection) ? fb.collection : [];
@@ -11273,6 +11282,150 @@ end $$;`;
         });
         const avgMargin = sumColForMargin > 0 ? Math.round(((sumColForMargin - sumExpForMargin) / sumColForMargin) * 100) : 0;
         const topMargins = siteMargins.slice().sort((a, b) => b.margin - a.margin).slice(0, 5);
+        const bottomMargins = siteMargins
+          .filter((sm) => sm.exp > 0)
+          .slice()
+          .sort((a, b) => (a.margin - b.margin) || (b.exp - a.exp))
+          .slice(0, 5);
+
+        // 2-1. 다가오는 수금 예정 일정 (stageMeta + extraItems + 미수 잔금 예정일)
+        const upcomingCollections = [];
+        const minSchedYmd = addDaysYmd(todayYmd, -60);
+        const maxSchedYmd = addDaysYmd(todayYmd, 90);
+        allCol.forEach((r) => {
+          if (!r || !r.siteName) return;
+          const fin = getCollectionRowFinancials(r);
+          if (fin.uncollected <= 0 && r.status === "완료") return;
+          let addedExplicit = false;
+          if (r.stageMeta && typeof r.stageMeta === "object") {
+            COL_STAGE_DEFS.forEach((st) => {
+              const meta = r.stageMeta[st.key] || {};
+              const recAmt = Number(r[st.key]) || 0;
+              const isPaid = meta.paid !== undefined ? !!meta.paid : (recAmt > 0 && !meta.dueDate);
+              const dueYmd = normalizeDateYmd(meta.dueDate || "");
+              if (!isPaid && dueYmd) {
+                const contractBase = Number(r.contractAmount) || fin.total || 0;
+                const schedAmt = recAmt > 0
+                  ? recAmt
+                  : ((Number(meta.pct) || 0) > 0 && contractBase > 0
+                      ? Math.round((contractBase * Number(meta.pct)) / 100)
+                      : fin.uncollected);
+                if (schedAmt > 0) {
+                  upcomingCollections.push({
+                    id: r.id,
+                    siteName: r.siteName,
+                    label: st.label,
+                    dueYmd,
+                    amount: schedAmt,
+                    proof: meta.proof || st.defaultProof || "",
+                    isExplicit: true
+                  });
+                  addedExplicit = true;
+                }
+              }
+            });
+          }
+          if (Array.isArray(r.extraItems)) {
+            r.extraItems.forEach((ex) => {
+              if (!ex || ex.paid) return;
+              const dueYmd = normalizeDateYmd(ex.date || "");
+              const exAmt = Number(ex.amount) || 0;
+              if (dueYmd && exAmt > 0) {
+                upcomingCollections.push({
+                  id: r.id,
+                  siteName: r.siteName,
+                  label: ex.label || "추가비",
+                  dueYmd,
+                  amount: exAmt,
+                  proof: ex.proof || "",
+                  isExplicit: true
+                });
+                addedExplicit = true;
+              }
+            });
+          }
+          if (!addedExplicit && fin.uncollected > 0) {
+            const mSite = findMatchedSiteInfo(r.siteName);
+            const info = getCollectionPeriodInfo(r, mSite);
+            const fallbackYmd = info.endYmd || info.startYmd || "";
+            if (fallbackYmd && fallbackYmd >= minSchedYmd && fallbackYmd <= maxSchedYmd) {
+              const nextStageLbl = (Number(r.downPayment) || 0) <= 0
+                ? "착수·중도금"
+                : ((Number(r.midPayment1) || 0) <= 0 && fallbackYmd > todayYmd ? "중도·잔금" : "잔금 예정");
+              upcomingCollections.push({
+                id: r.id,
+                siteName: r.siteName,
+                label: nextStageLbl,
+                dueYmd: fallbackYmd,
+                amount: fin.uncollected,
+                proof: r.taxInvoice || "",
+                isExplicit: false
+              });
+            }
+          }
+        });
+        upcomingCollections.sort((a, b) => {
+          if (a.isExplicit !== b.isExplicit) return a.isExplicit ? -1 : 1;
+          if (a.dueYmd !== b.dueYmd) return a.dueYmd.localeCompare(b.dueYmd);
+          return b.amount - a.amount;
+        });
+
+        // 2-2. 협력업체별 지출 TOP 5 (올해 누적 원가 & 미지급액)
+        const vendorMap = {};
+        let totalVendorYearExp = 0;
+        allExp.forEach((e) => {
+          if (!e) return;
+          const ym = normalizeMonthStr(e.settleMonth);
+          if (!ym.startsWith(curYear + "-")) return;
+          const claim = Number(e.claimAmount) || 0;
+          if (claim <= 0) return;
+          const itemStr = String(e.item || "").trim();
+          if (itemStr === "고정비" || itemStr === "급여") return;
+          const vName = String(e.vendor || "").trim() || String(e.category || "").trim() || "기타 거래처";
+          const bal = getExpenseRowBalance(e);
+          totalVendorYearExp += claim;
+          if (!vendorMap[vName]) {
+            vendorMap[vName] = { vendor: vName, claim: 0, unpaid: 0, count: 0, category: String(e.category || itemStr || "").trim() };
+          }
+          vendorMap[vName].claim += claim;
+          vendorMap[vName].unpaid += bal;
+          vendorMap[vName].count++;
+        });
+        const topVendors = Object.values(vendorMap)
+          .sort((a, b) => b.claim - a.claim)
+          .slice(0, 5);
+
+        // 2-3. 세금계산서 · 현금영수증 미발행 점검 목록
+        const taxCheckAlerts = [];
+        allCol.forEach((r) => {
+          if (!r || !r.siteName) return;
+          const tInv = String(r.taxInvoice || "미발행").trim();
+          if (tInv && tInv !== "미발행") return;
+          const fin = getCollectionRowFinancials(r);
+          if (fin.total <= 0 && fin.collected <= 0) return;
+          const mSite = findMatchedSiteInfo(r.siteName);
+          const info = getCollectionPeriodInfo(r, mSite);
+          if (info.year && info.year !== curYear && fin.uncollected <= 0 && fin.collected <= 0) return;
+          const prog = (mSite && mSite.progressRate !== undefined && mSite.progressRate !== null)
+            ? mSite.progressRate
+            : (r.progressRate !== "" && r.progressRate !== null && r.progressRate !== undefined ? Number(r.progressRate) : null);
+          const isDone = isCollectionSiteCompleted(mSite, prog) || r.status === "완료";
+          taxCheckAlerts.push({
+            row: r,
+            fin,
+            isDone,
+            hasCollected: fin.collected > 0,
+            year: info.year || curYear
+          });
+        });
+        taxCheckAlerts.sort((a, b) => {
+          const aCur = a.year === curYear ? 1 : 0;
+          const bCur = b.year === curYear ? 1 : 0;
+          if (aCur !== bCur) return bCur - aCur;
+          if (a.hasCollected !== b.hasCollected) return a.hasCollected ? -1 : 1;
+          if (a.isDone !== b.isDone) return a.isDone ? -1 : 1;
+          return (b.fin.collected || b.fin.total) - (a.fin.collected || a.fin.total);
+        });
 
         // 3. 향후 예상 유입 자금 (총 미수금 + 신규견적 계약완료 금액)
         const quoteContractedAmt = getAllSites()
@@ -11439,28 +11592,145 @@ end $$;`;
             </div>
           </div>
 
-          <!-- 5. 현장별 마진율 TOP 5 -->
-          <div class="standard-card" style="margin-bottom:0;padding:16px;background:#fff;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-              <h3 style="margin:0;font-size:14px;font-weight:800;color:#0f172a;">🏆 ${curYear}년 현장별 수익성 TOP 5</h3>
-              <button type="button" class="btn-tool-tag" onclick="window.setFinanceSubTab('monthly');">전체 마진 분석 ➔</button>
+          <!-- 5. 현장별 수익성 TOP 5 & 원가 주의·저마진 현장 (2단 대칭) -->
+          <div style="display:grid;grid-template-columns:${isMobile ? "1fr" : "1fr 1fr"};gap:14px;margin-bottom:14px;">
+            <div class="standard-card" style="margin-bottom:0;padding:16px;background:#fff;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <h3 style="margin:0;font-size:14px;font-weight:800;color:#0f172a;">🏆 ${curYear}년 현장별 수익성 TOP 5</h3>
+                <button type="button" class="btn-tool-tag" onclick="window.setFinanceSubTab('monthly');">전체 마진 분석 ➔</button>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:9px;">
+                ${topMargins.map((sm) => {
+                  const barW = Math.max(4, Math.min(100, sm.margin));
+                  const col = sm.margin >= 25 ? "#10b981" : (sm.margin >= 15 ? "#2563eb" : "#ef4444");
+                  return `
+                    <div onclick="window.openSiteFinanceDetailModal('${escJs(sm.siteName)}', '${escJs(sm.id)}')" style="cursor:pointer;">
+                      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:3px;gap:6px;">
+                        <span style="color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(sm.siteName)}</span>
+                        <span style="color:${col};white-space:nowrap;">마진 ${sm.margin}% <span style="color:#64748b;font-weight:600;">(계약 ${formatShortAmount(sm.total)} / 지출 ${formatShortAmount(sm.exp)})</span></span>
+                      </div>
+                      <div style="height:7px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
+                        <div style="height:100%;width:${barW}%;background:${col};border-radius:999px;"></div>
+                      </div>
+                    </div>
+                  `;
+                }).join("") || `<div style="font-size:12px;color:#94a3b8;">분석할 올해 현장 데이터가 없습니다.</div>`}
+              </div>
             </div>
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              ${topMargins.map((sm) => {
-                const barW = Math.max(4, Math.min(100, sm.margin));
-                const col = sm.margin >= 25 ? "#10b981" : (sm.margin >= 15 ? "#2563eb" : "#ef4444");
-                return `
-                  <div onclick="window.openSiteFinanceDetailModal('${escJs(sm.siteName)}', '${escJs(sm.id)}')" style="cursor:pointer;">
-                    <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:3px;">
-                      <span style="color:#1e293b;">${escHtml(sm.siteName)}</span>
-                      <span style="color:${col};">${sm.margin}% <span style="color:#64748b;font-weight:600;">(계약 ${formatShortAmount(sm.total)} / 지출 ${formatShortAmount(sm.exp)})</span></span>
+
+            <div class="standard-card" style="margin-bottom:0;padding:16px;background:#fff;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <h3 style="margin:0;font-size:14px;font-weight:800;color:#b91c1c;">⚠️ ${curYear}년 원가 주의 · 저마진 현장 (하위 5개소)</h3>
+                <button type="button" class="btn-tool-tag" onclick="window.setFinanceSubTab('monthly');">원가 내역 확인 ➔</button>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:9px;">
+                ${bottomMargins.map((sm) => {
+                  const costRatio = sm.total > 0 ? Math.round((sm.exp / sm.total) * 100) : 100;
+                  const barW = Math.max(6, Math.min(100, costRatio));
+                  const col = sm.margin < 0 ? "#dc2626" : (sm.margin < 15 ? "#ea580c" : (sm.margin < 25 ? "#d97706" : "#3b82f6"));
+                  const badgeTxt = sm.margin < 0 ? "원가초과" : (sm.margin < 15 ? "저마진" : "원가점검");
+                  return `
+                    <div onclick="window.openSiteFinanceDetailModal('${escJs(sm.siteName)}', '${escJs(sm.id)}')" style="cursor:pointer;">
+                      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:3px;gap:6px;">
+                        <span style="color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                          ${escHtml(sm.siteName)}
+                          <span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${sm.margin < 15 ? "#fef2f2" : "#fffbeb"};color:${col};border:1px solid ${sm.margin < 15 ? "#fecaca" : "#fde68a"};margin-left:3px;">${badgeTxt}</span>
+                        </span>
+                        <span style="color:${col};white-space:nowrap;">마진 ${sm.margin}% · 원가율 ${costRatio}% <span style="color:#64748b;font-weight:600;">(지출 ${formatShortAmount(sm.exp)})</span></span>
+                      </div>
+                      <div style="height:7px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
+                        <div style="height:100%;width:${barW}%;background:${col};border-radius:999px;"></div>
+                      </div>
                     </div>
-                    <div style="height:7px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
-                      <div style="height:100%;width:${barW}%;background:${col};border-radius:999px;"></div>
+                  `;
+                }).join("") || `<div style="font-size:12px;color:#94a3b8;">지출이 집계된 올해 현장이 없습니다.</div>`}
+              </div>
+            </div>
+          </div>
+
+          <!-- 6. 수금 예정 일정 · 협력업체 지출 TOP 5 · 계산서/영수증 발행 점검 (3단 그리드) -->
+          <div style="display:grid;grid-template-columns:${isMobile ? "1fr" : "repeat(3, 1fr)"};gap:14px;">
+            <!-- (1) 다가오는 수금 예정 일정 -->
+            <div class="standard-card" style="margin-bottom:0;padding:16px;background:#fff;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <h3 style="margin:0;font-size:13.5px;font-weight:800;color:#1e3a8a;">📅 다가오는 수금 예정 일정</h3>
+                <button type="button" class="btn-tool-tag" onclick="window.setFinanceSubTab('collection');">수금현황 ➔</button>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px;">
+                ${upcomingCollections.slice(0, 5).map((item) => {
+                  const dDiff = diffDaysYmd(todayYmd, item.dueYmd);
+                  const dTag = dDiff === 0 ? "오늘 예정" : (dDiff < 0 ? `D+${Math.abs(dDiff)} 경과` : `D-${dDiff}`);
+                  const dBg = dDiff <= 0 ? "#fef2f2" : (dDiff <= 7 ? "#eff6ff" : "#f8fafc");
+                  const dCol = dDiff <= 0 ? "#dc2626" : (dDiff <= 7 ? "#1d4ed8" : "#475569");
+                  const dBdr = dDiff <= 0 ? "#fecaca" : (dDiff <= 7 ? "#bfdbfe" : "#e2e8f0");
+                  return `
+                    <div onclick="window.openCollectionModal('${escJs(item.id)}')" style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;background:${dBg};border:1px solid ${dBdr};cursor:pointer;gap:8px;">
+                      <div style="min-width:0;">
+                        <div style="font-size:12px;font-weight:800;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                          ${escHtml(item.siteName)}
+                          <span style="font-size:10px;font-weight:800;padding:1px 5px;border-radius:4px;background:#fff;color:${dCol};border:1px solid ${dBdr};margin-left:3px;">${dTag}</span>
+                        </div>
+                        <div style="font-size:11px;color:#64748b;margin-top:1px;">${escHtml(item.dueYmd.slice(5).replace("-", "/"))} · <b>${escHtml(item.label)}</b>${item.proof ? " · " + escHtml(item.proof) : ""}</div>
+                      </div>
+                      <strong style="font-size:12.5px;color:${dCol};white-space:nowrap;">${formatShortAmount(item.amount)}</strong>
                     </div>
+                  `;
+                }).join("") || `<div style="font-size:12px;color:#94a3b8;padding:12px 0;text-align:center;">예정된 미수금 일정이 없습니다. 🎉</div>`}
+              </div>
+            </div>
+
+            <!-- (3) 협력업체별 지출 TOP 5 -->
+            <div class="standard-card" style="margin-bottom:0;padding:16px;background:#fff;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <h3 style="margin:0;font-size:13.5px;font-weight:800;color:#0f172a;">🤝 ${curYear}년 협력업체 지출 TOP 5</h3>
+                <button type="button" class="btn-tool-tag" onclick="window.setFinanceSubTab('expense');">비용마감 ➔</button>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                ${topVendors.map((v, idx) => {
+                  const sharePct = totalVendorYearExp > 0 ? Math.round((v.claim / totalVendorYearExp) * 100) : 0;
+                  const barW = Math.max(6, Math.min(100, sharePct * 2));
+                  const barCol = donutColors[idx % donutColors.length];
+                  return `
+                    <div onclick="window.openDashboardVendorExpenses('${escJs(v.vendor)}')" style="cursor:pointer;padding:4px 2px;" title="클릭하여 [${escHtml(v.vendor)}] 지출 내역 보기">
+                      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;margin-bottom:3px;gap:6px;">
+                        <span style="color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                          ${idx + 1}. ${escHtml(v.vendor)}
+                          <span style="font-size:10.5px;color:#64748b;font-weight:600;">(${v.count}건)</span>
+                        </span>
+                        <span style="white-space:nowrap;color:#0f172a;font-weight:800;">
+                          ${formatShortAmount(v.claim)} <span style="font-size:10.5px;color:#64748b;">(${sharePct}%)</span>
+                          ${v.unpaid > 0 ? `<span style="font-size:10px;color:#dc2626;background:#fef2f2;padding:1px 4px;border-radius:4px;border:1px solid #fecaca;margin-left:2px;">미지급 ${formatShortAmount(v.unpaid)}</span>` : ""}
+                        </span>
+                      </div>
+                      <div style="height:6px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
+                        <div style="height:100%;width:${barW}%;background:${barCol};border-radius:999px;"></div>
+                      </div>
+                    </div>
+                  `;
+                }).join("") || `<div style="font-size:12px;color:#94a3b8;padding:12px 0;text-align:center;">집계된 협력업체 지출 내역이 없습니다.</div>`}
+              </div>
+            </div>
+
+            <!-- (4) 세금계산서 · 현금영수증 발행 점검 -->
+            <div class="standard-card" style="margin-bottom:0;padding:16px;background:#fff;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <h3 style="margin:0;font-size:13.5px;font-weight:800;color:#0f766e;">🧾 계산서·영수증 미발행 점검 <span style="font-size:11px;background:#ccfbf1;color:#0f766e;padding:1px 6px;border-radius:999px;margin-left:3px;">${taxCheckAlerts.length}건</span></h3>
+                <button type="button" class="btn-tool-tag" onclick="window.setFinanceSubTab('collection'); window.setFinanceTaxFilter('미발행');">미발행 전체 ➔</button>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px;">
+                ${taxCheckAlerts.slice(0, 5).map(({ row, fin, isDone, hasCollected }) => `
+                  <div onclick="window.openCollectionModal('${escJs(row.id)}')" style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;background:#f0fdfa;border:1px solid #99f6e4;cursor:pointer;gap:8px;">
+                    <div style="min-width:0;">
+                      <div style="font-size:12px;font-weight:800;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                        ${escHtml(row.siteName)}
+                        ${isDone ? `<span style="font-size:10px;background:#0f766e;color:#fff;padding:1px 5px;border-radius:4px;margin-left:3px;">완료</span>` : (hasCollected ? `<span style="font-size:10px;background:#0284c7;color:#fff;padding:1px 5px;border-radius:4px;margin-left:3px;">수금중</span>` : "")}
+                      </div>
+                      <div style="font-size:11px;color:#475569;margin-top:1px;">${escHtml(row.clientName || "계약자 미등록")} · 수금 ${formatShortAmount(fin.collected)} / 도급 ${formatShortAmount(fin.total)}</div>
+                    </div>
+                    <span style="font-size:11px;font-weight:800;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;padding:2px 7px;border-radius:6px;white-space:nowrap;">미발행</span>
                   </div>
-                `;
-              }).join("") || `<div style="font-size:12px;color:#94a3b8;">분석할 올해 현장 데이터가 없습니다.</div>`}
+                `).join("") || `<div style="font-size:12px;color:#94a3b8;padding:12px 0;text-align:center;">미발행 점검 대상 현장이 없습니다. 🎉</div>`}
+              </div>
             </div>
           </div>
         `;
