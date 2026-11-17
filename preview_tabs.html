@@ -18417,9 +18417,9 @@ end $$;`;
                 </div>
                 <input type="text" class="ws-input" id="csUrlInput" readonly value="${escHtml(shareUrl)}" onclick="this.select()" style="background:#ffffff;font-size:12px;color:#1e3a8a;font-weight:600;">
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
-                  <button type="button" class="btn-tool-tag" onclick="copyText(document.getElementById('csUrlInput').value)" style="background:#ffffff;border-color:#93c5fd;color:#1d4ed8;font-weight:800;">📋 링크 복사</button>
-                  <button type="button" class="btn-tool-tag" onclick="window.copyClientShareKakao()" style="background:#fef08a;border-color:#facc15;color:#713f12;font-weight:800;">💬 카톡 안내문 복사</button>
-                  <a href="${escHtml(shareUrl)}" target="_blank" rel="noopener noreferrer" class="btn-tool-tag" style="background:#ffffff;text-decoration:none;font-weight:700;">🔗 미리보기 ↗</a>
+                  <button type="button" class="btn-tool-tag" onclick="window.saveClientShareModal(true).then(() => copyText(document.getElementById('csUrlInput').value))" style="background:#ffffff;border-color:#93c5fd;color:#1d4ed8;font-weight:800;">📋 링크 복사</button>
+                  <button type="button" class="btn-tool-tag" onclick="window.saveClientShareModal(true).then(() => window.copyClientShareKakao())" style="background:#fef08a;border-color:#facc15;color:#713f12;font-weight:800;">💬 카톡 안내문 복사</button>
+                  <button type="button" class="btn-tool-tag" onclick="window.previewClientShare()" style="background:#ffffff;font-weight:700;">🔗 미리보기 ↗</button>
                 </div>
               </div>
             </div>
@@ -18433,6 +18433,18 @@ end $$;`;
           <button type="button" class="btn-act-blue" onclick="window.saveClientShareModal()">💾 저장 및 최신 현황 반영</button>
         `;
         openModal("syncStatusModal");
+        if (!existing.token) {
+          window.saveClientShareModal(true);
+        }
+      };
+
+      window.previewClientShare = async function () {
+        if (!state._clientShareDraft) return;
+        const url = getClientShareUrl(state._clientShareDraft.token);
+        const win = window.open("", "_blank", "noopener,noreferrer");
+        await window.saveClientShareModal(true);
+        if (win) win.location.href = url;
+        else window.open(url, "_blank", "noopener,noreferrer");
       };
 
       window.regenerateClientShareToken = function () {
@@ -18450,7 +18462,7 @@ end $$;`;
         copyText(msg);
       };
 
-      window.saveClientShareModal = async function () {
+      window.saveClientShareModal = async function (silent) {
         const d = state._clientShareDraft;
         if (!d || !d.siteName) return;
         if (!state.dashData) state.dashData = {};
@@ -18474,9 +18486,9 @@ end $$;`;
             await window.WSSupabaseV3.persistSnapshot("dash_main", state.dashData);
             await window.WSSupabaseV3.persistSnapshot("client_share::" + d.token, payload);
           }
-          showToast(d.enabled ? "✅ 고객 공유 링크가 저장 및 최신 반영되었습니다." : "🔒 고객 공유 링크가 비활성화되었습니다.");
+          if (!silent) showToast(d.enabled ? "✅ 고객 공유 링크가 저장 및 최신 반영되었습니다." : "🔒 고객 공유 링크가 비활성화되었습니다.");
         } catch (err) {
-          showToast("⚠️ 저장 중 오류가 발생했습니다: " + (err && err.message ? err.message : err));
+          if (!silent) showToast("⚠️ 저장 중 오류가 발생했습니다: " + (err && err.message ? err.message : err));
         }
       };
 
