@@ -19214,6 +19214,7 @@ end $$;`;
           tabKey = "partners";
         }
         if (tabKey === "finance") {
+          if (!opts.keepSubTab) state.financeSubTab = "dashboard";
           state._needFinanceScrollTop = true;
           ensureFinanceDbDataLoaded(true);
         }
@@ -19262,6 +19263,7 @@ end $$;`;
           tabKey = "partners";
         }
         if (tabKey === "finance") {
+          if (!opts.keepSubTab) state.financeSubTab = "dashboard";
           state._needFinanceScrollTop = true;
           ensureFinanceDbDataLoaded(true);
         }
@@ -20595,7 +20597,7 @@ end $$;`;
                 cat: "💰 수금",
                 title: c.siteName,
                 sub: `총액 ${formatShortAmount(c.totalAmount)} · 미수 ${formatShortAmount(getCollectionRowFinancials(c).uncollected)}`,
-                onClick: `closeModal('syncStatusModal'); state.financeSubTab='collection'; ${navTabCmd('finance')}; openCollectionModal('${escJs(c.id)}');`
+                onClick: `closeModal('syncStatusModal'); state.financeSubTab='collection'; ${state.device === "mobile" ? "switchMobileTab('finance', { keepSubTab: true })" : "switchMainTab('finance', { keepSubTab: true })"}; openCollectionModal('${escJs(c.id)}');`
               });
             }
           });
