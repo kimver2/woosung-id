@@ -11138,18 +11138,29 @@ function promoteEstimateToSite(data) {
     }
 
     if (newRows.length > 0) {
-      mainSheet.getRange(startRow, 1, newRows.length, colCount).setValues(newRows);
-      for (var ri = 0; ri < newRows.length; ri++) {
-        var rNum = startRow + ri;
-        var rShared = newRows[ri][4];
-        formatInsertedScheduleRow(mainSheet, rNum, rShared);
+      var targetBlockRange = mainSheet.getRange(startRow, 1, newRows.length, colCount);
+      targetBlockRange.setValues(newRows);
+      try {
+        targetBlockRange
+          .setFontFamily("Malgun Gothic")
+          .setFontSize(10)
+          .setVerticalAlignment("middle")
+          .setBackground("#ffffff")
+          .setFontColor("#1e293b")
+          .setBorder(true, true, true, true, true, true, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
+        mainSheet.getRange(startRow, 1, newRows.length, 1).setFontWeight("bold");
+        var chkRange = mainSheet.getRange(startRow, 5, newRows.length, 1);
+        if (chkRange && typeof chkRange.insertCheckboxes === "function") {
+          chkRange.insertCheckboxes();
+        }
+      } catch (eFastFmt) {
+        for (var ri = 0; ri < newRows.length; ri++) {
+          formatInsertedScheduleRow(mainSheet, startRow + ri, newRows[ri][4]);
+        }
       }
       try {
         applySiteScheduleValidations(mainSheet, startRow, newRows.length);
       } catch(eVal) {}
-      try {
-        setupSiteSheetConditionalFormatting(mainSheet);
-      } catch(eCf) {}
 
       // 2개 행 이상이면 2번째 행부터 그룹화(아코디언)
       if (newRows.length > 1) {
@@ -11157,12 +11168,6 @@ function promoteEstimateToSite(data) {
           mainSheet.getRange((startRow + 1) + ":" + (startRow + newRows.length - 1)).shiftRowGroupDepth(1);
         } catch(eGrp) {}
       }
-
-      // 공종 유효성 검사 자동 등록
-      try {
-        var addedTaskNames = newRows.map(function(r) { return r[2]; });
-        ensureTasksInValidation(mainSheet, addedTaskNames);
-      } catch(eEtv) {}
     }
 
     // 서버 캐시 갱신
