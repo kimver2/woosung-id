@@ -4440,7 +4440,7 @@
               <td>${escHtml(parseYmdFromTask(t) || t.dateDisplay || "-")}</td>
               <td style="white-space:nowrap;">${mgrCellHtml}</td>
               <td>${escHtml(hasPartner ? t.partner : "미등록")}${hasPartner && phone ? ` <a href="tel:${escHtml(phone.replace(/[^0-9]/g, ""))}" onclick="event.stopPropagation();" style="color:#10b981;font-weight:700;text-decoration:none;margin-left:4px;">📞</a>` : ""}</td>
-              <td style="color:var(--text-sub);max-width:240px;">${escHtml(t.memo || "-")}</td>
+              <td style="color:var(--text-sub);max-width:240px;">${formatMemoTextInlineHtml(t.memo || "-")}</td>
               <td onclick="event.stopPropagation();" style="white-space:nowrap;">
                 <button type="button" class="btn-tool-tag" onclick="openTaskEditModal('${escJs(tid)}')">수정</button>
                 <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="openDeleteConfirm('task', '${escJs(tid)}')">삭제</button>
@@ -12421,16 +12421,21 @@
           </div>
 
           <div class="fg">
-            <label>
+            <label style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
               <span>특이사항 / 메모</span>
-              ${isEdit ? `<button type="button" class="btn-tool-tag" onclick="setSheetField('editFullMemo', ${!ctx.editFullMemo})">${ctx.editFullMemo ? "추가 입력 모드로" : "전체 원문 편집"}</button>` : ""}
+              <span style="display:inline-flex;align-items:center;gap:6px;">
+                <input type="file" id="taskMemoPhotoInput" accept="image/*" multiple style="display:none;" onchange="handleTaskMemoPhotoFiles(this.files); this.value='';">
+                <button type="button" class="btn-tool-tag" id="btnAddTaskMemoPhoto" onclick="document.getElementById('taskMemoPhotoInput').click()" style="background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;font-weight:700;">📷 사진 추가</button>
+                ${isEdit ? `<button type="button" class="btn-tool-tag" onclick="setSheetField('editFullMemo', ${!ctx.editFullMemo})">${ctx.editFullMemo ? "추가 입력 모드로" : "전체 원문 편집"}</button>` : ""}
+              </span>
             </label>
             ${isEdit && !ctx.editFullMemo ? `
-              ${ctx.memo ? `<div class="memo-history-list">${escHtml(ctx.memo).replace(/\n/g, "<br>")}</div>` : ""}
-              <input class="ws-input" value="${escHtml(ctx.newMemo || "")}" placeholder="새 메모 추가 입력 (저장 시 기존 메모에 타임스탬프 누적)" oninput="state_sheetUpdate('newMemo', this.value)">
+              ${ctx.memo ? `<div class="memo-history-list">${formatMemoHistoryWithPhotosHtml(ctx.memo)}</div>` : ""}
+              <input class="ws-input" value="${escHtml(ctx.newMemo || "")}" placeholder="새 메모 추가 입력 (저장 시 기존 메모에 누적 · Ctrl+V 사진 붙여넣기 가능)" oninput="state_sheetUpdate('newMemo', this.value)" onpaste="handleTaskMemoPaste(event)">
             ` : `
-              <textarea class="ws-textarea" placeholder="메모 내용을 입력하세요" oninput="state_sheetUpdate('memo', this.value)">${escHtml(ctx.memo)}</textarea>
+              <textarea class="ws-textarea" placeholder="메모 내용을 입력하세요 (Ctrl+V로 캡처 사진 바로 붙여넣기 가능)" oninput="state_sheetUpdate('memo', this.value)" onpaste="handleTaskMemoPaste(event)">${escHtml(ctx.memo)}</textarea>
             `}
+            ${renderTaskMemoPhotosPreviewHtml(ctx.memo)}
           </div>
         `;
 
@@ -12888,6 +12893,255 @@
         const nextIdx = (ctx.sameDayIdx + delta + ctx.sameDayList.length) % ctx.sameDayList.length;
         const target = ctx.sameDayList[nextIdx];
         if (target && target.task) window.openTaskEditModal(target.task.id || target.task.taskId);
+      };
+
+      function extractDriveIdFromAnyUrl(url) {
+        const s = String(url || "");
+        const m1 = s.match(/\/file\/d\/([a-zA-Z0-9_-]{15,})/);
+        if (m1) return m1[1];
+        const m2 = s.match(/[?&]id=([a-zA-Z0-9_-]{15,})/);
+        if (m2) return m2[1];
+        return "";
+      }
+      function extractMemoPhotos(memoText) {
+        const raw = String(memoText || "");
+        const list = [];
+        const re = /\[📷\s*사진:\s*([^\]]+)\]\((https?:\/\/[^\s)]+|data:image\/[^\s)]+)\)/g;
+        let m;
+        while ((m = re.exec(raw)) !== null) {
+          const name = String(m[1] || "첨부사진").trim();
+          const url = String(m[2] || "").trim();
+          const fid = extractDriveIdFromAnyUrl(url);
+          const thumbUrl = fid ? `https://drive.google.com/thumbnail?id=${fid}&sz=w800` : url;
+          const viewUrl = fid ? `https://drive.google.com/file/d/${fid}/view?usp=sharing` : url;
+          list.push({ fullToken: m[0], name, url, fid, thumbUrl, viewUrl });
+        }
+        return list;
+      }
+      function formatMemoTextInlineHtml(memoText) {
+        const raw = String(memoText || "").trim();
+        if (!raw || raw === "-") return "-";
+        const photos = extractMemoPhotos(raw);
+        const textOnly = raw.replace(/\[📷\s*사진:\s*([^\]]+)\]\((https?:\/\/[^\s)]+|data:image\/[^\s)]+)\)/g, "").replace(/\n+/g, " ").trim();
+        let html = textOnly ? escHtml(textOnly) : "";
+        if (photos.length > 0) {
+          const badges = photos.map((p) =>
+            `<a href="${escHtml(p.viewUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation();" style="display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:5px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:11px;font-weight:700;text-decoration:none;margin-left:4px;">📷 ${escHtml(p.name)}</a>`
+          ).join("");
+          html = (html ? html + " " : "") + badges;
+        }
+        return html || "-";
+      }
+      function formatMemoHistoryWithPhotosHtml(memoText) {
+        const raw = String(memoText || "");
+        if (!raw) return "";
+        return escHtml(raw)
+          .replace(/\[📷\s*사진:\s*([^\]]+)\]\((https?:\/\/[^\s)]+|data:image\/[^\s)]+)\)/g, (all, name, url) => {
+            return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:6px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:11.5px;font-weight:700;text-decoration:none;">📷 ${name} ↗</a>`;
+          })
+          .replace(/\n/g, "<br>");
+      }
+      function renderTaskMemoPhotosPreviewHtml(memoText) {
+        const photos = extractMemoPhotos(memoText);
+        if (!photos.length) return "";
+        return `
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;padding:8px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;">
+            ${photos.map((p, idx) => `
+              <div style="position:relative;width:82px;display:flex;flex-direction:column;align-items:center;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:4px;box-shadow:0 1px 2px rgba(15,23,42,0.05);">
+                <button type="button" onclick="removeTaskMemoPhotoByIdx(${idx})" title="이 사진 첨부 삭제" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid #fca5a5;background:#fee2e2;color:#dc2626;font-size:11px;font-weight:800;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;">✕</button>
+                <a href="${escHtml(p.viewUrl)}" target="_blank" rel="noopener noreferrer" onclick="if(openMemoPhotoLightbox('${escJs(p.thumbUrl)}','${escJs(p.viewUrl)}','${escJs(p.name)}')) return false;" style="display:block;width:72px;height:64px;border-radius:6px;overflow:hidden;background:#f1f5f9;">
+                  <img src="${escHtml(p.thumbUrl)}" alt="${escHtml(p.name)}" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.style.display='none';this.parentNode.innerHTML='<div style=\\'height:100%;display:flex;align-items:center;justify-content:center;font-size:22px;\\'>🖼️</div>';">
+                </a>
+                <a href="${escHtml(p.viewUrl)}" target="_blank" rel="noopener noreferrer" style="margin-top:3px;font-size:10px;color:#1e40af;font-weight:700;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none;" title="${escHtml(p.name)}">${escHtml(p.name)}</a>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      }
+      window.openMemoPhotoLightbox = function (thumbUrl, viewUrl, name) {
+        let ov = document.getElementById("memoPhotoLightboxOverlay");
+        if (!ov) {
+          ov = document.createElement("div");
+          ov.id = "memoPhotoLightboxOverlay";
+          ov.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,0.82);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;";
+          ov.onclick = function (e) { if (e.target === ov) ov.style.display = "none"; };
+          document.body.appendChild(ov);
+        }
+        ov.innerHTML = `
+          <div style="background:#fff;border-radius:12px;max-width:92vw;max-height:88vh;padding:12px;display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 40px rgba(0,0,0,0.4);">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+              <span style="font-weight:800;font-size:13.5px;color:#0f172a;">📷 ${escHtml(name || "첨부 사진")}</span>
+              <div style="display:flex;gap:6px;">
+                <a href="${escHtml(viewUrl)}" target="_blank" rel="noopener noreferrer" class="btn-tool-tag" style="text-decoration:none;background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-weight:700;">원본 새창 열기 ↗</a>
+                <button type="button" class="btn-tool-tag" onclick="document.getElementById('memoPhotoLightboxOverlay').style.display='none'">✕ 닫기</button>
+              </div>
+            </div>
+            <div style="overflow:auto;display:flex;align-items:center;justify-content:center;max-height:76vh;">
+              <img src="${escHtml(thumbUrl)}" alt="${escHtml(name)}" style="max-width:86vw;max-height:74vh;border-radius:8px;object-fit:contain;">
+            </div>
+          </div>
+        `;
+        ov.style.display = "flex";
+        return true;
+      };
+      window.removeTaskMemoPhotoByIdx = function (idx) {
+        const ctx = state.sheetCtx;
+        if (!ctx) return;
+        const photos = extractMemoPhotos(ctx.memo);
+        const target = photos[idx];
+        if (!target) return;
+        ctx.memo = String(ctx.memo || "")
+          .replace(target.fullToken, "")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+        renderTaskSheetModal();
+        showToast("🗑️ 첨부 사진이 메모에서 제거되었습니다. ([저장하기]를 누르면 반영됩니다)");
+      };
+      async function compressImageFileForMemo(file) {
+        if (!file || !String(file.type || "").startsWith("image/")) {
+          const dataUrl = await new Promise((res, rej) => {
+            const r = new FileReader();
+            r.onload = () => res(String(r.result || ""));
+            r.onerror = () => rej(new Error("파일 읽기 실패"));
+            r.readAsDataURL(file);
+          });
+          const comma = dataUrl.indexOf(",");
+          return { name: file.name || ("photo_" + Date.now() + ".jpg"), mimeType: file.type || "image/jpeg", data: comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl, dataUrl };
+        }
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const rawDataUrl = String((ev && ev.target && ev.target.result) || "");
+            const img = new Image();
+            img.onload = () => {
+              try {
+                const maxDim = 1400;
+                let w = img.width || 800, h = img.height || 600;
+                if (w > maxDim || h > maxDim) {
+                  if (w >= h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+                  else { w = Math.round((w * maxDim) / h); h = maxDim; }
+                }
+                const canvas = document.createElement("canvas");
+                canvas.width = w; canvas.height = h;
+                const cctx = canvas.getContext("2d");
+                cctx.drawImage(img, 0, 0, w, h);
+                const outDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+                const comma = outDataUrl.indexOf(",");
+                const baseName = String(file.name || ("사진_" + Date.now())).replace(/\.[^.]+$/, "");
+                resolve({
+                  name: baseName + ".jpg",
+                  mimeType: "image/jpeg",
+                  data: comma >= 0 ? outDataUrl.slice(comma + 1) : outDataUrl,
+                  dataUrl: outDataUrl
+                });
+              } catch (eCmp) {
+                const comma = rawDataUrl.indexOf(",");
+                resolve({ name: file.name || "photo.jpg", mimeType: file.type || "image/jpeg", data: comma >= 0 ? rawDataUrl.slice(comma + 1) : rawDataUrl, dataUrl: rawDataUrl });
+              }
+            };
+            img.onerror = () => {
+              const comma = rawDataUrl.indexOf(",");
+              resolve({ name: file.name || "photo.jpg", mimeType: file.type || "image/jpeg", data: comma >= 0 ? rawDataUrl.slice(comma + 1) : rawDataUrl, dataUrl: rawDataUrl });
+            };
+            img.src = rawDataUrl;
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+      window.handleTaskMemoPhotoFiles = async function (fileList) {
+        const ctx = state.sheetCtx;
+        if (!ctx || !fileList || !fileList.length) return;
+        const files = Array.from(fileList).filter((f) => f && (!f.type || f.type.startsWith("image/")));
+        if (!files.length) return showToast("⚠️ 이미지(사진) 파일만 첨부할 수 있습니다.");
+
+        const btn = document.getElementById("btnAddTaskMemoPhoto");
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = `⏳ 사진 업로드 중 (0/${files.length})...`;
+        }
+        try {
+          const siteName = (ctx.isCustomSite ? ctx.customSiteName : ctx.siteName) || "미지정현장";
+          const siteInfo = getSiteInfo(siteName) || {};
+          const clientDriveUrl = siteInfo.driveUrl || "";
+          const payload = [];
+          for (let i = 0; i < files.length; i++) {
+            if (btn) btn.textContent = `⏳ 사진 압축·변환 중 (${i + 1}/${files.length})...`;
+            const item = await compressImageFileForMemo(files[i]);
+            payload.push(item);
+          }
+          if (btn) btn.textContent = `☁️ 드라이브 저장 중...`;
+          let uploadedFiles = [];
+          if (typeof google !== "undefined" && google.script && google.script.run && google.script.run.uploadSiteFilesToDriveFromWeb) {
+            const res = await new Promise((resolve, reject) => {
+              google.script.run
+                .withSuccessHandler((r) => (r && r.success === false ? reject(new Error(r.error || "업로드 실패")) : resolve(r)))
+                .withFailureHandler((err) => reject(err))
+                .uploadSiteFilesToDriveFromWeb(siteName, payload, clientDriveUrl);
+            });
+            uploadedFiles = (res && res.files) || [];
+          } else if (location.protocol.startsWith("http")) {
+            const gasUrl = (window.WSDataService && window.WSDataService.GAS_API_URL) || GAS_AUTH_API_URL;
+            const resp = await fetch(gasUrl, {
+              method: "POST",
+              mode: "cors",
+              redirect: "follow",
+              headers: { "Content-Type": "text/plain;charset=utf-8" },
+              body: JSON.stringify({
+                action: "uploadSiteFiles",
+                siteName,
+                clientDriveUrl,
+                files: payload.map((p) => ({ name: p.name, mimeType: p.mimeType, data: p.data }))
+              })
+            });
+            const res = await resp.json();
+            if (!res || res.success === false) {
+              throw new Error((res && res.error) || "드라이브 사진 업로드 실패");
+            }
+            uploadedFiles = res.files || [];
+          } else {
+            uploadedFiles = payload.map((p) => ({ name: p.name, viewUrl: p.dataUrl, url: p.dataUrl }));
+          }
+
+          const now = new Date();
+          const stamp = `[${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} | ${state.user}]`;
+          const tokens = uploadedFiles.map((f) => {
+            const link = f.viewUrl || (f.id ? `https://drive.google.com/file/d/${f.id}/view?usp=sharing` : f.url);
+            return `${stamp} [📷 사진: ${f.name || "첨부사진"}](${link})`;
+          });
+          if (tokens.length > 0) {
+            ctx.memo = (ctx.memo ? ctx.memo.trim() + "\n" : "") + tokens.join("\n");
+            renderTaskSheetModal();
+            showToast(`✅ 사진 ${tokens.length}장이 비고/메모에 첨부되었습니다. ([저장하기]를 눌러 완료하세요)`);
+          }
+        } catch (err) {
+          console.error("메모 사진 첨부 오류:", err);
+          showToast("❌ 사진 첨부 실패: " + (err.message || String(err)));
+        } finally {
+          const btnAfter = document.getElementById("btnAddTaskMemoPhoto");
+          if (btnAfter) {
+            btnAfter.disabled = false;
+            btnAfter.textContent = "📷 사진 추가";
+          }
+        }
+      };
+      window.handleTaskMemoPaste = function (e) {
+        const items = e && e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        const imgFiles = [];
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type && items[i].type.indexOf("image/") === 0) {
+            const blob = items[i].getAsFile();
+            if (blob) {
+              const ext = (items[i].type.split("/")[1] || "png").replace(/[^a-z0-9]/gi, "");
+              const named = new File([blob], `캡처사진_${Date.now()}.${ext}`, { type: items[i].type });
+              imgFiles.push(named);
+            }
+          }
+        }
+        if (imgFiles.length > 0) {
+          e.preventDefault();
+          window.handleTaskMemoPhotoFiles(imgFiles);
+        }
       };
 
       window.saveTaskSheetModal = function () {

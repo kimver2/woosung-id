@@ -5806,40 +5806,61 @@ function extractDriveFolderIdFromUrl(urlOrId) {
 /**
  * [모바일 웹앱] 현장 파일(사진, 도면, 문서 등) 구글 드라이브 폴더에 실제 업로드
  */
+function getOrCreateAutoSiteDriveFolder_(cleanSite) {
+  var rootFolderName = "우성아이디_현장첨부사진";
+  var rootIter = DriveApp.getFoldersByName(rootFolderName);
+  var rootFolder = rootIter.hasNext() ? rootIter.next() : DriveApp.createFolder(rootFolderName);
+  var safeSiteFolder = String(cleanSite || "기타현장").replace(/[\\/:*?"<>|]/g, "_").trim() || "기타현장";
+  var subIter = rootFolder.getFoldersByName(safeSiteFolder);
+  var subFolder = subIter.hasNext() ? subIter.next() : rootFolder.createFolder(safeSiteFolder);
+  return subFolder;
+}
+
 function uploadSiteFilesToDriveFromWeb(siteName, filesPayload, clientDriveUrl) {
   try {
-    var cleanSite = String(siteName || "").trim();
-    if (!cleanSite) return { success: false, error: "현장명이 유효하지 않습니다." };
+    var cleanSite = String(siteName || "").trim() || "미지정현장";
     if (!filesPayload || !filesPayload.length) return { success: false, error: "업로드할 파일 데이터가 없습니다." };
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) ss = getAppSpreadsheet();
     var infoMap = getSiteInfoMap(ss);
-    var info = infoMap[cleanSite] || infoMap[cleanSite.replace(/\s+/g, " ")] || infoMap[cleanSite.replace(/\s+/g, "")];
+    var strippedSite = cleanSite.replace(/^\[(단건|AS)\]\s*/i, "").trim();
+    var info = infoMap[cleanSite] || infoMap[strippedSite] || infoMap[cleanSite.replace(/\s+/g, " ")] || infoMap[cleanSite.replace(/\s+/g, "")];
     var driveUrl = String(clientDriveUrl || (info ? (info.driveUrl || info.driveLink || "") : "")).trim();
 
-    if (!driveUrl) {
-      return { success: false, error: "[" + cleanSite + "] 등록된 드라이브 폴더 링크가 없습니다. 먼저 현장 정보에서 링크를 등록해주세요." };
-    }
-
-    var folderId = extractDriveFolderIdFromUrl(driveUrl);
-    if (!folderId) {
-      return { success: false, error: "등록된 드라이브 링크에서 폴더 ID를 인식할 수 없습니다: " + driveUrl };
-    }
-
-    var folder;
-    try {
-      folder = DriveApp.getFolderById(folderId);
-    } catch (eFolder) {
-      var errMsg = String(eFolder.message || eFolder.toString());
-      if (errMsg.indexOf("auth/drive") !== -1 || errMsg.indexOf("호출할 수 있는 권한이 없습니다") !== -1 || errMsg.indexOf("DriveApp") !== -1) {
-        return {
-          success: false,
-          isAuthRequired: true,
-          error: "구글 드라이브 최초 1회 권한 승인이 필요합니다. 구글 시트 상단 메뉴 [🚀 현장 관리 > ☁️ 구글 드라이브 업로드 권한 1회 승인]을 클릭하여 [허용]을 눌러주세요."
-        };
+    var folder = null;
+    if (driveUrl) {
+      var folderId = extractDriveFolderIdFromUrl(driveUrl);
+      if (folderId) {
+        try {
+          folder = DriveApp.getFolderById(folderId);
+        } catch (eFolder) {
+          var errMsg = String(eFolder.message || eFolder.toString());
+          if (errMsg.indexOf("auth/drive") !== -1 || errMsg.indexOf("호출할 수 있는 권한이 없습니다") !== -1 || errMsg.indexOf("DriveApp") !== -1) {
+            return {
+              success: false,
+              isAuthRequired: true,
+              error: "구글 드라이브 최초 1회 권한 승인이 필요합니다. 구글 시트 상단 메뉴 [🚀 현장 관리 > ☁️ 구글 드라이브 업로드 권한 1회 승인]을 클릭하여 [허용]을 눌러주세요."
+            };
+          }
+        }
       }
-      return { success: false, error: "구글 드라이브 폴더에 접근할 수 없습니다 (권한 또는 링크 확인 필요): " + errMsg };
+    }
+
+    if (!folder) {
+      try {
+        folder = getOrCreateAutoSiteDriveFolder_(strippedSite || cleanSite);
+      } catch (eAutoFolder) {
+        var autoErr = String(eAutoFolder.message || eAutoFolder.toString());
+        if (autoErr.indexOf("auth/drive") !== -1 || autoErr.indexOf("호출할 수 있는 권한이 없습니다") !== -1 || autoErr.indexOf("DriveApp") !== -1) {
+          return {
+            success: false,
+            isAuthRequired: true,
+            error: "구글 드라이브 최초 1회 권한 승인이 필요합니다. 구글 시트 상단 메뉴 [🚀 현장 관리 > ☁️ 구글 드라이브 업로드 권한 1회 승인]을 클릭하여 [허용]을 눌러주세요."
+          };
+        }
+        return { success: false, error: "구글 드라이브 폴더 생성/접근 실패: " + autoErr };
+      }
     }
 
     var uploadedList = [];
@@ -5853,10 +5874,16 @@ function uploadSiteFilesToDriveFromWeb(siteName, filesPayload, clientDriveUrl) {
       var decodedBytes = Utilities.base64Decode(rawData);
       var blob = Utilities.newBlob(decodedBytes, item.mimeType || "application/octet-stream", item.name);
       var createdFile = folder.createFile(blob);
+      try {
+        createdFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      } catch (eShare) {}
+      var fid = createdFile.getId();
       uploadedList.push({
         name: createdFile.getName(),
-        id: createdFile.getId(),
-        url: createdFile.getUrl()
+        id: fid,
+        url: createdFile.getUrl(),
+        viewUrl: "https://drive.google.com/file/d/" + fid + "/view?usp=sharing",
+        thumbUrl: "https://drive.google.com/thumbnail?id=" + fid + "&sz=w1000"
       });
     }
 
