@@ -714,11 +714,15 @@
         </button>
       ` : "";
 
+      const mgrContactsHtml = (Array.isArray(p.managerContacts) && p.managerContacts.length)
+        ? p.managerContacts.map((c) => `<span>👤 ${esc(c.name)}${c.phone ? ` | <a href="tel:${esc(String(c.phone).replace(/[^0-9+]/g, ""))}">📞 ${esc(c.phone)}</a>` : ""}</span>`).join("")
+        : (p.manager ? `<span>👤 담당자: ${esc(p.manager)}${p.managerPhone ? ` | <a href="tel:${esc(String(p.managerPhone).replace(/[^0-9+]/g, ""))}">📞 ${esc(p.managerPhone)}</a>` : ""}</span>` : "");
+
       document.getElementById("clientShareRoot").innerHTML = `
         <div class="card hero-card">
           <h1 class="site-title">${esc(p.siteName || "현장 진행 현황")}</h1>
           <div class="meta-row">
-            ${p.manager ? `<span>👤 담당자: ${esc(p.manager)}${p.managerPhone ? ` (<a href="tel:${esc(String(p.managerPhone).replace(/[^0-9+]/g, ""))}">📞 ${esc(p.managerPhone)}</a>)` : ""}</span>` : ""}
+            ${mgrContactsHtml}
             ${p.periodText ? `<span>🗓️ 공사기간: ${esc(p.periodText)}</span>` : ""}
             ${p.address ? `<span>📍 ${esc(p.address)} <a href="https://map.naver.com/p/search/${encodeURIComponent(p.address)}" target="_blank" rel="noopener noreferrer">지도 ↗</a></span>` : ""}
           </div>

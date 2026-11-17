@@ -18388,19 +18388,26 @@ end $$;`;
         const site = getAllSites().find((s) => s && s.siteName === siteName && (s.scope || "site") !== "newSite") || getAllSites().find((s) => s && s.siteName === siteName);
         const tasksRaw = (site && Array.isArray(site.tasks)) ? site.tasks : [];
         const mgrs = filterRegisteredManagers(getUniqueSiteManagers(tasksRaw));
-        const primary = mgrs[0] || state.user || "";
-        const phone = lookupMemberPhone(primary);
+        const list = (mgrs.length ? mgrs.slice(0, 2) : (state.user ? [state.user] : [])).map((name) => ({
+          name,
+          phone: lookupMemberPhone(name) || ""
+        }));
         return {
-          managerText: mgrs.slice(0, 2).join(", ") || primary,
-          primary,
-          phone
+          contacts: list,
+          managerText: list.map((c) => c.name).join(", "),
+          primary: list[0] ? list[0].name : "",
+          phone: list[0] ? list[0].phone : ""
         };
       }
 
+      function formatClientShareContactLines(siteName) {
+        const { contacts } = getClientShareManagerContact(siteName);
+        return contacts.map((c) => `담당자: ${c.name}${c.phone ? ` | ${c.phone}` : ""}`).join("\n");
+      }
+
       function buildDefaultClientShareNotice(siteName) {
-        const { managerText, phone } = getClientShareManagerContact(siteName);
-        const contactLine = managerText ? `\n담당자: ${managerText}${phone ? ` (${phone})` : ""}` : "";
-        return `안녕하세요, 우성아이디입니다.\n고객님 현장의 실시간 공정 진행 현황과 일정을 투명하게 공유드립니다.\n일정 및 시공 관련 문의사항은 아래 담당자에게 편하게 연락 주세요.${contactLine}`;
+        const contactLines = formatClientShareContactLines(siteName);
+        return `안녕하세요, 우성아이디입니다.\n고객님 현장의 실시간 공정 진행 현황과 일정을 투명하게 공유드립니다.\n일정 및 시공 관련 문의사항은 아래 담당자에게 편하게 연락 주세요.${contactLines ? "\n" + contactLines : ""}`;
       }
 
       function getClientShareUrl(token) {
@@ -18475,13 +18482,14 @@ end $$;`;
           }
         }
 
-        const { managerText, phone: managerPhone } = getClientShareManagerContact(siteName);
+        const { contacts, managerText, phone: managerPhone } = getClientShareManagerContact(siteName);
         return {
           enabled: shareCfg.enabled !== false,
           siteName: String(siteName || ""),
           address: String(info.address || ""),
           manager: managerText,
           managerPhone: String(managerPhone || ""),
+          managerContacts: contacts,
           periodText,
           noticeText: String(shareCfg.noticeText !== undefined ? shareCfg.noticeText : buildDefaultClientShareNotice(siteName)),
           showPayment,
@@ -18516,9 +18524,14 @@ end $$;`;
         const enabled = existing.token ? (existing.enabled !== false) : true;
         const showPayment = existing.showPayment !== false;
         const showDrive = existing.showDrive !== false;
-        const noticeText = (existing.noticeText && existing.noticeText !== DEFAULT_CLIENT_SHARE_NOTICE)
-          ? existing.noticeText
-          : buildDefaultClientShareNotice(siteName);
+        const isLegacyAutoNotice = Boolean(
+          !existing.noticeText
+          || existing.noticeText === DEFAULT_CLIENT_SHARE_NOTICE
+          || (existing.noticeText.startsWith("안녕하세요, 우성아이디입니다.\n고객님 현장의 실시간 공정 진행 현황과 일정을 투명하게 공유드립니다.") && existing.noticeText.includes("\n담당자: ") && !existing.noticeText.includes(" | "))
+        );
+        const noticeText = isLegacyAutoNotice
+          ? buildDefaultClientShareNotice(siteName)
+          : existing.noticeText;
         state._clientShareDraft = { siteName, token, enabled, showPayment, showDrive, noticeText };
 
         tEl.textContent = `🔗 [${siteName}] 고객용 진행 현황 공유`;
@@ -18606,9 +18619,8 @@ end $$;`;
         if (!state._clientShareDraft) return;
         const d = state._clientShareDraft;
         const url = getClientShareUrl(d.token);
-        const { managerText, phone } = getClientShareManagerContact(d.siteName);
-        const contactLine = managerText ? `\n담당자: ${managerText}${phone ? ` (${phone})` : ""}` : "";
-        const msg = `[우성아이디] ${d.siteName} 현장 진행 현황 안내\n\n안녕하세요, 우성아이디입니다.\n고객님 현장의 실시간 공정 일정 및 진행 현황을 아래 링크에서 확인하실 수 있습니다.\n\n👉 ${url}${contactLine}\n\n궁금하신 점은 언제든 담당자에게 연락 부탁드립니다.`;
+        const contactLines = formatClientShareContactLines(d.siteName);
+        const msg = `[우성아이디] ${d.siteName} 현장 진행 현황 안내\n\n안녕하세요, 우성아이디입니다.\n고객님 현장의 실시간 공정 일정 및 진행 현황을 아래 링크에서 확인하실 수 있습니다.\n\n👉 ${url}${contactLines ? "\n" + contactLines : ""}\n\n궁금하신 점은 언제든 담당자에게 연락 부탁드립니다.`;
         copyText(msg);
       };
 
