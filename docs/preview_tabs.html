@@ -5456,10 +5456,10 @@ end $$;`;
                 `}
               </div>
             </div>
-            <div style="flex:1;display:flex;justify-content:center;min-width:210px;">
-              <div class="pc-page-search-wrap" style="width:100%;max-width:300px;">
+            <div style="flex:1;display:flex;justify-content:center;min-width:240px;padding:0 12px;">
+              <div class="pc-page-search-wrap" style="width:100%;max-width:520px;">
                 <span class="pc-page-search-icon">🔍</span>
-                <input type="text" id="${isQ ? "pcQuoteScopedSearchInput" : "pcSearchInput"}" class="pc-page-search-input" style="width:100%;" placeholder="현장, 공종, 담당자 검색 (Alt+S)" value="${escHtml(state.searchQuery)}" oninput="onGlobalSearch(this.value)">
+                <input type="text" id="${isQ ? "pcQuoteScopedSearchInput" : "pcSearchInput"}" class="pc-page-search-input" style="width:100%;height:33px;font-size:12.5px;" placeholder="현장, 공종, 담당자 검색 (Alt+S)" value="${escHtml(state.searchQuery)}" oninput="onGlobalSearch(this.value)">
                 ${state.searchQuery ? `<span class="pc-page-search-clear" onclick="clearGlobalSearch()" title="검색 초기화">✕</span>` : `<span class="search-shortcut-badge" style="position:absolute;right:6px;font-size:10px;padding:2px 4px;border-radius:4px;background:#f1f5f9;color:#64748b;pointer-events:none;">Alt+S</span>`}
               </div>
             </div>
