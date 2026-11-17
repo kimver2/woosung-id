@@ -10966,13 +10966,18 @@ end $$;`;
                 <div style="font-size:11px;color:#ccfbf1;font-weight:700;">📅 ${escHtml(todayYmd)} (${todayDow})</div>
                 <div style="font-size:17px;font-weight:800;margin-top:3px;">${escHtml(user)} ${roleLabel} 브리핑 ☕</div>
               </div>
-              <button type="button" onclick="openTodoModal(null)" style="border:none;background:rgba(255,255,255,0.2);color:#fff;font-size:11px;font-weight:800;padding:5px 9px;border-radius:8px;cursor:pointer;">+ To-Do</button>
+              <div style="display:flex;gap:5px;align-items:center;">
+                <button type="button" onclick="openGlobalSearchModal()" style="border:none;background:rgba(255,255,255,0.2);color:#fff;font-size:11px;font-weight:800;padding:5px 8px;border-radius:8px;cursor:pointer;">🔍 검색</button>
+                <button type="button" onclick="openTodoModal(null)" style="border:none;background:rgba(255,255,255,0.2);color:#fff;font-size:11px;font-weight:800;padding:5px 9px;border-radius:8px;cursor:pointer;">+ To-Do</button>
+              </div>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecTodo" onclick="scrollAndHighlightHomeSection('mHomeSecTodo')">✅ To-Do ${pendingTodos.length}건</button>
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecTasks" onclick="setHomeTaskFilter('progress'); scrollAndHighlightHomeSection('mHomeSecTasks');">🔨 오늘 공정 ${todayTasks.length}건</button>
+              ${delayed.length > 0 ? `<button type="button" class="m-hero-chip-btn" style="background:rgba(239,68,68,0.28);border-color:rgba(254,202,202,0.55);" data-target="mHomeSecTasks" onclick="setHomeTaskFilter('delayed'); scrollAndHighlightHomeSection('mHomeSecTasks');">⚠️ 지연 공정 ${delayed.length}건</button>` : ""}
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecSites" onclick="scrollAndHighlightHomeSection('mHomeSecSites')">🏢 담당 현장 ${mySites.length}개소</button>
               <button type="button" class="m-hero-chip-btn" data-target="mHomeSecQuotes" onclick="scrollAndHighlightHomeSection('mHomeSecQuotes')">📋 신규 견적 ${activeNewQuotes.length}건</button>
+              ${(canViewFinance() && (state.user === "조항만" || String(getActualAuthUser() || "").trim().toLowerCase() === "admin")) ? `<button type="button" class="m-hero-chip-btn" onclick="state.financeSubTab='dashboard'; switchMobileTab('finance');">📊 재무 대시보드</button>` : ""}
             </div>
           </div>
 
@@ -20360,6 +20365,7 @@ end $$;`;
           box.innerHTML = `<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12.5px;">검색어를 입력하면 현장·공정·거래처·To-Do·재무 내역을 즉시 찾아줍니다.</div>`;
           return;
         }
+        const navTabCmd = (t) => state.device === "mobile" ? `switchMobileTab('${t}')` : `switchMainTab('${t}')`;
         const hits = [];
         getAllSites().forEach((s) => {
           if (!s) return;
@@ -20368,7 +20374,7 @@ end $$;`;
               cat: s.scope === "newSite" ? "📋 신규견적" : "🏢 현장",
               title: s.siteName,
               sub: `${(s.tasks || []).length}개 공정`,
-              onClick: `closeModal('syncStatusModal'); ${s.scope === "newSite" ? `state.selectedQuoteKey='${escJs(s.siteKey)}'; switchMainTab('quote')` : `openSiteDetail('${escJs(s.siteKey)}')`}`
+              onClick: `closeModal('syncStatusModal'); ${s.scope === "newSite" ? `state.selectedQuoteKey='${escJs(s.siteKey)}'; ${navTabCmd('quote')}` : `openSiteDetail('${escJs(s.siteKey)}')`}`
             });
           }
           (s.tasks || []).forEach((t) => {
@@ -20392,7 +20398,7 @@ end $$;`;
               cat: "🤝 거래처",
               title: `${p.biz ? p.biz + "_" : ""}${p.name}`,
               sub: `${p.phone || "연락처 없음"}${p.bankAccount ? " · " + p.bankAccount : ""}`,
-              onClick: `closeModal('syncStatusModal'); switchMainTab('partners');`
+              onClick: `closeModal('syncStatusModal'); ${navTabCmd('partners')};`
             });
           }
         });
@@ -20404,7 +20410,7 @@ end $$;`;
               cat: "✅ To-Do",
               title: td.title,
               sub: `${td.status || "미완료"} · ${td.manager || "미지정"}${td.siteName ? " · " + td.siteName : ""}`,
-              onClick: `closeModal('syncStatusModal'); switchMainTab('todo');`
+              onClick: `closeModal('syncStatusModal'); ${navTabCmd('todo')};`
             });
           }
         });
@@ -20416,7 +20422,7 @@ end $$;`;
                 cat: "💰 수금",
                 title: c.siteName,
                 sub: `총액 ${formatShortAmount(c.totalAmount)} · 미수 ${formatShortAmount(getCollectionRowFinancials(c).uncollected)}`,
-                onClick: `closeModal('syncStatusModal'); state.financeSubTab='collection'; switchMainTab('finance'); openCollectionModal('${escJs(c.id)}');`
+                onClick: `closeModal('syncStatusModal'); state.financeSubTab='collection'; ${navTabCmd('finance')}; openCollectionModal('${escJs(c.id)}');`
               });
             }
           });
