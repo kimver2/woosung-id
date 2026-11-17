@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>우성아이디 — 고객 현장 진행 현황</title>
+  <link rel="icon" type="image/png" href="./icon-192.png">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 16px 14px 40px;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 12px 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand img {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      object-fit: cover;
+      border: 1px solid #e2e8f0;
+    }
+    .brand-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.2;
+    }
+    .brand-sub {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+    }
+    .refresh-btn {
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #334155;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 11px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .refresh-btn:hover { background: #f8fafc; }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    .hero-card {
+      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+      color: #ffffff;
+      border: none;
+    }
+    .site-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin: 0 0 6px;
+      line-height: 1.3;
+    }
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      font-size: 12px;
+      color: #dbeafe;
+      font-weight: 600;
+    }
+    .meta-row a {
+      color: #ffffff;
+      text-decoration: underline;
+    }
+    .prog-wrap {
+      margin-top: 14px;
+      background: rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .prog-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12.5px;
+      font-weight: 800;
+      margin-bottom: 7px;
+    }
+    .prog-bar {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.25);
+      overflow: hidden;
+    }
+    .prog-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: #34d399;
+      transition: width 0.35s ease;
+    }
+    .notice-box {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #1e3a8a;
+      font-weight: 600;
+      margin-bottom: 12px;
+      white-space: pre-line;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .kpi-box {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 11px 10px;
+      text-align: center;
+    }
+    .kpi-lbl {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+    }
+    .kpi-val {
+      font-size: 18px;
+      font-weight: 900;
+      margin-top: 3px;
+      color: #0f172a;
+    }
+    .sec-title {
+      font-size: 14.5px;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .pay-summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .pay-sum-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 9px 10px;
+    }
+    .pay-sum-lbl {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 700;
+    }
+    .pay-sum-val {
+      font-size: 14px;
+      font-weight: 800;
+      margin-top: 2px;
+      color: #0f172a;
+    }
+    .pay-stage-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .pay-stage-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 11px;
+      border-radius: 9px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      font-size: 12.5px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .badge-done { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+    .badge-prog { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
+    .badge-plan { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .task-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+      background: #ffffff;
+    }
+    .task-row.is-done { background: #f8fafc; }
+    .task-row.is-today { background: #eff6ff; border-color: #93c5fd; }
+    .task-name {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .task-date {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #64748b;
+      margin-top: 2px;
+    }
+    .drive-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      padding: 11px;
+      border-radius: 10px;
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      color: #0369a1;
+      font-size: 13px;
+      font-weight: 800;
+      text-decoration: none;
+    }
+    .empty-card {
+      text-align: center;
+      padding: 48px 20px;
+    }
+    .footer {
+      text-align: center;
+      font-size: 11.5px;
+      color: #94a3b8;
+      margin-top: 16px;
+      font-weight: 600;
+    }
+    @media (max-width: 520px) {
+      .pay-summary { grid-template-columns: 1fr; }
+      .site-title { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <img src="./icon-192.png" alt="우성아이디">
+        <div>
+          <div class="brand-title">우성아이디</div>
+          <div class="brand-sub">실시간 현장 진행 현황</div>
+        </div>
+      </div>
+      <button type="button" class="refresh-btn" onclick="loadClientShare()">🔄 새로고침</button>
+    </div>
+
+    <div id="clientShareRoot">
+      <div class="card empty-card">
+        <div style="font-size:28px;margin-bottom:8px;">⏳</div>
+        <div style="font-size:14px;font-weight:700;color:#475569;">현장 진행 현황을 불러오는 중입니다...</div>
+      </div>
+    </div>
+
+    <div class="footer" id="clientShareFooter">© 우성아이디 인테리어</div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://uyqvguzglviqegxmxqyn.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_f8JwxMgpgs6AVSEumSIV2g_KlK6o9GA";
+
+    function esc(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function fmtKrw(n) {
+      const num = Number(n) || 0;
+      return num.toLocaleString("ko-KR") + "원";
+    }
+
+    function fmtUpdated(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return String(iso);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${y}-${m}-${day} ${hh}:${mm}`;
+    }
+
+    function renderError(icon, title, desc) {
+      document.getElementById("clientShareRoot").innerHTML = `
+        <div class="card empty-card">
+          <div style="font-size:34px;margin-bottom:10px;">${icon}</div>
+          <div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:6px;">${esc(title)}</div>
+          <div style="font-size:13px;color:#64748b;line-height:1.5;">${esc(desc)}</div>
+        </div>
+      `;
+    }
+
+    async function loadClientShare() {
+      const params = new URLSearchParams(location.search);
+      const token = (params.get("token") || "").trim();
+      if (!token) {
+        renderError("🔗", "유효하지 않은 공유 링크입니다.", "전달받으신 링크 주소를 다시 확인해 주세요.");
+        return;
+      }
+      try {
+        const key = "client_share::" + token;
+        const url = `${SUPABASE_URL}/rest/v1/ws_state_store?key=eq.${encodeURIComponent(key)}&select=payload,updated_at`;
+        const res = await fetch(url, {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: "Bearer " + SUPABASE_ANON_KEY
+          },
+          cache: "no-store"
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const rows = await res.json();
+        const row = Array.isArray(rows) ? rows[0] : null;
+        const p = row && row.payload ? row.payload : null;
+        if (!p || p.enabled === false) {
+          renderError("🔒", "공유가 종료되었거나 만료된 링크입니다.", "현장 담당자에게 최신 공유 링크를 요청해 주세요.");
+          return;
+        }
+        renderShareView(p, row.updated_at || p.updatedAt);
+      } catch (err) {
+        console.error(err);
+        renderError("⚠️", "현장 정보를 불러오지 못했습니다.", "잠시 후 다시 새로고침을 눌러 주세요.");
+      }
+    }
+
+    function renderShareView(p, updatedAt) {
+      const pct = Math.max(0, Math.min(100, Number(p.progressRate) || 0));
+      const tasks = Array.isArray(p.tasks) ? p.tasks : [];
+      const totalCnt = Number(p.totalTasksCount) || tasks.length;
+      const doneCnt = Number(p.completedTasksCount) || tasks.filter((t) => t.status === "완료").length;
+      const remainCnt = Math.max(0, totalCnt - doneCnt);
+      const todayYmd = (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      })();
+
+      let paymentHtml = "";
+      if (p.showPayment !== false && p.payment && Number(p.payment.total) > 0) {
+        const pay = p.payment;
+        const stages = Array.isArray(pay.stages) ? pay.stages : [];
+        paymentHtml = `
+          <div class="card">
+            <div class="sec-title">
+              <span>💰 수금 진행 현황</span>
+              <span class="badge ${pay.uncollected <= 0 ? "badge-done" : "badge-prog"}">${pay.uncollected <= 0 ? "완납 완료" : "진행 중"}</span>
+            </div>
+            <div class="pay-summary">
+              <div class="pay-sum-box">
+                <div class="pay-sum-lbl">총 계약금액</div>
+                <div class="pay-sum-val">${fmtKrw(pay.total)}</div>
+              </div>
+              <div class="pay-sum-box" style="background:#f0fdf4;border-color:#bbf7d0;">
+                <div class="pay-sum-lbl" style="color:#166534;">입금 완료</div>
+                <div class="pay-sum-val" style="color:#15803d;">${fmtKrw(pay.collected)}</div>
+              </div>
+              <div class="pay-sum-box" style="background:${pay.uncollected > 0 ? "#fffbeb" : "#f8fafc"};border-color:${pay.uncollected > 0 ? "#fde68a" : "#e2e8f0"};">
+                <div class="pay-sum-lbl" style="color:${pay.uncollected > 0 ? "#92400e" : "#64748b"};">남은 잔금</div>
+                <div class="pay-sum-val" style="color:${pay.uncollected > 0 ? "#b45309" : "#475569"};">${fmtKrw(pay.uncollected)}</div>
+              </div>
+            </div>
+            ${stages.length ? `
+              <div class="pay-stage-list">
+                ${stages.map((st) => `
+                  <div class="pay-stage-row">
+                    <span style="font-weight:700;color:#334155;">${esc(st.label)}</span>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <strong style="color:#0f172a;">${fmtKrw(st.amount)}</strong>
+                      <span class="badge ${st.paid ? "badge-done" : "badge-plan"}">${st.paid ? "입금 완료" : "예정"}</span>
+                    </div>
+                  </div>
+                `).join("")}
+              </div>
+            ` : ""}
+          </div>
+        `;
+      }
+
+      const taskListHtml = tasks.length ? tasks.map((t) => {
+        const isDone = t.status === "완료";
+        const isToday = !isDone && ((t.date && t.endDate && t.date <= todayYmd && t.endDate >= todayYmd) || t.date === todayYmd || String(t.status || "").includes("진행"));
+        const badgeCls = isDone ? "badge-done" : (isToday ? "badge-prog" : "badge-plan");
+        const badgeTxt = isDone ? "✅ 완료" : (isToday ? "🔨 진행 중" : "예정");
+        const dateStr = (t.date && t.endDate && t.endDate !== t.date) ? `${t.date} ~ ${t.endDate}` : (t.date || t.dateDisplay || "일정 조율 중");
+        return `
+          <div class="task-row ${isDone ? "is-done" : (isToday ? "is-today" : "")}">
+            <div style="min-width:0;">
+              <div class="task-name">${esc(t.taskName)}</div>
+              <div class="task-date">📅 ${esc(dateStr)}</div>
+            </div>
+            <span class="badge ${badgeCls}">${badgeTxt}</span>
+          </div>
+        `;
+      }).join("") : `<div style="font-size:13px;color:#64748b;text-align:center;padding:16px 0;">등록된 공정 일정이 없습니다.</div>`;
+
+      document.getElementById("clientShareRoot").innerHTML = `
+        <div class="card hero-card">
+          <h1 class="site-title">${esc(p.siteName || "현장 진행 현황")}</h1>
+          <div class="meta-row">
+            ${p.manager ? `<span>👤 담당자: ${esc(p.manager)}</span>` : ""}
+            ${p.periodText ? `<span>🗓️ 공사기간: ${esc(p.periodText)}</span>` : ""}
+            ${p.address ? `<span>📍 ${esc(p.address)} <a href="https://map.naver.com/p/search/${encodeURIComponent(p.address)}" target="_blank" rel="noopener noreferrer">지도 ↗</a></span>` : ""}
+          </div>
+          <div class="prog-wrap">
+            <div class="prog-head">
+              <span>전체 공정 진행률</span>
+              <span style="font-size:15px;">${pct}% (${doneCnt}/${totalCnt}건 완료)</span>
+            </div>
+            <div class="prog-bar"><div class="prog-fill" style="width:${pct}%;"></div></div>
+          </div>
+        </div>
+
+        ${p.noticeText ? `<div class="notice-box">${esc(p.noticeText)}</div>` : ""}
+
+        <div class="kpi-grid">
+          <div class="kpi-box">
+            <div class="kpi-lbl">전체 공정</div>
+            <div class="kpi-val">${totalCnt}건</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-lbl">완료 공정</div>
+            <div class="kpi-val" style="color:#15803d;">${doneCnt}건</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-lbl">진행 · 예정</div>
+            <div class="kpi-val" style="color:#1d4ed8;">${remainCnt}건</div>
+          </div>
+        </div>
+
+        ${paymentHtml}
+
+        ${p.driveUrl ? `
+          <div class="card" style="padding:12px;">
+            <a href="${esc(p.driveUrl)}" target="_blank" rel="noopener noreferrer" class="drive-btn">📂 현장 공유 자료 · 사진 보기 ↗</a>
+          </div>
+        ` : ""}
+
+        <div class="card">
+          <div class="sec-title">
+            <span>🛠️ 공정별 진행 일정</span>
+            <span style="font-size:11.5px;color:#64748b;font-weight:700;">총 ${tasks.length}개 공정</span>
+          </div>
+          <div class="task-list">${taskListHtml}</div>
+        </div>
+      `;
+
+      const upd = fmtUpdated(updatedAt);
+      document.getElementById("clientShareFooter").textContent = `© 우성아이디 인테리어${upd ? " · 최종 업데이트: " + upd : ""}`;
+    }
+
+    loadClientShare();
+  </script>
+</body>
+</html>

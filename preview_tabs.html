@@ -5271,6 +5271,7 @@ end $$;`;
                   ${info.driveUrl ? `<a class="btn-tool-tag" href="${escHtml(info.driveUrl)}" target="_blank" rel="noopener">📂 현장 자료</a>` : `<button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(selectedSite.siteName)}')">📂 드라이브 연결</button>`}
                   <button type="button" class="btn-tool-tag" onclick="openSiteFileUploadModal('${escJs(selectedSite.siteName)}')">📤 파일 업로드</button>
                   <button type="button" class="btn-tool-tag" onclick="openPartnerGuideForSite('${escJs(selectedSite.siteKey)}')">📋 안내문 확인</button>
+                  <button type="button" class="btn-tool-tag" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-weight:700;" onclick="window.openClientShareModal('${escJs(selectedSite.siteName)}')">🔗 고객 공유</button>
                   <button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(selectedSite.siteName)}')">✏️ 현장정보 수정</button>
                 </div>
               </div>
@@ -13820,6 +13821,7 @@ end $$;`;
                   ` : ""}
                   <button type="button" class="btn-tool-tag" style="background:#f0fdfa;color:#0f766e;border-color:#99f6e4;font-weight:700;" onclick="window.openEstimatePdfModal('${escJs(s.siteKey || s.siteName)}')">📄 견적서</button>
                   <button type="button" class="btn-tool-tag" onclick="openPartnerGuideForSite('${escJs(s.siteKey)}')">📋 안내문 확인</button>
+                  <button type="button" class="btn-tool-tag" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-weight:700;" onclick="window.openClientShareModal('${escJs(s.siteName)}')">🔗 고객 공유</button>
                   <button type="button" class="btn-tool-tag" onclick="focusSiteOnCalendar('${escJs(s.siteKey)}', true)">📅 캘린더 보기</button>
                   <button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(s.siteName)}')">✏️ 정보 수정</button>
                   <button type="button" class="btn-tool-tag" onclick="openSiteFileUploadModal('${escJs(s.siteName)}')">📤 파일 업로드</button>
@@ -18214,6 +18216,229 @@ end $$;`;
         openModal("partnerGuideModal");
       };
 
+      const DEFAULT_CLIENT_SHARE_NOTICE = "안녕하세요, 우성아이디입니다.\n고객님 현장의 실시간 공정 진행 현황과 일정을 투명하게 공유드립니다.\n일정 및 시공 관련 문의사항은 담당자에게 편하게 연락 주세요.";
+
+      function getClientShareUrl(token) {
+        const cleanToken = String(token || "").trim();
+        if (!cleanToken) return "";
+        try {
+          return new URL("./client.html?token=" + encodeURIComponent(cleanToken), location.href).href;
+        } catch (e) {
+          return "./client.html?token=" + encodeURIComponent(cleanToken);
+        }
+      }
+
+      function generateClientShareToken() {
+        return Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-6);
+      }
+
+      function buildClientSharePayload(siteName, cfg) {
+        const site = getAllSites().find((s) => s && s.siteName === siteName && (s.scope || "site") !== "newSite") || getAllSites().find((s) => s && s.siteName === siteName);
+        const info = getSiteInfo(siteName) || {};
+        const shareCfg = cfg || info.clientShare || {};
+        const tasksRaw = (site && Array.isArray(site.tasks)) ? site.tasks : [];
+        const metrics = site ? getSiteDateMetrics(site) : { earliest: "", latest: "" };
+        const periodText = metrics.earliest ? (metrics.latest && metrics.latest !== metrics.earliest ? `${metrics.earliest} ~ ${metrics.latest}` : metrics.earliest) : "";
+
+        const tasks = tasksRaw
+          .map((t) => {
+            const d = parseYmdFromTask(t) || "";
+            const ed = d ? parseEndYmdFromTask(t, d) : "";
+            return {
+              taskName: String(t.taskName || "공정"),
+              status: isTaskCompleted(t) ? "완료" : (String(t.status || "").includes("진행") ? "진행" : "예정"),
+              date: d,
+              endDate: ed && ed !== d ? ed : "",
+              dateDisplay: String(t.dateDisplay || "")
+            };
+          })
+          .sort((a, b) => String(a.date || "9999-99-99").localeCompare(String(b.date || "9999-99-99")));
+
+        const totalTasksCount = tasks.length;
+        const completedTasksCount = tasks.filter((t) => t.status === "완료").length;
+        const progressRate = totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : (site ? (site.progressRate || 0) : 0);
+
+        let payment = null;
+        const showPayment = shareCfg.showPayment !== false;
+        if (showPayment && state.financeDbData && Array.isArray(state.financeDbData.collection)) {
+          const normName = (n) => String(n || "").replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase();
+          const targetNorm = normName(siteName);
+          const colRow = state.financeDbData.collection.find((c) => c && c.siteName && normName(c.siteName) === targetNorm);
+          if (colRow) {
+            const fin = getCollectionRowFinancials(colRow);
+            const stages = [];
+            const stepDefs = [
+              ["계약금", Number(colRow.downPayment) || 0],
+              ["착수금", Number(colRow.startPayment) || 0],
+              ["1차 중도금", Number(colRow.midPayment1) || 0],
+              ["2차 중도금", Number(colRow.midPayment2) || 0],
+              ["3차 중도금", Number(colRow.midPayment3) || 0],
+              ["잔금", Number(colRow.finalPayment) || 0]
+            ];
+            stepDefs.forEach(([label, amount]) => {
+              if (amount > 0) stages.push({ label, amount, paid: true });
+            });
+            if (fin.uncollected > 0) {
+              stages.push({ label: "남은 잔금", amount: fin.uncollected, paid: false });
+            }
+            payment = {
+              total: fin.total,
+              collected: fin.collected,
+              uncollected: fin.uncollected,
+              stages
+            };
+          }
+        }
+
+        return {
+          enabled: shareCfg.enabled !== false,
+          siteName: String(siteName || ""),
+          address: String(info.address || ""),
+          manager: filterRegisteredManagers(getUniqueSiteManagers(tasksRaw)).slice(0, 2).join(", "),
+          periodText,
+          noticeText: String(shareCfg.noticeText !== undefined ? shareCfg.noticeText : DEFAULT_CLIENT_SHARE_NOTICE),
+          showPayment,
+          payment,
+          driveUrl: shareCfg.showDrive !== false ? String(info.driveUrl || "") : "",
+          progressRate,
+          totalTasksCount,
+          completedTasksCount,
+          tasks,
+          updatedAt: new Date().toISOString()
+        };
+      }
+
+      window.syncActiveClientShareForSite = function (siteName) {
+        if (!siteName || !window.WSSupabaseV3 || typeof window.WSSupabaseV3.persistSnapshot !== "function") return;
+        const info = getSiteInfo(siteName);
+        if (!info || !info.clientShare || !info.clientShare.enabled || !info.clientShare.token) return;
+        const payload = buildClientSharePayload(siteName, info.clientShare);
+        Promise.resolve(window.WSSupabaseV3.persistSnapshot("client_share::" + info.clientShare.token, payload)).catch(() => {});
+      };
+
+      window.openClientShareModal = function (siteName) {
+        const tEl = document.getElementById("syncStatusModalTitle");
+        const cEl = document.getElementById("syncStatusModalCloseBtn");
+        const bEl = document.getElementById("syncStatusModalBody");
+        const fEl = document.getElementById("syncStatusModalFooter");
+        if (!tEl || !bEl || !fEl) return;
+
+        const info = getSiteInfo(siteName) || {};
+        const existing = info.clientShare || {};
+        const token = existing.token || generateClientShareToken();
+        const enabled = existing.token ? (existing.enabled !== false) : true;
+        const showPayment = existing.showPayment !== false;
+        const showDrive = existing.showDrive !== false;
+        const noticeText = existing.noticeText !== undefined ? existing.noticeText : DEFAULT_CLIENT_SHARE_NOTICE;
+        state._clientShareDraft = { siteName, token, enabled, showPayment, showDrive, noticeText };
+
+        tEl.textContent = `🔗 [${siteName}] 고객용 진행 현황 공유`;
+        if (cEl) cEl.style.display = "inline-flex";
+        const modalCard = document.querySelector("#syncStatusModal .ws-modal-card");
+        if (modalCard) modalCard.style.maxWidth = "620px";
+
+        const renderBody = () => {
+          const d = state._clientShareDraft;
+          const shareUrl = getClientShareUrl(d.token);
+          bEl.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:12px;text-align:left;">
+              <div style="display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">
+                <div>
+                  <div style="font-size:13px;font-weight:800;color:#0f172a;">공유 링크 활성화</div>
+                  <div style="font-size:11.5px;color:#64748b;">끄면 기존 링크 접속 시 만료 안내가 표시됩니다.</div>
+                </div>
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;color:${d.enabled ? "#15803d" : "#64748b"};cursor:pointer;">
+                  <input type="checkbox" id="csEnabledChk" ${d.enabled ? "checked" : ""} onchange="state._clientShareDraft.enabled = this.checked;" style="width:17px;height:17px;accent-color:#16a34a;">
+                  ${d.enabled ? "공유 ON" : "공유 OFF"}
+                </label>
+              </div>
+
+              <div style="display:flex;gap:14px;flex-wrap:wrap;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#1e293b;cursor:pointer;">
+                  <input type="checkbox" id="csPayChk" ${d.showPayment ? "checked" : ""} onchange="state._clientShareDraft.showPayment = this.checked;" style="width:16px;height:16px;accent-color:#2563eb;">
+                  💰 수금 진행 현황 함께 표시
+                </label>
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#1e293b;cursor:pointer;">
+                  <input type="checkbox" id="csDriveChk" ${d.showDrive ? "checked" : ""} onchange="state._clientShareDraft.showDrive = this.checked;" style="width:16px;height:16px;accent-color:#2563eb;">
+                  📂 현장 공유 자료 링크 표시
+                </label>
+              </div>
+
+              <div class="fg" style="margin:0;">
+                <label>고객 안내 문구</label>
+                <textarea class="ws-textarea" id="csNoticeInput" rows="3" oninput="state._clientShareDraft.noticeText = this.value;" placeholder="고객에게 보여질 상단 인사말 및 안내 문구">${escHtml(d.noticeText)}</textarea>
+              </div>
+
+              <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                  <span style="font-size:12px;font-weight:800;color:#1e40af;">고객 전용 링크 (원가·연락처·비번 자동 제외)</span>
+                  <button type="button" class="btn-tool-tag" onclick="window.regenerateClientShareToken()" style="font-size:11px;padding:2px 8px;">🔄 링크 재발급</button>
+                </div>
+                <input type="text" class="ws-input" id="csUrlInput" readonly value="${escHtml(shareUrl)}" onclick="this.select()" style="background:#ffffff;font-size:12px;color:#1e3a8a;font-weight:600;">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+                  <button type="button" class="btn-tool-tag" onclick="copyText(document.getElementById('csUrlInput').value)" style="background:#ffffff;border-color:#93c5fd;color:#1d4ed8;font-weight:800;">📋 링크 복사</button>
+                  <button type="button" class="btn-tool-tag" onclick="window.copyClientShareKakao()" style="background:#fef08a;border-color:#facc15;color:#713f12;font-weight:800;">💬 카톡 안내문 복사</button>
+                  <a href="${escHtml(shareUrl)}" target="_blank" rel="noopener noreferrer" class="btn-tool-tag" style="background:#ffffff;text-decoration:none;font-weight:700;">🔗 미리보기 ↗</a>
+                </div>
+              </div>
+            </div>
+          `;
+        };
+        state._renderClientShareModalBody = renderBody;
+        renderBody();
+
+        fEl.innerHTML = `
+          <button type="button" class="btn-act-white" onclick="closeModal('syncStatusModal')">닫기</button>
+          <button type="button" class="btn-act-blue" onclick="window.saveClientShareModal()">💾 저장 및 최신 현황 반영</button>
+        `;
+        openModal("syncStatusModal");
+      };
+
+      window.regenerateClientShareToken = function () {
+        if (!state._clientShareDraft) return;
+        state._clientShareDraft.token = generateClientShareToken();
+        if (typeof state._renderClientShareModalBody === "function") state._renderClientShareModalBody();
+        showToast("🔄 새 공유 링크가 생성되었습니다. 저장 버튼을 눌러 반영하세요.");
+      };
+
+      window.copyClientShareKakao = function () {
+        if (!state._clientShareDraft) return;
+        const d = state._clientShareDraft;
+        const url = getClientShareUrl(d.token);
+        const msg = `[우성아이디] ${d.siteName} 현장 진행 현황 안내\n\n안녕하세요, 우성아이디입니다.\n고객님 현장의 실시간 공정 일정 및 진행 현황을 아래 링크에서 확인하실 수 있습니다.\n\n👉 ${url}\n\n궁금하신 점은 언제든 담당자에게 연락 부탁드립니다.`;
+        copyText(msg);
+      };
+
+      window.saveClientShareModal = async function () {
+        const d = state._clientShareDraft;
+        if (!d || !d.siteName) return;
+        if (!state.dashData) state.dashData = {};
+        if (!state.dashData.siteInfos) state.dashData.siteInfos = {};
+        const prev = state.dashData.siteInfos[d.siteName] || {};
+        const clientShare = {
+          token: d.token,
+          enabled: !!d.enabled,
+          showPayment: !!d.showPayment,
+          showDrive: !!d.showDrive,
+          noticeText: String(d.noticeText || ""),
+          updatedAt: new Date().toISOString()
+        };
+        state.dashData.siteInfos[d.siteName] = { ...prev, clientShare };
+        const payload = buildClientSharePayload(d.siteName, clientShare);
+        if (window.WSDataService && typeof window.WSDataService.saveDashboardCache === "function") {
+          window.WSDataService.saveDashboardCache(state.dashData);
+        }
+        try {
+          if (window.WSSupabaseV3 && typeof window.WSSupabaseV3.persistSnapshot === "function") {
+            await window.WSSupabaseV3.persistSnapshot("dash_main", state.dashData);
+            await window.WSSupabaseV3.persistSnapshot("client_share::" + d.token, payload);
+          }
+          showToast(d.enabled ? "✅ 고객 공유 링크가 저장 및 최신 반영되었습니다." : "🔒 고객 공유 링크가 비활성화되었습니다.");
+        } catch (err) {
+          showToast("⚠️ 저장 중 오류가 발생했습니다: " + (err && err.message ? err.message : err));
+        }
+      };
+
       window.openPartnerGuideForSite = function (siteKey) {
         const site = getAllSites().find((s) => s.siteKey === siteKey);
         if (!site) return;
@@ -21066,6 +21291,12 @@ end $$;`;
           };
           const t0 = performance.now();
           await upsertRows("ws_state_store", [row], "key");
+          if ((key === "dash_main" || key === "finance_main") && typeof window.syncActiveClientShareForSite === "function" && state.dashData && state.dashData.siteInfos) {
+            Object.keys(state.dashData.siteInfos).forEach((sn) => {
+              const cs = state.dashData.siteInfos[sn] && state.dashData.siteInfos[sn].clientShare;
+              if (cs && cs.enabled && cs.token) window.syncActiveClientShareForSite(sn);
+            });
+          }
           lastLatencyMs = Math.round(performance.now() - t0);
           state.syncSource = "supabase";
           const now = new Date();
