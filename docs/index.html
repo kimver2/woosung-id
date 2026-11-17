@@ -3069,6 +3069,8 @@
         }
         return (state.dashData && state.dashData.tasks) || [];
       }
+      const getTasksList = getTasksMasterList;
+      window.getTasksList = getTasksMasterList;
       function getPartnersMasterList() {
         if (state.settingsData && Array.isArray(state.settingsData.partners) && state.settingsData.partners.length) {
           return state.settingsData.partners.map((p) => p.fullName || (p.category ? p.category + "_" + p.name : p.name));
@@ -4744,7 +4746,7 @@
         const existingInput = document.getElementById("pcSearchInput");
         const isSitesActive = state.pcTab === "sites";
         const bodyAreaEl = pcSiteEl ? document.getElementById("pcSiteBodyArea") : null;
-        if (pcSiteEl && existingInput && bodyAreaEl && isSitesActive && pcSiteEl.contains(existingInput)) {
+        if (pcSiteEl && existingInput && bodyAreaEl && isSitesActive && pcSiteEl.contains(existingInput) && document.activeElement === existingInput) {
           bodyAreaEl.innerHTML = `
             ${visibleSites.length ? `
               <div class="carousel-wrap-box">
@@ -13501,6 +13503,21 @@
         __wsDeletedSiteGuards.set("NAME::" + effScope + "::" + _normDelSiteName(site.siteName), exp);
         _savePersistedDeleteGuards();
       }
+      function clearDeletedSiteGuardByName(siteName) {
+        const clean = _normDelSiteName(siteName);
+        if (!clean) return;
+        for (const k of [...__wsDeletedSiteGuards.keys()]) {
+          if (k.endsWith("::" + clean) || k === "KEY::" + clean) {
+            __wsDeletedSiteGuards.delete(k);
+          }
+        }
+        for (const k of [...__wsDeletedTaskGuards.keys()]) {
+          if (k.includes("::" + clean + "::")) {
+            __wsDeletedTaskGuards.delete(k);
+          }
+        }
+        _savePersistedDeleteGuards();
+      }
       function applyDeletedGuardsToDashData(dashData) {
         _loadPersistedDeleteGuards();
         if (!dashData || !Array.isArray(dashData.sites)) return dashData;
@@ -14716,14 +14733,16 @@
 
         if (!keepExistingEdits || !Array.isArray(state.promoteEditableTasks)) {
           const baseTasks = getDefaultProcessSchedule(scope, startDate, mgr);
-          state.promoteEditableTasks = baseTasks.map((t) => Object.assign({ enabled: true }, t));
+          state.promoteEditableTasks = baseTasks.map((t) => Object.assign({ enabled: true }, t, {
+            date: String(t.date || startDate).replace(/\./g, "-")
+          }));
         }
 
         const tasks = state.promoteEditableTasks || [];
         const activeCount = tasks.filter((t) => t.enabled !== false).length;
         if (countBadge) countBadge.innerText = `${activeCount}개 공종 선택됨`;
 
-        const masterTasks = getTasksList();
+        const masterTasks = getTasksMasterList();
         previewBox.innerHTML = tasks.map((t, idx) => {
           const isChecked = t.enabled !== false;
           const curTaskName = String(t.taskName || "").trim();
@@ -14731,6 +14750,7 @@
           const taskOptionsHtml = allTaskNames.map((tn) =>
             `<option value="${escHtml(tn)}" ${tn === curTaskName ? "selected" : ""}>${escHtml(tn)}</option>`
           ).join("");
+          const dateVal = String(t.date || startDate).replace(/\./g, "-");
           return `
             <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;background:${isChecked ? "#f8fafc" : "#f1f5f9"};opacity:${isChecked ? "1" : "0.55"};border-radius:6px;font-size:12px;border:1px solid #e2e8f0;">
               <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
@@ -14742,7 +14762,7 @@
                 <input type="text" class="ws-input" value="${escHtml(t.memo || "")}" placeholder="비고/작업내용" oninput="onPromoteTaskRowChange(${idx}, 'memo', this.value)" style="flex:1;min-width:70px;height:28px;font-size:11.5px;padding:2px 7px;">
               </div>
               <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
-                <input type="date" class="sheet-filter-select" value="${escHtml(t.date || startDate)}" onchange="onPromoteTaskRowChange(${idx}, 'date', this.value)" style="padding:3px 6px;font-size:11.5px;font-weight:700;color:#2563eb;height:28px;width:130px;">
+                <input type="date" class="sheet-filter-select" value="${escHtml(dateVal)}" onchange="onPromoteTaskRowChange(${idx}, 'date', this.value)" style="padding:3px 6px;font-size:11.5px;font-weight:700;color:#2563eb;height:28px;width:130px;">
                 <button type="button" onclick="removePromoteTaskRow(${idx})" title="이 행 삭제" style="border:none;background:#fee2e2;color:#dc2626;border-radius:5px;width:24px;height:24px;font-size:11px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;">✕</button>
               </div>
             </div>
@@ -14830,6 +14850,7 @@
         if (btn) { btn.disabled = true; btn.innerText = "⏳ 승격 처리 중..."; }
 
         // 1) Optimistic UI 즉시 반영 (0.1초 만에 모달 닫기 및 진행 현장 생성)
+        clearDeletedSiteGuardByName(siteName);
         const estSiteObj = getAllSites().find((s) => s.scope === "newSite" && (s.siteKey === curPromoteSiteKey || s.siteName === siteName));
         if (estSiteObj && estSiteObj.estimateData) {
           estSiteObj.estimateData.status = "계약 완료";
