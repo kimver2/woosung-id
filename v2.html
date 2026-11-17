@@ -18459,19 +18459,29 @@ end $$;`;
           if (colRow) {
             const fin = getCollectionRowFinancials(colRow);
             const stages = [];
-            const stepDefs = [
-              ["계약금", Number(colRow.downPayment) || 0],
-              ["착수금", Number(colRow.startPayment) || 0],
-              ["1차 중도금", Number(colRow.midPayment1) || 0],
-              ["2차 중도금", Number(colRow.midPayment2) || 0],
-              ["3차 중도금", Number(colRow.midPayment3) || 0],
-              ["잔금", Number(colRow.finalPayment) || 0]
-            ];
-            stepDefs.forEach(([label, amount]) => {
-              if (amount > 0) stages.push({ label, amount, paid: true });
+            const sMeta = (colRow.stageMeta && typeof colRow.stageMeta === "object") ? colRow.stageMeta : {};
+            let hasUnpaidScheduled = false;
+            COL_STAGE_DEFS.forEach((st) => {
+              const amount = Number(colRow[st.key]) || 0;
+              const meta = sMeta[st.key] || {};
+              const dueYmd = normalizeDateYmd(meta.dueDate || meta.date || "");
+              const paidYmd = normalizeDateYmd(meta.paidDate || "");
+              if (amount > 0) {
+                stages.push({ label: st.label, amount, paid: true, date: paidYmd || dueYmd || "" });
+              } else if (dueYmd && fin.uncollected > 0) {
+                const contractBase = Number(colRow.contractAmount) || fin.total || 0;
+                const schedAmt = (Number(meta.pct) || 0) > 0 && contractBase > 0
+                  ? Math.round((contractBase * Number(meta.pct)) / 100)
+                  : (st.key === "finalPayment" ? fin.uncollected : 0);
+                if (schedAmt > 0) {
+                  hasUnpaidScheduled = true;
+                  stages.push({ label: st.label, amount: schedAmt, paid: false, date: dueYmd });
+                }
+              }
             });
-            if (fin.uncollected > 0) {
-              stages.push({ label: "남은 잔금", amount: fin.uncollected, paid: false });
+            if (fin.uncollected > 0 && !hasUnpaidScheduled) {
+              const fallbackDue = normalizeDateYmd(colRow.nextDueDate || "") || (metrics.latest || "");
+              stages.push({ label: "남은 잔금", amount: fin.uncollected, paid: false, date: fallbackDue });
             }
             payment = {
               total: fin.total,
