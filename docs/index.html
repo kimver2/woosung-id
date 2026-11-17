@@ -4684,7 +4684,7 @@ end $$;`;
                 </div>
                 <div class="hk-sub"><span class="hk-sub-txt">전체 ${myTodos.length}건 중 미완료</span><span>➔</span></div>
               </div>
-              <div class="home-kpi-card kpi-green" onclick="switchMainTab('calendar')">
+              <div class="home-kpi-card kpi-green" onclick="setHomeTaskFilter('progress'); scrollAndHighlightHomeSection('homeSecTasks');">
                 <div class="hk-top-row">
                   <div>
                     <div class="hk-lbl">오늘 챙길 내 공정</div>
@@ -4694,7 +4694,7 @@ end $$;`;
                 </div>
                 <div class="hk-sub"><span class="hk-sub-txt">${escHtml(todayTasks.slice(0, 2).map((x) => x.task.taskName).join(", ") || "금일 예정 없음")}</span><span>➔</span></div>
               </div>
-              <div class="home-kpi-card kpi-red" onclick="openDelayedSitesFromHome(false)">
+              <div class="home-kpi-card kpi-red" onclick="setHomeTaskFilter('delayed'); scrollAndHighlightHomeSection('homeSecTasks');">
                 <div class="hk-top-row">
                   <div>
                     <div class="hk-lbl">나의 지연 / 확인 공정</div>
@@ -13262,7 +13262,7 @@ end $$;`;
               </div>
               <div style="font-size:19px;font-weight:800;color:#1e40af;margin-top:3px;">${pendingTodos.length}건</div>
             </div>
-            <div class="m-card-box" style="padding:11px 12px;margin-bottom:0;border-top:3px solid #ef4444;" onclick="openDelayedSitesFromHome(true)">
+            <div class="m-card-box" style="padding:11px 12px;margin-bottom:0;border-top:3px solid #ef4444;" onclick="setHomeTaskFilter('delayed'); scrollAndHighlightHomeSection('mHomeSecTasks');">
               <div style="display:flex;justify-content:space-between;align-items:center;">
                 <span style="font-size:11px;color:var(--text-muted);font-weight:700;">지연 / 확인</span>
                 <span style="font-size:14px;">⚠️</span>
