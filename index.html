@@ -12489,7 +12489,7 @@
               <span>특이사항 / 메모</span>
               <span style="display:inline-flex;align-items:center;gap:6px;">
                 <input type="file" id="taskMemoPhotoInput" accept="image/*" multiple style="display:none;" onchange="handleTaskMemoPhotoFiles(this.files); this.value='';">
-                <button type="button" class="btn-tool-tag" id="btnAddTaskMemoPhoto" onclick="document.getElementById('taskMemoPhotoInput').click()" style="background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;font-weight:700;">📷 사진 추가</button>
+                <button type="button" class="btn-tool-tag" id="btnAddTaskMemoPhoto" onclick="onTaskMemoPhotoBtnClick()" style="background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;font-weight:700;">📷 사진 추가</button>
                 ${isEdit ? `<button type="button" class="btn-tool-tag" onclick="setSheetField('editFullMemo', ${!ctx.editFullMemo})">${ctx.editFullMemo ? "추가 입력 모드로" : "전체 원문 편집"}</button>` : ""}
               </span>
             </label>
@@ -13057,8 +13057,34 @@
           .replace(target.fullToken, "")
           .replace(/\n{3,}/g, "\n\n")
           .trim();
+        if (ctx.mode === "edit" && ctx.taskId) {
+          const found = findTaskById(ctx.taskId);
+          if (found && found.task && found.site) {
+            const { site, task } = found;
+            const origTaskName = task.taskName || "";
+            const origDateStr = task.dateDisplay || task.startDateStr || "";
+            const origMgrStr = task.manager || "";
+            const origMemoStr = task.memo || "";
+            const wasArchived = Boolean(task.isArchived || site.isArchived || task.sheetName === "완료현장");
+            task.memo = ctx.memo;
+            task.updatedAtMs = Date.now();
+            task.memoUpdatedAtMs = Date.now();
+            if (window.WSDataService) {
+              window.WSDataService.saveTask(true, {
+                row: task.row || "", site: site.siteName, task: task.taskName, status: task.status,
+                shared: task.isShared, memo: task.memo, date: task.startDateStr || origDateStr, manager: task.manager,
+                partner: task.partner, sheetName: task.sheetName || "현장데이터",
+                id: task.taskId || task.id, taskId: task.taskId || task.id,
+                isArchived: wasArchived, origDate: origDateStr, origTask: origTaskName,
+                origMgr: origMgrStr, origMemo: origMemoStr
+              }, state.dashData);
+            }
+            markAllDirty();
+            renderActiveViews();
+          }
+        }
         renderTaskSheetModal();
-        showToast("🗑️ 첨부 사진이 메모에서 제거되었습니다. ([저장하기]를 누르면 반영됩니다)");
+        showToast("🗑️ 첨부 사진이 메모에서 제거되었습니다.");
       };
       async function compressImageFileForMemo(file) {
         if (!file || !String(file.type || "").startsWith("image/")) {
@@ -13111,11 +13137,62 @@
           reader.readAsDataURL(file);
         });
       }
+      window.openDriveRequiredAlert = function (siteName, fromModalId) {
+        const cleanSite = String(siteName || "").trim() || "해당 현장";
+        let ov = document.getElementById("driveRequiredAlertOverlay");
+        if (!ov) {
+          ov = document.createElement("div");
+          ov.id = "driveRequiredAlertOverlay";
+          ov.style.cssText = "position:fixed;inset:0;background:rgba(15,23,42,0.58);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;";
+          document.body.appendChild(ov);
+        }
+        ov.innerHTML = `
+          <div style="background:#ffffff;border-radius:14px;max-width:410px;width:94%;padding:20px 22px;display:flex;flex-direction:column;gap:14px;box-shadow:0 24px 48px rgba(15,23,42,0.28);border:1px solid #e2e8f0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid #f1f5f9;padding-bottom:10px;">
+              <span style="font-size:15.5px;font-weight:800;color:#0f172a;display:inline-flex;align-items:center;gap:6px;">📁 Google Drive 연결 필요</span>
+              <button type="button" onclick="document.getElementById('driveRequiredAlertOverlay').style.display='none'" style="border:none;background:#f1f5f9;color:#475569;width:28px;height:28px;border-radius:50%;font-size:13px;font-weight:800;cursor:pointer;">✕</button>
+            </div>
+            <div style="font-size:13px;color:#334155;line-height:1.65;">
+              <strong style="color:#1e40af;">[${escHtml(cleanSite)}]</strong> 현장에 연결된 <strong>Google Drive 폴더</strong>가 없습니다.<br>
+              사진·파일을 업로드하려면 먼저 현장 정보에서 <strong>구글 드라이브 폴더 URL</strong>을 연결해 주세요.
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:2px;">
+              <button type="button" class="btn-act-white" onclick="document.getElementById('driveRequiredAlertOverlay').style.display='none'">닫기</button>
+              <button type="button" class="btn-act-blue" onclick="document.getElementById('driveRequiredAlertOverlay').style.display='none'; ${fromModalId ? `closeModal('${escJs(fromModalId)}');` : ""} openSiteInfoModal('${escJs(cleanSite)}');">📂 드라이브 연결하기</button>
+            </div>
+          </div>
+        `;
+        ov.style.display = "flex";
+      };
+      window.onTaskMemoPhotoBtnClick = function () {
+        const ctx = state.sheetCtx;
+        if (!ctx) return;
+        const siteName = (ctx.siteName === "__NEW__" ? (ctx.newSiteName || "").trim() : (ctx.isCustomSite ? ctx.customSiteName : ctx.siteName) || "").trim();
+        if (!siteName) {
+          return showToast("⚠️ 먼저 현장명을 선택하거나 입력해 주세요.");
+        }
+        const siteInfo = getSiteInfo(siteName) || {};
+        const clientDriveUrl = String(siteInfo.driveUrl || "").trim();
+        if (!clientDriveUrl) {
+          window.openDriveRequiredAlert(siteName, "taskSheetModal");
+          return;
+        }
+        const inp = document.getElementById("taskMemoPhotoInput");
+        if (inp) inp.click();
+      };
       window.handleTaskMemoPhotoFiles = async function (fileList) {
         const ctx = state.sheetCtx;
         if (!ctx || !fileList || !fileList.length) return;
         const files = Array.from(fileList).filter((f) => f && (!f.type || f.type.startsWith("image/")));
         if (!files.length) return showToast("⚠️ 이미지(사진) 파일만 첨부할 수 있습니다.");
+
+        const siteName = (ctx.siteName === "__NEW__" ? (ctx.newSiteName || "").trim() : (ctx.isCustomSite ? ctx.customSiteName : ctx.siteName) || "").trim() || "미지정현장";
+        const siteInfo = getSiteInfo(siteName) || {};
+        const clientDriveUrl = String(siteInfo.driveUrl || "").trim();
+        if (!clientDriveUrl) {
+          window.openDriveRequiredAlert(siteName, "taskSheetModal");
+          return;
+        }
 
         const btn = document.getElementById("btnAddTaskMemoPhoto");
         if (btn) {
@@ -13123,9 +13200,6 @@
           btn.textContent = `⏳ 사진 업로드 중 (0/${files.length})...`;
         }
         try {
-          const siteName = (ctx.isCustomSite ? ctx.customSiteName : ctx.siteName) || "미지정현장";
-          const siteInfo = getSiteInfo(siteName) || {};
-          const clientDriveUrl = siteInfo.driveUrl || "";
           const payload = [];
           for (let i = 0; i < files.length; i++) {
             if (btn) btn.textContent = `⏳ 사진 압축·변환 중 (${i + 1}/${files.length})...`;
@@ -13173,8 +13247,35 @@
           });
           if (tokens.length > 0) {
             ctx.memo = (ctx.memo ? ctx.memo.trim() + "\n" : "") + tokens.join("\n");
+            // 수정 모달에서 사진 업로드 직후 바로 해당 공정의 메모에도 즉시 저장 연동 (팝업을 닫았다 열어도 보존)
+            if (ctx.mode === "edit" && ctx.taskId) {
+              const found = findTaskById(ctx.taskId);
+              if (found && found.task && found.site) {
+                const { site, task } = found;
+                const origTaskName = task.taskName || "";
+                const origDateStr = task.dateDisplay || task.startDateStr || "";
+                const origMgrStr = task.manager || "";
+                const origMemoStr = task.memo || "";
+                const wasArchived = Boolean(task.isArchived || site.isArchived || task.sheetName === "완료현장");
+                task.memo = ctx.memo;
+                task.updatedAtMs = Date.now();
+                task.memoUpdatedAtMs = Date.now();
+                if (window.WSDataService) {
+                  window.WSDataService.saveTask(true, {
+                    row: task.row || "", site: site.siteName, task: task.taskName, status: task.status,
+                    shared: task.isShared, memo: task.memo, date: task.startDateStr || origDateStr, manager: task.manager,
+                    partner: task.partner, sheetName: task.sheetName || "현장데이터",
+                    id: task.taskId || task.id, taskId: task.taskId || task.id,
+                    isArchived: wasArchived, origDate: origDateStr, origTask: origTaskName,
+                    origMgr: origMgrStr, origMemo: origMemoStr
+                  }, state.dashData);
+                }
+                markAllDirty();
+                renderActiveViews();
+              }
+            }
             renderTaskSheetModal();
-            showToast(`✅ 사진 ${tokens.length}장이 비고/메모에 첨부되었습니다. ([저장하기]를 눌러 완료하세요)`);
+            showToast(`✅ 사진 ${tokens.length}장이 드라이브 및 메모에 저장되었습니다.`);
           }
         } catch (err) {
           console.error("메모 사진 첨부 오류:", err);
@@ -13688,6 +13789,11 @@
 
       // ================= 모달 4: 현장 파일 업로드 모달 =================
       window.openSiteFileUploadModal = function (siteName) {
+        const info = getSiteInfo(siteName) || {};
+        if (!String(info.driveUrl || "").trim()) {
+          window.openDriveRequiredAlert(siteName);
+          return;
+        }
         state._uploadSiteName = siteName;
         state.uploadFiles = [];
         renderSiteUploadModalBody();
@@ -13706,13 +13812,13 @@
           </div>`).join("") || `<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:10px;">선택된 파일이 없습니다.</div>`;
 
         document.getElementById("siteUploadModalBody").innerHTML = `
-          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
-            <span>📁 연결 폴더: <strong>${info.driveUrl ? "Google Drive 연결됨" : "폴더 미연결"}</strong></span>
+          <div style="background:${info.driveUrl ? "#eff6ff" : "#fef2f2"};border:1px solid ${info.driveUrl ? "#bfdbfe" : "#fecaca"};border-radius:8px;padding:10px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
+            <span>📁 연결 폴더: <strong>${info.driveUrl ? "Google Drive 연결됨" : "⚠️ 폴더 미연결 (업로드 불가)"}</strong></span>
             ${info.driveUrl ? `<a href="${escHtml(info.driveUrl)}" target="_blank" rel="noopener" class="btn-tool-tag">폴더 열기 ↗</a>` : `<button type="button" class="btn-tool-tag" onclick="closeModal('siteFileUploadModal'); openSiteInfoModal('${escJs(siteName)}')">연결하기</button>`}
           </div>
           <div class="fg">
             <label>업로드할 현장 사진 / 도면 / PDF 선택</label>
-            <input type="file" multiple class="ws-input" onchange="onUploadFilesPicked(this.files)">
+            <input type="file" multiple class="ws-input" ${info.driveUrl ? "" : "disabled"} onchange="onUploadFilesPicked(this.files)">
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;">${listHtml}</div>
         `;
@@ -13723,6 +13829,12 @@
       }
       window.onUploadFilesPicked = function (files) {
         if (!files) return;
+        const siteName = state._uploadSiteName || "";
+        const info = getSiteInfo(siteName) || {};
+        if (!String(info.driveUrl || "").trim()) {
+          window.openDriveRequiredAlert(siteName, "siteFileUploadModal");
+          return;
+        }
         for (let i = 0; i < files.length; i++) state.uploadFiles.push(files[i]);
         renderSiteUploadModalBody();
       };
@@ -13731,8 +13843,13 @@
         renderSiteUploadModalBody();
       };
       window.executeSiteUpload = async function () {
-        if (!state.uploadFiles || !state.uploadFiles.length) return showToast("⚠️ 먼저 업로드할 파일을 선택해 주세요.");
         const siteName = state._uploadSiteName || "";
+        const siteInfoCheck = getSiteInfo(siteName) || {};
+        if (!String(siteInfoCheck.driveUrl || "").trim()) {
+          window.openDriveRequiredAlert(siteName, "siteFileUploadModal");
+          return;
+        }
+        if (!state.uploadFiles || !state.uploadFiles.length) return showToast("⚠️ 먼저 업로드할 파일을 선택해 주세요.");
         const filesToUpload = [...state.uploadFiles];
         const btnUpload = document.querySelector("#siteUploadModalFooter button.btn-act-blue");
         if (btnUpload) {

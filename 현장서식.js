@@ -5827,6 +5827,13 @@ function uploadSiteFilesToDriveFromWeb(siteName, filesPayload, clientDriveUrl) {
     var strippedSite = cleanSite.replace(/^\[(단건|AS)\]\s*/i, "").trim();
     var info = infoMap[cleanSite] || infoMap[strippedSite] || infoMap[cleanSite.replace(/\s+/g, " ")] || infoMap[cleanSite.replace(/\s+/g, "")];
     var driveUrl = String(clientDriveUrl || (info ? (info.driveUrl || info.driveLink || "") : "")).trim();
+    if (!driveUrl) {
+      return {
+        success: false,
+        driveNotLinked: true,
+        error: "현장에 연결된 Google Drive 폴더가 없습니다. 먼저 [현장정보 수정]에서 구글 드라이브 폴더 URL을 연결해 주세요."
+      };
+    }
 
     var folder = null;
     if (driveUrl) {
@@ -5843,7 +5850,18 @@ function uploadSiteFilesToDriveFromWeb(siteName, filesPayload, clientDriveUrl) {
               error: "구글 드라이브 최초 1회 권한 승인이 필요합니다. 구글 시트 상단 메뉴 [🚀 현장 관리 > ☁️ 구글 드라이브 업로드 권한 1회 승인]을 클릭하여 [허용]을 눌러주세요."
             };
           }
+          return {
+            success: false,
+            driveNotLinked: true,
+            error: "연결된 Google Drive 폴더에 접근할 수 없습니다. 폴더 URL이나 공유 권한을 다시 확인해 주세요."
+          };
         }
+      } else {
+        return {
+          success: false,
+          driveNotLinked: true,
+          error: "유효한 Google Drive 폴더 URL이 아닙니다. [현장정보 수정]에서 올바른 드라이브 폴더 링크를 연결해 주세요."
+        };
       }
     }
 
