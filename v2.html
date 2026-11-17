@@ -14810,7 +14810,7 @@
         // 2) 백그라운드 GAS 시트 저장 및 재무DB 동기화
         const onSuccess = function (res) {
           if (res && res.success) {
-            if (res.collectionRow && state.financeDbData && Array.isArray(state.financeDbData.collection)) {
+            if ((res.collectionCreated || res.collectionRow) && res.collectionRow && state.financeDbData && Array.isArray(state.financeDbData.collection)) {
               const alreadyHas = state.financeDbData.collection.some(c => (c.id && c.id === res.collectionRow.id) || (c.siteName && c.siteName.trim() === res.collectionRow.siteName.trim()));
               if (!alreadyHas) {
                 state.financeDbData.collection.unshift(res.collectionRow);
