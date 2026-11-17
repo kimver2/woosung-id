@@ -7293,6 +7293,39 @@ end $$;`;
       }
       window.normalizeMonthStr = normalizeMonthStr;
 
+      function getExpenseItemFilterOptions() {
+        const allExpenses = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
+        const selMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
+        const allMonths = !!state.expenseAllMonths;
+        const set = new Set();
+        let hasEmpty = false;
+        allExpenses.forEach(e => {
+          if (!e) return;
+          if (!allMonths && selMonth && normalizeMonthStr(e.settleMonth) !== selMonth) return;
+          const v = String(e.item || "").trim();
+          if (v) set.add(v);
+          else hasEmpty = true;
+        });
+        // 현재 월에 데이터가 적더라도 전체 데이터에 존재하는 항목을 함께 수집해 일관된 선택지 제공
+        allExpenses.forEach(e => {
+          if (!e) return;
+          const v = String(e.item || "").trim();
+          if (v) set.add(v);
+        });
+        const priority = ["고정비", "자재", "인건비", "시공", "자재/시공", "세금", "식대", "소모품비"];
+        const sorted = Array.from(set).sort((a, b) => {
+          const ia = priority.indexOf(a);
+          const ib = priority.indexOf(b);
+          if (ia !== -1 && ib !== -1) return ia - ib;
+          if (ia !== -1) return -1;
+          if (ib !== -1) return 1;
+          return a.localeCompare(b, "ko");
+        });
+        const opts = [["all", "전체 항목"], ...sorted.map(v => [v, v])];
+        if (hasEmpty) opts.push(["__empty__", "미지정"]);
+        return opts;
+      }
+
       function getFilteredExpenseList() {
         const allExpenses = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
         const selMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
@@ -7311,9 +7344,10 @@ end $$;`;
 
           // 2. 항목 필터
           if (itemFilter !== "all") {
-            if (itemFilter === "기타") {
-              if (["급여", "자재", "외주", "고정비"].includes(e.item)) return false;
-            } else if (e.item !== itemFilter) {
+            const expItem = String(e.item || "").trim();
+            if (itemFilter === "__empty__") {
+              if (expItem !== "") return false;
+            } else if (expItem !== itemFilter) {
               return false;
             }
           }
@@ -9419,9 +9453,9 @@ end $$;`;
                     style="width:100%;height:34px;padding:0 28px 0 10px;border-radius:6px;border:1px solid var(--border-dark);font-size:12.5px;outline:none;" />
                   ${state.expenseSearchQuery ? `<button type="button" onclick="window.clearExpenseSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:bold;line-height:1;">✕</button>` : ""}
                 </div>
-                <div style="display:flex;gap:4px;background:#f1f5f9;padding:3px;border-radius:6px;">
-                  ${[["all", "전체 항목"], ["급여", "급여"], ["자재", "자재"], ["외주", "외주"], ["고정비", "고정비"], ["기타", "기타"]].map(([k, label]) => `
-                    <button type="button" class="btn-sub-chip ${itemFilter === k ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;" onclick="window.setExpenseItemFilter('${k}')">${label}</button>
+                <div style="display:flex;gap:4px;background:#f1f5f9;padding:3px;border-radius:6px;flex-wrap:wrap;">
+                  ${getExpenseItemFilterOptions().map(([k, label]) => `
+                    <button type="button" class="btn-sub-chip ${itemFilter === k ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;white-space:nowrap;" onclick="window.setExpenseItemFilter('${escJs(k)}')">${escHtml(label)}</button>
                   `).join("")}
                 </div>
                 <div style="display:flex;gap:4px;background:#f1f5f9;padding:3px;border-radius:6px;">
@@ -11604,8 +11638,8 @@ end $$;`;
             </div>
 
             <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;">
-              ${[["all", "전체"], ["급여", "급여"], ["자재", "자재"], ["외주", "외주"], ["고정비", "고정비"], ["기타", "기타"]].map(([k, label]) => `
-                <button type="button" class="btn-sub-chip ${itemFilter === k ? "active" : ""}" style="padding:3px 7px;font-size:11px;" onclick="window.setExpenseItemFilter('${k}')">${label}</button>
+              ${getExpenseItemFilterOptions().map(([k, label]) => `
+                <button type="button" class="btn-sub-chip ${itemFilter === k ? "active" : ""}" style="padding:3px 7px;font-size:11px;white-space:nowrap;" onclick="window.setExpenseItemFilter('${escJs(k)}')">${escHtml(label === "전체 항목" ? "전체" : label)}</button>
               `).join("")}
               <button type="button" class="btn-sub-chip ${stFilter === "unpaid" ? "active" : ""}" style="padding:3px 7px;font-size:11px;${stFilter === "unpaid" ? "background:#fee2e2;color:#dc2626;border-color:#fca5a5;" : ""}" onclick="window.setExpenseStatusFilter('${stFilter === "unpaid" ? "all" : "unpaid"}')">미지급만</button>
               ${FINANCE_EXT_FLAGS.taxProofBadge ? `
