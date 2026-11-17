@@ -3256,8 +3256,13 @@
           const track = document.getElementById(trackId);
           if (track) {
             const activeCard = track.querySelector(activeSelector);
-            if (activeCard && typeof activeCard.scrollIntoView === "function") {
-              activeCard.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+            if (activeCard) {
+              const targetLeft = activeCard.offsetLeft - (track.clientWidth / 2) + (activeCard.offsetWidth / 2);
+              if (typeof track.scrollTo === "function") {
+                track.scrollTo({ left: Math.max(0, targetLeft), behavior: "smooth" });
+              } else {
+                track.scrollLeft = Math.max(0, targetLeft);
+              }
             }
           }
         });
@@ -11636,7 +11641,64 @@
         checkAndResetMobileFinanceScroll();
       }
 
+      function captureViewScrollPositions() {
+        const snap = {
+          winY: window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0,
+          byId: {},
+          bySel: {}
+        };
+        const ids = [
+          "pcSiteMain", "pcSiteSidebar", "pcCalMain", "pcCalSidebar",
+          "pcTodoMain", "pcQuoteMain", "pcQuoteSidebar", "pcFinanceMain",
+          "pcPartnersMain", "page-home", "page-sites", "page-calendar",
+          "page-todo", "page-quote", "page-finance", "page-partners",
+          "mAppBody", "m-page-home", "m-page-sites", "m-page-calendar",
+          "m-page-todo", "m-page-quote", "m-page-finance", "m-page-partners"
+        ];
+        ids.forEach((id) => {
+          const el = document.getElementById(id);
+          if (el && (el.scrollTop > 0 || el.scrollLeft > 0)) {
+            snap.byId[id] = { top: el.scrollTop, left: el.scrollLeft };
+          }
+        });
+        [".detail-card-panel .table-container", ".app-workspace", "#pcSiteCarouselTrack", "#pcQuoteCarouselTrack"].forEach((sel) => {
+          const el = document.querySelector(sel);
+          if (el && (el.scrollTop > 0 || el.scrollLeft > 0)) {
+            snap.bySel[sel] = { top: el.scrollTop, left: el.scrollLeft };
+          }
+        });
+        return snap;
+      }
+
+      function restoreViewScrollPositions(snap) {
+        if (!snap || state._needFinanceScrollTop) return;
+        const apply = () => {
+          Object.keys(snap.byId).forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) {
+              if (snap.byId[id].top > 0) el.scrollTop = snap.byId[id].top;
+              if (snap.byId[id].left > 0) el.scrollLeft = snap.byId[id].left;
+            }
+          });
+          Object.keys(snap.bySel).forEach((sel) => {
+            const el = document.querySelector(sel);
+            if (el) {
+              if (snap.bySel[sel].top > 0) el.scrollTop = snap.bySel[sel].top;
+              if (snap.bySel[sel].left > 0) el.scrollLeft = snap.bySel[sel].left;
+            }
+          });
+          if (snap.winY > 0 && typeof window.scrollTo === "function") {
+            window.scrollTo(0, snap.winY);
+          }
+        };
+        apply();
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(apply);
+        }
+      }
+
       function renderActiveViews() {
+        const scrollSnap = captureViewScrollPositions();
         updateGlobalBadges();
         if (state.device === "pc") {
           const tab = state.pcTab;
@@ -11649,6 +11711,7 @@
             else if (tab === "finance") renderPcFinanceTab();
             else if (tab === "partners") renderPcPartnersTab();
             state.dirtyPcTabs[tab] = false;
+            restoreViewScrollPositions(scrollSnap);
           }
         } else {
           const showSearchFilter = (state.mobileTab === "calendar" || state.mobileTab === "cal" || state.mobileTab === "sites");
@@ -11676,6 +11739,7 @@
             else if (tab === "finance") renderMobileFinanceTab();
             else if (tab === "partners") renderMobilePartnersTab();
             state.dirtyMobileTabs[tab] = false;
+            restoreViewScrollPositions(scrollSnap);
           }
         }
       }
