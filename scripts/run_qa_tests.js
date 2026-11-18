@@ -4113,6 +4113,551 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     );
   })();
 
+  // ========================================================
+  // [다중 사용자 공유 Tombstone] 2명 동시 편집 삭제 부활 차단 + 동일 현장명 재등록 런타임 시뮬레이션
+  // ========================================================
+  pendingAsyncTests.push((async () => {
+    const extractBlock = (startMarker, endMarker) => {
+      const s = idxRootHtml.indexOf(startMarker);
+      const e = idxRootHtml.indexOf(endMarker, s > -1 ? s : 0);
+      if (s === -1 || e <= s) throw new Error(`Tombstone QA missing marker: ${startMarker} .. ${endMarker}`);
+      return idxRootHtml.slice(s, e);
+    };
+
+    const snapCode = fs.readFileSync(path.join(__dirname, '..', 'data', 'dashboard_data.js'), 'utf8');
+    const coreBlock = extractBlock('function escHtml(str)', '// ================= 공유 사이드바 =================');
+    const resolvedPartnerBlock = extractBlock('function getResolvedSheetPartner(ctx)', 'function registerOptimisticCustomPartner(');
+    const saveTaskBlock = extractBlock('window.saveTaskSheetModal = function ()', '// ================= 모달 2: 삭제 확인 모달 =================');
+    const tombstoneAndDeleteBlock = extractBlock('const __WS_TOMBSTONE_TTL_MS =', '// ================= 모달 3 & 착공 필수 체크박스 =================');
+    const saveTodoBlock = extractBlock('window.saveTodoModal = function ()', 'window.toggleTodoItem = function (id)');
+    const saveEstimateBlock = extractBlock('window.saveEstimateModal = function ()', 'window.markEstimateContractDone = function');
+    const settingsDeleteSaveBlock = extractBlock('window.delSettingItem = function (kind, idx)', '// ================= [v3 Supabase 하이브리드 엔진 & 실시간 동기화] =================');
+    let supabaseBlock = extractBlock('// ================= [v3 Supabase 하이브리드 엔진 & 실시간 동기화] =================', 'window.openSupabaseSetupModal = function ()');
+    supabaseBlock = supabaseBlock.replace('          installServiceHooks,\n', '          installServiceHooks,\n          handleRealtimePayload,\n');
+    const mergeShareBlock = extractBlock('function mergePreservedShareConfigs(targetDash, prevDash)', 'function buildPartnerShareGuideText(');
+
+    const baseTs = Date.now() - 60000;
+    const makeSeedDash = () => ({
+      sites: [
+        {
+          siteKey: '강남 테스트현장',
+          siteName: '강남 테스트현장',
+          scope: 'site',
+          colorCode: '1',
+          colorHex: '#2563eb',
+          createdAtMs: baseTs,
+          tasks: [{
+            id: 't_gangnam_1', taskId: 't_gangnam_1', taskName: '철거',
+            startDateStr: '2026-11-18', endDateStr: '2026-11-18', dateDisplay: '2026-11-18',
+            manager: '조항만', partner: '철거_삭제거래처', status: '예정', scope: 'site', sheetName: '현장데이터', createdAtMs: baseTs
+          }]
+        },
+        {
+          siteKey: '유지 현장',
+          siteName: '유지 현장',
+          scope: 'site',
+          colorCode: '2',
+          colorHex: '#059669',
+          createdAtMs: baseTs,
+          tasks: [
+            {
+              id: 't_del_only', taskId: 't_del_only', taskName: '목공',
+              startDateStr: '2026-11-19', endDateStr: '2026-11-19', dateDisplay: '2026-11-19',
+              manager: '조항만', partner: '', status: '예정', scope: 'site', sheetName: '현장데이터', createdAtMs: baseTs
+            },
+            {
+              id: 't_keep_other', taskId: 't_keep_other', taskName: '전기',
+              startDateStr: '2026-11-20', endDateStr: '2026-11-20', dateDisplay: '2026-11-20',
+              manager: '송지은', partner: '전기_유지거래처', status: '예정', scope: 'site', sheetName: '현장데이터', createdAtMs: baseTs
+            }
+          ]
+        },
+        {
+          siteKey: 'NEWSITE::재무 테스트',
+          siteName: '재무 테스트',
+          scope: 'newSite',
+          colorCode: '1',
+          colorHex: '#0284c7',
+          createdAtMs: baseTs,
+          tasks: [{
+            id: 'est_fin_test', taskId: 'est_fin_test', taskName: '1차상담 예정',
+            startDateStr: '2026-11-18', endDateStr: '2026-11-18', dateDisplay: '2026-11-18',
+            manager: '조항만', status: '1차상담 예정', scope: 'newSite', createdAtMs: baseTs
+          }],
+          estimateData: { siteName: '재무 테스트', quoteType: 'site', status: '1차상담 예정', inquiryDate: '2026-11-18' }
+        }
+      ],
+      siteInfoMap: {
+        '강남 테스트현장': { address: '서울 강남구', clientShare: { token: 'tok_gangnam_1', enabled: true, updatedAt: '2026-11-18T00:00:00Z' } },
+        '재무 테스트': { memo: '테스트 현장 메모' },
+        '유지 현장': { address: '서울 서초구' }
+      }
+    });
+    const makeSeedFinance = () => ({
+      collection: [
+        { id: 'COL-DEL', siteName: '강남 테스트현장', contractAmount: 10000000, totalAmount: 10000000, collectedAmount: 0, uncollectedAmount: 10000000, createdAtMs: baseTs },
+        { id: 'COL-KEEP', siteName: '유지 현장', contractAmount: 20000000, totalAmount: 20000000, collectedAmount: 5000000, uncollectedAmount: 15000000, createdAtMs: baseTs }
+      ],
+      expense: [
+        { id: 'EXP-DEL', month: '2026-11', siteName: '강남 테스트현장', taskName: '철거', partner: '철거_삭제거래처', supplyAmount: 500000, vatAmount: 50000, totalAmount: 550000, paidAmount: 0, balanceAmount: 550000, createdAtMs: baseTs },
+        { id: 'EXP-KEEP', month: '2026-11', siteName: '유지 현장', taskName: '전기', partner: '전기_유지거래처', supplyAmount: 1000000, vatAmount: 100000, totalAmount: 1100000, paidAmount: 0, balanceAmount: 1100000, createdAtMs: baseTs }
+      ],
+      fixedMaster: [
+        { id: 'FM-DEL', name: '임시 고정비', category: '기타', amount: 100000, createdAtMs: baseTs },
+        { id: 'FM-KEEP', name: '사무실 월세', category: '고정비', amount: 2000000, createdAtMs: baseTs }
+      ]
+    });
+    const makeSeedTodo = () => ({
+      list: [
+        { id: 'todo_del', title: '삭제될 할일', status: '미완료', manager: '조항만', createdAtMs: baseTs },
+        { id: 'todo_keep', title: '유지 할일', status: '미완료', manager: '송지은', createdAtMs: baseTs }
+      ]
+    });
+    const makeSeedSettings = () => ({
+      partners: [
+        { name: '삭제거래처', biz: '철거', fullName: '철거_삭제거래처', phone: '010-0000-0001', createdAtMs: baseTs },
+        { name: '유지거래처', biz: '전기', fullName: '전기_유지거래처', phone: '010-0000-0002', createdAtMs: baseTs }
+      ],
+      tasks: [
+        { name: '삭제공종', category: '기타', createdAtMs: baseTs },
+        { name: '전기', category: '설비', createdAtMs: baseTs }
+      ],
+      members: [
+        { name: '조항만', role: '대표', phone: '010-1111-1111', createdAtMs: baseTs },
+        { name: '송지은', role: '디자이너', phone: '010-2222-2222', createdAtMs: baseTs }
+      ]
+    });
+
+    // 공유 인메모리 Mock Supabase DB
+    const mockDb = {
+      ws_state_store: new Map([
+        ['dashboard_main', { key: 'dashboard_main', payload: makeSeedDash(), updated_at: '2026-11-18T00:00:00Z', updated_by: 'seed' }],
+        ['finance_db', { key: 'finance_db', payload: makeSeedFinance(), updated_at: '2026-11-18T00:00:00Z', updated_by: 'seed' }],
+        ['todo_main', { key: 'todo_main', payload: makeSeedTodo(), updated_at: '2026-11-18T00:00:00Z', updated_by: 'seed' }],
+        ['settings_main', { key: 'settings_main', payload: makeSeedSettings(), updated_at: '2026-11-18T00:00:00Z', updated_by: 'seed' }],
+        ['client_share::tok_gangnam_1', { key: 'client_share::tok_gangnam_1', payload: { token: 'tok_gangnam_1', siteName: '강남 테스트현장', enabled: true }, updated_at: '2026-11-18T00:00:00Z', updated_by: 'seed' }]
+      ]),
+      ws_sites: new Map([
+        ['강남 테스트현장', { site_name: '강남 테스트현장', scope: 'site', progress_rate: 0 }],
+        ['유지 현장', { site_name: '유지 현장', scope: 'site', progress_rate: 0 }],
+        ['재무 테스트', { site_name: '재무 테스트', scope: 'newSite', progress_rate: 0 }]
+      ]),
+      ws_tasks: new Map([
+        ['t_gangnam_1', { id: 't_gangnam_1', site_name: '강남 테스트현장', category: 'site', task_name: '철거' }],
+        ['t_del_only', { id: 't_del_only', site_name: '유지 현장', category: 'site', task_name: '목공' }],
+        ['t_keep_other', { id: 't_keep_other', site_name: '유지 현장', category: 'site', task_name: '전기' }],
+        ['est_fin_test', { id: 'est_fin_test', site_name: '재무 테스트', category: 'newSite', task_name: '1차상담 예정' }]
+      ]),
+      ws_finance_store: new Map([
+        ['collection::COL-DEL', { record_key: 'collection::COL-DEL', record_type: 'collection', record_id: 'COL-DEL', site_name: '강남 테스트현장' }],
+        ['collection::COL-KEEP', { record_key: 'collection::COL-KEEP', record_type: 'collection', record_id: 'COL-KEEP', site_name: '유지 현장' }],
+        ['expense::EXP-DEL', { record_key: 'expense::EXP-DEL', record_type: 'expense', record_id: 'EXP-DEL', site_name: '강남 테스트현장' }],
+        ['expense::EXP-KEEP', { record_key: 'expense::EXP-KEEP', record_type: 'expense', record_id: 'EXP-KEEP', site_name: '유지 현장' }],
+        ['fixed::FM-DEL', { record_key: 'fixed::FM-DEL', record_type: 'fixedMaster', record_id: 'FM-DEL', site_name: '' }],
+        ['fixed::FM-KEEP', { record_key: 'fixed::FM-KEEP', record_type: 'fixedMaster', record_id: 'FM-KEEP', site_name: '' }]
+      ])
+    };
+
+    const tablePkCol = {
+      ws_state_store: 'key',
+      ws_sites: 'site_name',
+      ws_tasks: 'id',
+      ws_finance_store: 'record_key'
+    };
+
+    const parseInValues = (raw) => {
+      const m = String(raw || '').match(/^in\.\((.*)\)$/);
+      if (!m) return null;
+      return m[1].split(',').map((tok) => decodeURIComponent(tok.trim().replace(/^"(.*)"$/, '$1'))).filter(Boolean);
+    };
+
+    const mockFetch = async (rawUrl, init = {}) => {
+      const method = String((init && init.method) || 'GET').toUpperCase();
+      const u = new URL(String(rawUrl));
+      const parts = u.pathname.split('/').filter(Boolean);
+      const table = parts[parts.length - 1];
+      const store = mockDb[table];
+      const pk = tablePkCol[table];
+      if (!store || !pk) {
+        return { ok: false, status: 404, headers: { get: () => null }, text: async () => `Unknown table ${table}` };
+      }
+
+      if (method === 'GET') {
+        let rows = Array.from(store.values()).map((r) => JSON.parse(JSON.stringify(r)));
+        for (const [k, v] of u.searchParams.entries()) {
+          if (k === 'select' || k === 'limit' || k === 'order') continue;
+          if (String(v).startsWith('eq.')) {
+            const val = decodeURIComponent(String(v).slice(3));
+            rows = rows.filter((r) => String(r[k] ?? '') === val);
+          } else if (String(v).startsWith('in.(')) {
+            const vals = new Set(parseInValues(v) || []);
+            rows = rows.filter((r) => vals.has(String(r[k] ?? '')));
+          }
+        }
+        return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(rows) };
+      }
+
+      if (method === 'POST') {
+        const bodyRows = init && init.body ? JSON.parse(init.body) : [];
+        const arr = Array.isArray(bodyRows) ? bodyRows : [bodyRows];
+        arr.forEach((row) => {
+          if (!row || !row[pk]) return;
+          const saved = JSON.parse(JSON.stringify(row));
+          if (table === 'ws_state_store' && !saved.updated_at) saved.updated_at = new Date().toISOString();
+          store.set(String(row[pk]), saved);
+        });
+        return { ok: true, status: 201, headers: { get: () => null }, text: async () => JSON.stringify([]) };
+      }
+
+      if (method === 'DELETE') {
+        const filters = [];
+        for (const [k, v] of u.searchParams.entries()) {
+          if (String(v).startsWith('eq.')) {
+            filters.push({ k, type: 'eq', val: decodeURIComponent(String(v).slice(3)) });
+          } else if (String(v).startsWith('in.(')) {
+            filters.push({ k, type: 'in', vals: new Set(parseInValues(v) || []) });
+          }
+        }
+        for (const [rowKey, rowVal] of Array.from(store.entries())) {
+          const matchesAll = filters.length > 0 && filters.every((f) => {
+            const rv = String(rowVal[f.k] ?? '');
+            return f.type === 'eq' ? rv === f.val : f.vals.has(rv);
+          });
+          if (matchesAll) store.delete(rowKey);
+        }
+        return { ok: true, status: 204, headers: { get: () => null }, text: async () => '' };
+      }
+
+      return { ok: false, status: 405, headers: { get: () => null }, text: async () => 'Method Not Allowed' };
+    };
+
+    const createSimClient = (userName) => {
+      const storageMap = new Map([
+        ['ws_supabase_v3_config_v1', JSON.stringify({ url: 'https://mock.supabase.local', anonKey: 'mock_anon_key_123456', engineMode: 'supabase', dualWrite: false })]
+      ]);
+      const domMap = {};
+      const pendingWrites = [];
+      const simState = {
+        user: userName,
+        authUser: userName,
+        currentUser: userName,
+        device: 'pc',
+        pcTab: 'sites',
+        mobileTab: 'sites',
+        scope: 'site',
+        quoteCategory: 'site',
+        showArchivedSites: false,
+        quoteShowArchived: false,
+        selectedSiteKey: '강남 테스트현장',
+        selectedQuoteKey: 'NEWSITE::재무 테스트',
+        checkedSiteKeys: new Set(['강남 테스트현장', '유지 현장']),
+        dirtyPcTabs: {},
+        dirtyMobileTabs: {},
+        dashData: makeSeedDash(),
+        financeDbData: makeSeedFinance(),
+        financeLoaded: true,
+        todoData: makeSeedTodo(),
+        settingsData: makeSeedSettings(),
+        _todoDraft: {},
+        _estCtx: null,
+        _pendingSettingsDeletes: { partners: [], tasks: [], members: [] },
+        _pendingSettingsRecreates: { partners: [], tasks: [], members: [] }
+      };
+
+      const ctx = vm.createContext({
+        console,
+        Math, Date, Number, String, Array, Object, Set, Map, JSON, RegExp, Promise, Error, TypeError,
+        parseInt, parseFloat, isNaN, encodeURIComponent, decodeURIComponent, setTimeout, clearTimeout,
+        URL,
+        performance: { now: () => Date.now() },
+        fetch: mockFetch,
+        localStorage: {
+          getItem: (k) => (storageMap.has(k) ? storageMap.get(k) : null),
+          setItem: (k, v) => { storageMap.set(k, String(v)); },
+          removeItem: (k) => { storageMap.delete(k); }
+        },
+        location: { protocol: 'https:', pathname: '/index.html', search: '', href: 'https://kimver2.github.io/woosung-id/index.html' },
+        document: {
+          body: { classList: { add() {}, remove() {} } },
+          getElementById: (id) => domMap[id] || null,
+          querySelector: () => null,
+          querySelectorAll: () => []
+        },
+        SUPABASE_V3_DEFAULT_CONFIG: { url: 'https://mock.supabase.local', anonKey: 'mock_anon_key_123456', engineMode: 'supabase', dualWrite: false },
+        AUDIT_MAX_LOGS: 300,
+        getLocalAuditLogs: () => [],
+        saveLocalAuditLogs: () => {},
+        mergeAuditLogLists: (a, b) => [...(a || []), ...(b || [])],
+        syncAuthConfigLocalCache: () => {},
+        recordAuditLog: () => {},
+        getTopSavedAuth: () => ({ user: userName }),
+        applyAuthenticatedUser: () => {},
+        populateAuthMembersDatalist: () => {},
+        lookupMemberPhone: () => '',
+        formatPartnerPhoneInputValue: (v) => String(v || '').trim(),
+        extractDriveIdFromAnyUrl: () => '',
+        COL_STAGE_DEFS: [],
+        getTodayYmd: () => '2026-11-18',
+        normalizeMonthStr: (m) => {
+          const d = String(m || '').replace(/\D/g, '');
+          return d.length >= 6 ? `${d.slice(0, 4)}-${d.slice(4, 6)}` : String(m || '');
+        },
+        getExpenseRowBalance: (e) => Math.max(0, (Number(e && (e.totalAmount || e.amount)) || 0) - (Number(e && e.paidAmount) || 0)),
+        registerOptimisticCustomPartner: () => {},
+        syncAsTaskToFinance: () => {},
+        syncSingleTaskToFinance: () => {},
+        isEstimatePromotedToSite: () => false,
+        openPromoteEstimateModal: () => {},
+        sanitizeUnregisteredMembers: () => {},
+        syncUserSelectorOptions: () => {},
+        markAllDirty: () => {},
+        renderActiveViews: () => {},
+        renderSettingsModal: () => {},
+        showToast: () => {},
+        openModal: () => {},
+        closeModal: () => {},
+        domMap,
+        state: simState
+      });
+      ctx.window = ctx;
+      ctx.global = ctx;
+
+      vm.runInContext(snapCode, ctx);
+      vm.runInContext(coreBlock, ctx);
+      vm.runInContext(resolvedPartnerBlock, ctx);
+      vm.runInContext(mergeShareBlock, ctx);
+      vm.runInContext(saveTaskBlock, ctx);
+      vm.runInContext(tombstoneAndDeleteBlock, ctx);
+      vm.runInContext(saveTodoBlock, ctx);
+      vm.runInContext(saveEstimateBlock, ctx);
+      vm.runInContext(settingsDeleteSaveBlock, ctx);
+      vm.runInContext(supabaseBlock, ctx);
+
+      // 비동기 Supabase 저장 Promise 추적 래퍼
+      const svc = ctx.WSDataService;
+      Object.keys(svc).forEach((m) => {
+        if (typeof svc[m] === 'function' && m !== '_origGas') {
+          const origFn = svc[m].bind(svc);
+          svc[m] = (...args) => {
+            const ret = origFn(...args);
+            if (ret && typeof ret.then === 'function') pendingWrites.push(ret);
+            return ret;
+          };
+        }
+      });
+
+      ctx.flushWrites = async () => {
+        while (pendingWrites.length > 0) {
+          const batch = pendingWrites.splice(0, pendingWrites.length);
+          await Promise.all(batch);
+        }
+      };
+      ctx.setInput = (id, value, checked = false) => {
+        domMap[id] = { value: String(value ?? ''), checked: Boolean(checked), trim: () => String(value ?? '').trim() };
+      };
+      return ctx;
+    };
+
+    const userA = createSimClient('조항만');
+    const userB = createSimClient('송지은'); // 구버전 메모리를 쥔 채 동기화 전 상태
+    const userC = createSimClient('차정률'); // Realtime 수신 테스트용 구버전 탭
+
+    // [Phase 1] 사용자 A가 현장·공정·신규견적·수금·비용·고정비·To-Do·기준정보 삭제
+    userA.executeDelete('site', '강남 테스트현장');
+    userA.executeDelete('task', 't_del_only');
+    userA.executeDelete('site', 'NEWSITE::재무 테스트');
+    userA.WSDataService.deleteCollectionRow('COL-DEL', '조항만');
+    userA.WSDataService.deleteExpenseRow('EXP-DEL', '조항만');
+    userA.WSDataService.deleteFixedMasterRow('FM-DEL', '조항만');
+    userA.executeDelete('todo', 'todo_del');
+    userA.delSettingItem('partners', 0);
+    userA.delSettingItem('tasks', 0);
+    userA.saveSettingsModalAll();
+
+    await userA.flushWrites();
+    await userA.WSSupabaseV3.syncTombstones();
+
+    const tombSnapAfterA = (mockDb.ws_state_store.get('deleted_tombstones') || {}).payload || {};
+    const p1Checks = {
+      tombSite1: Boolean(tombSnapAfterA.sites && tombSnapAfterA.sites['KEY::강남 테스트현장']),
+      tombSite2: Boolean(tombSnapAfterA.sites && tombSnapAfterA.sites['KEY::NEWSITE::재무 테스트']),
+      tombTask1: Boolean(tombSnapAfterA.tasks && tombSnapAfterA.tasks['ID::t_gangnam_1']),
+      tombTask2: Boolean(tombSnapAfterA.tasks && tombSnapAfterA.tasks['ID::t_del_only']),
+      tombTask3: Boolean(tombSnapAfterA.tasks && tombSnapAfterA.tasks['ID::est_fin_test']),
+      tombCol: Boolean(tombSnapAfterA.collections && tombSnapAfterA.collections['COL-DEL']),
+      tombExp: Boolean(tombSnapAfterA.expenses && tombSnapAfterA.expenses['EXP-DEL']),
+      tombFm: Boolean(tombSnapAfterA.fixedMasters && tombSnapAfterA.fixedMasters['FM-DEL']),
+      tombTodo: Boolean(tombSnapAfterA.todos && tombSnapAfterA.todos['todo_del']),
+      tombPartner: Boolean(tombSnapAfterA.settings && tombSnapAfterA.settings.partners && tombSnapAfterA.settings.partners['철거_삭제거래처']),
+      tombSetTask: Boolean(tombSnapAfterA.settings && tombSnapAfterA.settings.tasks && tombSnapAfterA.settings.tasks['삭제공종']),
+      normSite1Del: !mockDb.ws_sites.has('강남 테스트현장'),
+      normSite2Del: !mockDb.ws_sites.has('재무 테스트'),
+      normTask1Del: !mockDb.ws_tasks.has('t_gangnam_1'),
+      normTask2Del: !mockDb.ws_tasks.has('t_del_only'),
+      normTask3Del: !mockDb.ws_tasks.has('est_fin_test'),
+      normColDel: !mockDb.ws_finance_store.has('collection::COL-DEL'),
+      normExpDel: !mockDb.ws_finance_store.has('expense::EXP-DEL'),
+      normFmDel: !mockDb.ws_finance_store.has('fixed::FM-DEL'),
+      shareRevoked: Boolean((mockDb.ws_state_store.get('client_share::tok_gangnam_1') || {}).payload && mockDb.ws_state_store.get('client_share::tok_gangnam_1').payload.enabled === false)
+    };
+    const phase1Ok = Object.values(p1Checks).every(Boolean);
+
+    // [Phase 2] 구버전 메모리를 가진 사용자 B가 동기화 없이 다른 항목 수정·추가 저장 (부활 시도)
+    const userBHasStaleBeforeSave = Boolean(
+      userB.state.dashData.sites.some((s) => s.siteKey === '강남 테스트현장') &&
+      userB.state.dashData.sites.some((s) => s.siteKey === 'NEWSITE::재무 테스트') &&
+      userB.state.financeDbData.expense.some((r) => r.id === 'EXP-DEL') &&
+      userB.state.todoData.list.some((t) => t.id === 'todo_del') &&
+      userB.state.settingsData.partners.some((p) => p.fullName === '철거_삭제거래처')
+    );
+
+    userB.state.sheetCtx = {
+      mode: 'edit', taskId: 't_keep_other', siteName: '유지 현장', taskName: '전기(B수정)',
+      scope: 'site', status: '진행 중', startYmd: '2026-11-20', endYmd: '2026-11-20', origStartYmd: '2026-11-20',
+      isRange: false, hasTime: false, partner: '전기_유지거래처', partnerPhone: '',
+      manager1: '송지은', manager2: '', isShared: false, memo: 'B수정'
+    };
+    userB.saveTaskSheetModal();
+
+    const newExpB = {
+      id: 'EXP-NEW-B', month: '2026-11', siteName: '유지 현장', taskName: '전기',
+      partner: '전기_유지거래처', supplyAmount: 200000, vatAmount: 20000, totalAmount: 220000,
+      paidAmount: 0, balanceAmount: 220000, createdAtMs: Date.now()
+    };
+    userB.state.financeDbData.expense.unshift(newExpB);
+    userB.WSDataService.saveExpenseRow(newExpB, userB.state.financeDbData);
+
+    userB.setInput('tdTitle', 'B 신규할일');
+    userB.setInput('tdDue', '2026.11.21');
+    userB.setInput('tdManager', '송지은');
+    userB.setInput('tdSite', '유지 현장');
+    userB.setInput('tdTag', '일반');
+    userB.setInput('tdDetail', '동시 편집 확인');
+    userB.state._todoDraft = {};
+    userB.saveTodoModal();
+
+    const keepPartnerB = userB.state.settingsData.partners.find((p) => p.fullName === '전기_유지거래처');
+    if (keepPartnerB) keepPartnerB.phone = '010-9999-8888';
+    userB.saveSettingsModalAll();
+
+    await userB.flushWrites();
+
+    const dbDashAfterB = (mockDb.ws_state_store.get('dashboard_main') || {}).payload || {};
+    const dbFinAfterB = (mockDb.ws_state_store.get('finance_db') || {}).payload || {};
+    const dbTodoAfterB = (mockDb.ws_state_store.get('todo_main') || {}).payload || {};
+    const dbSetAfterB = (mockDb.ws_state_store.get('settings_main') || {}).payload || {};
+    const keepSiteAfterB = (dbDashAfterB.sites || []).find((s) => s.siteKey === '유지 현장');
+    const p2Checks = {
+      userBStale: userBHasStaleBeforeSave,
+      noResSite: !(dbDashAfterB.sites || []).some((s) => s.siteKey === '강남 테스트현장' || s.siteKey === 'NEWSITE::재무 테스트'),
+      noResInfo: !(dbDashAfterB.siteInfoMap && (dbDashAfterB.siteInfoMap['강남 테스트현장'] || dbDashAfterB.siteInfoMap['재무 테스트'])),
+      keepEdited: Boolean(keepSiteAfterB && (keepSiteAfterB.tasks || []).length === 1 && keepSiteAfterB.tasks[0].id === 't_keep_other' && keepSiteAfterB.tasks[0].taskName === '전기(B수정)'),
+      noNormSite: !mockDb.ws_sites.has('강남 테스트현장') && !mockDb.ws_sites.has('재무 테스트'),
+      noNormTask: !mockDb.ws_tasks.has('t_gangnam_1') && !mockDb.ws_tasks.has('t_del_only') && !mockDb.ws_tasks.has('est_fin_test'),
+      noShareRes: Boolean((mockDb.ws_state_store.get('client_share::tok_gangnam_1') || {}).payload && mockDb.ws_state_store.get('client_share::tok_gangnam_1').payload.enabled === false),
+      noColRes: !(dbFinAfterB.collection || []).some((r) => r.id === 'COL-DEL'),
+      noExpRes: !(dbFinAfterB.expense || []).some((r) => r.id === 'EXP-DEL'),
+      noFmRes: !(dbFinAfterB.fixedMaster || []).some((r) => r.id === 'FM-DEL'),
+      hasExpNewB: (dbFinAfterB.expense || []).some((r) => r.id === 'EXP-NEW-B'),
+      noTodoRes: !(dbTodoAfterB.list || []).some((t) => t.id === 'todo_del'),
+      hasTodoNewB: (dbTodoAfterB.list || []).some((t) => t.title === 'B 신규할일'),
+      noSetPartnerRes: !(dbSetAfterB.partners || []).some((p) => p.fullName === '철거_삭제거래처'),
+      noSetTaskRes: !(dbSetAfterB.tasks || []).some((t) => t.name === '삭제공종'),
+      hasPartnerEditB: (dbSetAfterB.partners || []).some((p) => p.fullName === '전기_유지거래처' && p.phone === '010-9999-8888')
+    };
+    const phase2Ok = Object.values(p2Checks).every(Boolean);
+
+    // [Phase 3] Realtime deleted_tombstones 수신 · GAS 병합 · syncLiveFromSupabase 차단 검증
+    userC.WSSupabaseV3.handleRealtimePayload({
+      new: { key: 'deleted_tombstones', payload: (mockDb.ws_state_store.get('deleted_tombstones') || {}).payload }
+    });
+    const rtChecksC = {
+      rtSite: !userC.state.dashData.sites.some((s) => s.siteKey === '강남 테스트현장' || s.siteKey === 'NEWSITE::재무 테스트'),
+      rtTask: !userC.state.dashData.sites.some((s) => (s.tasks || []).some((t) => t.id === 't_del_only')),
+      rtCol: !userC.state.financeDbData.collection.some((r) => r.id === 'COL-DEL'),
+      rtExp: !userC.state.financeDbData.expense.some((r) => r.id === 'EXP-DEL'),
+      rtFm: !userC.state.financeDbData.fixedMaster.some((r) => r.id === 'FM-DEL'),
+      rtTodo: !userC.state.todoData.list.some((t) => t.id === 'todo_del'),
+      rtSetPartner: !userC.state.settingsData.partners.some((p) => p.fullName === '철거_삭제거래처'),
+      rtSetTask: !userC.state.settingsData.tasks.some((t) => t.name === '삭제공종')
+    };
+    const realtimePurgedC = Object.values(rtChecksC).every(Boolean);
+
+    const staleGasDash = userA.applyDeletedGuardsToDashData(makeSeedDash(), { fromGas: true });
+    const staleGasFin = userA.applyDeletedGuardsToFinanceData(makeSeedFinance(), { fromGas: true });
+    const staleGasTodo = userA.applyDeletedGuardsToTodoData(makeSeedTodo(), { fromGas: true });
+    const syncedUserA = await userA.WSSupabaseV3.syncLiveFromSupabase({ syncFinance: true });
+    const p3Checks = {
+      realtimePurgedC,
+      gasDash: staleGasDash.sites.length === 1 && staleGasDash.sites[0].siteKey === '유지 현장' && staleGasDash.sites[0].tasks.length === 1 && staleGasDash.sites[0].tasks[0].id === 't_keep_other',
+      gasFinCol: !staleGasFin.collection.some((r) => r.id === 'COL-DEL'),
+      gasFinExp: !staleGasFin.expense.some((r) => r.id === 'EXP-DEL'),
+      gasTodo: !staleGasTodo.list.some((t) => t.id === 'todo_del'),
+      syncDash: Boolean(syncedUserA && syncedUserA.dashData && syncedUserA.dashData.sites.length === 1),
+      syncFin: Boolean(syncedUserA && syncedUserA.financeData && syncedUserA.financeData.expense.some((r) => r.id === 'EXP-NEW-B'))
+    };
+    const phase3Ok = Object.values(p3Checks).every(Boolean);
+
+    // [Phase 4] 동일 현장명/견적명 명시적 재등록 정상 허용 + 구버전 공정 재부활 차단 검증
+    userA.state.dashData = JSON.parse(JSON.stringify(syncedUserA.dashData));
+    userA.state.sheetCtx = {
+      mode: 'create', siteName: '__NEW__', newSiteName: '강남 테스트현장', taskName: '신규 철거',
+      scope: 'site', status: '예정', startYmd: '2026-11-25', endYmd: '2026-11-25',
+      isRange: false, hasTime: false, partner: '전기_유지거래처', partnerPhone: '',
+      manager1: '조항만', manager2: '', isShared: false, memo: '재등록 테스트'
+    };
+    userA.saveTaskSheetModal();
+
+    userA.setInput('esSite', '재무 테스트');
+    userA.setInput('esStatus', '1차상담 예정');
+    userA.setInput('esMgr', '조항만');
+    userA.setInput('esInq', '2026-11-25');
+    userA.setInput('esMemo', '재등록 견적');
+    userA.state._estCtx = { isEdit: false, quoteType: 'site', ed: { inquiryDate: '2026-11-25', manager: '조항만' } };
+    userA.saveEstimateModal();
+
+    await userA.flushWrites();
+
+    const dbTombFinal = (mockDb.ws_state_store.get('deleted_tombstones') || {}).payload || {};
+    const dbDashFinal = (mockDb.ws_state_store.get('dashboard_main') || {}).payload || {};
+    const recreatedSite = (dbDashFinal.sites || []).find((s) => s.siteKey === '강남 테스트현장');
+    const recreatedEst = (dbDashFinal.sites || []).find((s) => s.siteKey === 'NEWSITE::재무 테스트');
+
+    // 재등록 후에도 과거 삭제된 공정(t_gangnam_1, createdAtMs <= deletedAt)만 구버전 스냅샷으로 섞여 들어오면 차단되어야 함
+    const mixedStaleAfterRecreate = userA.applyDeletedGuardsToDashData({
+      sites: [{
+        siteKey: '강남 테스트현장',
+        siteName: '강남 테스트현장',
+        scope: 'site',
+        createdAtMs: recreatedSite ? recreatedSite.createdAtMs : Date.now(),
+        tasks: [
+          { id: 't_gangnam_1', taskId: 't_gangnam_1', taskName: '철거', startDateStr: '2026-11-18', createdAtMs: baseTs },
+          JSON.parse(JSON.stringify(recreatedSite.tasks[0]))
+        ]
+      }]
+    });
+    const syncedUserBAfterRecreate = await userB.WSSupabaseV3.syncLiveFromSupabase({ syncFinance: true });
+    const phase4Ok = Boolean(
+      recreatedSite && recreatedSite.tasks.length === 1 && recreatedSite.tasks[0].taskName === '신규 철거' &&
+      recreatedEst && recreatedEst.estimateData && recreatedEst.estimateData.memo === '재등록 견적' &&
+      dbTombFinal.sites['KEY::강남 테스트현장'].recreatedAt > dbTombFinal.sites['KEY::강남 테스트현장'].deletedAt &&
+      dbTombFinal.sites['KEY::NEWSITE::재무 테스트'].recreatedAt > dbTombFinal.sites['KEY::NEWSITE::재무 테스트'].deletedAt &&
+      mockDb.ws_sites.has('강남 테스트현장') && mockDb.ws_sites.has('재무 테스트') &&
+      mixedStaleAfterRecreate.sites.length === 1 &&
+      mixedStaleAfterRecreate.sites[0].tasks.length === 1 &&
+      mixedStaleAfterRecreate.sites[0].tasks[0].taskName === '신규 철거' &&
+      syncedUserBAfterRecreate.dashData.sites.some((s) => s.siteKey === '강남 테스트현장' && s.tasks.some((t) => t.taskName === '신규 철거')) &&
+      syncedUserBAfterRecreate.dashData.sites.some((s) => s.siteKey === 'NEWSITE::재무 테스트')
+    );
+
+    const failedKeys = (obj) => Object.keys(obj).filter((k) => !obj[k]);
+    assertTest(
+      '다중 사용자 공유 Tombstone: 2명 동시 편집 삭제 부활 차단(전 도메인)·Realtime/GAS 차단 및 동일 현장명 재등록 허용 검증',
+      phase1Ok && phase2Ok && phase3Ok && phase4Ok,
+      `p1=[${failedKeys(p1Checks).join(',')}], p2=[${failedKeys(p2Checks).join(',')}], p3=[${failedKeys(p3Checks).join(',')}], rtC=[${failedKeys(rtChecksC).join(',')}], phase4=${phase4Ok}`
+    );
+  })());
+
 Promise.all(pendingAsyncTests).then(() => {
 if (isVerbose) {
   rawConsoleLog('\n========================================================');

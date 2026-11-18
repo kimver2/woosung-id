@@ -7510,13 +7510,23 @@ end $$;`;
         });
 
         if (purgedCount > 0 && state.todoData) {
+          const purgedIds = rawList
+            .filter((t) => t && t.status === "완료" && !kept.includes(t) && t.id)
+            .map((t) => String(t.id).trim())
+            .filter(Boolean);
+          if (purgedIds.length > 0 && typeof recordDeletedTodoGuard === "function") {
+            purgedIds.forEach((pid) => recordDeletedTodoGuard({ id: pid, skipRemoteSync: true }));
+          }
           state.todoData.list = kept;
           if (window.WSDataService && typeof window.WSDataService.saveTodoCache === "function") {
             window.WSDataService.saveTodoCache(state.todoData);
           }
           if (window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive && window.WSSupabaseV3.isSupabaseActive() && !state._todo90dPurgeRunning) {
             state._todo90dPurgeRunning = true;
-            Promise.resolve(window.WSDataService.deleteTodo && window.WSSupabaseV3.persistSnapshot ? window.WSSupabaseV3.persistSnapshot("todo_main", state.todoData) : null)
+            const persistFn = window.WSSupabaseV3.persistSnapshotQueued || window.WSSupabaseV3.persistSnapshot;
+            Promise.resolve()
+              .then(() => (typeof window.WSSupabaseV3.syncTombstones === "function" && purgedIds.length > 0 ? window.WSSupabaseV3.syncTombstones() : null))
+              .then(() => (persistFn ? persistFn("todo_main", state.todoData) : null))
               .catch(() => {})
               .finally(() => { state._todo90dPurgeRunning = false; });
           }
@@ -8189,12 +8199,16 @@ end $$;`;
           state.financeLoaded = true;
           state.financeLastFetchedAt = Date.now();
           if (res && res.success) {
-            state.financeDbData = {
+            const rawFin = {
               collection: Array.isArray(res.collection) ? res.collection : [],
               expense: Array.isArray(res.expense) ? res.expense : [],
               fixedMaster: Array.isArray(res.fixedMaster) ? res.fixedMaster : [],
               updatedAt: res.updatedAt || ""
             };
+            const isGasSrc = res.source !== "supabase";
+            state.financeDbData = typeof applyDeletedGuardsToFinanceData === "function"
+              ? applyDeletedGuardsToFinanceData(rawFin, { fromGas: isGasSrc })
+              : rawFin;
             if (ds.saveFinanceCache) ds.saveFinanceCache(state.financeDbData);
           } else {
             console.warn("getFinanceDbData warning:", res);
@@ -20723,26 +20737,33 @@ end $$;`;
           }
           const targetSheetName = ctx.scope === "single" ? "단건" : ctx.scope === "as" ? "AS" : "현장데이터";
           const isNewStatusDone = String(ctx.status || "").indexOf("완료") !== -1 || String(ctx.status || "").indexOf("취소") !== -1;
+          const recSiteTs = (typeof clearDeletedSiteGuardByName === "function" ? clearDeletedSiteGuardByName(finalSiteName, ctx.scope) : 0) || 0;
+          const nowMs = Math.max(Date.now(), recSiteTs);
           if (!site) {
             const prefix = ctx.scope === "single" ? "SINGLE::" : ctx.scope === "as" ? "AS::" : "";
             site = {
               siteKey: prefix + finalSiteName, siteName: finalSiteName, colorCode: "1", colorHex: "#2563eb",
+              createdAtMs: nowMs,
               tasks: [], scope: ctx.scope, isArchived: false, isAllCompleted: false, totalTasksCount: 0, completedTasksCount: 0, delayedTasksCount: 0, progressRate: 0
             };
             state.dashData.sites.unshift(site);
             if (state.checkedSiteKeys) state.checkedSiteKeys.add(site.siteKey);
-          } else if (!isNewStatusDone && (site.isArchived || site.isAllCompleted || isSiteCompleted(site))) {
-            site.isArchived = false;
-            site.isAllCompleted = false;
-            (site.tasks || []).forEach((t) => {
-              if (t) {
-                t.isArchived = false;
-                if (t.sheetName === "완료현장") t.sheetName = targetSheetName;
-              }
-            });
+          } else {
+            if (!site.createdAtMs || (recSiteTs > 0 && Number(site.createdAtMs) <= recSiteTs) || (typeof isSiteTombstoned === "function" && isSiteTombstoned(site, ctx.scope))) {
+              site.createdAtMs = Math.max(Number(site.createdAtMs) || 0, nowMs);
+            }
+            if (!isNewStatusDone && (site.isArchived || site.isAllCompleted || isSiteCompleted(site))) {
+              site.isArchived = false;
+              site.isAllCompleted = false;
+              (site.tasks || []).forEach((t) => {
+                if (t) {
+                  t.isArchived = false;
+                  if (t.sheetName === "완료현장") t.sheetName = targetSheetName;
+                }
+              });
+            }
           }
-          const newId = "task_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
-          const nowMs = Date.now();
+          const newId = "task_" + nowMs + "_" + Math.random().toString(36).slice(2, 6);
           const newTask = {
             id: newId, taskId: newId, row: "", taskName: ctx.taskName.trim(),
             dateDisplay: dateDisp, dateMs: new Date(ctx.startYmd + "T00:00:00").getTime(),
@@ -20753,7 +20774,7 @@ end $$;`;
             partner: finalPartner, manager: managerCombined, manager1: ctx.manager1, manager2: ctx.manager2,
             status: ctx.status, isShared: ctx.isShared, memo: finalMemo,
             asMeta: (isAsMode && ctx.asMeta) ? JSON.parse(JSON.stringify(ctx.asMeta)) : undefined,
-            updatedAtMs: nowMs, memoUpdatedAtMs: String(finalMemo).trim() ? nowMs : 0,
+            createdAtMs: nowMs, updatedAtMs: nowMs, memoUpdatedAtMs: String(finalMemo).trim() ? nowMs : 0,
             isToday: ctx.startYmd === todayYmd, isDelayed: ctx.startYmd < todayYmd && ctx.status !== "완료",
             hasCal: true, scope: ctx.scope, sheetName: targetSheetName, isArchived: false
           };
@@ -20817,109 +20838,598 @@ end $$;`;
         openModal("deleteConfirmModal");
       };
 
+      const __WS_TOMBSTONE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30일 보관 후 자동 만료
+      const __WS_DELETE_GUARD_TTL_MS = __WS_TOMBSTONE_TTL_MS;
+      const __WS_DELETE_GUARD_STORAGE_KEY = "ws_deleted_guards_v1";
+      const __WS_TOMBSTONE_BUCKETS = ["sites", "tasks", "collections", "expenses", "fixedMasters", "todos"];
+      const __WS_SETTINGS_TOMBSTONE_KINDS = ["partners", "tasks", "members"];
+
+      function _createEmptyTombstoneStore() {
+        return {
+          version: 2,
+          ttlMs: __WS_TOMBSTONE_TTL_MS,
+          updatedAt: "",
+          sites: {},
+          tasks: {},
+          collections: {},
+          expenses: {},
+          fixedMasters: {},
+          todos: {},
+          settings: { partners: {}, tasks: {}, members: {} }
+        };
+      }
+
+      const __wsTombstones = _createEmptyTombstoneStore();
+      // 레거시 호환용 Map 뷰 (읽기 전용 보조)
       const __wsDeletedTaskGuards = new Map();
       const __wsDeletedSiteGuards = new Map();
-      const __WS_DELETE_GUARD_TTL_MS = 45000;
-      const __WS_DELETE_GUARD_STORAGE_KEY = "ws_deleted_guards_v1";
+
+      function _normalizeScopeForGuard(scope) {
+        const s = String(scope || "").trim();
+        if (!s || s === "완료현장") return "site";
+        const low = s.toLowerCase();
+        if (low === "newsite" || s === "신규견적") return "newSite";
+        if (low === "single" || s === "단건") return "single";
+        if (low === "as") return "as";
+        return s;
+      }
+      function _normDelSiteName(s) {
+        return String(s || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
+      }
+      function _makeTaskSemanticKey(siteName, taskName, ymd, scopeOrSheet) {
+        return `${_normalizeScopeForGuard(scopeOrSheet).toLowerCase()}::${_normDelSiteName(siteName)}::${String(taskName || "").trim()}::${String(ymd || "").trim()}`;
+      }
+      function _isPositionalRowTaskId(tid) {
+        return /^(as|single|task|comp|estimate)_row_/i.test(String(tid || "").trim());
+      }
+      function _getTombstoneActor() {
+        try {
+          if (typeof getActualAuthUser === "function") {
+            const u = getActualAuthUser();
+            if (u) return String(u).trim();
+          }
+        } catch (_) {}
+        return String((state && (state.authUser || state.currentUser || state.user)) || "dashboard").trim();
+      }
+      function _parseItemCreatedAtMs(obj) {
+        if (!obj || typeof obj !== "object") return 0;
+        const raw = obj.createdAtMs !== undefined ? obj.createdAtMs : obj.createdAt;
+        if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+        if (typeof raw === "string" && raw.trim()) {
+          if (/^\d+$/.test(raw.trim())) return Number(raw.trim()) || 0;
+          const p = Date.parse(raw);
+          if (!Number.isNaN(p)) return p;
+        }
+        return 0;
+      }
+      function _isTombstoneBlocking(entry, itemCreatedAtMs, opts) {
+        if (!entry || typeof entry !== "object") return false;
+        const delAt = Number(entry.deletedAt) || 0;
+        if (delAt <= 0) return false;
+        const recAt = Number(entry.recreatedAt) || 0;
+        const itemCreated = Number(itemCreatedAtMs) || 0;
+        if (itemCreated > delAt) return false;
+        if (recAt > delAt) {
+          if (itemCreated > 0 && itemCreated <= delAt) return true;
+          return false;
+        }
+        if (opts && opts.fromGas && recAt > delAt) return false;
+        return true;
+      }
+      function _mergeTombstoneEntry(a, b) {
+        if (!a) return b ? Object.assign({}, b) : null;
+        if (!b) return Object.assign({}, a);
+        const delA = Number(a.deletedAt) || 0;
+        const delB = Number(b.deletedAt) || 0;
+        const recA = Number(a.recreatedAt) || 0;
+        const recB = Number(b.recreatedAt) || 0;
+        const merged = Object.assign({}, delB >= delA ? a : b, delB >= delA ? b : a, {
+          deletedAt: Math.max(delA, delB)
+        });
+        const maxRec = Math.max(recA, recB);
+        if (maxRec > 0) merged.recreatedAt = maxRec;
+        return merged;
+      }
+      function _pruneTombstoneMap(mapObj, nowMs) {
+        if (!mapObj || typeof mapObj !== "object") return {};
+        const out = {};
+        Object.keys(mapObj).forEach((k) => {
+          const v = mapObj[k];
+          if (!v || typeof v !== "object") return;
+          const latestTs = Math.max(Number(v.deletedAt) || 0, Number(v.recreatedAt) || 0);
+          if (latestTs > 0 && (nowMs - latestTs) <= __WS_TOMBSTONE_TTL_MS) {
+            out[k] = v;
+          }
+        });
+        return out;
+      }
+      function _pruneAllTombstones(store, nowMs) {
+        const now = nowMs || Date.now();
+        __WS_TOMBSTONE_BUCKETS.forEach((b) => {
+          store[b] = _pruneTombstoneMap(store[b], now);
+        });
+        if (!store.settings || typeof store.settings !== "object") store.settings = { partners: {}, tasks: {}, members: {} };
+        __WS_SETTINGS_TOMBSTONE_KINDS.forEach((k) => {
+          store.settings[k] = _pruneTombstoneMap(store.settings[k], now);
+        });
+        return store;
+      }
+      function _refreshLegacyGuardMaps() {
+        __wsDeletedTaskGuards.clear();
+        __wsDeletedSiteGuards.clear();
+        const now = Date.now();
+        Object.keys(__wsTombstones.tasks).forEach((k) => {
+          if (_isTombstoneBlocking(__wsTombstones.tasks[k], 0)) {
+            __wsDeletedTaskGuards.set(k, now + __WS_TOMBSTONE_TTL_MS);
+          }
+        });
+        Object.keys(__wsTombstones.sites).forEach((k) => {
+          if (_isTombstoneBlocking(__wsTombstones.sites[k], 0)) {
+            __wsDeletedSiteGuards.set(k, now + __WS_TOMBSTONE_TTL_MS);
+          }
+        });
+      }
+      function _mergeTombstonePayloadIntoStore(rawPayload) {
+        if (!rawPayload || typeof rawPayload !== "object") return __wsTombstones;
+        const now = Date.now();
+        // 레거시 v1 배열 포맷([k, exp]) 마이그레이션 지원
+        if (Array.isArray(rawPayload.tasks)) {
+          rawPayload.tasks.forEach((item) => {
+            if (Array.isArray(item) && item[0] && Number(item[1]) > now) {
+              const delAt = Math.max(1, Number(item[1]) - 45000);
+              __wsTombstones.tasks[item[0]] = _mergeTombstoneEntry(__wsTombstones.tasks[item[0]], { deletedAt: delAt });
+            }
+          });
+        }
+        if (Array.isArray(rawPayload.sites)) {
+          rawPayload.sites.forEach((item) => {
+            if (Array.isArray(item) && item[0] && Number(item[1]) > now) {
+              const delAt = Math.max(1, Number(item[1]) - 45000);
+              __wsTombstones.sites[item[0]] = _mergeTombstoneEntry(__wsTombstones.sites[item[0]], { deletedAt: delAt });
+            }
+          });
+        }
+        // v2 객체 포맷 병합
+        __WS_TOMBSTONE_BUCKETS.forEach((b) => {
+          const src = rawPayload[b];
+          if (src && !Array.isArray(src) && typeof src === "object") {
+            Object.keys(src).forEach((k) => {
+              if (!src[k] || typeof src[k] !== "object") return;
+              __wsTombstones[b][k] = _mergeTombstoneEntry(__wsTombstones[b][k], src[k]);
+            });
+          }
+        });
+        if (rawPayload.settings && typeof rawPayload.settings === "object") {
+          __WS_SETTINGS_TOMBSTONE_KINDS.forEach((sk) => {
+            const src = rawPayload.settings[sk];
+            if (src && typeof src === "object") {
+              Object.keys(src).forEach((k) => {
+                if (!src[k] || typeof src[k] !== "object") return;
+                __wsTombstones.settings[sk][k] = _mergeTombstoneEntry(__wsTombstones.settings[sk][k], src[k]);
+              });
+            }
+          });
+        }
+        _pruneAllTombstones(__wsTombstones, now);
+        _refreshLegacyGuardMaps();
+        return __wsTombstones;
+      }
+      function exportTombstonesSnapshot() {
+        _pruneAllTombstones(__wsTombstones, Date.now());
+        return JSON.parse(JSON.stringify({
+          version: 2,
+          ttlMs: __WS_TOMBSTONE_TTL_MS,
+          updatedAt: __wsTombstones.updatedAt || new Date().toISOString(),
+          sites: __wsTombstones.sites,
+          tasks: __wsTombstones.tasks,
+          collections: __wsTombstones.collections,
+          expenses: __wsTombstones.expenses,
+          fixedMasters: __wsTombstones.fixedMasters,
+          todos: __wsTombstones.todos,
+          settings: __wsTombstones.settings
+        }));
+      }
       function _loadPersistedDeleteGuards() {
         try {
           const raw = localStorage.getItem(__WS_DELETE_GUARD_STORAGE_KEY);
           if (!raw) return;
           const parsed = JSON.parse(raw);
-          const now = Date.now();
-          if (parsed && Array.isArray(parsed.tasks)) {
-            parsed.tasks.forEach(([k, exp]) => { if (exp > now) __wsDeletedTaskGuards.set(k, exp); });
-          }
-          if (parsed && Array.isArray(parsed.sites)) {
-            parsed.sites.forEach(([k, exp]) => { if (exp > now) __wsDeletedSiteGuards.set(k, exp); });
-          }
+          _mergeTombstonePayloadIntoStore(parsed);
         } catch (e) {}
       }
       function _savePersistedDeleteGuards() {
         try {
-          const now = Date.now();
-          const tasks = [...__wsDeletedTaskGuards.entries()].filter(([, exp]) => exp > now);
-          const sites = [...__wsDeletedSiteGuards.entries()].filter(([, exp]) => exp > now);
-          localStorage.setItem(__WS_DELETE_GUARD_STORAGE_KEY, JSON.stringify({ tasks, sites }));
+          __wsTombstones.updatedAt = new Date().toISOString();
+          const snap = exportTombstonesSnapshot();
+          localStorage.setItem(__WS_DELETE_GUARD_STORAGE_KEY, JSON.stringify(snap));
+          _refreshLegacyGuardMaps();
         } catch (e) {}
       }
-      _loadPersistedDeleteGuards();
-      function _normDelSiteName(s) {
-        return String(s || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
-      }
-      function _makeTaskSemanticKey(siteName, taskName, ymd, scopeOrSheet) {
-        return `${String(scopeOrSheet || "").toLowerCase()}::${_normDelSiteName(siteName)}::${String(taskName || "").trim()}::${String(ymd || "").trim()}`;
-      }
-      function recordDeletedTaskGuard(site, task) {
-        const exp = Date.now() + __WS_DELETE_GUARD_TTL_MS;
-        const tid = String((task && (task.taskId || task.id)) || "").trim();
-        if (tid && !/^(as|single|task|comp|estimate)_row_/i.test(tid)) {
-          __wsDeletedTaskGuards.set("ID::" + tid, exp);
-        }
-        const ymd = parseYmdFromTask(task) || task.startDateStr || "";
-        const effScope = (task && task.scope) || (site && site.scope) || "site";
-        const semKey = _makeTaskSemanticKey(site && site.siteName, task && task.taskName, ymd, effScope);
-        __wsDeletedTaskGuards.set("SEM::" + semKey, exp);
-        _savePersistedDeleteGuards();
-      }
-      function recordDeletedSiteGuard(site) {
-        if (!site) return;
-        const exp = Date.now() + __WS_DELETE_GUARD_TTL_MS;
-        if (site.siteKey) __wsDeletedSiteGuards.set("KEY::" + site.siteKey, exp);
-        const effScope = site.scope || "site";
-        __wsDeletedSiteGuards.set("NAME::" + effScope + "::" + _normDelSiteName(site.siteName), exp);
-        _savePersistedDeleteGuards();
-      }
-      function clearDeletedSiteGuardByName(siteName) {
-        const clean = _normDelSiteName(siteName);
-        if (!clean) return;
-        for (const k of [...__wsDeletedSiteGuards.keys()]) {
-          if (k.endsWith("::" + clean) || k === "KEY::" + clean) {
-            __wsDeletedSiteGuards.delete(k);
-          }
-        }
-        for (const k of [...__wsDeletedTaskGuards.keys()]) {
-          if (k.includes("::" + clean + "::")) {
-            __wsDeletedTaskGuards.delete(k);
-          }
-        }
-        _savePersistedDeleteGuards();
-      }
-      function applyDeletedGuardsToDashData(dashData) {
+      function mergeRemoteTombstones(remotePayload) {
         _loadPersistedDeleteGuards();
-        if (!dashData || !Array.isArray(dashData.sites)) return dashData;
-        const now = Date.now();
-        for (const [k, exp] of __wsDeletedTaskGuards.entries()) {
-          if (exp <= now) __wsDeletedTaskGuards.delete(k);
+        _mergeTombstonePayloadIntoStore(remotePayload);
+        _savePersistedDeleteGuards();
+        return exportTombstonesSnapshot();
+      }
+      function _scheduleRemoteTombstoneSync(skipSync) {
+        if (skipSync) return;
+        try {
+          if (window.WSSupabaseV3 && typeof window.WSSupabaseV3.isSupabaseActive === "function" && window.WSSupabaseV3.isSupabaseActive() && typeof window.WSSupabaseV3.syncTombstones === "function") {
+            Promise.resolve(window.WSSupabaseV3.syncTombstones()).catch(() => {});
+          }
+        } catch (_) {}
+      }
+      _loadPersistedDeleteGuards();
+
+      function _buildSiteGuardKeys(siteOrName, scopeHint) {
+        const keys = [];
+        const isObj = siteOrName && typeof siteOrName === "object";
+        const rawName = isObj ? siteOrName.siteName : siteOrName;
+        const clean = _normDelSiteName(rawName);
+        const effScope = _normalizeScopeForGuard((isObj && siteOrName.scope) || scopeHint || "site");
+        const sKey = isObj && siteOrName.siteKey ? String(siteOrName.siteKey).trim() : "";
+        if (sKey) keys.push("KEY::" + sKey);
+        if (clean) {
+          keys.push("NAME::" + effScope + "::" + clean);
+          if (effScope === "site") {
+            keys.push("KEY::" + clean);
+            keys.push("KEY::site::" + clean);
+          } else if (effScope === "newSite") {
+            keys.push("KEY::NEWSITE::" + clean);
+          } else if (effScope === "single") {
+            keys.push("KEY::SINGLE::" + clean);
+          } else if (effScope === "as") {
+            keys.push("KEY::AS::" + clean);
+          }
         }
-        for (const [k, exp] of __wsDeletedSiteGuards.entries()) {
-          if (exp <= now) __wsDeletedSiteGuards.delete(k);
+        return { keys: Array.from(new Set(keys)), cleanName: clean, effScope, siteKey: sKey };
+      }
+      function isSiteTombstoned(siteOrName, scopeHint, opts) {
+        _loadPersistedDeleteGuards();
+        const { keys } = _buildSiteGuardKeys(siteOrName, scopeHint);
+        const itemCreated = (siteOrName && typeof siteOrName === "object") ? _parseItemCreatedAtMs(siteOrName) : 0;
+        let maxDelEntry = null;
+        keys.forEach((k) => {
+          const e = __wsTombstones.sites[k];
+          if (!e) return;
+          if (!maxDelEntry || (Number(e.deletedAt) || 0) > (Number(maxDelEntry.deletedAt) || 0)) {
+            maxDelEntry = e;
+          }
+        });
+        if (!maxDelEntry) return false;
+        return _isTombstoneBlocking(maxDelEntry, itemCreated, opts);
+      }
+      function _nextMonotonicGuardTs(prevEntry, field) {
+        const now = Date.now();
+        if (!prevEntry || typeof prevEntry !== "object") return now;
+        const otherField = field === "recreatedAt" ? "deletedAt" : "recreatedAt";
+        const otherVal = Number(prevEntry[otherField]) || 0;
+        const curVal = Number(prevEntry[field]) || 0;
+        return Math.max(now, curVal, otherVal > 0 ? otherVal + 1 : 0);
+      }
+      function recordDeletedTaskGuard(site, task, opts) {
+        if (!task && !site) return;
+        const tid = String((task && (task.taskId || task.id)) || "").trim();
+        const ymd = (task && typeof parseYmdFromTask === "function" ? parseYmdFromTask(task) : "") || (task && (task.startDateStr || task.ymd)) || "";
+        const sName = (site && site.siteName) || (task && task.siteName) || "";
+        const effScope = _normalizeScopeForGuard((task && task.scope) || (site && site.scope) || "site");
+        const actor = _getTombstoneActor();
+        if (tid && !_isPositionalRowTaskId(tid)) {
+          const prev = __wsTombstones.tasks["ID::" + tid];
+          __wsTombstones.tasks["ID::" + tid] = {
+            deletedAt: _nextMonotonicGuardTs(prev, "deletedAt"), id: tid, siteName: _normDelSiteName(sName), taskName: String((task && task.taskName) || ""), scope: effScope, actor
+          };
+        }
+        if (sName || (task && task.taskName)) {
+          const semKey = _makeTaskSemanticKey(sName, task && task.taskName, ymd, effScope);
+          const prevSem = __wsTombstones.tasks["SEM::" + semKey];
+          __wsTombstones.tasks["SEM::" + semKey] = {
+            deletedAt: _nextMonotonicGuardTs(prevSem, "deletedAt"), siteName: _normDelSiteName(sName), taskName: String((task && task.taskName) || ""), ymd: String(ymd || ""), scope: effScope, actor
+          };
         }
         _savePersistedDeleteGuards();
-        if (__wsDeletedTaskGuards.size === 0 && __wsDeletedSiteGuards.size === 0) return dashData;
+        _scheduleRemoteTombstoneSync(opts && opts.skipRemoteSync);
+      }
+      function recordDeletedSiteGuard(site, opts) {
+        if (!site) return;
+        const actor = _getTombstoneActor();
+        const { keys, cleanName, effScope, siteKey } = _buildSiteGuardKeys(site, opts && opts.scope);
+        keys.forEach((k) => {
+          const prev = __wsTombstones.sites[k];
+          __wsTombstones.sites[k] = {
+            deletedAt: _nextMonotonicGuardTs(prev, "deletedAt"), siteKey: siteKey || cleanName, siteName: cleanName, scope: effScope, actor
+          };
+        });
+        _savePersistedDeleteGuards();
+        _scheduleRemoteTombstoneSync(opts && opts.skipRemoteSync);
+      }
+      function clearDeletedSiteGuardByName(siteName, scopeHint, opts) {
+        const clean = _normDelSiteName(siteName);
+        if (!clean) return 0;
+        const targetScope = scopeHint ? _normalizeScopeForGuard(scopeHint) : "";
+        const scopePrefixes = targetScope
+          ? (targetScope === "newSite" ? ["KEY::NEWSITE::" + clean] : targetScope === "single" ? ["KEY::SINGLE::" + clean] : targetScope === "as" ? ["KEY::AS::" + clean] : ["KEY::" + clean, "KEY::site::" + clean])
+          : ["KEY::" + clean, "KEY::site::" + clean, "KEY::NEWSITE::" + clean, "KEY::SINGLE::" + clean, "KEY::AS::" + clean];
+        let maxRecAt = 0;
+        Object.keys(__wsTombstones.sites).forEach((k) => {
+          const entry = __wsTombstones.sites[k];
+          const matchName = targetScope
+            ? (k === ("NAME::" + targetScope + "::" + clean) || scopePrefixes.includes(k))
+            : (k.endsWith("::" + clean) || k === "KEY::" + clean);
+          if (matchName && entry) {
+            entry.recreatedAt = _nextMonotonicGuardTs(entry, "recreatedAt");
+            if (entry.recreatedAt > maxRecAt) maxRecAt = entry.recreatedAt;
+          }
+        });
+        if (opts && opts.clearSemTasks) {
+          Object.keys(__wsTombstones.tasks).forEach((k) => {
+            if (k.startsWith("SEM::") && k.includes("::" + clean + "::")) {
+              const entry = __wsTombstones.tasks[k];
+              if (!targetScope || (entry && entry.scope === targetScope)) {
+                entry.recreatedAt = _nextMonotonicGuardTs(entry, "recreatedAt");
+                if (entry.recreatedAt > maxRecAt) maxRecAt = entry.recreatedAt;
+              }
+            }
+          });
+        }
+        _savePersistedDeleteGuards();
+        _scheduleRemoteTombstoneSync(opts && opts.skipRemoteSync);
+        return maxRecAt;
+      }
+      function recordDeletedFinanceGuard(kind, idOrList, meta, opts) {
+        const bucket = kind === "collection" ? "collections" : (kind === "fixedMaster" ? "fixedMasters" : "expenses");
+        const ids = Array.isArray(idOrList) ? idOrList : [idOrList];
+        const actor = _getTombstoneActor();
+        let added = false;
+        ids.forEach((rawId) => {
+          const cid = String(rawId || "").trim();
+          if (!cid) return;
+          const prev = __wsTombstones[bucket][cid];
+          __wsTombstones[bucket][cid] = Object.assign({}, meta || {}, { deletedAt: _nextMonotonicGuardTs(prev, "deletedAt"), actor });
+          added = true;
+        });
+        if (added) {
+          _savePersistedDeleteGuards();
+          _scheduleRemoteTombstoneSync(opts && opts.skipRemoteSync);
+        }
+      }
+      function clearDeletedFinanceGuard(kind, id, opts) {
+        const bucket = kind === "collection" ? "collections" : (kind === "fixedMaster" ? "fixedMasters" : "expenses");
+        const cid = String(id || "").trim();
+        if (!cid || !__wsTombstones[bucket][cid]) return 0;
+        const nextTs = _nextMonotonicGuardTs(__wsTombstones[bucket][cid], "recreatedAt");
+        __wsTombstones[bucket][cid].recreatedAt = nextTs;
+        _savePersistedDeleteGuards();
+        _scheduleRemoteTombstoneSync(opts && opts.skipRemoteSync);
+        return nextTs;
+      }
+      function recordDeletedTodoGuard(idOrObj, opts) {
+        const items = Array.isArray(idOrObj) ? idOrObj : [idOrObj];
+        const actor = _getTombstoneActor();
+        let added = false;
+        items.forEach((it) => {
+          const tid = String(typeof it === "object" && it ? (it.id || "") : (it || "")).trim();
+          if (!tid) return;
+          const prev = __wsTombstones.todos[tid];
+          __wsTombstones.todos[tid] = {
+            deletedAt: _nextMonotonicGuardTs(prev, "deletedAt"),
+            title: (typeof it === "object" && it && it.title) ? String(it.title) : "",
+            actor
+          };
+          added = true;
+        });
+        if (added) {
+          _savePersistedDeleteGuards();
+          _scheduleRemoteTombstoneSync((opts && opts.skipRemoteSync) || (items[0] && typeof items[0] === "object" && items[0].skipRemoteSync));
+        }
+      }
+      function clearDeletedTodoGuard(id, opts) {
+        const tid = String(id || "").trim();
+        if (!tid || !__wsTombstones.todos[tid]) return 0;
+        const nextTs = _nextMonotonicGuardTs(__wsTombstones.todos[tid], "recreatedAt");
+        __wsTombstones.todos[tid].recreatedAt = nextTs;
+        _savePersistedDeleteGuards();
+        _scheduleRemoteTombstoneSync(opts && opts.skipRemoteSync);
+        return nextTs;
+      }
+      function _getSettingItemGuardKey(kind, item) {
+        if (!item) return "";
+        if (typeof item === "string") return item.trim();
+        if (kind === "partners") {
+          return String(item.fullName || item.dropdownVal || (item.biz ? `${item.biz}_${item.name}` : item.name) || "").trim();
+        }
+        if (kind === "tasks") return String(item.name || item.taskName || "").trim();
+        return String(item.name || "").trim();
+      }
+      function recordDeletedSettingsGuard(kind, keyOrList, opts) {
+        if (!__WS_SETTINGS_TOMBSTONE_KINDS.includes(kind)) return;
+        const list = Array.isArray(keyOrList) ? keyOrList : [keyOrList];
+        const actor = _getTombstoneActor();
+        let added = false;
+        list.forEach((raw) => {
+          const k = _getSettingItemGuardKey(kind, raw);
+          if (!k) return;
+          const prev = __wsTombstones.settings[kind][k];
+          __wsTombstones.settings[kind][k] = { deletedAt: _nextMonotonicGuardTs(prev, "deletedAt"), name: k, actor };
+          added = true;
+        });
+        if (added) {
+          _savePersistedDeleteGuards();
+          _scheduleRemoteTombstoneSync(opts && opts.skipRemoteSync);
+        }
+      }
+      function clearDeletedSettingsGuard(kind, keyOrList, opts) {
+        if (!__WS_SETTINGS_TOMBSTONE_KINDS.includes(kind)) return 0;
+        const list = Array.isArray(keyOrList) ? keyOrList : [keyOrList];
+        let changed = false;
+        let maxRecAt = 0;
+        list.forEach((raw) => {
+          const k = _getSettingItemGuardKey(kind, raw);
+          if (k && __wsTombstones.settings[kind][k]) {
+            const nextTs = _nextMonotonicGuardTs(__wsTombstones.settings[kind][k], "recreatedAt");
+            __wsTombstones.settings[kind][k].recreatedAt = nextTs;
+            if (raw && typeof raw === "object") {
+              raw.createdAtMs = Math.max(Number(raw.createdAtMs) || 0, nextTs);
+            }
+            if (nextTs > maxRecAt) maxRecAt = nextTs;
+            changed = true;
+          }
+        });
+        if (changed) {
+          _savePersistedDeleteGuards();
+          _scheduleRemoteTombstoneSync(opts && opts.skipRemoteSync);
+        }
+        return maxRecAt;
+      }
 
+      function applyDeletedGuardsToDashData(dashData, opts) {
+        _loadPersistedDeleteGuards();
+        const now = Date.now();
+        _pruneAllTombstones(__wsTombstones, now);
+        _refreshLegacyGuardMaps();
+        if (!dashData || !Array.isArray(dashData.sites)) return dashData;
+        const hasSiteGuards = Object.keys(__wsTombstones.sites).length > 0;
+        const hasTaskGuards = Object.keys(__wsTombstones.tasks).length > 0;
+        if (!hasSiteGuards && !hasTaskGuards) return dashData;
+
+        let changed = false;
         dashData.sites = dashData.sites.filter((s) => {
-          if (!s) return false;
-          const effScope = s.scope || "site";
-          if (__wsDeletedSiteGuards.has("KEY::" + s.siteKey) || __wsDeletedSiteGuards.has("NAME::" + effScope + "::" + _normDelSiteName(s.siteName))) {
+          if (!s) { changed = true; return false; }
+          const effScope = _normalizeScopeForGuard(s.scope);
+          if (isSiteTombstoned(s, effScope, opts)) {
+            changed = true;
             return false;
           }
           if (Array.isArray(s.tasks)) {
+            const hadTasks = s.tasks.length > 0;
             s.tasks = s.tasks.filter((t) => {
-              if (!t) return false;
+              if (!t) { changed = true; return false; }
               const tid = String(t.taskId || t.id || "").trim();
-              if (tid && __wsDeletedTaskGuards.has("ID::" + tid)) return false;
-              const ymd = parseYmdFromTask(t) || t.startDateStr || "";
-              const tScope = t.scope || effScope;
-              const semKey = _makeTaskSemanticKey(s.siteName, t.taskName, ymd, tScope);
-              if (__wsDeletedTaskGuards.has("SEM::" + semKey)) return false;
+              const tCreated = _parseItemCreatedAtMs(t);
+              if (tid && __wsTombstones.tasks["ID::" + tid] && _isTombstoneBlocking(__wsTombstones.tasks["ID::" + tid], tCreated, opts)) {
+                changed = true;
+                return false;
+              }
+              if (!tid || _isPositionalRowTaskId(tid)) {
+                const ymd = (typeof parseYmdFromTask === "function" ? parseYmdFromTask(t) : "") || t.startDateStr || "";
+                const tScope = _normalizeScopeForGuard(t.scope || effScope);
+                const semKey = _makeTaskSemanticKey(s.siteName, t.taskName, ymd, tScope);
+                const semEntry = __wsTombstones.tasks["SEM::" + semKey];
+                if (semEntry && _isTombstoneBlocking(semEntry, tCreated, opts)) {
+                  changed = true;
+                  return false;
+                }
+              }
               return true;
             });
-            if (s.tasks.length === 0 && effScope !== "newSite") return false;
+            if (s.tasks.length === 0 && (effScope !== "newSite" || hadTasks)) {
+              changed = true;
+              return false;
+            }
           }
           return true;
         });
+
+        // 삭제된 현장의 고아 siteInfoMap / siteInfos 정리 (client_share 재업로드 및 ws_sites 정보등록 유령 행 차단)
+        const survivingSiteNames = new Set(dashData.sites.map((s) => _normDelSiteName(s && s.siteName)).filter(Boolean));
+        const hasAnySiteTombstoneForName = (cleanName) => {
+          if (!cleanName) return false;
+          const entries = Object.keys(__wsTombstones.sites)
+            .filter((k) => k.endsWith("::" + cleanName) || k === "KEY::" + cleanName)
+            .map((k) => __wsTombstones.sites[k]);
+          return entries.some((e) => _isTombstoneBlocking(e, 0, opts));
+        };
+        ["siteInfoMap", "siteInfos"].forEach((mapProp) => {
+          const infoMap = dashData[mapProp];
+          if (!infoMap || typeof infoMap !== "object") return;
+          Object.keys(infoMap).forEach((sn) => {
+            const clean = _normDelSiteName(sn);
+            if (!clean || survivingSiteNames.has(clean)) return;
+            if (hasAnySiteTombstoneForName(clean)) {
+              const infoObj = infoMap[sn];
+              const infoUpd = _parseItemCreatedAtMs(infoObj) || (infoObj && infoObj.updatedAt ? Date.parse(infoObj.updatedAt) || 0 : 0);
+              const maxDel = Math.max(0, ...Object.keys(__wsTombstones.sites)
+                .filter((k) => k.endsWith("::" + clean) || k === "KEY::" + clean)
+                .map((k) => Number(__wsTombstones.sites[k] && __wsTombstones.sites[k].deletedAt) || 0));
+              if (!infoUpd || infoUpd <= maxDel) {
+                delete infoMap[sn];
+                changed = true;
+              }
+            }
+          });
+        });
+
+        if (opts && typeof opts === "object") opts.changed = changed;
         return dashData;
+      }
+
+      function applyDeletedGuardsToFinanceData(financeData, opts) {
+        _loadPersistedDeleteGuards();
+        _pruneAllTombstones(__wsTombstones, Date.now());
+        if (!financeData || typeof financeData !== "object") return financeData;
+        let changed = false;
+        const filterArr = (arr, bucket) => {
+          if (!Array.isArray(arr)) return arr;
+          const mapObj = __wsTombstones[bucket] || {};
+          if (Object.keys(mapObj).length === 0) return arr;
+          return arr.filter((item) => {
+            if (!item) { changed = true; return false; }
+            const cid = String(item.id || "").trim();
+            if (cid && mapObj[cid] && _isTombstoneBlocking(mapObj[cid], _parseItemCreatedAtMs(item), opts)) {
+              changed = true;
+              return false;
+            }
+            return true;
+          });
+        };
+        if (Array.isArray(financeData.collection)) financeData.collection = filterArr(financeData.collection, "collections");
+        if (Array.isArray(financeData.expense)) financeData.expense = filterArr(financeData.expense, "expenses");
+        if (Array.isArray(financeData.fixedMaster)) financeData.fixedMaster = filterArr(financeData.fixedMaster, "fixedMasters");
+        if (opts && typeof opts === "object") opts.changed = changed;
+        return financeData;
+      }
+
+      function applyDeletedGuardsToTodoData(todoData, opts) {
+        _loadPersistedDeleteGuards();
+        _pruneAllTombstones(__wsTombstones, Date.now());
+        if (!todoData || !Array.isArray(todoData.list)) return todoData;
+        const mapObj = __wsTombstones.todos || {};
+        if (Object.keys(mapObj).length === 0) return todoData;
+        let changed = false;
+        todoData.list = todoData.list.filter((t) => {
+          if (!t) { changed = true; return false; }
+          const tid = String(t.id || "").trim();
+          if (tid && mapObj[tid] && _isTombstoneBlocking(mapObj[tid], _parseItemCreatedAtMs(t), opts)) {
+            changed = true;
+            return false;
+          }
+          return true;
+        });
+        if (opts && typeof opts === "object") opts.changed = changed;
+        return todoData;
+      }
+
+      function applyDeletedGuardsToSettingsData(settingsData, opts) {
+        _loadPersistedDeleteGuards();
+        _pruneAllTombstones(__wsTombstones, Date.now());
+        if (!settingsData || typeof settingsData !== "object") return settingsData;
+        let changed = false;
+        __WS_SETTINGS_TOMBSTONE_KINDS.forEach((kind) => {
+          const arr = settingsData[kind];
+          const mapObj = (__wsTombstones.settings && __wsTombstones.settings[kind]) || {};
+          if (!Array.isArray(arr) || Object.keys(mapObj).length === 0) return;
+          settingsData[kind] = arr.filter((item) => {
+            if (!item) { changed = true; return false; }
+            const k = _getSettingItemGuardKey(kind, item);
+            if (k && mapObj[k] && _isTombstoneBlocking(mapObj[k], _parseItemCreatedAtMs(item), opts)) {
+              changed = true;
+              return false;
+            }
+            return true;
+          });
+        });
+        if (opts && typeof opts === "object") opts.changed = changed;
+        return settingsData;
       }
 
       window.executeDelete = function (type, targetId) {
@@ -20930,7 +21440,7 @@ end $$;`;
             const delSiteName = site.siteName || "";
             const delTaskName = task.taskName || "공정";
             const delTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, task) : null;
-            recordDeletedTaskGuard(site, task);
+            recordDeletedTaskGuard(site, task, { skipRemoteSync: true });
             const wasArchived = Boolean(task.isArchived || site.isArchived || task.sheetName === "완료현장");
             const effSheetName = task.sheetName || (site.scope === "as" ? "AS" : site.scope === "single" ? "단건" : wasArchived ? "완료현장" : "현장데이터");
             const deletedRowNum = parseInt(task.row, 10) || 0;
@@ -20980,9 +21490,30 @@ end $$;`;
           if (idx > -1) {
             const s = state.dashData.sites[idx];
             const delSiteName = s.siteName || "현장";
-            recordDeletedSiteGuard(s);
-            (s.tasks || []).forEach((t) => recordDeletedTaskGuard(s, t));
+            const cleanDelName = _normDelSiteName(delSiteName);
+            const deletedTaskIds = (s.tasks || []).map((t) => t && String(t.taskId || t.id || "").trim()).filter(Boolean);
+            recordDeletedSiteGuard(s, { skipRemoteSync: true });
+            (s.tasks || []).forEach((t) => recordDeletedTaskGuard(s, t, { skipRemoteSync: true }));
             state.dashData.sites.splice(idx, 1);
+            const hasRemainingSameSite = (state.dashData.sites || []).some((x) => x && _normDelSiteName(x.siteName) === cleanDelName);
+            const revokeShareTokens = [];
+            if (!hasRemainingSameSite) {
+              ["siteInfoMap", "siteInfos"].forEach((mapProp) => {
+                const infoMap = state.dashData && state.dashData[mapProp];
+                if (!infoMap || typeof infoMap !== "object") return;
+                Object.keys(infoMap).forEach((k) => {
+                  if (_normDelSiteName(k) !== cleanDelName) return;
+                  const info = infoMap[k];
+                  if (info && info.clientShare && info.clientShare.token) {
+                    revokeShareTokens.push({ key: "client_share::" + info.clientShare.token, shareType: "client", siteName: delSiteName });
+                  }
+                  if (info && info.partnerShare && info.partnerShare.token) {
+                    revokeShareTokens.push({ key: "partner_share::" + info.partnerShare.token, shareType: "partner", siteName: delSiteName });
+                  }
+                  delete infoMap[k];
+                });
+              });
+            }
             if (state.selectedSiteKey === targetId) {
               const remainPool = s.scope === "newSite" ? [] : getAllSites().filter((x) => x.scope === (s.scope || state.scope) && Boolean(isSiteCompleted(x)) === Boolean(state.showArchivedSites));
               state.selectedSiteKey = remainPool.length ? remainPool[0].siteKey : null;
@@ -20993,7 +21524,16 @@ end $$;`;
             }
             recalcDashMeta();
             const targetScope = (s.scope === "newSite" || s.scope === "single" || s.scope === "as") ? s.scope : (s.isArchived ? "완료현장" : s.scope);
-            if (window.WSDataService) window.WSDataService.deleteSite({ site: s.siteName, scope: targetScope }, state.dashData);
+            if (window.WSDataService) {
+              window.WSDataService.deleteSite({
+                site: s.siteName,
+                scope: targetScope,
+                rawScope: s.scope || "site",
+                siteKey: s.siteKey || "",
+                deletedTaskIds,
+                revokeShareTokens
+              }, state.dashData);
+            }
             window.__wsDeletedPopupInfo = {
               title: "✅ 현장 삭제 완료",
               message: `<strong>${escHtml(delSiteName)}</strong> 현장이 삭제되었습니다.`,
@@ -21003,6 +21543,7 @@ end $$;`;
           showToast("🗑️ 현장이 삭제되었습니다.");
         } else if (type === "todo") {
           const delTodo = (state.todoData && Array.isArray(state.todoData.list)) ? state.todoData.list.find((t) => t && t.id === targetId) : null;
+          recordDeletedTodoGuard(delTodo || targetId, { skipRemoteSync: true });
           state.todoData.list = (state.todoData.list || []).filter((t) => t.id !== targetId);
           if (typeof window.recordAuditLog === "function" && delTodo) {
             const delSummary = (typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
@@ -21566,12 +22107,15 @@ end $$;`;
         state._clientShareFinancePromise = Promise.race([
           Promise.resolve(ds.getFinanceDbData(user)).then((res) => {
             if (res && res.success) {
-              state.financeDbData = {
+              const rawFin = {
                 collection: Array.isArray(res.collection) ? res.collection : [],
                 expense: Array.isArray(res.expense) ? res.expense : [],
                 fixedMaster: Array.isArray(res.fixedMaster) ? res.fixedMaster : [],
                 updatedAt: res.updatedAt || ""
               };
+              state.financeDbData = typeof applyDeletedGuardsToFinanceData === "function"
+                ? applyDeletedGuardsToFinanceData(rawFin, { fromGas: res.source !== "supabase" })
+                : rawFin;
               state.financeLoaded = true;
               state.financeLastFetchedAt = Date.now();
               if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
@@ -21932,8 +22476,9 @@ end $$;`;
         }
         try {
           if (window.WSSupabaseV3 && typeof window.WSSupabaseV3.persistSnapshot === "function") {
+            const persistDash = window.WSSupabaseV3.persistSnapshotQueued || window.WSSupabaseV3.persistSnapshot;
             if (typeof window.WSSupabaseV3.isSupabaseActive !== "function" || window.WSSupabaseV3.isSupabaseActive()) {
-              await window.WSSupabaseV3.persistSnapshot("dashboard_main", state.dashData, { skipShareSync: true });
+              await persistDash("dashboard_main", state.dashData, { skipShareSync: true });
             }
             await window.WSSupabaseV3.persistSnapshot("client_share::" + d.token, payload);
           }
@@ -21981,8 +22526,15 @@ end $$;`;
 
       function mergePreservedShareConfigs(targetDash, prevDash) {
         if (!targetDash || typeof targetDash !== "object" || !prevDash || typeof prevDash !== "object") return targetDash;
+        const activeSiteNames = new Set((Array.isArray(targetDash.sites) ? targetDash.sites : []).map((s) => (typeof _normDelSiteName === "function" ? _normDelSiteName(s && s.siteName) : String((s && s.siteName) || "").trim())).filter(Boolean));
+        const isDeletedOrphanSiteName = (sn) => {
+          const cleanSn = typeof _normDelSiteName === "function" ? _normDelSiteName(sn) : String(sn || "").trim();
+          if (!cleanSn || activeSiteNames.has(cleanSn)) return false;
+          if (typeof isSiteTombstoned !== "function") return false;
+          return ["site", "newSite", "single", "as"].some((sc) => isSiteTombstoned(cleanSn, sc));
+        };
         const mergeShareKey = (sn, prevEntry, shareKey) => {
-          if (!prevEntry || !prevEntry[shareKey]) return;
+          if (!prevEntry || !prevEntry[shareKey] || isDeletedOrphanSiteName(sn)) return;
           if (!targetDash.siteInfoMap || typeof targetDash.siteInfoMap !== "object") targetDash.siteInfoMap = {};
           const curEntry = targetDash.siteInfoMap[sn] || {};
           const curUpd = curEntry[shareKey] && curEntry[shareKey].updatedAt ? String(curEntry[shareKey].updatedAt) : "";
@@ -22417,8 +22969,9 @@ end $$;`;
         }
         try {
           if (window.WSSupabaseV3 && typeof window.WSSupabaseV3.persistSnapshot === "function") {
+            const persistDash = window.WSSupabaseV3.persistSnapshotQueued || window.WSSupabaseV3.persistSnapshot;
             if (typeof window.WSSupabaseV3.isSupabaseActive === "function" && window.WSSupabaseV3.isSupabaseActive()) {
-              await window.WSSupabaseV3.persistSnapshot("dashboard_main", state.dashData, { skipShareSync: true });
+              await persistDash("dashboard_main", state.dashData, { skipShareSync: true });
             }
             if (d.prevToken && d.prevToken !== d.token) {
               await window.WSSupabaseV3.persistSnapshot("partner_share::" + d.prevToken, {
@@ -22665,9 +23218,13 @@ end $$;`;
           const idx = state.todoData.list.findIndex((x) => x.id === d.id);
           if (idx > -1) {
             beforeTodoSnap = JSON.parse(JSON.stringify(state.todoData.list[idx]));
+            if (beforeTodoSnap.createdAtMs) payload.createdAtMs = beforeTodoSnap.createdAtMs;
+            else if (beforeTodoSnap.createdAt) payload.createdAt = beforeTodoSnap.createdAt;
             state.todoData.list[idx] = payload;
           }
         } else {
+          const recTodoTs = (typeof clearDeletedTodoGuard === "function" ? clearDeletedTodoGuard(payload.id) : 0) || 0;
+          payload.createdAtMs = Math.max(Date.now(), recTodoTs);
           state.todoData.list.unshift(payload);
         }
         if (window.WSDataService) {
@@ -22773,6 +23330,7 @@ end $$;`;
         else dueDate = "";
 
         const newId = "todo_" + Date.now();
+        const recTodoTs = (typeof clearDeletedTodoGuard === "function" ? clearDeletedTodoGuard(newId) : 0) || 0;
         const payload = {
           id: newId,
           title: title,
@@ -22782,7 +23340,8 @@ end $$;`;
           tag: siteName ? "현장" : "일반",
           detail: "",
           status: "미완료",
-          isImportant: false
+          isImportant: false,
+          createdAtMs: Math.max(Date.now(), recTodoTs)
         };
 
         if (!state.todoData) state.todoData = { list: [] };
@@ -23354,7 +23913,8 @@ end $$;`;
         if (btn) { btn.disabled = true; btn.innerText = "⏳ 승격 처리 중..."; }
 
         // 1) Optimistic UI 즉시 반영 (0.01초 만에 모달 닫기 및 홈/캘린더/현장목록 즉시 반영)
-        clearDeletedSiteGuardByName(siteName);
+        const qtTarget = (ed.quoteType === "single" || ed.quoteType === "as") ? ed.quoteType : "site";
+        const recPromoteTs = (typeof clearDeletedSiteGuardByName === "function" ? clearDeletedSiteGuardByName(siteName, qtTarget) : 0) || 0;
         const estSiteObj = getAllSites().find((s) => s.scope === "newSite" && (s.siteKey === curPromoteSiteKey || s.siteName === siteName));
         const prevPromoteStatus = (estSiteObj && estSiteObj.estimateData && estSiteObj.estimateData.status) ? estSiteObj.estimateData.status : "";
         if (estSiteObj) {
@@ -23376,12 +23936,13 @@ end $$;`;
         const targetSheetName = qt === "as" ? "AS" : (qt === "single" ? "단건" : "현장데이터");
         let existingSite = getAllSites().find((s) => s.siteName === siteName && (s.scope || "site") === qt);
         if (!existingSite) {
-          const nowTs = Date.now();
+          const nowTs = Math.max(Date.now(), recPromoteTs);
           const newSiteObj = {
             siteKey: qt === "site" ? siteName : (qt.toUpperCase() + "::" + siteName),
             siteName: siteName,
             colorCode: "1",
             colorHex: qt === "as" ? "#dc2626" : (qt === "single" ? "#7c3aed" : "#0284c7"),
+            createdAtMs: nowTs,
             tasks: computedTasks.map((t, idx) => {
               const normYmd = String(t.date || startDate || todayYmd).replace(/\./g, "-").trim().slice(0, 10);
               const dMs = new Date(normYmd + "T00:00:00").getTime() || nowTs;
@@ -23404,6 +23965,7 @@ end $$;`;
                 status: t.status || (qt === "as" ? "AS" : "예정"),
                 isShared: true,
                 memo: tMemo,
+                createdAtMs: nowTs + idx,
                 updatedAtMs: nowTs + idx,
                 memoUpdatedAtMs: tMemo ? (nowTs + idx) : 0,
                 isToday: normYmd === todayYmd,
@@ -23493,8 +24055,8 @@ end $$;`;
         // 2) 백그라운드 GAS 시트 저장 및 재무DB 동기화
         const onSuccess = function (res) {
           if (res && res.success) {
-            if (__wsDeletedSiteGuards.has("NAME::site::" + _normDelSiteName(siteName))) {
-              if (window.WSDataService) window.WSDataService.deleteSite({ site: siteName, scope: "site" }, state.dashData);
+            if (typeof isSiteTombstoned === "function" && isSiteTombstoned(siteName, qt)) {
+              if (window.WSDataService) window.WSDataService.deleteSite({ site: siteName, scope: qt }, state.dashData);
               return;
             }
             if (Array.isArray(res.createdTasks) && existingSite && Array.isArray(existingSite.tasks)) {
@@ -24078,17 +24640,25 @@ end $$;`;
         if (ctx.isEdit) {
           const s = getAllSites().find((x) => x.siteKey === ctx.siteKey);
           if (s) {
+            const prevEstName = String(s.siteName || "").trim();
             s.siteName = siteName;
             s.estimateData = ed;
             s.isArchived = ed.status === "계약 완료" || ed.status === "수주 실패" || ed.status === "실패";
             s.isAllCompleted = s.isArchived;
+            if (prevEstName && prevEstName !== siteName) {
+              const recRenameTs = (typeof clearDeletedSiteGuardByName === "function" ? clearDeletedSiteGuardByName(siteName, "newSite") : 0) || 0;
+              s.createdAtMs = Math.max(Number(s.createdAtMs) || 0, Date.now(), recRenameTs);
+            }
             state.selectedQuoteKey = s.siteKey;
           }
         } else {
+          const recEstTs = (typeof clearDeletedSiteGuardByName === "function" ? clearDeletedSiteGuardByName(siteName, "newSite") : 0) || 0;
+          const nowMs = Math.max(Date.now(), recEstTs);
           const newKey = "NEWSITE::" + siteName;
           state.dashData.sites.unshift({
             siteKey: newKey, siteName, colorCode: "1", colorHex: "#0284c7",
-            tasks: [{ id: "est_" + Date.now(), taskName: ed.status, dateDisplay: ed.inquiryDate, startDateStr: ed.inquiryDate, endDateStr: ed.inquiryDate, manager: ed.manager, status: ed.status, scope: "newSite" }],
+            createdAtMs: nowMs,
+            tasks: [{ id: "est_" + nowMs, taskName: ed.status, dateDisplay: ed.inquiryDate, startDateStr: ed.inquiryDate, endDateStr: ed.inquiryDate, manager: ed.manager, status: ed.status, scope: "newSite", createdAtMs: nowMs }],
             scope: "newSite", isArchived: false, isAllCompleted: false, estimateData: ed, totalTasksCount: 1, completedTasksCount: 0, delayedTasksCount: 0, progressRate: 0
           });
           state.selectedQuoteKey = newKey;
@@ -25331,6 +25901,8 @@ end $$;`;
       // ================= 모달 9: 마스터 설정 관리 모달 =================
       window.openSettingsModal = function (opts) {
         if (!state.settingsData && window.WSDataService) state.settingsData = window.WSDataService.getInitialSettingsData();
+        state._pendingSettingsDeletes = { partners: [], tasks: [], members: [] };
+        state._pendingSettingsRecreates = { partners: [], tasks: [], members: [] };
         try {
           state._settingsBeforeSnap = JSON.parse(JSON.stringify(state.settingsData || { partners: [], tasks: [], members: [] }));
         } catch (_) {
@@ -25456,6 +26028,9 @@ end $$;`;
           Object.assign(target, payload);
           showToast(`✏️ [${name}] 거래처 정보가 수정되었습니다.`);
         } else {
+          payload.createdAtMs = Date.now();
+          if (!state._pendingSettingsRecreates) state._pendingSettingsRecreates = { partners: [], tasks: [], members: [] };
+          state._pendingSettingsRecreates.partners.push(payload);
           s.partners.unshift(payload);
           showToast(`➕ [${name}] 신규 거래처가 추가되었습니다.`);
         }
@@ -26192,7 +26767,10 @@ end $$;`;
           if (!name) return showToast("⚠️ 공종명을 입력하세요.");
           const category = ((document.getElementById("stTCat") || {}).value || "기타").trim();
           const note = ((document.getElementById("stTNote") || {}).value || "").trim();
-          s.tasks.unshift({ name, taskName: name, category, note });
+          const newTaskItem = { name, taskName: name, category, note, createdAtMs: Date.now() };
+          if (!state._pendingSettingsRecreates) state._pendingSettingsRecreates = { partners: [], tasks: [], members: [] };
+          state._pendingSettingsRecreates.tasks.push(newTaskItem);
+          s.tasks.unshift(newTaskItem);
           showToast(`➕ [${name}] 공종이 추가되었습니다.`);
         } else {
           const nameEl = document.getElementById("stMName");
@@ -26204,7 +26782,10 @@ end $$;`;
           else if (/^02\d{7,8}$/.test(phone)) phone = phone.replace(/^(02)(\d{3,4})(\d{4})$/, "$1-$2-$3");
           const recv = document.getElementById("stMRecv") ? document.getElementById("stMRecv").checked : true;
           const note = ((document.getElementById("stMNote") || {}).value || "").trim();
-          s.members.push({ name, role, phone, receive: recv, notifyEnabled: recv, note });
+          const newMemberItem = { name, role, phone, receive: recv, notifyEnabled: recv, note, createdAtMs: Date.now() };
+          if (!state._pendingSettingsRecreates) state._pendingSettingsRecreates = { partners: [], tasks: [], members: [] };
+          state._pendingSettingsRecreates.members.push(newMemberItem);
+          s.members.push(newMemberItem);
           showToast(`➕ [${name}] 구성원이 추가되었습니다.`);
         }
         renderSettingsModal();
@@ -26217,13 +26798,40 @@ end $$;`;
         renderSettingsModal();
       };
       window.delSettingItem = function (kind, idx) {
-        state.settingsData[kind].splice(idx, 1);
+        const arr = state.settingsData && state.settingsData[kind];
+        if (!Array.isArray(arr) || idx < 0 || idx >= arr.length) return;
+        const removed = arr[idx];
+        if (removed) {
+          if (!state._pendingSettingsDeletes) state._pendingSettingsDeletes = { partners: [], tasks: [], members: [] };
+          if (Array.isArray(state._pendingSettingsDeletes[kind])) {
+            state._pendingSettingsDeletes[kind].push(removed);
+          }
+        }
+        arr.splice(idx, 1);
         renderSettingsModal();
       };
       window.saveSettingsModalAll = function () {
         const useSb = window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive();
         showToast(useSb ? "⚡ 기준정보 설정을 Supabase에 즉시 저장 중입니다..." : "💾 기준정보 설정을 구글 시트에 일괄 저장 중입니다...");
         const beforeSettingsSnap = state._settingsBeforeSnap || null;
+        if (state._pendingSettingsDeletes && typeof recordDeletedSettingsGuard === "function") {
+          ["partners", "tasks", "members"].forEach((k) => {
+            const list = state._pendingSettingsDeletes[k];
+            if (Array.isArray(list) && list.length > 0) {
+              recordDeletedSettingsGuard(k, list, { skipRemoteSync: true });
+            }
+          });
+        }
+        if (state._pendingSettingsRecreates && typeof clearDeletedSettingsGuard === "function") {
+          ["partners", "tasks", "members"].forEach((k) => {
+            const list = state._pendingSettingsRecreates[k];
+            if (Array.isArray(list) && list.length > 0) {
+              clearDeletedSettingsGuard(k, list, { skipRemoteSync: true });
+            }
+          });
+        }
+        state._pendingSettingsDeletes = { partners: [], tasks: [], members: [] };
+        state._pendingSettingsRecreates = { partners: [], tasks: [], members: [] };
         if (window.WSDataService) {
           const payloadSettings = state.settingsData;
           if (beforeSettingsSnap && typeof window.recordAuditLog === "function" && typeof window.computeSettingsAuditDiff === "function") {
@@ -26446,8 +27054,15 @@ end $$;`;
         }
 
         function buildSitesRows(dashData) {
-          const sites = (dashData && Array.isArray(dashData.sites)) ? dashData.sites : [];
-          const infoMap = (dashData && dashData.siteInfoMap) || {};
+          const filteredDash = (typeof applyDeletedGuardsToDashData === "function" && dashData)
+            ? applyDeletedGuardsToDashData({
+                sites: Array.isArray(dashData.sites) ? dashData.sites.map((s) => s ? Object.assign({}, s, { tasks: Array.isArray(s.tasks) ? s.tasks.slice() : s.tasks }) : s) : [],
+                siteInfoMap: dashData.siteInfoMap ? Object.assign({}, dashData.siteInfoMap) : {},
+                siteInfos: dashData.siteInfos ? Object.assign({}, dashData.siteInfos) : {}
+              })
+            : dashData;
+          const sites = (filteredDash && Array.isArray(filteredDash.sites)) ? filteredDash.sites : [];
+          const infoMap = (filteredDash && filteredDash.siteInfoMap) || {};
           const byName = new Map();
           const scopeRank = { site: 1, single: 2, as: 3, newSite: 4 };
           const nowIso = new Date().toISOString();
@@ -26470,6 +27085,7 @@ end $$;`;
               progressRate: Number(s.progressRate) || 0,
               totalTasksCount: Number(s.totalTasksCount) || 0,
               completedTasksCount: Number(s.completedTasksCount) || 0,
+              createdAtMs: Number(s.createdAtMs) || 0,
               estimateData: s.estimateData || null
             };
 
@@ -26580,10 +27196,153 @@ end $$;`;
           return Array.from(byKey.values());
         }
 
+        const TOMBSTONE_PROTECTED_KEYS = new Set(["dashboard_main", "dash_main", "finance_db", "todo_main", "settings_main"]);
+
+        function cloneForTombstoneFilter(key, rawObj) {
+          const src = (rawObj && typeof rawObj === "object") ? rawObj : {};
+          if (key === "dashboard_main" || key === "dash_main") {
+            const cloned = Object.assign({}, src);
+            if (Array.isArray(src.sites)) {
+              cloned.sites = src.sites.map((s) => (s && typeof s === "object")
+                ? Object.assign({}, s, { tasks: Array.isArray(s.tasks) ? s.tasks.slice() : s.tasks })
+                : s);
+            }
+            if (src.siteInfoMap && typeof src.siteInfoMap === "object") cloned.siteInfoMap = Object.assign({}, src.siteInfoMap);
+            if (src.siteInfos && typeof src.siteInfos === "object") cloned.siteInfos = Object.assign({}, src.siteInfos);
+            return cloned;
+          }
+          if (key === "finance_db") {
+            return Object.assign({}, src, {
+              collection: Array.isArray(src.collection) ? src.collection.slice() : [],
+              expense: Array.isArray(src.expense) ? src.expense.slice() : [],
+              fixedMaster: Array.isArray(src.fixedMaster) ? src.fixedMaster.slice() : []
+            });
+          }
+          if (key === "todo_main") {
+            return Object.assign({}, src, {
+              list: Array.isArray(src.list) ? src.list.slice() : []
+            });
+          }
+          if (key === "settings_main") {
+            return Object.assign({}, src, {
+              partners: Array.isArray(src.partners) ? src.partners.slice() : src.partners,
+              tasks: Array.isArray(src.tasks) ? src.tasks.slice() : src.tasks,
+              members: Array.isArray(src.members) ? src.members.slice() : src.members
+            });
+          }
+          return Object.assign({}, src);
+        }
+
+        async function pullAndMergeTombstonesFromSupabase() {
+          if (!isSupabaseActive()) {
+            return typeof exportTombstonesSnapshot === "function" ? exportTombstonesSnapshot() : null;
+          }
+          try {
+            const rows = await selectStateRows(["deleted_tombstones"]);
+            if (rows && rows[0] && rows[0].payload && typeof mergeRemoteTombstones === "function") {
+              return mergeRemoteTombstones(rows[0].payload);
+            }
+          } catch (err) {
+            console.warn("[Supabase Tombstone] 사전 조회 경고:", err);
+          }
+          return typeof exportTombstonesSnapshot === "function" ? exportTombstonesSnapshot() : null;
+        }
+
+        async function syncTombstonesToSupabase() {
+          if (typeof exportTombstonesSnapshot !== "function") return null;
+          if (!isSupabaseActive()) return exportTombstonesSnapshot();
+          return enqueueKeyWrite("deleted_tombstones", async () => {
+            let remotePayload = null;
+            try {
+              const rows = await selectStateRows(["deleted_tombstones"]);
+              if (rows && rows[0] && rows[0].payload) remotePayload = rows[0].payload;
+            } catch (err) {
+              console.warn("[Supabase Tombstone] 원격 병합 조회 경고:", err);
+            }
+            const merged = (remotePayload && typeof mergeRemoteTombstones === "function")
+              ? mergeRemoteTombstones(remotePayload)
+              : exportTombstonesSnapshot();
+            merged.updatedAt = new Date().toISOString();
+            await persistDomainSnapshot("deleted_tombstones", merged, { skipTombstoneFilter: true, skipShareSync: true });
+            return merged;
+          });
+        }
+
         async function persistDomainSnapshot(key, rawPayload, opts) {
+          let effectiveRaw = rawPayload || {};
+          const shouldFilterTombstone = TOMBSTONE_PROTECTED_KEYS.has(key) && !(opts && opts.skipTombstoneFilter);
+          if (shouldFilterTombstone) {
+            if (isSupabaseActive() && !(opts && opts.skipTombstoneFetch)) {
+              await pullAndMergeTombstonesFromSupabase();
+            }
+            const filterOpts = { changed: false };
+            const filteredCopy = cloneForTombstoneFilter(key, effectiveRaw);
+            if ((key === "dashboard_main" || key === "dash_main") && typeof applyDeletedGuardsToDashData === "function") {
+              applyDeletedGuardsToDashData(filteredCopy, filterOpts);
+              if (filterOpts.changed) {
+                if (rawPayload && typeof rawPayload === "object") {
+                  rawPayload.sites = filteredCopy.sites;
+                  if (filteredCopy.siteInfoMap) rawPayload.siteInfoMap = filteredCopy.siteInfoMap;
+                  if (filteredCopy.siteInfos) rawPayload.siteInfos = filteredCopy.siteInfos;
+                }
+                if (state && state.dashData) {
+                  applyDeletedGuardsToDashData(state.dashData);
+                  if (typeof recalcDashMeta === "function") recalcDashMeta();
+                  if (window.WSDataService && window.WSDataService.saveDashboardCache) {
+                    window.WSDataService.saveDashboardCache(state.dashData);
+                  }
+                }
+              }
+            } else if (key === "finance_db" && typeof applyDeletedGuardsToFinanceData === "function") {
+              applyDeletedGuardsToFinanceData(filteredCopy, filterOpts);
+              if (filterOpts.changed) {
+                if (rawPayload && typeof rawPayload === "object") {
+                  rawPayload.collection = filteredCopy.collection;
+                  rawPayload.expense = filteredCopy.expense;
+                  rawPayload.fixedMaster = filteredCopy.fixedMaster;
+                }
+                if (state && state.financeDbData) {
+                  applyDeletedGuardsToFinanceData(state.financeDbData);
+                  if (window.WSDataService && window.WSDataService.saveFinanceCache) {
+                    window.WSDataService.saveFinanceCache(state.financeDbData);
+                  }
+                }
+              }
+            } else if (key === "todo_main" && typeof applyDeletedGuardsToTodoData === "function") {
+              applyDeletedGuardsToTodoData(filteredCopy, filterOpts);
+              if (filterOpts.changed) {
+                if (rawPayload && typeof rawPayload === "object") {
+                  rawPayload.list = filteredCopy.list;
+                }
+                if (state && state.todoData) {
+                  applyDeletedGuardsToTodoData(state.todoData);
+                  if (window.WSDataService && window.WSDataService.saveTodoCache) {
+                    window.WSDataService.saveTodoCache(state.todoData);
+                  }
+                }
+              }
+            } else if (key === "settings_main" && typeof applyDeletedGuardsToSettingsData === "function") {
+              applyDeletedGuardsToSettingsData(filteredCopy, filterOpts);
+              if (filterOpts.changed) {
+                if (rawPayload && typeof rawPayload === "object") {
+                  rawPayload.partners = filteredCopy.partners;
+                  rawPayload.tasks = filteredCopy.tasks;
+                  rawPayload.members = filteredCopy.members;
+                }
+                if (state && state.settingsData) {
+                  applyDeletedGuardsToSettingsData(state.settingsData);
+                  if (window.WSDataService && window.WSDataService.saveSettingsCache) {
+                    window.WSDataService.saveSettingsCache(state.settingsData);
+                  }
+                }
+              }
+            }
+            effectiveRaw = filteredCopy;
+          }
+
           const mutId = `${SESSION_CLIENT_ID}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
           markLocalMutId(mutId);
-          const payload = Object.assign({}, rawPayload || {}, {
+          const payload = Object.assign({}, effectiveRaw || {}, {
             _clientMutId: mutId,
             _updatedMs: Date.now()
           });
@@ -26596,26 +27355,42 @@ end $$;`;
           const t0 = performance.now();
           await upsertRows("ws_state_store", [row], "key");
           if (!(opts && opts.skipShareSync)) {
-            if ((key === "dashboard_main" || key === "dash_main" || key === "finance_db" || key === "finance_main") && typeof window.syncActiveClientShareForSite === "function" && state.dashData) {
+            const shareDashSource = (key === "dashboard_main" || key === "dash_main") ? effectiveRaw : state.dashData;
+            const survivingShareNames = new Set(
+              ((shareDashSource && Array.isArray(shareDashSource.sites)) ? shareDashSource.sites : [])
+                .map((s) => (typeof _normDelSiteName === "function" ? _normDelSiteName(s && s.siteName) : String((s && s.siteName) || "").trim()))
+                .filter(Boolean)
+            );
+            const canSyncSiteShare = (sn) => {
+              const clean = typeof _normDelSiteName === "function" ? _normDelSiteName(sn) : String(sn || "").trim();
+              if (!clean) return false;
+              if (survivingShareNames.size > 0 && !survivingShareNames.has(clean) && typeof isSiteTombstoned === "function") {
+                if (isSiteTombstoned(clean, "site") || isSiteTombstoned(clean, "newSite") || isSiteTombstoned(clean, "single") || isSiteTombstoned(clean, "as")) {
+                  return false;
+                }
+              }
+              return true;
+            };
+            if ((key === "dashboard_main" || key === "dash_main" || key === "finance_db" || key === "finance_main") && typeof window.syncActiveClientShareForSite === "function" && shareDashSource) {
               const clientShareSites = new Set();
-              if (state.dashData.siteInfoMap && typeof state.dashData.siteInfoMap === "object") {
-                Object.keys(state.dashData.siteInfoMap).forEach((sn) => {
-                  const cs = state.dashData.siteInfoMap[sn] && state.dashData.siteInfoMap[sn].clientShare;
-                  if (cs && cs.enabled && cs.token) clientShareSites.add(sn);
+              if (shareDashSource.siteInfoMap && typeof shareDashSource.siteInfoMap === "object") {
+                Object.keys(shareDashSource.siteInfoMap).forEach((sn) => {
+                  const cs = shareDashSource.siteInfoMap[sn] && shareDashSource.siteInfoMap[sn].clientShare;
+                  if (cs && cs.enabled && cs.token && canSyncSiteShare(sn)) clientShareSites.add(sn);
                 });
               }
-              if (state.dashData.siteInfos && typeof state.dashData.siteInfos === "object") {
-                Object.keys(state.dashData.siteInfos).forEach((sn) => {
-                  const cs = state.dashData.siteInfos[sn] && state.dashData.siteInfos[sn].clientShare;
-                  if (cs && cs.enabled && cs.token) clientShareSites.add(sn);
+              if (shareDashSource.siteInfos && typeof shareDashSource.siteInfos === "object") {
+                Object.keys(shareDashSource.siteInfos).forEach((sn) => {
+                  const cs = shareDashSource.siteInfos[sn] && shareDashSource.siteInfos[sn].clientShare;
+                  if (cs && cs.enabled && cs.token && canSyncSiteShare(sn)) clientShareSites.add(sn);
                 });
               }
               clientShareSites.forEach((sn) => window.syncActiveClientShareForSite(sn));
             }
-            if (key === "dashboard_main" && typeof window.syncActivePartnerShareForSite === "function" && state.dashData && state.dashData.siteInfoMap) {
-              Object.keys(state.dashData.siteInfoMap).forEach((sn) => {
-                const ps = state.dashData.siteInfoMap[sn] && state.dashData.siteInfoMap[sn].partnerShare;
-                if (ps && ps.enabled && ps.token) window.syncActivePartnerShareForSite(sn);
+            if (key === "dashboard_main" && typeof window.syncActivePartnerShareForSite === "function" && shareDashSource && shareDashSource.siteInfoMap) {
+              Object.keys(shareDashSource.siteInfoMap).forEach((sn) => {
+                const ps = shareDashSource.siteInfoMap[sn] && shareDashSource.siteInfoMap[sn].partnerShare;
+                if (ps && ps.enabled && ps.token && canSyncSiteShare(sn)) window.syncActivePartnerShareForSite(sn);
               });
             }
           }
@@ -26690,29 +27465,42 @@ end $$;`;
           const d = dashData || state.dashData;
           if (!d) return;
           const cleanName = String(siteName || "").trim();
-          const siteRows = buildSitesRows({
-            sites: (d.sites || []).filter(s => s && String(s.siteName || "").trim() === cleanName),
-            siteInfoMap: cleanName && d.siteInfoMap && d.siteInfoMap[cleanName] ? { [cleanName]: d.siteInfoMap[cleanName] } : {}
-          });
+          const filteredSites = (d.sites || []).filter((s) => s && String(s.siteName || "").trim() === cleanName);
+          const filteredObj = (typeof applyDeletedGuardsToDashData === "function")
+            ? applyDeletedGuardsToDashData({
+                sites: filteredSites.map((s) => Object.assign({}, s, { tasks: Array.isArray(s.tasks) ? s.tasks.slice() : s.tasks })),
+                siteInfoMap: cleanName && d.siteInfoMap && d.siteInfoMap[cleanName] ? { [cleanName]: d.siteInfoMap[cleanName] } : {}
+              })
+            : {
+                sites: filteredSites,
+                siteInfoMap: cleanName && d.siteInfoMap && d.siteInfoMap[cleanName] ? { [cleanName]: d.siteInfoMap[cleanName] } : {}
+              };
+          const siteRows = buildSitesRows(filteredObj);
           if (siteRows.length > 0) {
             await upsertRows("ws_sites", siteRows, "site_name");
           }
-          const matchingSites = (d.sites || []).filter(s => s && String(s.siteName || "").trim() === cleanName);
-          let taskRows = buildTasksRows({ sites: matchingSites });
+          let taskRows = buildTasksRows({ sites: filteredObj.sites || [] });
           if (singleTaskId) {
             const targetOnly = taskRows.filter(r => r.id === singleTaskId || (r.raw_json && (r.raw_json.taskId === singleTaskId || r.raw_json.id === singleTaskId)));
             if (targetOnly.length > 0) taskRows = targetOnly;
+            else taskRows = [];
           }
           if (taskRows.length > 0) {
             await upsertRows("ws_tasks", taskRows, "id");
           }
         }
 
-        async function removeNormalizedSite(siteName, dashData) {
+        async function removeNormalizedSite(siteName, dashData, scopeHint, deletedTaskIds) {
           const cleanName = String(siteName || "").trim();
           if (!cleanName) return;
+          if (Array.isArray(deletedTaskIds) && deletedTaskIds.length > 0) {
+            await deleteRowsByIds("ws_tasks", "id", deletedTaskIds);
+          }
           const d = dashData || state.dashData;
-          const stillHasSite = (d && Array.isArray(d.sites)) ? d.sites.some(s => s && String(s.siteName || "").trim() === cleanName) : false;
+          const survivingSites = (d && Array.isArray(d.sites))
+            ? d.sites.filter(s => s && String(s.siteName || "").trim() === cleanName && !(typeof isSiteTombstoned === "function" && isSiteTombstoned(s)))
+            : [];
+          const stillHasSite = survivingSites.length > 0;
           if (!stillHasSite) {
             await deleteRowsByIds("ws_sites", "site_name", [cleanName]);
             const client = getClient();
@@ -26722,6 +27510,18 @@ end $$;`;
               await restRequest("DELETE", `ws_tasks?site_name=eq.${encodeURIComponent(cleanName)}`, undefined, "return=minimal");
             }
           } else {
+            if (scopeHint) {
+              const normScope = typeof _normalizeScopeForGuard === "function" ? _normalizeScopeForGuard(scopeHint) : String(scopeHint);
+              const stillHasScope = survivingSites.some(s => (typeof _normalizeScopeForGuard === "function" ? _normalizeScopeForGuard(s.scope) : String(s.scope || "site")) === normScope);
+              if (!stillHasScope) {
+                const client = getClient();
+                if (client) {
+                  await client.from("ws_tasks").delete().eq("site_name", cleanName).eq("category", normScope);
+                } else {
+                  await restRequest("DELETE", `ws_tasks?site_name=eq.${encodeURIComponent(cleanName)}&category=eq.${encodeURIComponent(normScope)}`, undefined, "return=minimal");
+                }
+              }
+            }
             await syncNormalizedForSite(cleanName, d);
           }
         }
@@ -26809,7 +27609,50 @@ end $$;`;
             state.syncTime = lastRealtimeEventAt;
 
             let label = "";
-            if (key === "dashboard_main" && Array.isArray(data.sites)) {
+            if (key === "deleted_tombstones") {
+              if (typeof mergeRemoteTombstones === "function") mergeRemoteTombstones(data);
+              let anyPurged = false;
+              const dsSvc = window.WSDataService;
+              if (state.dashData && Array.isArray(state.dashData.sites) && typeof applyDeletedGuardsToDashData === "function") {
+                const oDash = { changed: false };
+                applyDeletedGuardsToDashData(state.dashData, oDash);
+                if (oDash.changed) {
+                  anyPurged = true;
+                  if (typeof recalcDashMeta === "function") recalcDashMeta();
+                  if (dsSvc && dsSvc.saveDashboardCache) dsSvc.saveDashboardCache(state.dashData);
+                }
+              }
+              if (state.todoData && Array.isArray(state.todoData.list) && typeof applyDeletedGuardsToTodoData === "function") {
+                const oTodo = { changed: false };
+                applyDeletedGuardsToTodoData(state.todoData, oTodo);
+                if (oTodo.changed) {
+                  anyPurged = true;
+                  if (dsSvc && dsSvc.saveTodoCache) dsSvc.saveTodoCache(state.todoData);
+                }
+              }
+              if (state.settingsData && typeof applyDeletedGuardsToSettingsData === "function") {
+                const oSet = { changed: false };
+                applyDeletedGuardsToSettingsData(state.settingsData, oSet);
+                if (oSet.changed) {
+                  anyPurged = true;
+                  if (dsSvc && dsSvc.saveSettingsCache) dsSvc.saveSettingsCache(state.settingsData);
+                }
+              }
+              if (state.financeDbData && typeof applyDeletedGuardsToFinanceData === "function") {
+                const oFin = { changed: false };
+                applyDeletedGuardsToFinanceData(state.financeDbData, oFin);
+                if (oFin.changed) {
+                  anyPurged = true;
+                  if (dsSvc && dsSvc.saveFinanceCache) dsSvc.saveFinanceCache(state.financeDbData);
+                  state.dirtyPcTabs.finance = true;
+                  state.dirtyMobileTabs.finance = true;
+                }
+              }
+              if (anyPurged) {
+                markAllDirty();
+                renderActiveViews();
+              }
+            } else if (key === "dashboard_main" && Array.isArray(data.sites)) {
               state.dashData = applyDeletedGuardsToDashData(data);
               if (window.WSDataService && window.WSDataService.saveDashboardCache) {
                 window.WSDataService.saveDashboardCache(state.dashData);
@@ -26820,7 +27663,7 @@ end $$;`;
               renderActiveViews();
               label = "현장·공정";
             } else if (key === "todo_main" && Array.isArray(data.list)) {
-              state.todoData = data;
+              state.todoData = typeof applyDeletedGuardsToTodoData === "function" ? applyDeletedGuardsToTodoData(data) : data;
               if (window.WSDataService && window.WSDataService.saveTodoCache) {
                 window.WSDataService.saveTodoCache(state.todoData);
               }
@@ -26828,7 +27671,7 @@ end $$;`;
               renderActiveViews();
               label = "To-Do";
             } else if (key === "settings_main") {
-              state.settingsData = data;
+              state.settingsData = typeof applyDeletedGuardsToSettingsData === "function" ? applyDeletedGuardsToSettingsData(data) : data;
               if (window.WSDataService && window.WSDataService.saveSettingsCache) {
                 window.WSDataService.saveSettingsCache(state.settingsData);
               }
@@ -26838,12 +27681,13 @@ end $$;`;
               renderActiveViews();
               label = "기준정보";
             } else if (key === "finance_db" && canViewFinance()) {
-              state.financeDbData = {
+              const nextFin = {
                 collection: Array.isArray(data.collection) ? data.collection : [],
                 expense: Array.isArray(data.expense) ? data.expense : [],
                 fixedMaster: Array.isArray(data.fixedMaster) ? data.fixedMaster : [],
                 updatedAt: data.updatedAt || ""
               };
+              state.financeDbData = typeof applyDeletedGuardsToFinanceData === "function" ? applyDeletedGuardsToFinanceData(nextFin) : nextFin;
               state.financeLoaded = true;
               if (window.WSDataService && window.WSDataService.saveFinanceCache) {
                 window.WSDataService.saveFinanceCache(state.financeDbData);
@@ -26987,7 +27831,7 @@ end $$;`;
           const opts = (typeof optsOrCb === "object" && optsOrCb !== null) ? optsOrCb : {};
           const cb = (typeof optsOrCb === "function") ? optsOrCb : onUpdated;
           const t0 = performance.now();
-          const keys = ["dashboard_main", "todo_main", "settings_main", "auth_config", "audit_logs"];
+          const keys = ["dashboard_main", "todo_main", "settings_main", "auth_config", "audit_logs", "deleted_tombstones"];
           if (opts.syncFinance) keys.push("finance_db");
 
           const rows = await selectStateRows(keys);
@@ -26997,10 +27841,27 @@ end $$;`;
           const byKey = {};
           rows.forEach((r) => { if (r && r.key) byKey[r.key] = r.payload; });
 
+          if (byKey.deleted_tombstones && typeof mergeRemoteTombstones === "function") {
+            mergeRemoteTombstones(byKey.deleted_tombstones);
+          }
+
           if (!byKey.dashboard_main || !Array.isArray(byKey.dashboard_main.sites)) {
             const emptyRes = { emptySupabase: true, elapsedMs, dashData: null, todoData: null, settingsData: null, financeData: null, meta: { source: "supabase_empty", updatedAt: "" } };
             if (typeof cb === "function") cb(emptyRes);
             return emptyRes;
+          }
+
+          if (typeof applyDeletedGuardsToDashData === "function") {
+            byKey.dashboard_main = applyDeletedGuardsToDashData(byKey.dashboard_main);
+          }
+          if (byKey.todo_main && Array.isArray(byKey.todo_main.list) && typeof applyDeletedGuardsToTodoData === "function") {
+            byKey.todo_main = applyDeletedGuardsToTodoData(byKey.todo_main);
+          }
+          if (byKey.settings_main && typeof applyDeletedGuardsToSettingsData === "function") {
+            byKey.settings_main = applyDeletedGuardsToSettingsData(byKey.settings_main);
+          }
+          if (byKey.finance_db && typeof applyDeletedGuardsToFinanceData === "function") {
+            byKey.finance_db = applyDeletedGuardsToFinanceData(byKey.finance_db);
           }
 
           const ds = window.WSDataService;
@@ -27047,10 +27908,15 @@ end $$;`;
         }
 
         async function fetchFinanceSnapshotFromSupabase() {
-          const rows = await selectStateRows(["finance_db"]);
-          if (rows && rows[0] && rows[0].payload) {
-            const p = rows[0].payload;
-            return {
+          const rows = await selectStateRows(["finance_db", "deleted_tombstones"]);
+          const tombRow = Array.isArray(rows) ? rows.find(r => r && r.key === "deleted_tombstones") : null;
+          if (tombRow && tombRow.payload && typeof mergeRemoteTombstones === "function") {
+            mergeRemoteTombstones(tombRow.payload);
+          }
+          const finRow = Array.isArray(rows) ? rows.find(r => r && r.key === "finance_db") : null;
+          if (finRow && finRow.payload) {
+            const p = finRow.payload;
+            const out = {
               success: true,
               collection: Array.isArray(p.collection) ? p.collection : [],
               expense: Array.isArray(p.expense) ? p.expense : [],
@@ -27058,12 +27924,16 @@ end $$;`;
               updatedAt: p.updatedAt || "",
               source: "supabase"
             };
+            return typeof applyDeletedGuardsToFinanceData === "function" ? applyDeletedGuardsToFinanceData(out) : out;
           }
           return null;
         }
 
         async function ensureFinanceInMemory() {
           if (state.financeDbData && Array.isArray(state.financeDbData.collection) && state.financeLoaded) {
+            if (typeof applyDeletedGuardsToFinanceData === "function") {
+              applyDeletedGuardsToFinanceData(state.financeDbData);
+            }
             return state.financeDbData;
           }
           if (isSupabaseActive()) {
@@ -27083,6 +27953,9 @@ end $$;`;
           }
           if (!state.financeDbData || !Array.isArray(state.financeDbData.collection)) {
             state.financeDbData = { collection: [], expense: [], fixedMaster: [], updatedAt: "" };
+          }
+          if (typeof applyDeletedGuardsToFinanceData === "function") {
+            applyDeletedGuardsToFinanceData(state.financeDbData);
           }
           return state.financeDbData;
         }
@@ -27232,11 +28105,22 @@ end $$;`;
           }
           mergePreservedShareConfigs(dashData, state.dashData);
 
+          try {
+            const tombRows = await selectStateRows(["deleted_tombstones"]);
+            if (tombRows && tombRows[0] && tombRows[0].payload && typeof mergeRemoteTombstones === "function") {
+              mergeRemoteTombstones(tombRows[0].payload);
+            }
+          } catch (_) {}
+          if (typeof applyDeletedGuardsToDashData === "function") dashData = applyDeletedGuardsToDashData(dashData, { fromGas: true });
+          if (todoData && typeof applyDeletedGuardsToTodoData === "function") todoData = applyDeletedGuardsToTodoData(todoData, { fromGas: true });
+          if (settingsData && typeof applyDeletedGuardsToSettingsData === "function") settingsData = applyDeletedGuardsToSettingsData(settingsData, { fromGas: true });
+          if (financeDb && typeof applyDeletedGuardsToFinanceData === "function") financeDb = applyDeletedGuardsToFinanceData(financeDb, { fromGas: true });
+
           appendLog("3/5 ws_state_store 도메인 스냅샷 저장 중...");
-          await persistDomainSnapshot("dashboard_main", dashData);
-          if (todoData) await persistDomainSnapshot("todo_main", todoData);
-          if (settingsData) await persistDomainSnapshot("settings_main", settingsData);
-          if (financeDb) await persistDomainSnapshot("finance_db", financeDb);
+          await persistDomainSnapshot("dashboard_main", dashData, { skipTombstoneFetch: true });
+          if (todoData) await persistDomainSnapshot("todo_main", todoData, { skipTombstoneFetch: true });
+          if (settingsData) await persistDomainSnapshot("settings_main", settingsData, { skipTombstoneFetch: true });
+          if (financeDb) await persistDomainSnapshot("finance_db", financeDb, { skipTombstoneFetch: true });
           else if (!canFinance) {
             appendLog("ℹ 재무 DB(finance_db)는 대표/관리자(조항만 · admin) 계정 로그인 시 이관할 수 있습니다.");
           }
@@ -27426,9 +28310,24 @@ end $$;`;
             }
             if (!isSupabaseActive()) return orig.saveTask.call(ds, isEdit, clean, dashData);
             const d = dashData || state.dashData;
+            if (!isEdit && clean && clean.site && typeof clearDeletedSiteGuardByName === "function") {
+              const targetScope = clean.category || clean.scope || (clean.sheetName === "AS" ? "as" : clean.sheetName === "단건" ? "single" : "site");
+              clearDeletedSiteGuardByName(clean.site, targetScope, { skipRemoteSync: true });
+              if (d && Array.isArray(d.sites)) {
+                const nowStamp = Date.now();
+                d.sites.forEach((s) => {
+                  if (s && s.siteName === clean.site && String(s.scope || "site") === String(targetScope)) {
+                    if (!s.createdAtMs) s.createdAtMs = nowStamp;
+                  }
+                });
+              }
+            }
             if (d) ds.saveDashboardCache(d);
             bgDualWrite("saveTask", () => orig.saveTask.call(ds, isEdit, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
+              if (!isEdit && typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               await persistDomainSnapshot("dashboard_main", d);
               if (clean && clean.site) {
                 await syncNormalizedForSite(clean.site, d, clean.id || clean.taskId || "");
@@ -27446,11 +28345,22 @@ end $$;`;
                 : [clean.origDate || "", clean.origMgr || ""].filter(Boolean).join(" · ");
               window.recordAuditLog("공정", "삭제", `[${clean.site || ""}] ${clean.task || ""}`, delSummary);
             }
+            if (clean && typeof recordDeletedTaskGuard === "function") {
+              const tScope = clean.sheetName === "AS" ? "as" : (clean.sheetName === "단건" ? "single" : (clean.sheetName === "신규견적" ? "newSite" : "site"));
+              recordDeletedTaskGuard(
+                { siteName: clean.site || "", scope: tScope },
+                { id: clean.id || clean.taskId || "", taskId: clean.taskId || clean.id || "", taskName: clean.task || "", startDateStr: clean.origDate || clean.date || "", scope: tScope },
+                { skipRemoteSync: true }
+              );
+            }
             if (!isSupabaseActive()) return orig.deleteTask.call(ds, clean, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
             bgDualWrite("deleteTask", () => orig.deleteTask.call(ds, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
+              if (typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               await persistDomainSnapshot("dashboard_main", d);
               if (clean && (clean.id || clean.taskId)) {
                 await removeNormalizedTask(clean.id || clean.taskId);
@@ -27504,17 +28414,42 @@ end $$;`;
           };
 
           ds.deleteSite = function (payload, dashData) {
-            if (typeof window.recordAuditLog === "function" && payload) {
-              window.recordAuditLog("현장", "삭제", payload.site || "", payload.scope || "");
+            const rawPayload = payload || {};
+            const gasPayload = { site: rawPayload.site || "", scope: rawPayload.scope || "site" };
+            const rawScope = rawPayload.rawScope || rawPayload.scope || "site";
+            const siteKey = rawPayload.siteKey || "";
+            const deletedTaskIds = Array.isArray(rawPayload.deletedTaskIds) ? rawPayload.deletedTaskIds : [];
+            const revokeShareTokens = Array.isArray(rawPayload.revokeShareTokens) ? rawPayload.revokeShareTokens : [];
+            if (typeof window.recordAuditLog === "function" && rawPayload) {
+              window.recordAuditLog("현장", "삭제", rawPayload.site || "", rawPayload.scope || "");
             }
-            if (!isSupabaseActive()) return orig.deleteSite.call(ds, payload, dashData);
+            if (rawPayload.site && typeof recordDeletedSiteGuard === "function") {
+              recordDeletedSiteGuard({ siteName: rawPayload.site, siteKey: siteKey, scope: rawScope }, { skipRemoteSync: true });
+            }
+            if (!isSupabaseActive()) return orig.deleteSite.call(ds, gasPayload, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
-            bgDualWrite("deleteSite", () => orig.deleteSite.call(ds, payload, dashData));
+            bgDualWrite("deleteSite", () => orig.deleteSite.call(ds, gasPayload, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
+              if (typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               await persistDomainSnapshot("dashboard_main", d);
-              if (payload && payload.site) {
-                await removeNormalizedSite(payload.site, d);
+              if (revokeShareTokens.length > 0) {
+                for (const tokInfo of revokeShareTokens) {
+                  if (!tokInfo || !tokInfo.key) continue;
+                  try {
+                    await persistDomainSnapshot(tokInfo.key, {
+                      shareType: tokInfo.shareType || "client",
+                      enabled: false,
+                      siteName: String(tokInfo.siteName || ""),
+                      revokedAt: new Date().toISOString()
+                    }, { skipShareSync: true });
+                  } catch (_) {}
+                }
+              }
+              if (rawPayload && rawPayload.site) {
+                await removeNormalizedSite(rawPayload.site, d, rawScope, deletedTaskIds);
               }
               return { ok: true, success: true, source: "supabase" };
             });
@@ -27570,9 +28505,23 @@ end $$;`;
           ds.saveEstimate = function (isEdit, payload, dashData) {
             if (!isSupabaseActive()) return orig.saveEstimate.call(ds, isEdit, payload, dashData);
             const d = dashData || state.dashData;
+            if (!isEdit && payload && payload.siteName && typeof clearDeletedSiteGuardByName === "function") {
+              clearDeletedSiteGuardByName(payload.siteName, "newSite", { skipRemoteSync: true });
+              if (d && Array.isArray(d.sites)) {
+                const nowStamp = Date.now();
+                d.sites.forEach((s) => {
+                  if (s && s.scope === "newSite" && s.siteName === payload.siteName && !s.createdAtMs) {
+                    s.createdAtMs = nowStamp;
+                  }
+                });
+              }
+            }
             if (d) ds.saveDashboardCache(d);
             bgDualWrite("saveEstimate", () => orig.saveEstimate.call(ds, isEdit, payload, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
+              if (!isEdit && typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               await persistDomainSnapshot("dashboard_main", d);
               if (payload && payload.siteName) {
                 await syncNormalizedForSite(payload.siteName, d);
@@ -27584,9 +28533,16 @@ end $$;`;
           ds.promoteEstimateToSite = function (payload, dashData) {
             if (!isSupabaseActive()) return orig.promoteEstimateToSite.call(ds, payload, dashData);
             const d = dashData || state.dashData;
+            const targetScope = (payload && (payload.scope === "single" || payload.scope === "as")) ? payload.scope : "site";
+            if (payload && payload.siteName && typeof clearDeletedSiteGuardByName === "function") {
+              clearDeletedSiteGuardByName(payload.siteName, targetScope, { skipRemoteSync: true });
+            }
             if (d) ds.saveDashboardCache(d);
             bgDualWrite("promoteEstimateToSite", () => orig.promoteEstimateToSite.call(ds, payload, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
+              if (typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               await persistDomainSnapshot("dashboard_main", d);
               if (payload && payload.siteName) {
                 await syncNormalizedForSite(payload.siteName, d);
@@ -27626,6 +28582,7 @@ end $$;`;
                   }
                   collectionRow = {
                     id: "COL-" + Date.now(),
+                    createdAtMs: Date.now(),
                     siteName: payload.siteName,
                     period: calcPeriod,
                     manager: payload.manager || "",
@@ -27708,11 +28665,17 @@ end $$;`;
           };
 
           ds.deleteTodo = function (id, todoData) {
+            if (id && typeof recordDeletedTodoGuard === "function") {
+              recordDeletedTodoGuard(id, { skipRemoteSync: true });
+            }
             if (!isSupabaseActive()) return orig.deleteTodo.call(ds, id, todoData);
             const td = todoData || state.todoData;
             if (td) ds.saveTodoCache(td);
             bgDualWrite("deleteTodo", () => orig.deleteTodo.call(ds, id, todoData));
             return enqueueKeyWrite("todo_main", async () => {
+              if (typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               await persistDomainSnapshot("todo_main", td);
               return { ok: true, success: true, source: "supabase" };
             });
@@ -27723,6 +28686,9 @@ end $$;`;
             if (settingsData) ds.saveSettingsCache(settingsData);
             bgDualWrite("saveSettings", () => orig.saveSettings.call(ds, settingsData));
             return enqueueKeyWrite("settings_main", async () => {
+              if (typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               await persistDomainSnapshot("settings_main", settingsData);
               if (state.dashData && settingsData) {
                 if (Array.isArray(settingsData.members)) {
@@ -27751,6 +28717,7 @@ end $$;`;
                   });
                   state.dashData.partnerPhoneMap = Object.assign({}, state.dashData.partnerPhoneMap || {}, ppMap);
                 }
+                if (typeof applyDeletedGuardsToDashData === "function") applyDeletedGuardsToDashData(state.dashData);
                 ds.saveDashboardCache(state.dashData);
                 await enqueueKeyWrite("dashboard_main", () => persistDomainSnapshot("dashboard_main", state.dashData));
               }
@@ -27768,7 +28735,13 @@ end $$;`;
           };
 
           ds.saveCollectionRow = function (row, authUser) {
-            const { clean: cleanRow, meta } = extractAuditMeta(row);
+            const { clean: rawCleanRow, meta } = extractAuditMeta(row);
+            const isRestore = Boolean(rawCleanRow && rawCleanRow._restoringFromAudit);
+            let cleanRow = rawCleanRow;
+            if (isRestore) {
+              cleanRow = Object.assign({}, rawCleanRow);
+              delete cleanRow._restoringFromAudit;
+            }
             if (typeof window.recordAuditLog === "function" && cleanRow && (!meta || !meta.skip)) {
               const prevCol = (meta && meta.before) || ((cleanRow.id && state.financeDbData && Array.isArray(state.financeDbData.collection))
                 ? state.financeDbData.collection.find(c => c && c.id === cleanRow.id)
@@ -27790,7 +28763,8 @@ end $$;`;
             bgDualWrite("saveCollectionRow", () => orig.saveCollectionRow.call(ds, cleanRow, authUser));
             return enqueueKeyWrite("finance_db", async () => {
               const fb = await ensureFinanceInMemory();
-              const savedId = (cleanRow && cleanRow.id) ? String(cleanRow.id) : ("COL-" + Date.now());
+              const isNewId = !(cleanRow && cleanRow.id);
+              const savedId = !isNewId ? String(cleanRow.id) : ("COL-" + Date.now());
               const cAmt = Number(cleanRow.contractAmount) || 0;
               const chgAmt = Number(cleanRow.changeAmount) || 0;
               const totalAmt = cAmt + chgAmt;
@@ -27813,21 +28787,31 @@ end $$;`;
                 const stageSum = stageKeys.reduce((s, k) => s + (Number(cleanRow[k]) || 0), 0);
                 collected = stageSum + extraPaid;
               }
+              const nextCol = Array.isArray(fb.collection) ? fb.collection.slice() : [];
+              const idx = nextCol.findIndex(r => r && r.id === savedId);
+              const existingCreated = idx >= 0 ? (nextCol[idx].createdAtMs || 0) : 0;
+              const createdAtMs = isRestore ? Date.now() : (cleanRow.createdAtMs || existingCreated || ((isNewId || idx < 0) ? Date.now() : 0));
               const saved = Object.assign({}, cleanRow, {
                 id: savedId,
                 totalAmount: totalAmt,
                 collectedAmount: collected,
-                uncollectedAmount: totalAmt - collected
+                uncollectedAmount: totalAmt - collected,
+                createdAtMs
               });
-              const nextCol = Array.isArray(fb.collection) ? fb.collection.slice() : [];
-              const idx = nextCol.findIndex(r => r && r.id === savedId);
+              if ((isRestore || isNewId) && typeof clearDeletedFinanceGuard === "function") {
+                clearDeletedFinanceGuard("collection", savedId, { skipRemoteSync: true });
+                if (typeof syncTombstonesToSupabase === "function") await syncTombstonesToSupabase();
+              }
               if (idx >= 0) nextCol[idx] = Object.assign({}, nextCol[idx], saved);
               else nextCol.unshift(saved);
               const nextFb = Object.assign({}, fb, { collection: nextCol, updatedAt: new Date().toISOString() });
               state.financeDbData = nextFb;
               if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(nextFb);
               await persistDomainSnapshot("finance_db", nextFb);
-              await upsertRows("ws_finance_store", [{ record_key: "collection::" + savedId, category: "collection", payload: saved, updated_at: new Date().toISOString() }], "record_key");
+              const aliveInDb = (nextFb.collection || []).some(r => r && r.id === savedId);
+              if (aliveInDb) {
+                await upsertRows("ws_finance_store", [{ record_key: "collection::" + savedId, category: "collection", payload: saved, updated_at: new Date().toISOString() }], "record_key");
+              }
               return { success: true, row: saved, id: savedId, source: "supabase" };
             });
           };
@@ -27842,7 +28826,16 @@ end $$;`;
             return enqueueKeyWrite("finance_db", async () => {
               const fb = await ensureFinanceInMemory();
               const existingIds = new Set((fb.collection || []).map(c => c && c.id));
-              const newOnes = list.filter(r => r && !existingIds.has(r.id));
+              const nowBatch = Date.now();
+              const newOnes = list.filter(r => r && !existingIds.has(r.id)).map(r => Object.assign({}, r, { createdAtMs: r.createdAtMs || nowBatch }));
+              newOnes.forEach((r) => {
+                if (r.id && typeof clearDeletedFinanceGuard === "function") {
+                  clearDeletedFinanceGuard("collection", r.id, { skipRemoteSync: true });
+                }
+              });
+              if (newOnes.length > 0 && typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               const nextFb = Object.assign({}, fb, {
                 collection: [...newOnes, ...(fb.collection || [])],
                 updatedAt: new Date().toISOString()
@@ -27858,9 +28851,16 @@ end $$;`;
           };
 
           ds.deleteCollectionRow = function (id, authUser) {
+            if (id && typeof recordDeletedFinanceGuard === "function") {
+              const targetCol = (state.financeDbData && Array.isArray(state.financeDbData.collection)) ? state.financeDbData.collection.find(r => r && r.id === id) : null;
+              recordDeletedFinanceGuard("collection", id, { siteName: (targetCol && targetCol.siteName) || "" }, { skipRemoteSync: true });
+            }
             if (!isSupabaseActive()) return orig.deleteCollectionRow.call(ds, id, authUser);
             bgDualWrite("deleteCollectionRow", () => orig.deleteCollectionRow.call(ds, id, authUser));
             return enqueueKeyWrite("finance_db", async () => {
+              if (typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               const fb = await ensureFinanceInMemory();
               const nextFb = Object.assign({}, fb, {
                 collection: (fb.collection || []).filter(r => r && r.id !== id),
@@ -27875,38 +28875,65 @@ end $$;`;
           };
 
           ds.saveExpenseRow = function (row, authUser) {
-            if (typeof window.recordAuditLog === "function" && row && !row.id) {
-              const regSummary = `청구 ${(Number(row.claimAmount) || 0).toLocaleString("ko-KR")}원 / 지급 ${(Number(row.paidAmount) || 0).toLocaleString("ko-KR")}원` + (row.category ? ` · ${row.category}` : "");
-              window.recordAuditLog("재무", "비용 등록", `${row.vendor || row.item || ""} (${row.siteName || "공통"})`, regSummary);
+            const isRestore = Boolean(row && row._restoringFromAudit);
+            let cleanRow = row;
+            if (isRestore) {
+              cleanRow = Object.assign({}, row);
+              delete cleanRow._restoringFromAudit;
             }
-            if (!isSupabaseActive()) return orig.saveExpenseRow.call(ds, row, authUser);
-            bgDualWrite("saveExpenseRow", () => orig.saveExpenseRow.call(ds, row, authUser));
+            if (typeof window.recordAuditLog === "function" && cleanRow && !cleanRow.id) {
+              const regSummary = `청구 ${(Number(cleanRow.claimAmount) || 0).toLocaleString("ko-KR")}원 / 지급 ${(Number(cleanRow.paidAmount) || 0).toLocaleString("ko-KR")}원` + (cleanRow.category ? ` · ${cleanRow.category}` : "");
+              window.recordAuditLog("재무", "비용 등록", `${cleanRow.vendor || cleanRow.item || ""} (${cleanRow.siteName || "공통"})`, regSummary);
+            }
+            if (!isSupabaseActive()) return orig.saveExpenseRow.call(ds, cleanRow, authUser);
+            bgDualWrite("saveExpenseRow", () => orig.saveExpenseRow.call(ds, cleanRow, authUser));
             return enqueueKeyWrite("finance_db", async () => {
               const fb = await ensureFinanceInMemory();
-              const savedId = (row && row.id) ? String(row.id) : ("EXP-" + Date.now() + "_" + Math.random().toString(36).slice(2, 5).toUpperCase());
-              const computedBal = getExpenseRowBalance(row);
-              const saved = Object.assign({}, row, { id: savedId, balance: computedBal });
+              const isNewId = !(cleanRow && cleanRow.id);
+              const savedId = !isNewId ? String(cleanRow.id) : ("EXP-" + Date.now() + "_" + Math.random().toString(36).slice(2, 5).toUpperCase());
+              const computedBal = getExpenseRowBalance(cleanRow);
               // state.financeDbData.expense 내 임시 ID(temp_exp_...)를 실제 ID로 치환한 사본으로 저장
               const cleanList = (fb.expense || []).filter(e => e && !String(e.id || "").startsWith("temp_exp_"));
               const idx = cleanList.findIndex(e => e.id === savedId);
+              const existingCreated = idx >= 0 ? (cleanList[idx].createdAtMs || 0) : 0;
+              const createdAtMs = isRestore ? Date.now() : (cleanRow.createdAtMs || existingCreated || ((isNewId || idx < 0) ? Date.now() : 0));
+              const saved = Object.assign({}, cleanRow, { id: savedId, balance: computedBal, createdAtMs });
+              if ((isRestore || isNewId) && typeof clearDeletedFinanceGuard === "function") {
+                clearDeletedFinanceGuard("expense", savedId, { skipRemoteSync: true });
+                if (typeof syncTombstonesToSupabase === "function") await syncTombstonesToSupabase();
+              }
               if (idx >= 0) cleanList[idx] = Object.assign({}, cleanList[idx], saved);
               else cleanList.unshift(saved);
               const nextFb = Object.assign({}, fb, { expense: cleanList, updatedAt: new Date().toISOString() });
+              state.financeDbData = nextFb;
+              if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(nextFb);
               await persistDomainSnapshot("finance_db", nextFb);
-              await upsertRows("ws_finance_store", [{ record_key: "expense::" + savedId, category: "expense", payload: saved, updated_at: new Date().toISOString() }], "record_key");
+              const aliveInDb = (nextFb.expense || []).some(e => e && e.id === savedId);
+              if (aliveInDb) {
+                await upsertRows("ws_finance_store", [{ record_key: "expense::" + savedId, category: "expense", payload: saved, updated_at: new Date().toISOString() }], "record_key");
+              }
               return { success: true, row: saved, id: savedId, source: "supabase" };
             });
           };
 
           ds.deleteExpenseRow = function (id, authUser) {
+            if (id && typeof recordDeletedFinanceGuard === "function") {
+              const targetExp = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense.find(e => e && e.id === id) : null;
+              recordDeletedFinanceGuard("expense", id, { siteName: (targetExp && targetExp.siteName) || "" }, { skipRemoteSync: true });
+            }
             if (!isSupabaseActive()) return orig.deleteExpenseRow.call(ds, id, authUser);
             bgDualWrite("deleteExpenseRow", () => orig.deleteExpenseRow.call(ds, id, authUser));
             return enqueueKeyWrite("finance_db", async () => {
+              if (typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               const fb = await ensureFinanceInMemory();
               const nextFb = Object.assign({}, fb, {
                 expense: (fb.expense || []).filter(e => e && e.id !== id),
                 updatedAt: new Date().toISOString()
               });
+              state.financeDbData = nextFb;
+              if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(nextFb);
               await persistDomainSnapshot("finance_db", nextFb);
               await deleteRowsByIds("ws_finance_store", "record_key", ["expense::" + id]);
               return { success: true, source: "supabase" };
@@ -27916,17 +28943,25 @@ end $$;`;
           ds.deleteExpenseBatchRows = function (ids, authUser) {
             const idList = Array.isArray(ids) ? ids.filter(Boolean) : [];
             if (idList.length === 0) return Promise.resolve({ success: true });
+            if (typeof recordDeletedFinanceGuard === "function") {
+              recordDeletedFinanceGuard("expense", idList, {}, { skipRemoteSync: true });
+            }
             if (!isSupabaseActive()) {
               return Promise.all(idList.map(id => orig.deleteExpenseRow.call(ds, id, authUser))).then(() => ({ success: true }));
             }
             bgDualWrite("deleteExpenseBatchRows", () => Promise.all(idList.map(id => orig.deleteExpenseRow.call(ds, id, authUser))));
             const idSet = new Set(idList);
             return enqueueKeyWrite("finance_db", async () => {
+              if (typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               const fb = await ensureFinanceInMemory();
               const nextFb = Object.assign({}, fb, {
                 expense: (fb.expense || []).filter(e => e && !idSet.has(e.id)),
                 updatedAt: new Date().toISOString()
               });
+              state.financeDbData = nextFb;
+              if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(nextFb);
               await persistDomainSnapshot("finance_db", nextFb);
               await deleteRowsByIds("ws_finance_store", "record_key", idList.map(id => "expense::" + id));
               return { success: true, deletedCount: idList.length, source: "supabase" };
@@ -27953,6 +28988,7 @@ end $$;`;
                 const claim = Number(am.baseAmount) || 0;
                 created.push({
                   id: `EXP-${nowBase}_${idx}`,
+                  createdAtMs: nowBase,
                   settleMonth: targetMonth,
                   item: am.item || "고정비",
                   category: am.category || "",
@@ -27986,10 +29022,12 @@ end $$;`;
               const fb = await ensureFinanceInMemory();
               const nowBase = Date.now();
               const newRows = (Array.isArray(rows) ? rows : []).map((r, idx) => Object.assign({}, r, {
-                id: (r && r.id) ? String(r.id) : `EXP-${nowBase}_${idx}`
+                id: (r && r.id) ? String(r.id) : `EXP-${nowBase}_${idx}`,
+                createdAtMs: (r && r.createdAtMs) || nowBase
               }));
               const nextExp = [...newRows, ...(fb.expense || [])];
               const nextFb = Object.assign({}, fb, { expense: nextExp, updatedAt: new Date().toISOString() });
+              state.financeDbData = nextFb;
               ds.saveFinanceCache(nextFb);
               await persistDomainSnapshot("finance_db", nextFb);
               if (newRows.length > 0) {
@@ -28004,28 +29042,45 @@ end $$;`;
             bgDualWrite("saveFixedMasterRow", () => orig.saveFixedMasterRow.call(ds, row, authUser));
             return enqueueKeyWrite("finance_db", async () => {
               const fb = await ensureFinanceInMemory();
-              const savedId = (row && row.id) ? String(row.id) : ("FM-" + Date.now());
-              const saved = Object.assign({}, row, { id: savedId });
+              const isNewId = !(row && row.id);
+              const savedId = !isNewId ? String(row.id) : ("FM-" + Date.now());
               const cleanList = (fb.fixedMaster || []).filter(f => f && !String(f.id || "").startsWith("temp_fm_"));
               const idx = cleanList.findIndex(f => f.id === savedId);
+              const existingCreated = idx >= 0 ? (cleanList[idx].createdAtMs || 0) : 0;
+              const createdAtMs = row.createdAtMs || existingCreated || ((isNewId || idx < 0) ? Date.now() : 0);
+              const saved = Object.assign({}, row, { id: savedId, createdAtMs });
               if (idx >= 0) cleanList[idx] = Object.assign({}, cleanList[idx], saved);
               else cleanList.unshift(saved);
               const nextFb = Object.assign({}, fb, { fixedMaster: cleanList, updatedAt: new Date().toISOString() });
+              state.financeDbData = nextFb;
+              if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(nextFb);
               await persistDomainSnapshot("finance_db", nextFb);
-              await upsertRows("ws_finance_store", [{ record_key: "fixed::" + savedId, category: "fixedMaster", payload: saved, updated_at: new Date().toISOString() }], "record_key");
+              const aliveInDb = (nextFb.fixedMaster || []).some(f => f && f.id === savedId);
+              if (aliveInDb) {
+                await upsertRows("ws_finance_store", [{ record_key: "fixed::" + savedId, category: "fixedMaster", payload: saved, updated_at: new Date().toISOString() }], "record_key");
+              }
               return { success: true, id: savedId, source: "supabase" };
             });
           };
 
           ds.deleteFixedMasterRow = function (id, authUser) {
+            if (id && typeof recordDeletedFinanceGuard === "function") {
+              const targetFm = (state.financeDbData && Array.isArray(state.financeDbData.fixedMaster)) ? state.financeDbData.fixedMaster.find(f => f && f.id === id) : null;
+              recordDeletedFinanceGuard("fixedMaster", id, { item: (targetFm && targetFm.item) || "" }, { skipRemoteSync: true });
+            }
             if (!isSupabaseActive()) return orig.deleteFixedMasterRow.call(ds, id, authUser);
             bgDualWrite("deleteFixedMasterRow", () => orig.deleteFixedMasterRow.call(ds, id, authUser));
             return enqueueKeyWrite("finance_db", async () => {
+              if (typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               const fb = await ensureFinanceInMemory();
               const nextFb = Object.assign({}, fb, {
                 fixedMaster: (fb.fixedMaster || []).filter(f => f && f.id !== id),
                 updatedAt: new Date().toISOString()
               });
+              state.financeDbData = nextFb;
+              if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(nextFb);
               await persistDomainSnapshot("finance_db", nextFb);
               await deleteRowsByIds("ws_finance_store", "record_key", ["fixed::" + id]);
               return { success: true, source: "supabase" };
@@ -28162,6 +29217,9 @@ end $$;`;
           isConfigured,
           isSupabaseActive,
           persistSnapshot: persistDomainSnapshot,
+          persistSnapshotQueued: (key, rawPayload, opts) => enqueueKeyWrite(key, () => persistDomainSnapshot(key, rawPayload, opts)),
+          syncTombstones: syncTombstonesToSupabase,
+          pullTombstones: pullAndMergeTombstonesFromSupabase,
           fetchAuditLogs: fetchAuditLogsFromSupabase,
           pullAuditLogs: pullAuditLogsFromSupabase,
           syncAuditLogs: syncAndSaveAuditLogs,
@@ -29226,7 +30284,7 @@ end $$;`;
 
           let updated = false;
           if (dashData) {
-            const cleanDash = applyDeletedGuardsToDashData(dashData);
+            const cleanDash = applyDeletedGuardsToDashData(dashData, { fromGas: !useSb });
             let mutStart = 0;
             try { mutStart = Number(localStorage.getItem("ws_last_mutation_start_ms") || "0"); } catch (_) {}
             if (!useSb && Date.now() - mutStart < 25000 && state.dashData && Array.isArray(state.dashData.sites) && Array.isArray(cleanDash.sites)) {
@@ -29234,7 +30292,7 @@ end $$;`;
               state.dashData.sites.forEach((localSite) => {
                 if (!localSite || (localSite.scope || "site") === "newSite") return;
                 const key = `${localSite.scope || "site"}::${_normDelSiteName(localSite.siteName)}`;
-                if (__wsDeletedSiteGuards.has("KEY::" + localSite.siteKey) || __wsDeletedSiteGuards.has("NAME::" + key)) return;
+                if (typeof isSiteTombstoned === "function" && isSiteTombstoned(localSite, localSite.scope || "site", { fromGas: true })) return;
                 const hasPendingOpt = (localSite.tasks || []).some((t) => t && (!t.row || (Number(t.updatedAtMs) || 0) >= mutStart - 2000));
                 if (hasPendingOpt && !serverKeys.has(key)) {
                   cleanDash.sites.unshift(localSite);
@@ -29249,18 +30307,31 @@ end $$;`;
             }
             updated = true;
           }
-          if (todoData) { state.todoData = todoData; updated = true; }
+          if (todoData) {
+            state.todoData = typeof applyDeletedGuardsToTodoData === "function" ? applyDeletedGuardsToTodoData(todoData, { fromGas: !useSb }) : todoData;
+            if (!useSb && window.WSDataService && typeof window.WSDataService.saveTodoCache === "function") {
+              window.WSDataService.saveTodoCache(state.todoData);
+            }
+            updated = true;
+          }
           if (settingsData) {
-            state.settingsData = settingsData;
+            state.settingsData = typeof applyDeletedGuardsToSettingsData === "function" ? applyDeletedGuardsToSettingsData(settingsData, { fromGas: !useSb }) : settingsData;
+            if (!useSb && window.WSDataService && typeof window.WSDataService.saveSettingsCache === "function") {
+              window.WSDataService.saveSettingsCache(state.settingsData);
+            }
             updated = true;
           }
           if (financeData && financeData.success) {
-            state.financeDbData = {
+            const nextFinData = {
               collection: Array.isArray(financeData.collection) ? financeData.collection : [],
               expense: Array.isArray(financeData.expense) ? financeData.expense : [],
               fixedMaster: Array.isArray(financeData.fixedMaster) ? financeData.fixedMaster : [],
               updatedAt: financeData.updatedAt || ""
             };
+            state.financeDbData = typeof applyDeletedGuardsToFinanceData === "function" ? applyDeletedGuardsToFinanceData(nextFinData, { fromGas: !useSb }) : nextFinData;
+            if (!useSb && window.WSDataService && typeof window.WSDataService.saveFinanceCache === "function") {
+              window.WSDataService.saveFinanceCache(state.financeDbData);
+            }
             state.financeLoaded = true;
             state.financeLastFetchedAt = Date.now();
             state.dirtyPcTabs.finance = true;
@@ -29809,13 +30880,13 @@ end $$;`;
       function bootstrap() {
         const ds = window.WSDataService;
         state.dashData = applyDeletedGuardsToDashData(ds ? ds.getInitialDashboardData() : { kpi: {}, scopeCounts: {}, sites: [], siteInfoMap: {}, holidays: {} });
-        state.todoData = ds ? ds.getInitialTodoData() : { list: [] };
-        state.financeData = ds ? ds.getInitialFinanceData() : { summary: {}, ledger: [] };
+        state.todoData = applyDeletedGuardsToTodoData(ds ? ds.getInitialTodoData() : { list: [] });
+        state.financeData = applyDeletedGuardsToFinanceData(ds ? ds.getInitialFinanceData() : { summary: {}, ledger: [] });
         if (state.financeData && Array.isArray(state.financeData.collection)) {
           state.financeDbData = state.financeData;
           state.financeLoaded = false;
         }
-        state.settingsData = ds ? ds.getInitialSettingsData() : { partners: [], tasks: [], members: [] };
+        state.settingsData = applyDeletedGuardsToSettingsData(ds ? ds.getInitialSettingsData() : { partners: [], tasks: [], members: [] });
         try {
           const initSavedAuth = getTopSavedAuth();
           if (initSavedAuth && initSavedAuth.user) {
@@ -30020,7 +31091,11 @@ end $$;`;
             ? state.financeDbData.collection.find(r => r && r.id === before.id)
             : null;
           const curColSnap = curCol ? JSON.parse(JSON.stringify(curCol)) : null;
-          ds.saveCollectionRow(Object.assign({}, before, { _skipAudit: true }), user).then((res) => {
+          before.createdAtMs = Date.now();
+          if (before.id && typeof clearDeletedFinanceGuard === "function") {
+            clearDeletedFinanceGuard("collection", before.id);
+          }
+          ds.saveCollectionRow(Object.assign({}, before, { _skipAudit: true, _restoringFromAudit: true }), user).then((res) => {
             if (res && res.success) {
               if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
               if (!Array.isArray(state.financeDbData.collection)) state.financeDbData.collection = [];
@@ -30046,7 +31121,11 @@ end $$;`;
             ? state.financeDbData.expense.find(e => e && e.id === before.id)
             : null;
           const curExpSnap = curExp ? JSON.parse(JSON.stringify(curExp)) : null;
-          ds.saveExpenseRow(before, user).then((res) => {
+          before.createdAtMs = Date.now();
+          if (before.id && typeof clearDeletedFinanceGuard === "function") {
+            clearDeletedFinanceGuard("expense", before.id);
+          }
+          ds.saveExpenseRow(Object.assign({}, before, { _restoringFromAudit: true }), user).then((res) => {
             if (res && res.success) {
               if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
               if (!Array.isArray(state.financeDbData.expense)) state.financeDbData.expense = [];
