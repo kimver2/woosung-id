@@ -8102,18 +8102,56 @@ end $$;`;
       }
       window.stripExpenseTaxProof = stripExpenseTaxProof;
 
+      function isExpense33Withholding(rowOrNote, explicitProof) {
+        if (explicitProof !== undefined && explicitProof !== null) {
+          return String(explicitProof).trim() === "3.3%원천징수";
+        }
+        const note = (rowOrNote && typeof rowOrNote === "object") ? rowOrNote.note : rowOrNote;
+        const rowProof = (rowOrNote && typeof rowOrNote === "object" && rowOrNote.taxProof)
+          ? String(rowOrNote.taxProof).trim()
+          : parseExpenseTaxProof(note);
+        if (rowProof === "3.3%원천징수") return true;
+        return /3\.3%\s*(공제|원천징수|원천)/.test(String(note || ""));
+      }
+      window.isExpense33Withholding = isExpense33Withholding;
+
+      function calcExpenseFinancials(claimAmount, paidAmount, rowOrNote, explicitProof) {
+        const claim = Number(claimAmount) || 0;
+        const paid = Number(paidAmount) || 0;
+        const is33 = isExpense33Withholding(rowOrNote, explicitProof);
+        const tax33 = is33 ? Math.round(claim * 0.033) : 0;
+        const payableAmount = claim - tax33;
+        const rawBalance = payableAmount - paid;
+        const balance = Math.max(rawBalance, 0);
+        return {
+          claim: claim,
+          paid: paid,
+          is33: is33,
+          tax33: tax33,
+          payableAmount: payableAmount,
+          rawBalance: rawBalance,
+          balance: balance,
+          isFullyPaid: balance <= 0
+        };
+      }
+      window.calcExpenseFinancials = calcExpenseFinancials;
+
       function getExpenseRowBalance(e) {
         if (!e) return 0;
-        const claim = Number(e.claimAmount) || 0;
-        const paid = Number(e.paidAmount) || 0;
-        const proof = parseExpenseTaxProof(e.note);
-        if (proof === "3.3%원천징수" || /3\.3%\s*공제/.test(String(e.note || ""))) {
-          const netTarget = claim - Math.round(claim * 0.033);
-          return Math.max(netTarget - paid, 0);
+        const fin = calcExpenseFinancials(e.claimAmount, e.paidAmount, e);
+        if (fin.is33) {
+          return fin.balance;
         }
-        return (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : Math.max(claim - paid, 0);
+        return (e.balance !== undefined && e.balance !== null && e.balance !== "")
+          ? Math.max(Number(e.balance) || 0, 0)
+          : fin.balance;
       }
       window.getExpenseRowBalance = getExpenseRowBalance;
+
+      function isExpenseRowPaid(e) {
+        return getExpenseRowBalance(e) <= 0;
+      }
+      window.isExpenseRowPaid = isExpenseRowPaid;
 
       function buildExpenseNoteWithTaxProof(rawNote, proof) {
         const base = stripExpenseTaxProof(rawNote);
@@ -8169,10 +8207,7 @@ end $$;`;
           if (!allMonths && selMonth) {
             if (normalizeMonthStr(e.settleMonth) !== selMonth) return false;
           }
-          const claim = Number(e.claimAmount) || 0;
-          const paid = Number(e.paidAmount) || 0;
-          const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
-          return bal > 0;
+          return getExpenseRowBalance(e) > 0;
         });
 
         if (unpaidList.length === 0) {
@@ -8180,12 +8215,7 @@ end $$;`;
           return;
         }
 
-        const totalUnpaid = unpaidList.reduce((acc, e) => {
-          const claim = Number(e.claimAmount) || 0;
-          const paid = Number(e.paidAmount) || 0;
-          const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
-          return acc + bal;
-        }, 0);
+        const totalUnpaid = unpaidList.reduce((acc, e) => acc + getExpenseRowBalance(e), 0);
 
         const monthLabel = allMonths ? "전체 기간" : `${selMonth}월`;
         const lines = [
@@ -8195,9 +8225,7 @@ end $$;`;
         ];
 
         unpaidList.forEach((e, idx) => {
-          const claim = Number(e.claimAmount) || 0;
-          const paid = Number(e.paidAmount) || 0;
-          const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
+          const bal = getExpenseRowBalance(e);
 
           const matchedFixed = fixedMaster.find(f => f.vendor === e.vendor);
           let accountInfo = (e.category2 || "").trim();
@@ -8263,7 +8291,7 @@ end $$;`;
           filtered.forEach(e => {
             const claim = Number(e.claimAmount) || 0;
             const paid = Number(e.paidAmount) || 0;
-            const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
+            const bal = getExpenseRowBalance(e);
             rows.push([
               e.settleMonth || "",
               e.item || "",
@@ -9404,9 +9432,7 @@ end $$;`;
           }
 
           // 3. 상태 필터
-          const claim = Number(e.claimAmount) || 0;
-          const paid = Number(e.paidAmount) || 0;
-          const bal = (e.balance !== undefined && e.balance !== null && e.balance !== "") ? Number(e.balance) : (claim - paid);
+          const bal = getExpenseRowBalance(e);
           if (stFilter === "unpaid" && bal <= 0) return false;
           if (stFilter === "paid" && bal > 0) return false;
 
@@ -9504,8 +9530,10 @@ end $$;`;
         }
 
         prefill = prefill || {};
+        window._expModalCtxPrefill = prefill;
         const defMonth = prefill.settleMonth || (state.expenseSelectedMonth || getTodayYmd().slice(0, 7));
 
+        const initPrefillFin = calcExpenseFinancials(prefill.claimAmount || 0, prefill.paidAmount || 0, prefill);
         const rData = row ? Object.assign({}, row) : {
           id: "",
           settleMonth: defMonth,
@@ -9516,10 +9544,11 @@ end $$;`;
           siteName: prefill.siteName || "공통",
           claimAmount: prefill.claimAmount || 0,
           paidAmount: prefill.paidAmount || 0,
-          balance: (prefill.claimAmount || 0) - (prefill.paidAmount || 0),
+          balance: initPrefillFin.balance,
           payDate: prefill.payDate || "",
           note: prefill.note || ""
         };
+        window._expModalLastItem = String(rData.item || "외주").trim();
 
         const siteOptions = Array.from(new Set([
           "공통",
@@ -9537,10 +9566,45 @@ end $$;`;
           );
           if (p && p.bankAccount) rData.category2 = p.bankAccount;
         }
-        const vendorOptions = Array.from(new Set([
-          ...partnerList.map(p => p.fullName || p.name),
-          ...expList.map(e => e.vendor)
-        ].filter(Boolean)));
+        const masterVendorNames = Array.from(new Set(
+          partnerList.map(p => String((p && (p.fullName || p.name)) || "").trim()).filter(Boolean)
+        ));
+        const masterVendorSet = new Set(masterVendorNames);
+        const existingExpVendors = Array.from(new Set(
+          expList.map(e => String((e && e.vendor) || "").trim()).filter(v => v && !masterVendorSet.has(v))
+        ));
+        const curVendorTrimmed = String(rData.vendor || "").trim();
+        const extraCurVendor = (curVendorTrimmed && !masterVendorSet.has(curVendorTrimmed) && !existingExpVendors.includes(curVendorTrimmed))
+          ? [curVendorTrimmed]
+          : [];
+
+        const baseItemOpts = ["외주", "자재", "급여", "인건비", "경비", "고정비", "장비", "식대", "공과금", "세금", "소모품비", "기타"];
+        const curItemTrimmed = String(rData.item || "외주").trim() || "외주";
+        const itemOptions = baseItemOpts.includes(curItemTrimmed) ? baseItemOpts : [curItemTrimmed, ...baseItemOpts];
+        const initProof = parseExpenseTaxProof(rData.note) || (isExpense33Withholding(rData) ? "3.3%원천징수" : "");
+
+        const linkedIds = (isEdit && Array.isArray(prefill.linkedIds)) ? prefill.linkedIds : [];
+        const linkedRows = linkedIds.length > 1
+          ? linkedIds.map(lid => expList.find(e => e && e.id === lid)).filter(Boolean)
+          : [];
+        const linkedSwitcherHtml = linkedRows.length > 1 ? `
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+            <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+              <span style="font-size:11.5px;font-weight:800;color:#1e40af;">🔗 연결된 내역 ${linkedRows.length}건:</span>
+              ${linkedRows.map(lr => {
+                const active = lr.id === row.id;
+                return `<button type="button" onclick="window.openExpenseModal('${escJs(lr.id)}', window._expModalCtxPrefill)"
+                  style="padding:2px 8px;font-size:11px;font-weight:700;border-radius:5px;cursor:pointer;border:1px solid ${active ? "#2563eb" : "#93c5fd"};background:${active ? "#2563eb" : "#ffffff"};color:${active ? "#ffffff" : "#1d4ed8"};">
+                  ${escHtml(formatShortSettleMonth(lr.settleMonth) || "-")} · ${escHtml(lr.vendor || lr.category || lr.id)} (${formatKrw(lr.claimAmount)})
+                </button>`;
+              }).join("")}
+            </div>
+            <button type="button" onclick="window.openExpenseModal(null, { siteName: '${escJs(prefill.siteName || rData.siteName || "공통")}', category: '${escJs(prefill.category || rData.category || "")}', vendor: '${escJs(prefill.vendor || "")}', settleMonth: '${escJs(prefill.settleMonth || rData.settleMonth || defMonth)}' })"
+              style="padding:2px 8px;font-size:11px;font-weight:700;border-radius:5px;border:1px solid #86efac;background:#f0fdf4;color:#15803d;cursor:pointer;">
+              + 추가 등록
+            </button>
+          </div>
+        ` : "";
 
         const bodyEl = document.getElementById("expenseModalBody");
         if (!bodyEl) return;
@@ -9549,9 +9613,7 @@ end $$;`;
           <datalist id="expenseSiteDatalist">
             ${siteOptions.map(s => `<option value="${escHtml(s)}"></option>`).join("")}
           </datalist>
-          <datalist id="expenseVendorDatalist">
-            ${vendorOptions.map(v => `<option value="${escHtml(v)}"></option>`).join("")}
-          </datalist>
+          ${linkedSwitcherHtml}
 
           <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
             <div>
@@ -9561,8 +9623,8 @@ end $$;`;
             </div>
             <div>
               <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">항목 <span style="color:#ef4444;">*</span></label>
-              <select id="expItem" style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;">
-                ${["급여", "자재", "외주", "장비", "식대", "공과금", "기타"].map(opt => `<option value="${opt}" ${rData.item === opt ? "selected" : ""}>${opt}</option>`).join("")}
+              <select id="expItem" onchange="window.onExpenseItemChange(this.value)" style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;">
+                ${itemOptions.map(opt => `<option value="${escHtml(opt)}" ${curItemTrimmed === opt ? "selected" : ""}>${escHtml(opt)}</option>`).join("")}
               </select>
             </div>
           </div>
@@ -9570,9 +9632,23 @@ end $$;`;
           <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
             <div>
               <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">업체명 <span style="color:#ef4444;">*</span></label>
-              <input type="text" id="expVendor" list="expenseVendorDatalist" value="${escHtml(rData.vendor)}" placeholder="거래처명 입력 또는 선택"
-                onchange="window.onExpenseVendorChange(this.value, true)"
-                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+              <select id="expVendorSelect"
+                data-ws-searchable="1"
+                data-ws-custom-value="__CUSTOM__"
+                data-ws-custom-label="✏️ 직접 입력..."
+                data-ws-placeholder="거래처 검색 또는 선택"
+                onchange="window.onExpenseVendorSelectChange(this.value)"
+                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;">
+                <option value="" ${!curVendorTrimmed ? "selected" : ""}>거래처 선택</option>
+                ${extraCurVendor.map(v => `<option value="${escHtml(v)}" selected>${escHtml(v)}</option>`).join("")}
+                ${masterVendorNames.length ? `<optgroup label="── 거래처 마스터 ──">${masterVendorNames.map(v => `<option value="${escHtml(v)}" ${curVendorTrimmed === v ? "selected" : ""}>${escHtml(v)}</option>`).join("")}</optgroup>` : ""}
+                ${existingExpVendors.length ? `<optgroup label="── 기존 등록 업체 ──">${existingExpVendors.map(v => `<option value="${escHtml(v)}" ${curVendorTrimmed === v ? "selected" : ""}>${escHtml(v)}</option>`).join("")}</optgroup>` : ""}
+                <option value="__CUSTOM__">✏️ 직접 입력...</option>
+              </select>
+              <input type="hidden" id="expVendor" value="${escHtml(curVendorTrimmed)}" />
+              <input type="text" id="expVendorCustom" class="ws-input" value="" placeholder="업체명을 직접 입력하세요"
+                oninput="window.onExpenseVendorCustomInput(this.value)"
+                style="display:none;margin-top:6px;width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;box-sizing:border-box;" />
               <div id="expVendorHint" style="font-size:11px;color:#2563eb;margin-top:3px;font-weight:600;"></div>
             </div>
             <div>
@@ -9630,12 +9706,12 @@ end $$;`;
             <div>
               <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">증빙 구분 <button type="button" onclick="window.applyExpense33Withholding()" style="margin-left:6px;padding:1px 6px;font-size:10.5px;font-weight:800;border-radius:4px;border:1px solid #fcd34d;background:#fef3c7;color:#b45309;cursor:pointer;" title="청구금액에서 3.3% 원천징수 공제 후 실지급액 자동 계산">⚡ 3.3% 공제</button></label>
               <select id="expTaxProof" onchange="window.calcExpenseModalBalance()" style="width:100%;height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;">
-                <option value="" ${!parseExpenseTaxProof(rData.note) ? "selected" : ""}>미선택</option>
-                <option value="세금계산서" ${parseExpenseTaxProof(rData.note) === "세금계산서" ? "selected" : ""}>🧾 세금계산서</option>
-                <option value="현금영수증" ${parseExpenseTaxProof(rData.note) === "현금영수증" ? "selected" : ""}>🧾 현금영수증</option>
-                <option value="3.3%원천징수" ${parseExpenseTaxProof(rData.note) === "3.3%원천징수" ? "selected" : ""}>🧾 3.3% 원천징수</option>
-                <option value="카드" ${parseExpenseTaxProof(rData.note) === "카드" ? "selected" : ""}>💳 카드</option>
-                <option value="무증빙" ${parseExpenseTaxProof(rData.note) === "무증빙" ? "selected" : ""}>⚠️ 무증빙</option>
+                <option value="" ${!initProof ? "selected" : ""}>미선택</option>
+                <option value="세금계산서" ${initProof === "세금계산서" ? "selected" : ""}>🧾 세금계산서</option>
+                <option value="현금영수증" ${initProof === "현금영수증" ? "selected" : ""}>🧾 현금영수증</option>
+                <option value="3.3%원천징수" ${initProof === "3.3%원천징수" ? "selected" : ""}>🧾 3.3% 원천징수</option>
+                <option value="카드" ${initProof === "카드" ? "selected" : ""}>💳 카드</option>
+                <option value="무증빙" ${initProof === "무증빙" ? "selected" : ""}>⚠️ 무증빙</option>
               </select>
             </div>
             <div>
@@ -9664,6 +9740,7 @@ end $$;`;
           `;
         }
 
+        if (typeof enhanceWsSelects === "function") enhanceWsSelects();
         calcExpenseModalBalance();
         if (rData.vendor) onExpenseVendorChange(rData.vendor, false);
         openModal("expenseModal");
@@ -9682,11 +9759,11 @@ end $$;`;
         const claim = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const paid = Number(String(document.getElementById("expPaidAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const proof = document.getElementById("expTaxProof")?.value || "";
-        const tax33 = proof === "3.3%원천징수" ? Math.round(claim * 0.033) : 0;
-        const bal = (claim - tax33) - paid;
+        const fin = calcExpenseFinancials(claim, paid, null, proof);
+        const bal = fin.rawBalance;
         const balEl = document.getElementById("expBalanceDisplay");
         if (balEl) {
-          balEl.value = (bal === 0 && tax33 > 0)
+          balEl.value = (bal === 0 && fin.tax33 > 0)
             ? `0원 (3.3% 공제)`
             : bal.toLocaleString("ko-KR") + "원";
           balEl.style.color = bal > 0 ? "#dc2626" : (bal === 0 ? "#15803d" : "#2563eb");
@@ -9697,7 +9774,7 @@ end $$;`;
       window.setExpenseFullPaid = function() {
         const claim = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const proof = document.getElementById("expTaxProof")?.value || "";
-        const target = proof === "3.3%원천징수" ? (claim - Math.round(claim * 0.033)) : claim;
+        const target = calcExpenseFinancials(claim, 0, null, proof).payableAmount;
         const paidEl = document.getElementById("expPaidAmount");
         if (paidEl) paidEl.value = target > 0 ? target.toLocaleString("ko-KR") : "0";
         const dateEl = document.getElementById("expPayDate");
@@ -9709,12 +9786,16 @@ end $$;`;
       window.applyExpense33Withholding = function() {
         const claim = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         if (claim <= 0) return showToast("ℹ️ 청구금액을 먼저 입력해 주세요.");
-        const tax33 = Math.round(claim * 0.033);
-        const netPay = claim - tax33;
+        const fin = calcExpenseFinancials(claim, 0, null, "3.3%원천징수");
+        const tax33 = fin.tax33;
+        const netPay = fin.payableAmount;
         const paidEl = document.getElementById("expPaidAmount");
         if (paidEl) paidEl.value = netPay.toLocaleString("ko-KR");
         const proofEl = document.getElementById("expTaxProof");
-        if (proofEl) proofEl.value = "3.3%원천징수";
+        if (proofEl) {
+          proofEl.value = "3.3%원천징수";
+          if (typeof syncEnhancedWsSelect === "function") syncEnhancedWsSelect(proofEl);
+        }
         const noteEl = document.getElementById("expNote");
         if (noteEl && !String(noteEl.value || "").includes("3.3%")) {
           noteEl.value = (noteEl.value ? noteEl.value + " / " : "") + `3.3% 공제 ${tax33.toLocaleString("ko-KR")}원 (실지급 ${netPay.toLocaleString("ko-KR")}원)`;
@@ -9725,8 +9806,90 @@ end $$;`;
         showToast(`✅ 3.3% 공제(${tax33.toLocaleString("ko-KR")}원) 적용 완료 · 실지급 ${netPay.toLocaleString("ko-KR")}원`);
       };
 
+      window.onExpenseVendorSelectChange = function(val, prefillCustomText) {
+        const selVal = String(val || "");
+        const customEl = document.getElementById("expVendorCustom");
+        const hiddenEl = document.getElementById("expVendor");
+        if (selVal === "__CUSTOM__") {
+          const typedFallback = prefillCustomText !== undefined ? prefillCustomText : (window._wsLastDropSearch || "");
+          window._wsLastDropSearch = "";
+          const initialCustom = String(typedFallback || (customEl && customEl.value) || "").trim();
+          if (customEl) {
+            customEl.style.display = "block";
+            customEl.value = initialCustom;
+            if (typeof customEl.focus === "function") customEl.focus();
+          }
+          if (hiddenEl) hiddenEl.value = initialCustom;
+          window.onExpenseVendorChange(initialCustom, true);
+        } else {
+          if (customEl) {
+            customEl.style.display = "none";
+            customEl.value = "";
+          }
+          if (hiddenEl) hiddenEl.value = selVal;
+          window.onExpenseVendorChange(selVal, true);
+        }
+      };
+
+      window.onExpenseVendorCustomInput = function(val) {
+        const str = String(val || "");
+        const hiddenEl = document.getElementById("expVendor");
+        if (hiddenEl) hiddenEl.value = str;
+        window.onExpenseVendorChange(str, true);
+      };
+
+      window.onExpenseItemChange = function(newItem) {
+        const itemStr = String(newItem || "").trim();
+        const prevItem = String(window._expModalLastItem || "").trim();
+        window._expModalLastItem = itemStr;
+
+        const selEl = document.getElementById("expVendorSelect");
+        const customEl = document.getElementById("expVendorCustom");
+        const hiddenEl = document.getElementById("expVendor");
+        if (!selEl || !hiddenEl) return;
+
+        if (itemStr && itemStr !== "외주") {
+          const hasOpt = Array.from(selEl.options || []).some(o => o.value === itemStr);
+          if (!hasOpt) {
+            const opt = document.createElement("option");
+            opt.value = itemStr;
+            opt.textContent = itemStr;
+            const customOpt = Array.from(selEl.options || []).find(o => o.value === "__CUSTOM__");
+            if (customOpt && customOpt.parentNode === selEl) {
+              selEl.insertBefore(opt, customOpt);
+            } else {
+              selEl.appendChild(opt);
+            }
+          }
+          selEl.value = itemStr;
+          hiddenEl.value = itemStr;
+          if (customEl) {
+            customEl.style.display = "none";
+            customEl.value = "";
+          }
+          if (typeof syncEnhancedWsSelect === "function") syncEnhancedWsSelect(selEl);
+          window.onExpenseVendorChange(itemStr, true);
+        } else if (itemStr === "외주") {
+          const curVendor = String(hiddenEl.value || "").trim();
+          if (curVendor && prevItem && prevItem !== "외주" && curVendor === prevItem) {
+            selEl.value = "";
+            hiddenEl.value = "";
+            if (customEl) {
+              customEl.style.display = "none";
+              customEl.value = "";
+            }
+            if (typeof syncEnhancedWsSelect === "function") syncEnhancedWsSelect(selEl);
+            window.onExpenseVendorChange("", true);
+          }
+        }
+      };
+
       window.onExpenseVendorChange = function(vendorVal, isUserAction) {
-        if (!vendorVal) return;
+        const hintEl = document.getElementById("expVendorHint");
+        if (!vendorVal) {
+          if (hintEl) hintEl.textContent = "";
+          return;
+        }
         const partners = getPartnersListForTab();
         const vNorm = vendorVal.toLowerCase().trim();
         const found = partners.find(p =>
@@ -9734,7 +9897,6 @@ end $$;`;
           (p.fullName && p.fullName.toLowerCase() === vNorm) ||
           (p.dropdownVal && p.dropdownVal.toLowerCase().includes(vNorm))
         );
-        const hintEl = document.getElementById("expVendorHint");
         const cat2El = document.getElementById("expCategory2");
         const catEl = document.getElementById("expCategory");
         if (found) {
@@ -9762,7 +9924,14 @@ end $$;`;
         if (window._isSavingExpense) return;
         const settleMonth = (document.getElementById("expSettleMonth")?.value || "").trim();
         const item = (document.getElementById("expItem")?.value || "외주").trim();
-        const vendor = (document.getElementById("expVendor")?.value || "").trim();
+        const vendorSelEl = document.getElementById("expVendorSelect");
+        const vendorCustomEl = document.getElementById("expVendorCustom");
+        const vendorHiddenEl = document.getElementById("expVendor");
+        const vendorSelVal = vendorSelEl ? String(vendorSelEl.value || "") : "";
+        const vendor = (vendorSelVal === "__CUSTOM__"
+          ? (vendorCustomEl ? vendorCustomEl.value : "")
+          : (vendorSelEl ? vendorSelVal : (vendorHiddenEl ? vendorHiddenEl.value : ""))
+        ).trim();
         const category = (document.getElementById("expCategory")?.value || "").trim();
         const siteName = (document.getElementById("expSiteName")?.value || "공통").trim();
         const category2 = (document.getElementById("expCategory2")?.value || "").trim();
@@ -9770,10 +9939,9 @@ end $$;`;
         const paidAmount = Number(String(document.getElementById("expPaidAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const payDate = (document.getElementById("expPayDate")?.value || "").trim();
         const expTaxProof = (document.getElementById("expTaxProof")?.value || "").trim();
-        const tax33 = expTaxProof === "3.3%원천징수" ? Math.round(claimAmount * 0.033) : 0;
-        const balance = Math.max((claimAmount - tax33) - paidAmount, 0);
         let rawNote = (document.getElementById("expNote")?.value || "").trim();
         const note = (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) ? buildExpenseNoteWithTaxProof(rawNote, expTaxProof) : rawNote;
+        const balance = calcExpenseFinancials(claimAmount, paidAmount, rawNote, expTaxProof).balance;
 
         if (!settleMonth) {
           alert("정산월(YYYY-MM)을 입력해 주세요.");
@@ -9781,7 +9949,14 @@ end $$;`;
         }
         if (!vendor) {
           alert("업체명을 입력해 주세요.");
-          document.getElementById("expVendor")?.focus();
+          if (vendorSelVal === "__CUSTOM__" && vendorCustomEl) {
+            vendorCustomEl.focus();
+          } else {
+            const enhancedInp = vendorSelEl && vendorSelEl.nextElementSibling && vendorSelEl.nextElementSibling.querySelector
+              ? vendorSelEl.nextElementSibling.querySelector("input")
+              : null;
+            (enhancedInp || vendorSelEl || vendorHiddenEl)?.focus();
+          }
           return;
         }
         if (!category) {
@@ -10479,6 +10654,9 @@ end $$;`;
         const supplier = getSupplierBizInfo();
         const claim = Number(e.claimAmount) || 0;
         const paid = Number(e.paidAmount) || 0;
+        const fin = calcExpenseFinancials(claim, paid, e);
+        const bal = getExpenseRowBalance(e);
+        const balText = (fin.is33 && bal === 0) ? "0원 (3.3% 공제)" : `${bal.toLocaleString("ko-KR")}원`;
         const certHtml = `
           <div style="border:1.5px solid #334155;border-radius:8px;padding:22px;background:#fff;text-align:left;font-size:12.5px;">
             <div style="text-align:center;font-size:21px;font-weight:900;letter-spacing:5px;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:16px;">대 금 지 급 확 인 서</div>
@@ -10492,7 +10670,7 @@ end $$;`;
               <tr style="text-align:center;font-weight:800;">
                 <td style="border:1px solid #cbd5e1;padding:9px;">${claim.toLocaleString("ko-KR")}원</td>
                 <td style="border:1px solid #cbd5e1;padding:9px;color:#15803d;">${paid.toLocaleString("ko-KR")}원</td>
-                <td style="border:1px solid #cbd5e1;padding:9px;color:#dc2626;">${(claim - paid).toLocaleString("ko-KR")}원</td>
+                <td style="border:1px solid #cbd5e1;padding:9px;color:${bal > 0 ? "#dc2626" : "#15803d"};">${balText}</td>
                 <td style="border:1px solid #cbd5e1;padding:9px;">${escHtml(e.payDate || "-")}</td>
               </tr>
             </table>
@@ -11400,13 +11578,18 @@ end $$;`;
         if (!item) return;
 
         const claim = Number(item.claimAmount) || 0;
-        if (!confirm(`[${item.vendor}]의 ${item.item}(${item.category}) 청구금액 전액(${claim.toLocaleString("ko-KR")}원)을 오늘 날짜로 지급 완료 처리하시겠습니까?`)) {
+        const fin = calcExpenseFinancials(claim, item.paidAmount, item);
+        const targetPaid = fin.payableAmount;
+        const payLabel = fin.is33
+          ? `3.3% 공제 후 실지급액(${targetPaid.toLocaleString("ko-KR")}원 / 청구 ${claim.toLocaleString("ko-KR")}원)`
+          : `청구금액 전액(${targetPaid.toLocaleString("ko-KR")}원)`;
+        if (!confirm(`[${item.vendor}]의 ${item.item}(${item.category}) ${payLabel}을 오늘 날짜로 지급 완료 처리하시겠습니까?`)) {
           return;
         }
 
         window._isQuickPayingExpense = true;
         const updated = Object.assign({}, item, {
-          paidAmount: claim,
+          paidAmount: targetPaid,
           balance: 0,
           payDate: getTodayYmd()
         });
@@ -11416,6 +11599,9 @@ end $$;`;
           if (res && res.success) {
             const idx = expList.findIndex(e => e.id === id);
             if (idx !== -1) expList[idx] = updated;
+            if (WSDataService && typeof WSDataService.saveFinanceCache === "function") {
+              WSDataService.saveFinanceCache(state.financeDbData);
+            }
 
             state.dirtyPcTabs.finance = true;
             state.dirtyMobileTabs.finance = true;
@@ -12078,7 +12264,7 @@ end $$;`;
             siteName: item.siteName,
             claimAmount: claim,
             paidAmount: paid,
-            balance: claim - paid,
+            balance: calcExpenseFinancials(claim, paid, note).balance,
             payDate: paid > 0 ? getTodayYmd() : "",
             note: note
           });
@@ -12119,6 +12305,58 @@ end $$;`;
       };
 
       // ================= 현장 정산·세부 공정별 지급 내역 모달 =================
+      function getMatchedExpensesForTask(siteExpenses, t) {
+        if (!Array.isArray(siteExpenses) || !t) return [];
+        const tName = String(t.taskName || "").trim();
+        const tPartnerRaw = String(t.partner || "").trim();
+        const tPartner = (tPartnerRaw && tPartnerRaw !== "-" && tPartnerRaw !== "미등록") ? tPartnerRaw : "";
+        return siteExpenses.filter(e => {
+          if (!e) return false;
+          const cat = String(e.category || "").trim();
+          const ven = String(e.vendor || "").trim();
+          const catMatch = Boolean(tName && cat && (cat === tName || tName.includes(cat) || cat.includes(tName)));
+          const venMatch = Boolean(tPartner && ven && (ven.includes(tPartner) || tPartner.includes(ven)));
+          return catMatch || venMatch;
+        });
+      }
+      window.getMatchedExpensesForTask = getMatchedExpensesForTask;
+
+      function pickPrimaryTaskExpense(matchedExps, t) {
+        if (!Array.isArray(matchedExps) || matchedExps.length === 0) return null;
+        if (matchedExps.length === 1) return matchedExps[0];
+        const tName = String((t && t.taskName) || "").trim();
+        const tPartnerRaw = String((t && t.partner) || "").trim();
+        const tPartner = (tPartnerRaw && tPartnerRaw !== "-" && tPartnerRaw !== "미등록") ? tPartnerRaw : "";
+        const scoreExp = (e) => {
+          const cat = String((e && e.category) || "").trim();
+          const ven = String((e && e.vendor) || "").trim();
+          let score = 0;
+          if (tName && cat) {
+            if (cat === tName) score += 4;
+            else if (tName.includes(cat) || cat.includes(tName)) score += 2;
+          }
+          if (tPartner && ven) {
+            if (ven === tPartner) score += 4;
+            else if (ven.includes(tPartner) || tPartner.includes(ven)) score += 2;
+          }
+          return score;
+        };
+        const idNum = (e) => {
+          const m = String((e && e.id) || "").match(/(\d+)/g);
+          return m ? (Number(m[m.length - 1]) || 0) : 0;
+        };
+        return matchedExps.slice().sort((a, b) => {
+          const sDiff = scoreExp(b) - scoreExp(a);
+          if (sDiff !== 0) return sDiff;
+          const mDiff = normalizeMonthStr(b && b.settleMonth).localeCompare(normalizeMonthStr(a && a.settleMonth));
+          if (mDiff !== 0) return mDiff;
+          const dDiff = String((b && b.payDate) || "").localeCompare(String((a && a.payDate) || ""));
+          if (dDiff !== 0) return dDiff;
+          return idNum(b) - idNum(a);
+        })[0];
+      }
+      window.pickPrimaryTaskExpense = pickPrimaryTaskExpense;
+
       window.openSiteFinanceDetailModal = function(siteName, colId) {
         window.currentDetailSiteName = siteName;
         window.currentDetailColId = colId;
@@ -12130,7 +12368,7 @@ end $$;`;
         const site = allSites.find(s => s.siteName === siteName);
 
         const expList = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
-        const siteExpenses = expList.filter(e => e.siteName === siteName);
+        const siteExpenses = expList.filter(e => e && String(e.siteName || "").trim() === String(siteName || "").trim());
 
         const titleEl = document.getElementById("siteFinanceDetailModalTitle");
         if (titleEl) {
@@ -12155,7 +12393,7 @@ end $$;`;
 
         const totalExpenseClaim = siteExpenses.reduce((acc, e) => acc + (Number(e.claimAmount) || 0), 0);
         const totalExpensePaid = siteExpenses.reduce((acc, e) => acc + (Number(e.paidAmount) || 0), 0);
-        const totalExpenseBal = siteExpenses.reduce((acc, e) => acc + (Number(e.balance) || 0), 0);
+        const totalExpenseBal = siteExpenses.reduce((acc, e) => acc + getExpenseRowBalance(e), 0);
 
         const profit = contractAmount - totalExpenseClaim;
         const marginRate = contractAmount > 0 ? Math.round((profit / contractAmount) * 100) : 0;
@@ -12202,6 +12440,7 @@ end $$;`;
 
         // 2. 세부 공정별 지급 내역
         const tasks = site ? (site.tasks || []) : [];
+        window._siteDetailTaskLinkedIds = {};
         const tasksSectionHtml = `
           <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -12226,22 +12465,25 @@ end $$;`;
                   </tr>
                 </thead>
                 <tbody>
-                  ${tasks.map(t => {
-                    const matchedExps = siteExpenses.filter(e => {
-                      const catMatch = e.category && (e.category === t.taskName || t.taskName.includes(e.category) || e.category.includes(t.taskName));
-                      const venMatch = e.vendor && t.partner && (e.vendor.includes(t.partner) || t.partner.includes(e.vendor));
-                      return catMatch || venMatch;
-                    });
+                  ${tasks.map((t, tIdx) => {
+                    const matchedExps = getMatchedExpensesForTask(siteExpenses, t);
 
                     const taskClaim = matchedExps.reduce((acc, e) => acc + (Number(e.claimAmount) || 0), 0);
                     const taskPaid = matchedExps.reduce((acc, e) => acc + (Number(e.paidAmount) || 0), 0);
-                    const taskBal = taskClaim - taskPaid;
+                    const taskBal = matchedExps.reduce((acc, e) => acc + getExpenseRowBalance(e), 0);
 
                     let stBadge = `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#eff6ff;color:#2563eb;">${escHtml(t.status || "예정")}</span>`;
                     if (t.status === "진행중") stBadge = `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#fef3c7;color:#d97706;">진행중</span>`;
                     else if (t.status === "완료") stBadge = `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#ecfdf5;color:#059669;">완료</span>`;
 
                     const taskMonth = (parseYmdFromTask(t) || getTodayYmd()).slice(0, 7);
+                    const primaryExp = pickPrimaryTaskExpense(matchedExps, t);
+                    if (matchedExps.length > 0) {
+                      window._siteDetailTaskLinkedIds[tIdx] = matchedExps.map(e => e.id).filter(Boolean);
+                    }
+                    const inputOnclick = (primaryExp && primaryExp.id)
+                      ? `window.openExpenseModal('${escJs(primaryExp.id)}', { linkedIds: (window._siteDetailTaskLinkedIds && window._siteDetailTaskLinkedIds[${tIdx}]) || [], siteName: '${escJs(siteName)}', category: '${escJs(t.taskName)}', vendor: '${escJs(t.partner || "")}', settleMonth: '${escJs(taskMonth)}' })`
+                      : `window.openExpenseModal(null, { siteName: '${escJs(siteName)}', category: '${escJs(t.taskName)}', vendor: '${escJs(t.partner || "")}', settleMonth: '${escJs(taskMonth)}' })`;
 
                     return `
                       <tr>
@@ -12257,7 +12499,7 @@ end $$;`;
                         <td style="text-align:right;font-weight:800;color:${taskBal > 0 ? "#dc2626" : "#15803d"};">${taskBal > 0 ? formatKrw(taskBal) : (taskClaim > 0 ? "완납" : "-")}</td>
                         <td style="text-align:center;">
                           <button type="button" class="btn-sub-xs" style="padding:3px 8px;font-size:11px;white-space:nowrap;"
-                            onclick="window.openExpenseModal(null, { siteName: '${escJs(siteName)}', category: '${escJs(t.taskName)}', vendor: '${escJs(t.partner || "")}', settleMonth: '${escJs(taskMonth)}' })">
+                            onclick="${inputOnclick}">
                             입력
                           </button>
                         </td>
@@ -12304,7 +12546,12 @@ end $$;`;
                   ${siteExpenses.map(e => {
                     const claim = Number(e.claimAmount) || 0;
                     const paid = Number(e.paidAmount) || 0;
-                    const bal = claim - paid;
+                    const bal = getExpenseRowBalance(e);
+                    const proof = (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) ? parseExpenseTaxProof(e.note) : "";
+                    const proofBadge = proof === "3.3%원천징수"
+                      ? '<span style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#fef3c7;color:#b45309;border:1px solid #fcd34d;margin-right:4px;">⚡ 3.3%원천</span>'
+                      : (proof ? `<span style="display:inline-block;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;margin-right:4px;">${escHtml(proof)}</span>` : "");
+                    const cleanNote = (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) ? stripExpenseTaxProof(e.note) : (e.note || "");
                     return `
                       <tr>
                         <td style="white-space:nowrap;font-weight:700;color:#475569;">${escHtml(formatShortSettleMonth(e.settleMonth))}</td>
@@ -12317,7 +12564,7 @@ end $$;`;
                           ${bal > 0 ? formatKrw(bal) : "완납"}
                         </td>
                         <td>${escHtml(e.payDate || "-")}</td>
-                        <td style="font-size:11px;color:var(--text-sub);">${escHtml(e.note || "-")}</td>
+                        <td style="font-size:11px;color:var(--text-sub);">${proofBadge}${escHtml(cleanNote || "-")}</td>
                         <td style="text-align:center;">
                           <div style="display:inline-flex;gap:4px;">
                             ${bal > 0 ? `<button type="button" class="btn-sub-xs" style="padding:2px 5px;font-size:10.5px;color:#15803d;border-color:#86efac;" onclick="window.onQuickPayFullExpense('${escJs(e.id)}')">전액지급</button>` : ""}
@@ -12484,7 +12731,7 @@ end $$;`;
         const profitRate = totalCollected > 0 ? Math.round((netProfit / totalCollected) * 100) : 0;
 
         const totalUncollected = filteredCol.reduce((acc, r) => acc + getCollectionRowFinancials(r).uncollected, 0);
-        const totalUnpaidExpense = filteredExp.reduce((acc, e) => acc + (Number(e.balance) || 0), 0);
+        const totalUnpaidExpense = filteredExp.reduce((acc, e) => acc + getExpenseRowBalance(e), 0);
         const netCashDiff = totalUncollected - totalUnpaidExpense;
 
         // 4. 월별 손익 요약표 (1월 ~ 12월)
@@ -12577,7 +12824,7 @@ end $$;`;
           const sObj = siteMap.get(sName);
           sObj.expenseClaim += (Number(e.claimAmount) || 0);
           sObj.expensePaid += (Number(e.paidAmount) || 0);
-          sObj.expenseBalance += (Number(e.balance) || 0);
+          sObj.expenseBalance += getExpenseRowBalance(e);
         });
 
         const siteList = Array.from(siteMap.values()).map(s => {
@@ -13599,8 +13846,8 @@ end $$;`;
 
           const totalClaim = filtered.reduce((acc, r) => acc + (Number(r.claimAmount) || 0), 0);
           const totalPaid = filtered.reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0);
-          const totalBal = filtered.reduce((acc, r) => acc + (Number(r.balance) || 0), 0);
-          const unpaidCount = filtered.filter(r => (Number(r.balance) || 0) > 0).length;
+          const totalBal = filtered.reduce((acc, r) => acc + getExpenseRowBalance(r), 0);
+          const unpaidCount = filtered.filter(r => getExpenseRowBalance(r) > 0).length;
 
           const itemFilter = state.expenseItemFilter || "all";
           const stFilter = state.expenseStatusFilter || "all";
@@ -13668,7 +13915,7 @@ end $$;`;
                 </div>
                 <div style="display:flex;gap:4px;background:#f1f5f9;padding:3px;border-radius:6px;">
                   <button type="button" class="btn-sub-chip ${stFilter === "all" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;" onclick="window.setExpenseStatusFilter('all')">전체 상태</button>
-                  <button type="button" class="btn-sub-chip ${stFilter === "unpaid" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;${stFilter === "unpaid" ? "background:#fee2e2;color:#dc2626;border-color:#fca5a5;" : ""}" onclick="window.setExpenseStatusFilter('unpaid')">미지급만 (${allExp.filter(e => (Number(e.balance) || 0) > 0).length})</button>
+                  <button type="button" class="btn-sub-chip ${stFilter === "unpaid" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;${stFilter === "unpaid" ? "background:#fee2e2;color:#dc2626;border-color:#fca5a5;" : ""}" onclick="window.setExpenseStatusFilter('unpaid')">미지급만 (${allExp.filter(e => getExpenseRowBalance(e) > 0).length})</button>
                   <button type="button" class="btn-sub-chip ${stFilter === "paid" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;" onclick="window.setExpenseStatusFilter('paid')">지급완료</button>
                 </div>
                 ${FINANCE_EXT_FLAGS.taxProofBadge ? `
@@ -13676,6 +13923,7 @@ end $$;`;
                     <option value="all" ${state.expenseTaxFilter === "all" ? "selected" : ""}>전체 증빙</option>
                     <option value="세금계산서" ${state.expenseTaxFilter === "세금계산서" ? "selected" : ""}>🧾 세금계산서</option>
                     <option value="현금영수증" ${state.expenseTaxFilter === "현금영수증" ? "selected" : ""}>🧾 현금영수증</option>
+                    <option value="3.3%원천징수" ${state.expenseTaxFilter === "3.3%원천징수" ? "selected" : ""}>⚡ 3.3% 원천징수</option>
                     <option value="카드" ${state.expenseTaxFilter === "카드" ? "selected" : ""}>💳 카드</option>
                     <option value="무증빙" ${state.expenseTaxFilter === "무증빙" ? "selected" : ""}>⚠️ 무증빙</option>
                   </select>
@@ -15894,8 +16142,8 @@ end $$;`;
 
           const totalClaim = filtered.reduce((acc, r) => acc + (Number(r.claimAmount) || 0), 0);
           const totalPaid = filtered.reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0);
-          const totalBal = filtered.reduce((acc, r) => acc + (Number(r.balance) || 0), 0);
-          const unpaidCount = filtered.filter(r => (Number(r.balance) || 0) > 0).length;
+          const totalBal = filtered.reduce((acc, r) => acc + getExpenseRowBalance(r), 0);
+          const unpaidCount = filtered.filter(r => getExpenseRowBalance(r) > 0).length;
 
           const itemFilter = state.expenseItemFilter || "all";
           const stFilter = state.expenseStatusFilter || "all";
@@ -15982,6 +16230,7 @@ end $$;`;
                   <option value="all" ${state.expenseTaxFilter === "all" ? "selected" : ""}>증빙전체</option>
                   <option value="세금계산서" ${state.expenseTaxFilter === "세금계산서" ? "selected" : ""}>계산서</option>
                   <option value="현금영수증" ${state.expenseTaxFilter === "현금영수증" ? "selected" : ""}>영수증</option>
+                  <option value="3.3%원천징수" ${state.expenseTaxFilter === "3.3%원천징수" ? "selected" : ""}>3.3%원천</option>
                   <option value="카드" ${state.expenseTaxFilter === "카드" ? "selected" : ""}>카드</option>
                   <option value="무증빙" ${state.expenseTaxFilter === "무증빙" ? "selected" : ""}>무증빙</option>
                 </select>
@@ -17753,6 +18002,7 @@ end $$;`;
           if (exceptId && id === exceptId) return;
           el.style.display = "none";
           const cfg = window.wsDropRegistry[id];
+          if (cfg) cfg._lastTypedSearch = "";
           const inp = document.getElementById("wsDropInput_" + id);
           if (inp && cfg && cfg.searchable) {
             inp.value = cfg.displayText || "";
@@ -17864,6 +18114,7 @@ end $$;`;
         const cfg = window.wsDropRegistry[id];
         if (!cfg) return;
         window.closeAllWsCustomDropdowns(id);
+        cfg._lastTypedSearch = "";
         const drop = document.getElementById("wsDropList_" + id);
         const inp = document.getElementById("wsDropInput_" + id);
         if (drop) {
@@ -17888,6 +18139,7 @@ end $$;`;
       window.filterWsCustomDropdown = function (id, q) {
         const cfg = window.wsDropRegistry[id];
         if (!cfg) return;
+        cfg._lastTypedSearch = String(q || "");
         const drop = document.getElementById("wsDropList_" + id);
         const inp = document.getElementById("wsDropInput_" + id);
         if (drop) {
@@ -17907,6 +18159,10 @@ end $$;`;
       window.selectWsCustomDropdownItem = function (id, val) {
         const cfg = window.wsDropRegistry[id];
         if (!cfg) return;
+        window._wsLastDropSearch = (cfg.customFooterValue && val === cfg.customFooterValue)
+          ? String(cfg._lastTypedSearch || "")
+          : "";
+        cfg._lastTypedSearch = "";
         cfg.value = val;
         const flat = [];
         (cfg.items || []).forEach((it) => {
@@ -17956,6 +18212,73 @@ end $$;`;
         }
       }
 
+      function extractSelectDropdownMeta(sel) {
+        const customFooterVal = (sel && sel.dataset && sel.dataset.wsCustomValue) || "";
+        const customFooterLabel = (sel && sel.dataset && sel.dataset.wsCustomLabel) || "";
+        const items = [];
+        Array.from(sel.children).forEach((ch) => {
+          if (ch.tagName === "OPTGROUP") {
+            const opts = Array.from(ch.children)
+              .filter((o) => o.tagName === "OPTION" && (!customFooterVal || o.value !== customFooterVal))
+              .map((o) => ({ value: o.value, label: o.textContent.trim() }));
+            if (opts.length) items.push({ group: ch.label || "목록", options: opts });
+          } else if (ch.tagName === "OPTION") {
+            if (customFooterVal && ch.value === customFooterVal) return;
+            items.push({ value: ch.value, label: ch.textContent.trim() });
+          }
+        });
+        const flatOpts = [];
+        items.forEach((it) => {
+          if (it.group && Array.isArray(it.options)) flatOpts.push(...it.options);
+          else flatOpts.push(it);
+        });
+        const curVal = sel.value || "";
+        const curOpt = flatOpts.find((o) => String(o.value) === String(curVal));
+        let curLabel = "";
+        if (customFooterVal && curVal === customFooterVal) {
+          curLabel = customFooterLabel;
+        } else if (curVal === "" && sel.dataset && sel.dataset.wsPlaceholder) {
+          curLabel = "";
+        } else {
+          curLabel = curOpt
+            ? curOpt.label
+            : (sel.options && sel.selectedIndex >= 0 && sel.options[sel.selectedIndex]
+                ? sel.options[sel.selectedIndex].textContent.trim()
+                : curVal);
+        }
+        const isSearchable = (sel.dataset && sel.dataset.wsSearchable === "1") || flatOpts.length >= 12;
+        return { items, flatOpts, curVal, curLabel, isSearchable, customFooterVal, customFooterLabel };
+      }
+
+      function syncEnhancedWsSelect(sel) {
+        if (!sel || sel.dataset.wsEnhanced !== "1") return;
+        const wrap = sel.nextElementSibling;
+        if (!wrap || !wrap.classList || !wrap.classList.contains("ws-auto-sel-wrap")) return;
+        const dropId = wrap.getAttribute("data-drop-id") || "";
+        const cfg = window.wsDropRegistry && window.wsDropRegistry[dropId];
+        if (!cfg) return;
+        const meta = extractSelectDropdownMeta(sel);
+        cfg.items = meta.items;
+        cfg.value = meta.curVal;
+        cfg.displayText = meta.curLabel;
+        cfg.searchable = meta.isSearchable;
+        if (meta.customFooterLabel) {
+          cfg.customFooterLabel = meta.customFooterLabel;
+          cfg.customFooterValue = meta.customFooterVal || "__CUSTOM__";
+        }
+        const inp = document.getElementById("wsDropInput_" + dropId);
+        if (inp) {
+          inp.value = meta.curLabel;
+          inp.style.color = meta.curVal ? "#0f172a" : "#475569";
+          inp.style.fontWeight = meta.curVal ? "700" : "600";
+        }
+        const drop = document.getElementById("wsDropList_" + dropId);
+        if (drop) {
+          drop.innerHTML = buildWsCustomDropItemsHtml(cfg, "");
+        }
+      }
+      window.syncEnhancedWsSelect = syncEnhancedWsSelect;
+
       let _wsEnhancedSeq = 0;
       function enhanceWsSelects() {
         const scopes = document.querySelectorAll("#pcFinanceMain select, #m-page-finance select, .ws-modal-body select, #pcSiteSidebar select, #pcQuoteSidebar select, #pcPartnersMain select, #m-page-partners select, #pcTodoMain select, #m-page-todo select, #mFilterBar select");
@@ -17966,28 +18289,9 @@ end $$;`;
           sel.dataset.wsEnhanced = "1";
 
           const dropId = "wsAutoSel_" + (++_wsEnhancedSeq);
-          const items = [];
-          Array.from(sel.children).forEach((ch) => {
-            if (ch.tagName === "OPTGROUP") {
-              const opts = Array.from(ch.children).filter((o) => o.tagName === "OPTION").map((o) => ({
-                value: o.value,
-                label: o.textContent.trim()
-              }));
-              if (opts.length) items.push({ group: ch.label || "목록", options: opts });
-            } else if (ch.tagName === "OPTION") {
-              items.push({ value: ch.value, label: ch.textContent.trim() });
-            }
-          });
-
-          const flatOpts = [];
-          items.forEach((it) => {
-            if (it.group && Array.isArray(it.options)) flatOpts.push(...it.options);
-            else flatOpts.push(it);
-          });
-          const curVal = sel.value || "";
-          const curOpt = flatOpts.find((o) => String(o.value) === String(curVal));
-          const curLabel = curOpt ? curOpt.label : (sel.options && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].textContent.trim() : "");
-          const isSearchable = flatOpts.length >= 12;
+          const meta = extractSelectDropdownMeta(sel);
+          const { items, curVal, curLabel, isSearchable, customFooterVal, customFooterLabel } = meta;
+          const phText = (sel.dataset && sel.dataset.wsPlaceholder) ? sel.dataset.wsPlaceholder : "";
 
           const cs = sel.style || {};
           const wrap = document.createElement("div");
@@ -18010,6 +18314,8 @@ end $$;`;
             displayText: curLabel,
             searchable: isSearchable,
             items: items,
+            customFooterLabel: customFooterLabel || "",
+            customFooterValue: customFooterVal || "",
             isFixedPopover: true,
             onSelect: (newVal) => {
               sel.value = newVal;
@@ -18021,6 +18327,7 @@ end $$;`;
             <div class="sheet-partner-search-box" style="width:100%;">
               <input type="text" id="wsDropInput_${dropId}" class="ws-input"
                 value="${escHtml(curLabel)}"
+                ${phText ? `placeholder="${escHtml(phText)}"` : ""}
                 autocomplete="off"
                 ${isSearchable ? "" : "readonly"}
                 style="height:${escHtml(hVal)};font-size:${escHtml(fsVal)};padding:0 24px 0 9px;cursor:pointer;background:#ffffff;color:${curVal ? "#0f172a" : "#475569"};font-weight:${curVal ? "700" : "600"};width:100%;min-width:84px;box-sizing:border-box;text-overflow:ellipsis;"
@@ -25014,9 +25321,7 @@ end $$;`;
             return enqueueKeyWrite("finance_db", async () => {
               const fb = await ensureFinanceInMemory();
               const savedId = (row && row.id) ? String(row.id) : ("EXP-" + Date.now() + "_" + Math.random().toString(36).slice(2, 5).toUpperCase());
-              const computedBal = (row && row.balance !== undefined && row.balance !== null && row.balance !== "")
-                ? Number(row.balance)
-                : getExpenseRowBalance(row);
+              const computedBal = getExpenseRowBalance(row);
               const saved = Object.assign({}, row, { id: savedId, balance: computedBal });
               // state.financeDbData.expense 내 임시 ID(temp_exp_...)를 실제 ID로 치환한 사본으로 저장
               const cleanList = (fb.expense || []).filter(e => e && !String(e.id || "").startsWith("temp_exp_"));
