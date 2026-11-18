@@ -6711,7 +6711,7 @@ end $$;`;
                 ${resetBtnHtml}
               </div>
             </div>
-            <div style="${isMobile ? "display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;" : "display:grid;grid-template-columns:repeat(12, 1fr);gap:6px;"}">
+            <div id="${isMobile ? "mFinanceMonthStrip" : "pcFinanceMonthStrip"}" style="${isMobile ? "display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;" : "display:grid;grid-template-columns:repeat(12, 1fr);gap:6px;"}">
               ${monthCardsHtml}
             </div>
           </div>
@@ -7098,10 +7098,22 @@ end $$;`;
       };
 
       window.setFinanceMonthFilter = function(month) {
+        const stripEl = document.getElementById("mFinanceMonthStrip");
+        const savedScrollLeft = stripEl ? stripEl.scrollLeft : 0;
+        const mBody = document.querySelector(".m-app-body");
+        const savedBodyTop = mBody ? mBody.scrollTop : 0;
         state.financeMonthFilter = (state.financeMonthFilter === month) ? 0 : month;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
+        const restore = () => {
+          const newStrip = document.getElementById("mFinanceMonthStrip");
+          if (newStrip && savedScrollLeft > 0) newStrip.scrollLeft = savedScrollLeft;
+          const newBody = document.querySelector(".m-app-body");
+          if (newBody && savedBodyTop > 0) newBody.scrollTop = savedBodyTop;
+        };
+        restore();
+        requestAnimationFrame(restore);
       };
 
       window.resetFinanceDateFilters = function() {
@@ -14365,7 +14377,7 @@ end $$;`;
                   ${mIsDone && mIsPromoted ? `<span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:8px;background:#dcfce7;color:#15803d;border:1px solid #86efac;cursor:pointer;white-space:nowrap;" onclick="event.stopPropagation(); navigateToSiteDetail('${escJs(s.siteName)}', true);">✅ 승격됨</span>` : ""}
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
-                  ${(!mIsDone && !isFailedView) ? getQuoteElapsedBadgeHtml(eData.inquiryDate) : ""}
+                  ${(!mIsDone && !isFailedMode) ? getQuoteElapsedBadgeHtml(eData.inquiryDate) : ""}
                   <span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;background:${stStyle.bg};color:${stStyle.fg};border:1px solid ${stStyle.border};white-space:nowrap;flex-shrink:0;">${escHtml(eSt)}</span>
                 </div>
               </div>
