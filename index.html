@@ -9950,6 +9950,59 @@ end $$;`;
         return "";
       }
 
+      /** 거래처 계좌정보를 은행·계좌번호·예금주 칩과 복사 버튼으로 구분 렌더링합니다. */
+      function renderPartnerBankAccountHtml(partnerOrRaw, opts) {
+        const o = opts || {};
+        const rawBank = (partnerOrRaw && typeof partnerOrRaw === "object")
+          ? getPartnerBankAccountStr(partnerOrRaw)
+          : String(partnerOrRaw || "").trim();
+        if (!rawBank) return o.emptyHtml !== undefined ? o.emptyHtml : `<span style="color:#94a3b8;">-</span>`;
+
+        const parts = parseBankAccountParts(rawBank);
+        const hasAnyPart = Boolean(parts.bank || parts.account || parts.holder);
+        const isMobile = Boolean(o.mobile);
+        const fz = isMobile ? "10.5px" : "11px";
+        const accFz = isMobile ? "11px" : "11.5px";
+        const chipHtml = (label, val, bg, fg, bd, valFz, isBoldVal) => {
+          if (!val) return "";
+          return `<span style="display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:4px;background:${bg};color:${fg};border:1px solid ${bd};font-size:${valFz || fz};font-weight:${isBoldVal ? 800 : 700};${isBoldVal ? "font-variant-numeric:tabular-nums;" : ""}white-space:nowrap;line-height:1.35;"><span style="font-size:10px;font-weight:600;opacity:0.75;">${label}</span><span>${escHtml(val)}</span></span>`;
+        };
+
+        const badgesHtml = hasAnyPart
+          ? [
+              chipHtml("은행", parts.bank, "#eff6ff", "#1d4ed8", "#bfdbfe", fz, false),
+              chipHtml("계좌번호", parts.account, isMobile ? "#ffffff" : "#f0fdfa", "#0f766e", isMobile ? "#5eead4" : "#99f6e4", accFz, true),
+              chipHtml("예금주", parts.holder, isMobile ? "#ffffff" : "#f8fafc", "#334155", "#cbd5e1", fz, false)
+            ].filter(Boolean).join("")
+          : `<span style="font-size:${accFz};color:#0f766e;font-weight:700;">${escHtml(rawBank)}</span>`;
+
+        const btnStyle = isMobile
+          ? "border:1px solid #99f6e4;background:#ffffff;color:#0f766e;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:4px;cursor:pointer;flex-shrink:0;"
+          : (o.compactBtn
+            ? "border:1px solid #cbd5e1;background:#f8fafc;color:#475569;font-size:10.5px;font-weight:700;padding:2px 6px;border-radius:4px;cursor:pointer;flex-shrink:0;"
+            : "border:1px solid #cbd5e1;background:#f8fafc;color:#475569;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;cursor:pointer;flex-shrink:0;");
+
+        const safeCopyArg = escJs(rawBank).replace(/"/g, "&quot;");
+        const copyBtnHtml = `<button type="button" onclick="copyText('${safeCopyArg}')" style="${btnStyle}" title="계좌번호 복사">복사</button>`;
+
+        if (isMobile) {
+          return `
+            <div style="font-size:11px;color:#0f766e;background:#f0fdfa;padding:6px 8px;border-radius:6px;margin-top:6px;border:1px solid #99f6e4;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:0;">${badgesHtml}</div>
+              ${copyBtnHtml}
+            </div>
+          `;
+        }
+
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:0;">${badgesHtml}</div>
+            ${copyBtnHtml}
+          </div>
+        `;
+      }
+      window.renderPartnerBankAccountHtml = renderPartnerBankAccountHtml;
+
       function findExpensePartnerMatch(partners, vendorVal) {
         const list = Array.isArray(partners) ? partners : [];
         const vNorm = String(vendorVal || "").toLowerCase().trim();
@@ -15144,6 +15197,7 @@ end $$;`;
         const dispBiz = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
         const rawPhone = String(p.phone || "").trim();
         const cleanPhone = rawPhone.replace(/[^0-9]/g, "");
+        const rawBankStr = getPartnerBankAccountStr(p);
 
         return `
           <tr style="${p.status === '보류' ? 'opacity:0.65;background:#fff5f5;' : ''}">
@@ -15169,13 +15223,8 @@ end $$;`;
                 </div>
               ` : `<span style="color:#94a3b8;">-</span>`}
             </td>
-            <td style="white-space:nowrap;min-width:260px;">
-              ${p.bankAccount ? `
-                <div style="display:inline-flex;align-items:center;gap:6px;">
-                  <span style="font-size:12px;color:#0f766e;font-weight:700;">${escHtml(p.bankAccount)}</span>
-                  <button type="button" onclick="copyText('${escJs(p.bankAccount)}')" style="border:1px solid #cbd5e1;background:#f8fafc;color:#475569;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;cursor:pointer;flex-shrink:0;" title="계좌번호 복사">복사</button>
-                </div>
-              ` : `<span style="color:#94a3b8;">-</span>`}
+            <td style="min-width:280px;max-width:380px;white-space:normal;" title="${escHtml(rawBankStr)}">
+              ${renderPartnerBankAccountHtml(p)}
             </td>
             <td style="text-align:center;white-space:nowrap;">
               <span style="padding:2px 7px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};white-space:nowrap;">${escHtml(p.status || "운영 중")}</span>
@@ -15217,12 +15266,7 @@ end $$;`;
               <span style="padding:2px 7px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};flex-shrink:0;">${escHtml(p.status || "운영 중")}</span>
             </div>
             ${p.feature ? `<div style="font-size:11px;color:#1e3a8a;background:#f0fdf4;padding:4px 8px;border-radius:6px;margin-top:6px;border:1px solid #bbf7d0;">🎯 <strong>주력:</strong> ${escHtml(p.feature)}</div>` : ""}
-            ${p.bankAccount ? `
-              <div style="font-size:11px;color:#0f766e;background:#f0fdfa;padding:5px 8px;border-radius:6px;margin-top:6px;border:1px solid #99f6e4;display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                <span style="font-weight:700;word-break:break-all;overflow:visible;line-height:1.4;"><strong>계좌:</strong> ${escHtml(p.bankAccount)}</span>
-                <button type="button" onclick="copyText('${escJs(p.bankAccount)}')" style="border:1px solid #99f6e4;background:#ffffff;color:#0f766e;font-size:10.5px;font-weight:700;padding:2px 6px;border-radius:4px;cursor:pointer;flex-shrink:0;">복사</button>
-              </div>
-            ` : ""}
+            ${renderPartnerBankAccountHtml(p, { mobile: true, emptyHtml: "" })}
             ${(p.note || p.memo) ? `<div style="font-size:11px;color:#64748b;margin-top:5px;">📝 ${escHtml(p.note || p.memo)}</div>` : ""}
             <div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed #e2e8f0;">
               ${rawPhone ? `
@@ -15399,7 +15443,7 @@ end $$;`;
                   <th style="text-align:center;">우선순위</th>
                   <th>담당자/직책</th>
                   <th>연락처 (원터치/복사)</th>
-                  <th style="min-width:260px;white-space:nowrap;">계좌번호 (복사)</th>
+                  <th style="min-width:280px;white-space:nowrap;">계좌번호 (복사)</th>
                   <th style="text-align:center;">관리상태</th>
                   <th>발주방식</th>
                   <th>주력분야 및 특징</th>
@@ -24599,6 +24643,29 @@ end $$;`;
         renderSettingsModal();
       };
 
+      window.syncPartnerBankHidden = function () {
+        const bEl = document.getElementById("stPBankName");
+        const aEl = document.getElementById("stPAccountNo");
+        const hEl = document.getElementById("stPAccountHolder");
+        const hiddenEl = document.getElementById("stPBankAccount");
+        if (!bEl && !aEl && !hEl) return (hiddenEl && hiddenEl.value) || "";
+        const formatted = formatBankAccountParts(
+          bEl ? bEl.value : "",
+          aEl ? aEl.value : "",
+          hEl ? hEl.value : ""
+        );
+        if (hiddenEl) hiddenEl.value = formatted;
+        const previewEl = document.getElementById("stPBankPreview");
+        if (previewEl) {
+          previewEl.textContent = formatted ? `저장 형식: ${formatted}` : "미입력 시 비워두세요";
+        }
+        return formatted;
+      };
+
+      window.onPartnerBankInput = function () {
+        return window.syncPartnerBankHidden();
+      };
+
       window.submitPartnerForm = function () {
         const nameEl = document.getElementById("stPName");
         const name = (nameEl ? nameEl.value : "").trim();
@@ -24615,7 +24682,20 @@ end $$;`;
         const status = ((document.getElementById("stPStatus") || {}).value || "운영 중").trim();
         const orderMethod = ((document.getElementById("stPOrder") || {}).value || "").trim();
         const feature = ((document.getElementById("stPFeature") || {}).value || "").trim();
-        const bankAccount = ((document.getElementById("stPBankAccount") || {}).value || "").trim();
+        const bEl = document.getElementById("stPBankName");
+        const aEl = document.getElementById("stPAccountNo");
+        const hEl = document.getElementById("stPAccountHolder");
+        const hiddenBankEl = document.getElementById("stPBankAccount");
+        let bankAccount = "";
+        if (bEl || aEl || hEl) {
+          const bVal = (bEl ? bEl.value : "").trim();
+          const aVal = (aEl ? aEl.value : "").trim();
+          const hVal = (hEl ? hEl.value : "").trim();
+          bankAccount = formatBankAccountParts(bVal, aVal, hVal);
+          if (hiddenBankEl) hiddenBankEl.value = bankAccount;
+        } else {
+          bankAccount = ((hiddenBankEl || {}).value || "").trim();
+        }
         const note = ((document.getElementById("stPNote") || {}).value || "").trim();
         const fullName = biz ? `${biz}_${name}` : (category ? `${category}_${name}` : name);
 
@@ -24638,7 +24718,14 @@ end $$;`;
 
         const s = state.settingsData;
         if (typeof state.editingPartnerIndex === "number" && state.editingPartnerIndex >= 0 && s.partners[state.editingPartnerIndex]) {
-          Object.assign(s.partners[state.editingPartnerIndex], payload);
+          const target = s.partners[state.editingPartnerIndex];
+          delete target.bank;
+          delete target.account;
+          delete target.accountNumber;
+          delete target.accountNo;
+          delete target.holder;
+          delete target.accountHolder;
+          Object.assign(target, payload);
           showToast(`✏️ [${name}] 거래처 정보가 수정되었습니다.`);
         } else {
           s.partners.unshift(payload);
@@ -24654,6 +24741,7 @@ end $$;`;
         const statusBg = p.status === "운영 중" ? "#dcfce7" : (p.status === "확인 필요" ? "#fef3c7" : (p.status === "보류" ? "#fee2e2" : "#eff6ff"));
         const statusFg = p.status === "운영 중" ? "#166534" : (p.status === "확인 필요" ? "#92400e" : (p.status === "보류" ? "#991b1b" : "#1d4ed8"));
         const dispBiz = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
+        const rawBankStr = getPartnerBankAccountStr(p);
         return `
           <tr>
             <td style="text-align:center;font-size:11.5px;color:#94a3b8;font-weight:700;white-space:nowrap;">${idx + 1}</td>
@@ -24670,13 +24758,8 @@ end $$;`;
               ${p.phone ? `<a href="tel:${escHtml(p.phone)}" style="color:#2563eb;text-decoration:none;font-weight:600;font-size:11.5px;white-space:nowrap;">📞 ${escHtml(p.phone)}</a>` : `<span style="color:#94a3b8;">-</span>`}
             </td>
             <td style="text-align:center;white-space:nowrap;"><span style="padding:2px 7px;border-radius:4px;font-weight:700;font-size:10.5px;background:${statusBg};color:${statusFg};white-space:nowrap;">${escHtml(p.status || "운영 중")}</span></td>
-            <td style="white-space:nowrap;min-width:260px;" title="${escHtml(p.bankAccount || "")}">
-              ${p.bankAccount ? `
-                <div style="display:inline-flex;align-items:center;gap:6px;">
-                  <span style="color:#0f766e;font-weight:700;font-size:11.5px;">${escHtml(p.bankAccount)}</span>
-                  <button type="button" onclick="copyText('${escJs(p.bankAccount)}')" style="border:1px solid #cbd5e1;background:#f8fafc;color:#475569;font-size:10.5px;font-weight:700;padding:1px 5px;border-radius:4px;cursor:pointer;flex-shrink:0;" title="계좌번호 복사">복사</button>
-                </div>
-              ` : `<span style="color:#94a3b8;">-</span>`}
+            <td style="min-width:280px;max-width:380px;white-space:normal;" title="${escHtml(rawBankStr)}">
+              ${renderPartnerBankAccountHtml(p, { compactBtn: true })}
             </td>
             <td style="font-size:11.5px;color:#475569;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.feature || "")}">${escHtml(p.feature || "-")}</td>
             <td style="font-size:11.5px;color:#64748b;white-space:nowrap;">${escHtml(p.orderMethod || "-")}</td>
@@ -24845,6 +24928,9 @@ end $$;`;
 
           const editIdx = state.editingPartnerIndex;
           const editItem = (typeof editIdx === "number" && editIdx >= 0) ? rawList[editIdx] : null;
+          const editBankRaw = editItem ? getPartnerBankAccountStr(editItem) : "";
+          const editBankParts = editBankRaw ? parseBankAccountParts(editBankRaw) : { bank: "", account: "", holder: "" };
+          const editBankFormatted = formatBankAccountParts(editBankParts);
 
           const formHtml = state.showPartnerForm ? `
             <div style="background:#f8fafc;padding:14px;border-radius:10px;border:1.5px solid #93c5fd;box-shadow:0 2px 6px rgba(37,99,235,0.06);margin-bottom:12px;display:flex;flex-direction:column;gap:10px;">
@@ -24894,11 +24980,28 @@ end $$;`;
                   <input class="ws-input" id="stPOrder" value="${escHtml((editItem && editItem.orderMethod) || "")}" placeholder="예: 카톡, 문자, 전화">
                 </div>
               </div>
-              <div style="display:grid;grid-template-columns:1.2fr 1.2fr 1.2fr auto;gap:8px;align-items:end;">
-                <div>
-                  <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">계좌번호 (은행 계좌 예금주)</label>
-                  <input class="ws-input" id="stPBankAccount" value="${escHtml((editItem && (editItem.bankAccount || editItem.account)) || "")}" placeholder="예: 국민 123-456-7890 홍길동">
+              <div style="background:#ffffff;padding:10px 12px;border-radius:8px;border:1px solid #cbd5e1;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+                  <label style="font-size:11.5px;font-weight:800;color:#1e3a8a;margin:0;">🏦 입금 계좌 정보 (은행 · 계좌번호 · 예금주)</label>
+                  <span id="stPBankPreview" style="font-size:11px;color:#0f766e;font-weight:700;">${editBankFormatted ? `저장 형식: ${escHtml(editBankFormatted)}` : "미입력 시 비워두세요"}</span>
                 </div>
+                <div class="exp-bank-grid">
+                  <div>
+                    <label for="stPBankName" style="font-size:11px;font-weight:700;color:#475569;margin-bottom:3px;display:block;white-space:nowrap;">은행</label>
+                    <input class="ws-input" id="stPBankName" value="${escHtml(editBankParts.bank)}" placeholder="예: 국민, 신한, 한국씨티은행" oninput="onPartnerBankInput()">
+                  </div>
+                  <div>
+                    <label for="stPAccountNo" style="font-size:11px;font-weight:700;color:#475569;margin-bottom:3px;display:block;white-space:nowrap;">계좌번호</label>
+                    <input class="ws-input" id="stPAccountNo" value="${escHtml(editBankParts.account)}" placeholder="예: 123-456-789012" oninput="onPartnerBankInput()">
+                  </div>
+                  <div>
+                    <label for="stPAccountHolder" style="font-size:11px;font-weight:700;color:#475569;margin-bottom:3px;display:block;white-space:nowrap;">예금주</label>
+                    <input class="ws-input" id="stPAccountHolder" value="${escHtml(editBankParts.holder)}" placeholder="예: 홍길동, (주)한샘" oninput="onPartnerBankInput()">
+                  </div>
+                </div>
+                <input type="hidden" id="stPBankAccount" value="${escHtml(editBankFormatted || editBankRaw)}">
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">
                 <div>
                   <label style="font-size:11px;font-weight:700;color:#334155;margin-bottom:3px;display:block;white-space:nowrap;">주력분야 및 특징</label>
                   <input class="ws-input" id="stPFeature" value="${escHtml((editItem && editItem.feature) || "")}" placeholder="예: 30평형 전문 / 마감 디테일 우수">
@@ -24972,7 +25075,7 @@ end $$;`;
                     <th style="width:100px;min-width:100px;text-align:left;white-space:nowrap;">담당 / 직책</th>
                     <th style="width:130px;min-width:130px;text-align:left;white-space:nowrap;">연락처</th>
                     <th style="width:85px;min-width:85px;text-align:center;white-space:nowrap;">관리상태</th>
-                    <th style="width:260px;min-width:260px;text-align:left;white-space:nowrap;">계좌번호</th>
+                    <th style="width:280px;min-width:280px;text-align:left;white-space:nowrap;">계좌번호</th>
                     <th style="width:180px;min-width:180px;text-align:left;white-space:nowrap;">주력분야 및 특징</th>
                     <th style="width:115px;min-width:115px;text-align:left;white-space:nowrap;">발주 / 접수방식</th>
                     <th style="min-width:140px;text-align:left;white-space:nowrap;">비고 / 메모</th>
