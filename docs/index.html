@@ -831,9 +831,70 @@
 
     /* ================= 3. 공유 좌측 사이드바 ================= */
     .sidebar-panel {
-      width: 270px; min-width: 270px; max-width: 270px; background: var(--surface); border-right: 1px solid var(--border);
+      width: var(--pc-sidebar-width, 270px); min-width: var(--pc-sidebar-width, 270px); max-width: var(--pc-sidebar-width, 270px);
+      background: var(--surface); border-right: 1px solid var(--border);
       padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex-shrink: 0; box-sizing: border-box;
       scrollbar-gutter: stable;
+    }
+    .pc-sidebar-resizer {
+      width: 7px;
+      margin-left: -4px;
+      margin-right: -3px;
+      flex: 0 0 7px;
+      align-self: stretch;
+      cursor: col-resize;
+      position: relative;
+      z-index: 15;
+      background: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    .pc-sidebar-resizer::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 3px;
+      width: 2px;
+      border-radius: 2px;
+      background: transparent;
+      transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .pc-sidebar-resizer::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 4px;
+      height: 36px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.45);
+      opacity: 0;
+      transition: opacity 0.15s ease, background-color 0.15s ease;
+    }
+    .pc-sidebar-resizer:hover::after,
+    .pc-sidebar-resizer.is-resizing::after {
+      background: #2563eb;
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25);
+    }
+    .pc-sidebar-resizer:hover::before,
+    .pc-sidebar-resizer.is-resizing::before {
+      opacity: 1;
+      background: #2563eb;
+    }
+    body.ws-sidebar-resizing,
+    body.ws-sidebar-resizing * {
+      cursor: col-resize !important;
+      user-select: none !important;
+      -webkit-user-select: none !important;
+    }
+    @media (max-width: 860px) {
+      .pc-sidebar-resizer { display: none !important; }
+    }
+    @media print {
+      .pc-sidebar-resizer { display: none !important; }
     }
     .btn-new-task-big {
       width: 100%; height: 38px; background: #1e40af; color: #ffffff; border: none; border-radius: 6px;
@@ -1082,7 +1143,7 @@
 
     /* ================= 5. [캘린더] (기존 운영 버전 공종 알약 100% 재현) ================= */
     .calendar-workspace-view {
-      flex: 1; display: flex; flex-direction: column; background: #f8fafc; padding: 12px 16px; overflow: hidden; gap: 8px;
+      flex: 1; min-width: 0; display: flex; flex-direction: column; background: #f8fafc; padding: 12px 16px; overflow: hidden; gap: 8px;
     }
     .pc-cal-toolbar {
       display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0;
@@ -2946,6 +3007,7 @@
         <div class="page-container" id="page-todo"><div class="todo-workspace-view" id="pcTodoMain"></div></div>
         <div class="page-container" id="page-calendar">
           <aside class="sidebar-panel" id="pcCalSidebar"></aside>
+          <div class="pc-sidebar-resizer" data-sidebar-target="pcCalSidebar" role="separator" aria-orientation="vertical" aria-label="사이드바 너비 조절 (더블클릭 시 기본 너비로 초기화)" title="드래그하여 너비 조절 · 더블클릭 시 기본 너비(270px)로 초기화"></div>
           <main class="calendar-workspace-view" id="pcCalMain"></main>
           <aside class="pc-cal-detail-drawer" id="pcCalDetailDrawer" style="display:none;">
             <div class="ws-modal-header">
@@ -2958,10 +3020,12 @@
         </div>
         <div class="page-container" id="page-sites">
           <aside class="sidebar-panel" id="pcSiteSidebar"></aside>
+          <div class="pc-sidebar-resizer" data-sidebar-target="pcSiteSidebar" role="separator" aria-orientation="vertical" aria-label="사이드바 너비 조절 (더블클릭 시 기본 너비로 초기화)" title="드래그하여 너비 조절 · 더블클릭 시 기본 너비(270px)로 초기화"></div>
           <main class="site-list-workspace-view" id="pcSiteMain"></main>
         </div>
         <div class="page-container" id="page-quote">
           <aside class="sidebar-panel" id="pcQuoteSidebar"></aside>
+          <div class="pc-sidebar-resizer" data-sidebar-target="pcQuoteSidebar" role="separator" aria-orientation="vertical" aria-label="사이드바 너비 조절 (더블클릭 시 기본 너비로 초기화)" title="드래그하여 너비 조절 · 더블클릭 시 기본 너비(270px)로 초기화"></div>
           <main class="site-list-workspace-view" id="pcQuoteMain"></main>
         </div>
         <div class="page-container" id="page-finance"><div class="standard-page-view" id="pcFinanceMain"></div></div>
@@ -3627,6 +3691,7 @@ end $$;`;
         auditSyncLoading: false,
         auditLastSyncedAt: "",
         auditSyncError: "",
+        pcSidebarWidth: 270,
         uploadFiles: []
       };
 
@@ -3694,6 +3759,20 @@ end $$;`;
         clearTimeout(window.__toastTimer);
         const duration = String(msg || "").includes("\n") ? 4500 : 2600;
         window.__toastTimer = setTimeout(() => el.classList.remove("show"), duration);
+      }
+      function normalizeCollectionSiteDupKey(siteName) {
+        return String(siteName || "").replace(/\s+/g, "").toLowerCase();
+      }
+      function findDuplicateCollectionRow(collectionList, siteName, excludeId) {
+        const targetKey = normalizeCollectionSiteDupKey(siteName);
+        if (!targetKey || !Array.isArray(collectionList)) return null;
+        const cleanExcludeId = String(excludeId || "").trim();
+        return collectionList.find((r) => {
+          if (!r || r._optimisticPending) return false;
+          if (String(r.id || "").startsWith("temp_col_")) return false;
+          if (cleanExcludeId && String(r.id || "").trim() === cleanExcludeId) return false;
+          return normalizeCollectionSiteDupKey(r.siteName) === targetKey;
+        }) || null;
       }
       function copyText(txt) {
         if (!txt) return;
@@ -10284,6 +10363,27 @@ end $$;`;
           return;
         }
 
+        const rowId = String(id || "").trim();
+        const isNew = !rowId;
+        const existingCols = (state.financeDbData && Array.isArray(state.financeDbData.collection))
+          ? state.financeDbData.collection
+          : [];
+        const normDupKey = (typeof normalizeCollectionSiteDupKey === "function")
+          ? normalizeCollectionSiteDupKey
+          : (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
+        const dupCol = (typeof findDuplicateCollectionRow === "function")
+          ? findDuplicateCollectionRow(existingCols, siteName, rowId)
+          : (existingCols.find((r) => {
+              if (!r || r._optimisticPending || String(r.id || "").startsWith("temp_col_")) return false;
+              if (rowId && String(r.id || "").trim() === rowId) return false;
+              return normDupKey(r.siteName) === normDupKey(siteName);
+            }) || null);
+        if (dupCol && (isNew || String(dupCol.id || "").trim() !== rowId)) {
+          showToast("이미 수금현황에 등록된 현장입니다.");
+          if (document.getElementById("colSiteName")) document.getElementById("colSiteName").focus();
+          return;
+        }
+
         const clientName = (document.getElementById("colClientName") ? document.getElementById("colClientName").value : "").trim();
         const manager = (document.getElementById("colManager") ? document.getElementById("colManager").value : "").trim();
         const category = (document.getElementById("colCategory") ? document.getElementById("colCategory").value : "").trim();
@@ -10417,6 +10517,10 @@ end $$;`;
             if (window.currentDetailSiteName) {
               window.openSiteFinanceDetailModal(window.currentDetailSiteName, saved.id || window.currentDetailColId);
             }
+          } else if (res && res.duplicate) {
+            showToast((res && res.error) || "이미 수금현황에 등록된 현장입니다.");
+            if (document.getElementById("colSiteName")) document.getElementById("colSiteName").focus();
+            if (btn) { btn.disabled = false; btn.textContent = "저장"; }
           } else {
             alert("수금 정보 저장 실패: " + ((res && res.error) || "알 수 없는 오류"));
             if (btn) { btn.disabled = false; btn.textContent = "저장하기"; }
@@ -13102,13 +13206,35 @@ end $$;`;
       window.submitCollectionSiteImport = function () {
         const list = window._colImportCandidates || [];
         const cbs = document.querySelectorAll(".col-import-cb:checked");
+        if (cbs.length === 0) return showToast("ℹ️ 선택된 현장이 없습니다.");
+
+        const existingCols = (state.financeDbData && Array.isArray(state.financeDbData.collection))
+          ? state.financeDbData.collection
+          : [];
+        const normDupKey = (typeof normalizeCollectionSiteDupKey === "function")
+          ? normalizeCollectionSiteDupKey
+          : (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
+        const seenSiteKeys = new Set(
+          existingCols
+            .filter(r => r && !String(r.id || "").startsWith("temp_col_"))
+            .map(r => normDupKey(r.siteName))
+            .filter(Boolean)
+        );
+
         const picked = [];
+        let skippedDupCount = 0;
         const baseTime = Date.now();
-        cbs.forEach((cb, k) => {
+        cbs.forEach((cb) => {
           const item = list[Number(cb.getAttribute("data-idx"))];
           if (!item) return;
+          const kNorm = normDupKey(item.siteName);
+          if (!kNorm || seenSiteKeys.has(kNorm)) {
+            skippedDupCount += 1;
+            return;
+          }
+          seenSiteKeys.add(kNorm);
           picked.push({
-            id: `COL-${baseTime}_${k}`,
+            id: `COL-${baseTime}_${picked.length}`,
             siteName: item.siteName,
             period: item.period,
             manager: item.manager,
@@ -13132,9 +13258,13 @@ end $$;`;
             note: ""
           });
         });
-        if (picked.length === 0) return showToast("ℹ️ 선택된 현장이 없습니다.");
+        if (picked.length === 0) {
+          window.closeModal("syncStatusModal");
+          return showToast("이미 수금현황에 등록된 현장입니다.");
+        }
         if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
-        state.financeDbData.collection = [...picked, ...(state.financeDbData.collection || [])];
+        const optimisticPicked = picked.map(p => Object.assign({}, p, { _optimisticPending: true }));
+        state.financeDbData.collection = [...optimisticPicked, ...(state.financeDbData.collection || [])];
         const ds = window.WSDataService;
         if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
         if (typeof window.recordAuditLog === "function") {
@@ -13144,11 +13274,50 @@ end $$;`;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
-        showToast(`✅ ${picked.length}개 현장이 수금현황에 등록되었습니다.`);
+        showToast(`✅ ${picked.length}개 현장이 수금현황에 등록되었습니다.${skippedDupCount > 0 ? ` (중복 ${skippedDupCount}건 제외)` : ""}`);
         if (ds && typeof ds.saveCollectionBatchRows === "function") {
-          ds.saveCollectionBatchRows(picked, state.authUser).catch(err => console.error("saveCollectionBatchRows error:", err));
+          ds.saveCollectionBatchRows(picked, state.authUser).then((res) => {
+            if (state.financeDbData && Array.isArray(state.financeDbData.collection)) {
+              const skippedSet = new Set(Array.isArray(res && res.skippedIds) ? res.skippedIds : []);
+              state.financeDbData.collection = state.financeDbData.collection
+                .filter(r => r && !skippedSet.has(r.id))
+                .map((r) => {
+                  if (r && r._optimisticPending && picked.some(p => p.id === r.id)) {
+                    const cleanR = Object.assign({}, r);
+                    delete cleanR._optimisticPending;
+                    return cleanR;
+                  }
+                  return r;
+                });
+              if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+            }
+            if (res && res.skippedCount > 0) {
+              state.dirtyPcTabs.finance = true;
+              state.dirtyMobileTabs.finance = true;
+              renderActiveViews();
+              showToast(`ℹ️ 중복 현장 ${res.skippedCount}건은 제외되고 ${res.createdCount || 0}건이 등록되었습니다.`);
+            }
+          }).catch(err => console.error("saveCollectionBatchRows error:", err));
         } else if (ds && typeof ds.saveCollectionRow === "function") {
-          picked.forEach(r => ds.saveCollectionRow(r, state.authUser).catch(() => {}));
+          Promise.all(picked.map(r => ds.saveCollectionRow(r, state.authUser).catch(() => null))).then((results) => {
+            if (state.financeDbData && Array.isArray(state.financeDbData.collection)) {
+              const failedDupIds = new Set();
+              results.forEach((res, idx) => {
+                if (res && res.duplicate && picked[idx]) failedDupIds.add(picked[idx].id);
+              });
+              state.financeDbData.collection = state.financeDbData.collection
+                .filter(r => r && !failedDupIds.has(r.id))
+                .map((r) => {
+                  if (r && r._optimisticPending && picked.some(p => p.id === r.id)) {
+                    const cleanR = Object.assign({}, r);
+                    delete cleanR._optimisticPending;
+                    return cleanR;
+                  }
+                  return r;
+                });
+              if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+            }
+          });
         }
       };
 
@@ -21404,14 +21573,21 @@ end $$;`;
           else list.unshift(Object.assign({}, rowPayload));
         } else {
           optimisticId = tempPrefix + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
-          list.unshift(Object.assign({}, rowPayload, { id: optimisticId }));
+          list.unshift(Object.assign({}, rowPayload, { id: optimisticId, _optimisticPending: true }));
         }
         if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
 
         if (req && typeof req.then === "function") {
           req.then((res) => {
-            if (!res || !res.success || !state.financeDbData || !Array.isArray(state.financeDbData[bucketKey])) return;
+            if (!res || !res.success || !state.financeDbData || !Array.isArray(state.financeDbData[bucketKey])) {
+              if (!isExistingUpdate && res && res.duplicate && state.financeDbData && Array.isArray(state.financeDbData[bucketKey])) {
+                state.financeDbData[bucketKey] = state.financeDbData[bucketKey].filter(r => r && r.id !== optimisticId);
+                if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+              }
+              return;
+            }
             const saved = Object.assign({}, rowPayload, res.row || {});
+            delete saved._optimisticPending;
             const resolvedId = (res.row && res.row.id) || res.id || saved.id || optimisticId;
             saved.id = resolvedId;
             if (!isExistingUpdate) {
@@ -30168,35 +30344,119 @@ end $$;`;
             });
           };
 
+          function _normColDupKey(siteName) {
+            return (typeof normalizeCollectionSiteDupKey === "function")
+              ? normalizeCollectionSiteDupKey(siteName)
+              : String(siteName || "").replace(/\s+/g, "").toLowerCase();
+          }
+
+          function _findDupColRow(collectionList, siteName, excludeId) {
+            if (typeof findDuplicateCollectionRow === "function") {
+              return findDuplicateCollectionRow(collectionList, siteName, excludeId);
+            }
+            const targetKey = _normColDupKey(siteName);
+            if (!targetKey || !Array.isArray(collectionList)) return null;
+            const cleanExcludeId = String(excludeId || "").trim();
+            return collectionList.find((r) => {
+              if (!r || r._optimisticPending || String(r.id || "").startsWith("temp_col_")) return false;
+              if (cleanExcludeId && String(r.id || "").trim() === cleanExcludeId) return false;
+              return _normColDupKey(r.siteName) === targetKey;
+            }) || null;
+          }
+
+          function mergeFinanceCollectionWithRemote(localList, remoteList) {
+            const cleanLocal = (Array.isArray(localList) ? localList : []).filter(
+              r => r && !String(r.id || "").startsWith("temp_col_") && !r._optimisticPending
+            );
+            if (!Array.isArray(remoteList) || remoteList.length === 0) return cleanLocal;
+            const seenIds = new Set(cleanLocal.map(r => r && r.id).filter(Boolean));
+            const merged = cleanLocal.slice();
+            remoteList.forEach((r) => {
+              if (!r || String(r.id || "").startsWith("temp_col_") || r._optimisticPending) return;
+              if (r.id && seenIds.has(r.id)) return;
+              if (r.id) seenIds.add(r.id);
+              merged.push(r);
+            });
+            return merged;
+          }
+
+          function emitCollectionSaveAuditLog(cleanRow, meta, colSource) {
+            if (typeof window.recordAuditLog !== "function" || !cleanRow || (meta && meta.skip)) return;
+            const list = Array.isArray(colSource) ? colSource : [];
+            const prevCol = (meta && meta.before) || ((cleanRow.id && list.find(c => c && c.id === cleanRow.id)) || null);
+            const isEditCol = Boolean(cleanRow.id && prevCol);
+            const fb = `계약 ${(Number(cleanRow.contractAmount) || 0).toLocaleString("ko-KR")}원 · ${cleanRow.status || ""}`;
+            const diffInput = (isEditCol && typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+              ? window.computeAuditDiff(prevCol, cleanRow, window.AUDIT_FIELD_SPECS.collection, fb)
+              : fb;
+            window.recordAuditLog(
+              "재무",
+              isEditCol ? "수금 수정" : "수금 등록",
+              cleanRow.siteName || "",
+              diffInput,
+              prevCol ? { type: "collection", id: prevCol.id, beforeData: JSON.parse(JSON.stringify(prevCol)) } : null
+            );
+          }
+
           ds.saveCollectionRow = function (row, authUser) {
             const { clean: rawCleanRow, meta } = extractAuditMeta(row);
             const isRestore = Boolean(rawCleanRow && rawCleanRow._restoringFromAudit);
-            let cleanRow = rawCleanRow;
-            if (isRestore) {
-              cleanRow = Object.assign({}, rawCleanRow);
-              delete cleanRow._restoringFromAudit;
+            let cleanRow = Object.assign({}, rawCleanRow || {});
+            if (isRestore) delete cleanRow._restoringFromAudit;
+            delete cleanRow._optimisticPending;
+
+            const rowId = String(cleanRow.id || "").trim();
+            const localCols = (state.financeDbData && Array.isArray(state.financeDbData.collection))
+              ? state.financeDbData.collection
+              : [];
+
+            if (!isSupabaseActive()) {
+              const dupLocal = _findDupColRow(localCols, cleanRow.siteName, rowId);
+              if (dupLocal) {
+                if (typeof showToast === "function") showToast("이미 수금현황에 등록된 현장입니다.");
+                return Promise.resolve({
+                  success: false,
+                  duplicate: true,
+                  error: "이미 수금현황에 등록된 현장입니다.",
+                  existingId: dupLocal.id
+                });
+              }
+              emitCollectionSaveAuditLog(cleanRow, meta, localCols);
+              return orig.saveCollectionRow.call(ds, cleanRow, authUser);
             }
-            if (typeof window.recordAuditLog === "function" && cleanRow && (!meta || !meta.skip)) {
-              const prevCol = (meta && meta.before) || ((cleanRow.id && state.financeDbData && Array.isArray(state.financeDbData.collection))
-                ? state.financeDbData.collection.find(c => c && c.id === cleanRow.id)
-                : null);
-              const isEditCol = Boolean(cleanRow.id && prevCol);
-              const fb = `계약 ${(Number(cleanRow.contractAmount) || 0).toLocaleString("ko-KR")}원 · ${cleanRow.status || ""}`;
-              const diffInput = (isEditCol && typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
-                ? window.computeAuditDiff(prevCol, cleanRow, window.AUDIT_FIELD_SPECS.collection, fb)
-                : fb;
-              window.recordAuditLog(
-                "재무",
-                isEditCol ? "수금 수정" : "수금 등록",
-                cleanRow.siteName || "",
-                diffInput,
-                prevCol ? { type: "collection", id: prevCol.id, beforeData: JSON.parse(JSON.stringify(prevCol)) } : null
-              );
+
+            const dupPre = _findDupColRow(localCols, cleanRow.siteName, rowId);
+            if (dupPre) {
+              if (typeof showToast === "function") showToast("이미 수금현황에 등록된 현장입니다.");
+              return Promise.resolve({
+                success: false,
+                duplicate: true,
+                error: "이미 수금현황에 등록된 현장입니다.",
+                existingId: dupPre.id
+              });
             }
-            if (!isSupabaseActive()) return orig.saveCollectionRow.call(ds, cleanRow, authUser);
-            bgDualWrite("saveCollectionRow", () => orig.saveCollectionRow.call(ds, cleanRow, authUser));
+
             return enqueueKeyWrite("finance_db", async () => {
+              const wasLoaded = Boolean(state.financeLoaded);
               const fb = await ensureFinanceInMemory();
+              const remoteFb = wasLoaded ? await fetchFinanceSnapshotFromSupabase().catch(() => null) : null;
+              const nextCol = mergeFinanceCollectionWithRemote(fb.collection, remoteFb && remoteFb.collection);
+
+              const dupRemote = _findDupColRow(nextCol, cleanRow.siteName, rowId);
+              if (dupRemote) {
+                if (typeof showToast === "function") showToast("이미 수금현황에 등록된 현장입니다.");
+                return {
+                  success: false,
+                  duplicate: true,
+                  error: "이미 수금현황에 등록된 현장입니다.",
+                  existingId: dupRemote.id,
+                  source: "supabase"
+                };
+              }
+
+              emitCollectionSaveAuditLog(cleanRow, meta, nextCol);
+              bgDualWrite("saveCollectionRow", () => orig.saveCollectionRow.call(ds, cleanRow, authUser));
+
               const isNewId = !(cleanRow && cleanRow.id);
               const savedId = !isNewId ? String(cleanRow.id) : ("COL-" + Date.now());
               const cAmt = Number(cleanRow.contractAmount) || 0;
@@ -30221,7 +30481,6 @@ end $$;`;
                 const stageSum = stageKeys.reduce((s, k) => s + (Number(cleanRow[k]) || 0), 0);
                 collected = stageSum + extraPaid;
               }
-              const nextCol = Array.isArray(fb.collection) ? fb.collection.filter(r => r && !String(r.id || "").startsWith("temp_col_")) : [];
               const idx = nextCol.findIndex(r => r && r.id === savedId);
               const existingCreated = idx >= 0 ? (nextCol[idx].createdAtMs || 0) : 0;
               const createdAtMs = isRestore ? Date.now() : (cleanRow.createdAtMs || existingCreated || ((isNewId || idx < 0) ? Date.now() : 0));
@@ -30257,41 +30516,105 @@ end $$;`;
 
           ds.saveCollectionBatchRows = function (rows, authUser) {
             const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
-            if (list.length === 0) return Promise.resolve({ success: true });
-            if (!isSupabaseActive()) {
-              return Promise.all(list.map(r => orig.saveCollectionRow.call(ds, r, authUser))).then(() => ({ success: true }));
-            }
-            bgDualWrite("saveCollectionBatchRows", () => Promise.all(list.map(r => orig.saveCollectionRow.call(ds, r, authUser))));
-            return enqueueKeyWrite("finance_db", async () => {
-              const fb = await ensureFinanceInMemory();
-              const existingIds = new Set((fb.collection || []).map(c => c && c.id));
+            if (list.length === 0) return Promise.resolve({ success: true, createdCount: 0, skippedCount: 0, skippedIds: [] });
+
+            function filterBatchAgainstCollection(rawRows, baseCollection) {
+              const existingIds = new Set((baseCollection || []).map(c => c && c.id).filter(Boolean));
+              const existingSiteKeys = new Set(
+                (baseCollection || []).map(c => _normColDupKey(c && c.siteName)).filter(Boolean)
+              );
               const nowBatch = Date.now();
-              const normalizedList = list.map(r => {
-                const finR = typeof getCollectionRowFinancials === "function" ? getCollectionRowFinancials(r) : { isAmountUnset: ((Number(r && r.totalAmount) || 0) <= 0 && (Number(r && r.collectedAmount) || 0) <= 0) };
+              const accepted = [];
+              const skippedIds = [];
+              let skippedCount = 0;
+
+              rawRows.forEach((r, idx) => {
+                if (!r) return;
+                const rowId = String(r.id || "").trim() || `COL-${nowBatch}_${idx}`;
+                const siteKey = _normColDupKey(r.siteName);
+                if (existingIds.has(rowId) || (siteKey && existingSiteKeys.has(siteKey))) {
+                  skippedCount += 1;
+                  if (r.id) skippedIds.push(String(r.id));
+                  return;
+                }
+                existingIds.add(rowId);
+                if (siteKey) existingSiteKeys.add(siteKey);
+                const finR = typeof getCollectionRowFinancials === "function"
+                  ? getCollectionRowFinancials(r)
+                  : { isAmountUnset: ((Number(r && r.totalAmount) || 0) <= 0 && (Number(r && r.collectedAmount) || 0) <= 0) };
                 let stR = String((r && r.status) || "진행중").trim() || "진행중";
                 if (finR.isAmountUnset && stR === "완료") stR = "진행중";
-                return Object.assign({}, r, { status: stR, createdAtMs: r.createdAtMs || nowBatch });
+                const cleanR = Object.assign({}, r, { id: rowId, status: stR, createdAtMs: r.createdAtMs || nowBatch });
+                delete cleanR._optimisticPending;
+                accepted.push(cleanR);
               });
-              const newOnes = normalizedList.filter(r => r && !existingIds.has(r.id));
-              normalizedList.forEach((r) => {
+              return { accepted, skippedCount, skippedIds };
+            }
+
+            if (!isSupabaseActive()) {
+              const localCols = mergeFinanceCollectionWithRemote(
+                state.financeDbData && state.financeDbData.collection,
+                null
+              );
+              const { accepted, skippedCount, skippedIds } = filterBatchAgainstCollection(list, localCols);
+              if (state.financeDbData && Array.isArray(state.financeDbData.collection)) {
+                const skipSet = new Set(skippedIds);
+                const accIds = new Set(accepted.map(a => a.id));
+                state.financeDbData.collection = state.financeDbData.collection
+                  .filter(r => r && !skipSet.has(r.id))
+                  .map((r) => {
+                    if (r && r._optimisticPending && accIds.has(r.id)) {
+                      const c = Object.assign({}, r);
+                      delete c._optimisticPending;
+                      return c;
+                    }
+                    return r;
+                  });
+                if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+              }
+              if (accepted.length === 0) {
+                return Promise.resolve({ success: true, createdCount: 0, skippedCount, skippedIds });
+              }
+              return Promise.all(accepted.map(r => orig.saveCollectionRow.call(ds, r, authUser))).then(() => ({
+                success: true,
+                createdCount: accepted.length,
+                skippedCount,
+                skippedIds
+              }));
+            }
+
+            return enqueueKeyWrite("finance_db", async () => {
+              const wasLoaded = Boolean(state.financeLoaded);
+              const fb = await ensureFinanceInMemory();
+              const remoteFb = wasLoaded ? await fetchFinanceSnapshotFromSupabase().catch(() => null) : null;
+              const baseCols = mergeFinanceCollectionWithRemote(fb.collection, remoteFb && remoteFb.collection);
+              const { accepted: newOnes, skippedCount, skippedIds } = filterBatchAgainstCollection(list, baseCols);
+
+              if (newOnes.length === 0) {
+                const cleanFb = Object.assign({}, fb, { collection: baseCols });
+                state.financeDbData = cleanFb;
+                if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(cleanFb);
+                return { success: true, createdCount: 0, skippedCount, skippedIds, source: "supabase" };
+              }
+
+              bgDualWrite("saveCollectionBatchRows", () => Promise.all(newOnes.map(r => orig.saveCollectionRow.call(ds, r, authUser))));
+              newOnes.forEach((r) => {
                 if (r.id && typeof clearDeletedFinanceGuard === "function") {
                   clearDeletedFinanceGuard("collection", r.id, { skipRemoteSync: true });
                 }
               });
-              if (normalizedList.length > 0 && typeof syncTombstonesToSupabase === "function") {
+              if (typeof syncTombstonesToSupabase === "function") {
                 await syncTombstonesToSupabase();
               }
               const nextFb = Object.assign({}, fb, {
-                collection: [...newOnes, ...(fb.collection || [])],
+                collection: [...newOnes, ...baseCols],
                 updatedAt: new Date().toISOString()
               });
               state.financeDbData = nextFb;
               if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(nextFb);
               await persistDomainSnapshot("finance_db", nextFb);
-              if (normalizedList.length > 0) {
-                await upsertRows("ws_finance_store", normalizedList.map(r => ({ record_key: "collection::" + r.id, category: "collection", payload: r, updated_at: new Date().toISOString() })), "record_key");
-              }
-              return { success: true, createdCount: newOnes.length, source: "supabase" };
+              await upsertRows("ws_finance_store", newOnes.map(r => ({ record_key: "collection::" + r.id, category: "collection", payload: r, updated_at: new Date().toISOString() })), "record_key");
+              return { success: true, createdCount: newOnes.length, skippedCount, skippedIds, source: "supabase" };
             });
           };
 
@@ -30894,6 +31217,161 @@ end $$;`;
         showToast(`📅 [${task.taskName}] 일정이 ${targetYmd}(으)로 이동되었습니다.`);
       };
 
+      // ================= PC 좌측 사이드바 드래그 리사이저 =================
+      const PC_SIDEBAR_WIDTH_STORAGE_KEY = "ws_pc_sidebar_width_v1";
+      const PC_SIDEBAR_DEFAULT_WIDTH = 270;
+      const PC_SIDEBAR_MIN_WIDTH = 220;
+      const PC_SIDEBAR_MAX_WIDTH = 480;
+      let _pcSidebarResizeInitDone = false;
+
+      function clampPcSidebarWidth(rawWidth) {
+        if (rawWidth === null || rawWidth === undefined || rawWidth === "") return PC_SIDEBAR_DEFAULT_WIDTH;
+        const parsed = typeof rawWidth === "number" ? rawWidth : parseFloat(String(rawWidth));
+        if (!Number.isFinite(parsed) || parsed <= 0) return PC_SIDEBAR_DEFAULT_WIDTH;
+        return Math.min(PC_SIDEBAR_MAX_WIDTH, Math.max(PC_SIDEBAR_MIN_WIDTH, Math.round(parsed)));
+      }
+
+      function loadSavedPcSidebarWidth() {
+        try {
+          if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.getItem === "function") {
+            const raw = localStorage.getItem(PC_SIDEBAR_WIDTH_STORAGE_KEY);
+            if (raw !== null && raw !== undefined && String(raw).trim() !== "") {
+              return clampPcSidebarWidth(raw);
+            }
+          }
+        } catch (_) {}
+        return PC_SIDEBAR_DEFAULT_WIDTH;
+      }
+
+      function savePcSidebarWidth(widthPx) {
+        const clamped = clampPcSidebarWidth(widthPx);
+        try {
+          if (typeof localStorage !== "undefined" && localStorage && typeof localStorage.setItem === "function") {
+            localStorage.setItem(PC_SIDEBAR_WIDTH_STORAGE_KEY, String(clamped));
+          }
+        } catch (_) {}
+        return clamped;
+      }
+
+      function applyPcSidebarWidth(widthPx, opts) {
+        const o = opts || {};
+        const clamped = clampPcSidebarWidth(widthPx);
+        state.pcSidebarWidth = clamped;
+        const pxStr = clamped + "px";
+        try {
+          if (typeof document !== "undefined" && document.documentElement && document.documentElement.style && typeof document.documentElement.style.setProperty === "function") {
+            document.documentElement.style.setProperty("--pc-sidebar-width", pxStr);
+          }
+        } catch (_) {}
+        const sidebarIds = ["pcCalSidebar", "pcSiteSidebar", "pcQuoteSidebar"];
+        sidebarIds.forEach((sid) => {
+          const el = (typeof document !== "undefined" && typeof document.getElementById === "function") ? document.getElementById(sid) : null;
+          if (el && el.style) {
+            el.style.width = pxStr;
+            el.style.minWidth = pxStr;
+            el.style.maxWidth = pxStr;
+          }
+        });
+        if (o.persist) {
+          savePcSidebarWidth(clamped);
+        }
+        return clamped;
+      }
+
+      function resetPcSidebarWidth() {
+        return applyPcSidebarWidth(PC_SIDEBAR_DEFAULT_WIDTH, { persist: true });
+      }
+
+      function initPcSidebarResizer() {
+        const initialW = loadSavedPcSidebarWidth();
+        applyPcSidebarWidth(initialW, { persist: false });
+        if (_pcSidebarResizeInitDone || typeof document === "undefined") return;
+        _pcSidebarResizeInitDone = true;
+
+        let activeDrag = null;
+        const endDrag = () => {
+          if (!activeDrag) return;
+          const { handleEl, currentWidth } = activeDrag;
+          activeDrag = null;
+          if (handleEl && handleEl.classList) handleEl.classList.remove("is-resizing");
+          if (document.body && document.body.classList) document.body.classList.remove("ws-sidebar-resizing");
+          if (typeof document.removeEventListener === "function") {
+            document.removeEventListener("mousemove", onMouseMove);
+            document.removeEventListener("mouseup", onMouseUp);
+          }
+          if (typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+            window.removeEventListener("blur", onMouseUp);
+          }
+          savePcSidebarWidth(currentWidth);
+        };
+
+        const onMouseMove = (ev) => {
+          if (!activeDrag) return;
+          const clientX = (ev && typeof ev.clientX === "number") ? ev.clientX : activeDrag.startX;
+          const deltaX = clientX - activeDrag.startX;
+          activeDrag.currentWidth = applyPcSidebarWidth(activeDrag.startWidth + deltaX, { persist: false });
+        };
+
+        const onMouseUp = () => {
+          endDrag();
+        };
+
+        const handles = (typeof document.querySelectorAll === "function")
+          ? Array.from(document.querySelectorAll(".pc-sidebar-resizer"))
+          : [];
+        handles.forEach((handleEl) => {
+          if (!handleEl || typeof handleEl.addEventListener !== "function") return;
+          handleEl.addEventListener("mousedown", (ev) => {
+            if (!ev || (ev.button !== undefined && ev.button !== 0)) return;
+            if (state.device === "mobile") return;
+            if (typeof ev.preventDefault === "function") ev.preventDefault();
+            try {
+              const sel = typeof window !== "undefined" && typeof window.getSelection === "function" ? window.getSelection() : null;
+              if (sel && typeof sel.removeAllRanges === "function") sel.removeAllRanges();
+            } catch (_) {}
+            const targetId = typeof handleEl.getAttribute === "function" ? handleEl.getAttribute("data-sidebar-target") : "";
+            const sidebarEl = targetId && typeof document.getElementById === "function" ? document.getElementById(targetId) : null;
+            let measuredWidth = state.pcSidebarWidth || loadSavedPcSidebarWidth();
+            if (sidebarEl && typeof sidebarEl.getBoundingClientRect === "function") {
+              const rect = sidebarEl.getBoundingClientRect();
+              if (rect && rect.width > 0) measuredWidth = rect.width;
+            } else if (sidebarEl && sidebarEl.style && sidebarEl.style.width) {
+              const parsed = parseFloat(sidebarEl.style.width);
+              if (Number.isFinite(parsed) && parsed > 0) measuredWidth = parsed;
+            }
+            const startWidth = clampPcSidebarWidth(measuredWidth);
+            activeDrag = {
+              handleEl,
+              startX: typeof ev.clientX === "number" ? ev.clientX : 0,
+              startWidth,
+              currentWidth: startWidth
+            };
+            if (handleEl.classList) handleEl.classList.add("is-resizing");
+            if (document.body && document.body.classList) document.body.classList.add("ws-sidebar-resizing");
+            if (typeof document.addEventListener === "function") {
+              document.addEventListener("mousemove", onMouseMove);
+              document.addEventListener("mouseup", onMouseUp);
+            }
+            if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+              window.addEventListener("blur", onMouseUp);
+            }
+          });
+          handleEl.addEventListener("dblclick", (ev) => {
+            if (state.device === "mobile") return;
+            if (ev && typeof ev.preventDefault === "function") ev.preventDefault();
+            endDrag();
+            resetPcSidebarWidth();
+            if (typeof showToast === "function") {
+              showToast(`↔️ 사이드바 너비가 기본값(${PC_SIDEBAR_DEFAULT_WIDTH}px)으로 초기화되었습니다.`);
+            }
+          });
+        });
+      }
+      window.clampPcSidebarWidth = clampPcSidebarWidth;
+      window.applyPcSidebarWidth = applyPcSidebarWidth;
+      window.resetPcSidebarWidth = resetPcSidebarWidth;
+      window.initPcSidebarResizer = initPcSidebarResizer;
+
       // ================= 전역 핸들러 =================
       window.switchDeviceMode = function (mode) {
         state.device = mode;
@@ -30905,6 +31383,9 @@ end $$;`;
         if (bMob) bMob.classList.toggle("active", mode === "mobile");
         pcFrame.style.display = mode === "pc" ? "flex" : "none";
         mobileFrame.style.display = mode === "mobile" ? "block" : "none";
+        if (mode === "pc") {
+          applyPcSidebarWidth(loadSavedPcSidebarWidth(), { persist: false });
+        }
         renderActiveViews();
       };
 
@@ -31057,6 +31538,7 @@ end $$;`;
         document.querySelectorAll(".page-container").forEach((page) => page.classList.remove("active"));
         const target = document.getElementById("page-" + tabKey);
         if (target) target.classList.add("active");
+        applyPcSidebarWidth(state.pcSidebarWidth || loadSavedPcSidebarWidth(), { persist: false });
         resetPcScrollTop(tabKey);
         renderActiveViews();
         resetPcScrollTop(tabKey);
@@ -32396,6 +32878,7 @@ end $$;`;
         }
 
         initDashboardAuthLock();
+        initPcSidebarResizer();
 
         const todayYmd = getTodayYmd();
         state.selectedDayStr = todayYmd;

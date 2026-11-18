@@ -5928,6 +5928,460 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     );
   })());
 
+  // [수금현황 동일 현장명 중복 생성 차단 (onSaveCollectionRow · submitCollectionSiteImport · WSSupabaseV3) 런타임 QA]
+  pendingAsyncTests.push((async () => {
+    const marker = '<script src="data/dashboard_data.js"></script>';
+    const idxHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const dashDataScript = fs.readFileSync(path.join(__dirname, '..', 'data', 'dashboard_data.js'), 'utf8');
+    const mPos = idxHtml.indexOf(marker);
+    const sStart = idxHtml.indexOf('<script>', mPos) + '<script>'.length;
+    const sEnd = idxHtml.lastIndexOf('</script>');
+    const mainScript = idxHtml.slice(sStart, sEnd);
+
+    const makeClassList = () => {
+      const set = new Set();
+      return {
+        add: (...cs) => cs.forEach((c) => set.add(c)),
+        remove: (...cs) => cs.forEach((c) => set.delete(c)),
+        toggle: (c, f) => (f === undefined ? (set.has(c) ? (set.delete(c), false) : (set.add(c), true)) : (f ? (set.add(c), true) : (set.delete(c), false))),
+        contains: (c) => set.has(c)
+      };
+    };
+    const makeEl = (id) => ({
+      id,
+      value: '',
+      textContent: '',
+      innerHTML: '',
+      disabled: false,
+      style: {},
+      classList: makeClassList(),
+      focus: () => {},
+      select: () => {},
+      closest: () => null,
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      setAttribute: () => {},
+      getAttribute: () => ''
+    });
+
+    const elements = new Map();
+    [
+      'toastBanner', 'colSiteName', 'colClientName', 'colManager', 'colCategory', 'colStatus', 'colPeriod',
+      'colContractAmount', 'colChangeAmount', 'colChangeDesc', 'colDownPayment', 'colStartPayment',
+      'colMidPayment1', 'colMidPayment2', 'colMidPayment3', 'colFinalPayment', 'colTaxInvoice', 'colNote',
+      'btnSaveCollectionRow', 'collectionModal', 'syncStatusModal', 'pcViewFrame', 'mobilePhoneFrame',
+      'mobileScreenInner', 'userSelector', 'mUserSelector', 'topAccessLockOverlay', 'topAccessPinInput',
+      'topAccessPinError', 'wsMembersAuthDl',
+      'page-home', 'page-todo', 'page-calendar', 'page-sites', 'page-quote', 'page-finance', 'page-partners',
+      'm-page-home', 'm-page-todo', 'm-page-calendar', 'm-page-sites', 'm-page-quote', 'm-page-finance', 'm-page-partners',
+      'pcHomeMain', 'pcCalMain', 'pcSiteMain', 'pcQuoteMain', 'pcTodoMain', 'pcFinanceMain', 'pcPartnersMain',
+      'mHomeMain', 'mCalMain', 'mSitesMain', 'mQuoteMain', 'mTodoMain', 'mobileFinanceMain', 'mPartnersMain',
+      'pcCalSidebar', 'pcSiteSidebar', 'pcQuoteSidebar'
+    ].forEach((id) => elements.set(id, makeEl(id)));
+
+    const importCheckedBoxes = [];
+    const listeners = {};
+    const storageMap = new Map([
+      ['ws_dashboard_auth_token_v2', 'WSAUTH_MOCK'],
+      ['ws_dashboard_auth_user_v2', '조항만'],
+      ['ws_supabase_v3_config_v1', JSON.stringify({
+        url: 'https://mock-proj.supabase.co',
+        anonKey: 'mock-anon-key-1234567890',
+        engineMode: 'sheets',
+        dualWrite: false
+      })]
+    ]);
+
+    let remoteCollectionRows = [];
+    let origSaveCalls = 0;
+    let supabaseStoreUpsertCalls = [];
+    let supabaseFinanceUpsertCalls = [];
+
+    const mockFetch = async (url, init) => {
+      const u = String(url || '');
+      const method = String((init && init.method) || 'GET').toUpperCase();
+      if (u.includes('ws_state_store') && method === 'GET') {
+        const rows = [{
+          key: 'finance_db',
+          payload: {
+            collection: remoteCollectionRows.slice(),
+            expense: [],
+            fixedMaster: [],
+            updatedAt: '2026-11-19T00:00:00.000Z'
+          }
+        }];
+        return {
+          ok: true,
+          status: 200,
+          json: async () => rows,
+          text: async () => JSON.stringify(rows)
+        };
+      }
+      if (u.includes('ws_state_store') && method === 'POST') {
+        try {
+          const parsed = JSON.parse((init && init.body) || '[]');
+          supabaseStoreUpsertCalls.push(parsed);
+        } catch (_) {}
+        return { ok: true, status: 200, json: async () => [], text: async () => '[]' };
+      }
+      if (u.includes('ws_finance_store') && method === 'POST') {
+        try {
+          const parsed = JSON.parse((init && init.body) || '[]');
+          supabaseFinanceUpsertCalls.push(parsed);
+        } catch (_) {}
+        return { ok: true, status: 200, json: async () => [], text: async () => '[]' };
+      }
+      return { ok: true, status: 200, json: async () => [], text: async () => '[]' };
+    };
+
+    const document = {
+      body: makeEl('body'),
+      documentElement: makeEl('html'),
+      activeElement: null,
+      cookie: '',
+      getElementById: (id) => elements.get(id) || null,
+      querySelector: () => null,
+      querySelectorAll: (sel) => (sel === '.col-import-cb:checked' ? importCheckedBoxes : []),
+      addEventListener: (t, fn) => { listeners[t] = listeners[t] || []; listeners[t].push(fn); },
+      removeEventListener: () => {}
+    };
+
+    const sb = {
+      console, Math, Date, Number, String, Array, Object, Set, Map, JSON, RegExp, Promise, Error, TypeError,
+      parseInt, parseFloat, isNaN, encodeURIComponent, decodeURIComponent, URL, URLSearchParams,
+      fetch: mockFetch,
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      requestAnimationFrame: (fn) => { if (typeof fn === 'function') fn(); return 0; },
+      performance: { now: () => 100 },
+      navigator: { maxTouchPoints: 0, userAgent: 'node-qa' },
+      innerWidth: 1280,
+      scrollTo: () => {},
+      alert: (m) => { sb._lastAlert = m; },
+      confirm: () => false,
+      close: () => {},
+      location: { protocol: 'http:', hostname: 'localhost', pathname: '/index.html', search: '', hash: '', href: 'http://localhost/index.html' },
+      localStorage: {
+        getItem: (k) => (storageMap.has(k) ? storageMap.get(k) : null),
+        setItem: (k, v) => storageMap.set(k, String(v)),
+        removeItem: (k) => storageMap.delete(k)
+      },
+      sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+      history: { state: null, length: 1, pushState: () => {}, replaceState: () => {} },
+      document,
+      getComputedStyle: () => ({ zIndex: '0' }),
+      addEventListener: (t, fn) => { listeners[t] = listeners[t] || []; listeners[t].push(fn); },
+      removeEventListener: () => {}
+    };
+    sb.window = sb;
+    sb.globalThis = sb;
+    vm.createContext(sb);
+    vm.runInContext(dashDataScript, sb);
+    sb.WSDataService.saveCollectionRow = async (row) => {
+      origSaveCalls++;
+      return { success: true, id: row.id || 'COL-ORIG-' + origSaveCalls, row: Object.assign({}, row, { id: row.id || 'COL-ORIG-' + origSaveCalls }) };
+    };
+    vm.runInContext(mainScript, sb);
+    (listeners.DOMContentLoaded || []).forEach((fn) => fn());
+
+    // 1) 비-Supabase 모드: onSaveCollectionRow 신규 중복 차단 vs 기존 행 수정 허용 + ds.saveCollectionRow 가드
+    sb.state.financeLoaded = true;
+    sb.state.financeDbData = {
+      collection: [{ id: 'COL-1', siteName: '한남 더힐', contractAmount: 10000000, status: '진행중' }],
+      expense: [],
+      fixedMaster: []
+    };
+    elements.get('colSiteName').value = '한남더힐';
+    elements.get('colContractAmount').value = '5000000';
+    elements.get('toastBanner').textContent = '';
+    sb.onSaveCollectionRow('');
+    const manualDupBlocked = Boolean(
+      elements.get('toastBanner').textContent === '이미 수금현황에 등록된 현장입니다.' &&
+      origSaveCalls === 0 &&
+      sb.state.financeDbData.collection.length === 1
+    );
+
+    const dsNewDupRes = await sb.WSDataService.saveCollectionRow({ id: '', siteName: '한남더힐' }, '조항만');
+    const dsNewDupBlocked = Boolean(dsNewDupRes && dsNewDupRes.success === false && dsNewDupRes.duplicate === true && origSaveCalls === 0);
+
+    // 기존 행 수정(row.id === existing.id)은 정상 허용
+    elements.get('colSiteName').value = '한남 더힐';
+    elements.get('colContractAmount').value = '15000000';
+    sb.onSaveCollectionRow('COL-1');
+    await new Promise((r) => setTimeout(r, 10));
+    const editAllowedOk = Boolean(
+      origSaveCalls === 1 &&
+      sb.state.financeDbData.collection.length === 1 &&
+      sb.state.financeDbData.collection[0].contractAmount === 15000000
+    );
+
+    // 2) Supabase 활성 모드 전환: 로컬 + 원격 Supabase finance_db 대조 중복 차단 검증
+    storageMap.set('ws_supabase_v3_config_v1', JSON.stringify({
+      url: 'https://mock-proj.supabase.co',
+      anonKey: 'mock-anon-key-1234567890',
+      engineMode: 'supabase',
+      dualWrite: false
+    }));
+    remoteCollectionRows = [
+      { id: 'COL-1', siteName: '한남 더힐', contractAmount: 15000000, status: '진행중' },
+      { id: 'COL-REM-1', siteName: '래미안 원베일리', contractAmount: 20000000, status: '진행중' }
+    ];
+    const origCallsBeforeSb = origSaveCalls;
+    elements.get('toastBanner').textContent = '';
+    const sbRemoteDupRes = await sb.WSDataService.saveCollectionRow({ id: '', siteName: '래미안원베일리', contractAmount: 30000000 }, '조항만');
+    const sbRemoteDupBlocked = Boolean(
+      sbRemoteDupRes &&
+      sbRemoteDupRes.success === false &&
+      sbRemoteDupRes.duplicate === true &&
+      elements.get('toastBanner').textContent === '이미 수금현황에 등록된 현장입니다.' &&
+      supabaseFinanceUpsertCalls.length === 0 &&
+      origSaveCalls === origCallsBeforeSb
+    );
+
+    // 3) submitCollectionSiteImport & saveCollectionBatchRows: 기존+배치내중복+Supabase원격 중복 스킵 검증
+    sb._colImportCandidates = [
+      { siteName: '한남더힐', period: '2026.11.01 ~ 2026.11.30', manager: '조항만', category: '전체공사', isDone: false },
+      { siteName: '래미안 원베일리', period: '2026.11.02 ~ 2026.11.20', manager: '조항만', category: '전체공사', isDone: false },
+      { siteName: '신규 현장 A', period: '2026.11.05 ~ 2026.11.25', manager: '조항만', category: '전체공사', isDone: false },
+      { siteName: '신규현장A', period: '2026.11.05 ~ 2026.11.25', manager: '조항만', category: 'AS', isDone: false }
+    ];
+    importCheckedBoxes.length = 0;
+    [0, 1, 2, 3].forEach((idx) => importCheckedBoxes.push({ getAttribute: () => String(idx) }));
+    sb.submitCollectionSiteImport();
+    await new Promise((r) => setTimeout(r, 20));
+
+    const batchDirectRes = await sb.WSDataService.saveCollectionBatchRows([
+      { id: 'COL-BATCH-DUP', siteName: '신규현장A', status: '진행중' },
+      { id: 'COL-BATCH-NEW', siteName: '독립현장B', status: '진행중' }
+    ], '조항만');
+
+    const finalCols = sb.state.financeDbData.collection || [];
+    const normKeys = finalCols.map((c) => String(c.siteName || '').replace(/\s+/g, '').toLowerCase());
+    const uniqueKeyCount = new Set(normKeys).size;
+    const importBatchOk = Boolean(
+      finalCols.some((c) => c.siteName === '신규 현장 A') &&
+      finalCols.some((c) => c.siteName === '독립현장B') &&
+      !finalCols.some((c) => c._optimisticPending) &&
+      uniqueKeyCount === finalCols.length &&
+      batchDirectRes &&
+      batchDirectRes.createdCount === 1 &&
+      batchDirectRes.skippedCount === 1
+    );
+
+    assertTest(
+      '수금현황 동일 현장명(공백 제거 정규화) 중복 생성 원천 차단(수기 등록/수정·일괄 불러오기·Supabase batch/row) 런타임 검증',
+      manualDupBlocked && dsNewDupBlocked && editAllowedOk && sbRemoteDupBlocked && importBatchOk,
+      `manualDup=${manualDupBlocked}, dsNewDup=${dsNewDupBlocked}, editOk=${editAllowedOk}, sbRemoteDup=${sbRemoteDupBlocked}, importBatch=${importBatchOk}`
+    );
+  })());
+
+  // [PC 좌측 사이드바 세로 경계 드래그 리사이저(범위 220~480px · 더블클릭 초기화 · localStorage 유지 · 모바일 비간섭) 런타임 QA]
+  pendingAsyncTests.push((async () => {
+    const marker = '<script src="data/dashboard_data.js"></script>';
+    const idxHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const dashDataScript = fs.readFileSync(path.join(__dirname, '..', 'data', 'dashboard_data.js'), 'utf8');
+    const mPos = idxHtml.indexOf(marker);
+    const sStart = idxHtml.indexOf('<script>', mPos) + '<script>'.length;
+    const sEnd = idxHtml.lastIndexOf('</script>');
+    const mainScript = idxHtml.slice(sStart, sEnd);
+
+    const hasResizerHtmlCss = Boolean(
+      idxHtml.includes('cursor: col-resize;') &&
+      idxHtml.includes('ws-sidebar-resizing') &&
+      idxHtml.includes('data-sidebar-target="pcCalSidebar"') &&
+      idxHtml.includes('data-sidebar-target="pcSiteSidebar"') &&
+      idxHtml.includes('data-sidebar-target="pcQuoteSidebar"') &&
+      idxHtml.includes('@media (max-width: 860px)')
+    );
+
+    const sharedStorage = new Map([
+      ['ws_dashboard_auth_token_v2', 'WSAUTH_MOCK'],
+      ['ws_dashboard_auth_user_v2', '조항만']
+    ]);
+
+    function bootSidebarVm() {
+      const makeClassList = () => {
+        const set = new Set();
+        return {
+          add: (...cs) => cs.forEach((c) => set.add(c)),
+          remove: (...cs) => cs.forEach((c) => set.delete(c)),
+          toggle: (c, f) => (f === undefined ? (set.has(c) ? (set.delete(c), false) : (set.add(c), true)) : (f ? (set.add(c), true) : (set.delete(c), false))),
+          contains: (c) => set.has(c)
+        };
+      };
+      const makeNode = (id, attrs = {}) => {
+        const nodeListeners = {};
+        const cssProps = {};
+        const el = {
+          id,
+          value: '',
+          textContent: '',
+          innerHTML: '',
+          style: {
+            setProperty: (k, v) => { cssProps[k] = String(v); },
+            getPropertyValue: (k) => cssProps[k] || ''
+          },
+          classList: makeClassList(),
+          focus: () => {},
+          select: () => {},
+          closest: () => null,
+          querySelector: () => null,
+          querySelectorAll: () => [],
+          setAttribute: (k, v) => { attrs[k] = String(v); },
+          getAttribute: (k) => (attrs[k] !== undefined ? attrs[k] : null),
+          getBoundingClientRect: () => ({ width: parseFloat(el.style.width) || 270 }),
+          addEventListener: (t, fn) => { nodeListeners[t] = nodeListeners[t] || []; nodeListeners[t].push(fn); },
+          dispatch: (t, ev) => (nodeListeners[t] || []).forEach((fn) => fn(ev))
+        };
+        return el;
+      };
+
+      const elements = new Map();
+      [
+        'pcViewFrame', 'mobilePhoneFrame', 'mobileScreenInner', 'btnDevPc', 'btnDevMobile',
+        'pcCalSidebar', 'pcSiteSidebar', 'pcQuoteSidebar', 'pcCalMain', 'pcSiteMain', 'pcQuoteMain',
+        'pcHomeMain', 'pcTodoMain', 'pcFinanceMain', 'pcPartnersMain',
+        'mHomeMain', 'mCalMain', 'mSitesMain', 'mQuoteMain', 'mTodoMain', 'mobileFinanceMain', 'mPartnersMain',
+        'page-home', 'page-todo', 'page-calendar', 'page-sites', 'page-quote', 'page-finance', 'page-partners',
+        'm-page-home', 'm-page-todo', 'm-page-calendar', 'm-page-sites', 'm-page-quote', 'm-page-finance', 'm-page-partners',
+        'topAccessLockOverlay', 'topAccessPinInput', 'topAccessPinError', 'wsMembersAuthDl',
+        'userSelector', 'mUserSelector', 'toastBanner', 'perfBadge'
+      ].forEach((id) => elements.set(id, makeNode(id)));
+
+      const handles = [
+        makeNode('resizerCal', { 'data-sidebar-target': 'pcCalSidebar' }),
+        makeNode('resizerSite', { 'data-sidebar-target': 'pcSiteSidebar' }),
+        makeNode('resizerQuote', { 'data-sidebar-target': 'pcQuoteSidebar' })
+      ];
+
+      const docListeners = {};
+      const winListeners = {};
+      const htmlEl = makeNode('html');
+      const bodyEl = makeNode('body');
+      const document = {
+        body: bodyEl,
+        documentElement: htmlEl,
+        activeElement: null,
+        cookie: '',
+        getElementById: (id) => elements.get(id) || null,
+        querySelector: () => null,
+        querySelectorAll: (sel) => {
+          if (sel === '.pc-sidebar-resizer') return handles;
+          if (sel === '.page-container') return ['home', 'calendar', 'sites', 'todo', 'quote', 'partners', 'finance'].map((t) => elements.get('page-' + t));
+          if (sel === '.m-page-pane') return ['home', 'calendar', 'sites', 'todo', 'quote', 'partners', 'finance'].map((t) => elements.get('m-page-' + t));
+          return [];
+        },
+        addEventListener: (t, fn) => { docListeners[t] = docListeners[t] || []; docListeners[t].push(fn); },
+        removeEventListener: (t, fn) => { if (docListeners[t]) docListeners[t] = docListeners[t].filter((f) => f !== fn); }
+      };
+
+      const sb = {
+        console, Math, Date, Number, String, Array, Object, Set, Map, JSON, RegExp, Promise, Error, TypeError,
+        parseInt, parseFloat, isNaN, Number, encodeURIComponent, decodeURIComponent, URL, URLSearchParams,
+        fetch: () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]), text: () => Promise.resolve('[]') }),
+        setTimeout: () => 0,
+        clearTimeout: () => {},
+        requestAnimationFrame: (fn) => { if (typeof fn === 'function') fn(); return 0; },
+        performance: { now: () => 100 },
+        navigator: { maxTouchPoints: 0, userAgent: 'node-qa' },
+        innerWidth: 1440,
+        scrollTo: () => {},
+        confirm: () => false,
+        close: () => {},
+        location: { protocol: 'https:', hostname: 'kimver2.github.io', pathname: '/woosung-id/index.html', search: '', hash: '', href: 'https://kimver2.github.io/woosung-id/index.html' },
+        localStorage: {
+          getItem: (k) => (sharedStorage.has(k) ? sharedStorage.get(k) : null),
+          setItem: (k, v) => sharedStorage.set(k, String(v)),
+          removeItem: (k) => sharedStorage.delete(k)
+        },
+        sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+        history: { state: null, length: 1, pushState: () => {}, replaceState: () => {} },
+        document,
+        getSelection: () => ({ removeAllRanges: () => {} }),
+        getComputedStyle: () => ({ zIndex: '0' }),
+        addEventListener: (t, fn) => { winListeners[t] = winListeners[t] || []; winListeners[t].push(fn); },
+        removeEventListener: (t, fn) => { if (winListeners[t]) winListeners[t] = winListeners[t].filter((f) => f !== fn); }
+      };
+      sb.window = sb;
+      sb.globalThis = sb;
+      vm.createContext(sb);
+      vm.runInContext(dashDataScript, sb);
+      vm.runInContext(mainScript, sb);
+      (winListeners.DOMContentLoaded || []).forEach((fn) => fn());
+      (docListeners.DOMContentLoaded || []).forEach((fn) => fn());
+      return { sb, elements, handles, htmlEl, bodyEl, docListeners };
+    }
+
+    const vm1 = bootSidebarVm();
+    const defaultInitOk = Boolean(
+      vm1.elements.get('pcCalSidebar').style.width === '270px' &&
+      vm1.elements.get('pcSiteSidebar').style.width === '270px' &&
+      vm1.elements.get('pcQuoteSidebar').style.width === '270px' &&
+      vm1.htmlEl.style.getPropertyValue('--pc-sidebar-width') === '270px'
+    );
+
+    // 드래그 시작 -> 최소(220px)/최대(480px) 클램핑 + 텍스트 선택 방지 클래스 + 마우스업 저장
+    let prevented = false;
+    vm1.handles[0].dispatch('mousedown', { button: 0, clientX: 270, preventDefault: () => { prevented = true; } });
+    const dragActiveOk = Boolean(
+      prevented &&
+      vm1.bodyEl.classList.contains('ws-sidebar-resizing') &&
+      vm1.handles[0].classList.contains('is-resizing')
+    );
+
+    (vm1.docListeners.mousemove || []).slice().forEach((fn) => fn({ clientX: 100 })); // 270 - 170 = 100 -> 220px
+    const minClampOk = vm1.elements.get('pcCalSidebar').style.width === '220px';
+
+    (vm1.docListeners.mousemove || []).slice().forEach((fn) => fn({ clientX: 800 })); // 270 + 530 = 800 -> 480px
+    const maxClampOk = vm1.elements.get('pcCalSidebar').style.width === '480px';
+
+    (vm1.docListeners.mousemove || []).slice().forEach((fn) => fn({ clientX: 350 })); // 350px
+    (vm1.docListeners.mouseup || []).slice().forEach((fn) => fn({}));
+    const dragEndSavedOk = Boolean(
+      !vm1.bodyEl.classList.contains('ws-sidebar-resizing') &&
+      !vm1.handles[0].classList.contains('is-resizing') &&
+      vm1.elements.get('pcCalSidebar').style.width === '350px' &&
+      sharedStorage.get('ws_pc_sidebar_width_v1') === '350'
+    );
+
+    // 탭 전환 후에도 조절된 너비 유지
+    vm1.sb.switchMainTab('sites');
+    const tabSitesOk = vm1.elements.get('pcSiteSidebar').style.width === '350px';
+    vm1.sb.switchMainTab('quote');
+    const tabQuoteOk = vm1.elements.get('pcQuoteSidebar').style.width === '350px';
+
+    // 새로고침(새 VM 부트) 후에도 localStorage 저장 너비 유지
+    const vm2 = bootSidebarVm();
+    const reloadPersistOk = Boolean(
+      vm2.elements.get('pcCalSidebar').style.width === '350px' &&
+      vm2.elements.get('pcSiteSidebar').style.width === '350px' &&
+      vm2.elements.get('pcQuoteSidebar').style.width === '350px' &&
+      vm2.htmlEl.style.getPropertyValue('--pc-sidebar-width') === '350px'
+    );
+
+    // 모바일 뷰에서는 리사이저 비간섭
+    vm2.sb.switchDeviceMode('mobile');
+    vm2.handles[0].dispatch('mousedown', { button: 0, clientX: 350, preventDefault: () => {} });
+    const mobileGuardOk = !vm2.bodyEl.classList.contains('ws-sidebar-resizing') && vm2.elements.get('pcCalSidebar').style.width === '350px';
+    vm2.sb.switchDeviceMode('pc');
+
+    // 더블클릭 시 기본 너비(270px)로 초기화 및 localStorage 갱신
+    vm2.handles[1].dispatch('dblclick', { preventDefault: () => {} });
+    const dblClickResetOk = Boolean(
+      vm2.elements.get('pcCalSidebar').style.width === '270px' &&
+      vm2.elements.get('pcSiteSidebar').style.width === '270px' &&
+      vm2.elements.get('pcQuoteSidebar').style.width === '270px' &&
+      vm2.htmlEl.style.getPropertyValue('--pc-sidebar-width') === '270px' &&
+      sharedStorage.get('ws_pc_sidebar_width_v1') === '270'
+    );
+
+    assertTest(
+      'PC 좌측 사이드바 세로 경계 드래그 리사이저(범위 220~480px·탭전환/새로고침 유지·더블클릭 초기화·모바일 비간섭) 런타임 검증',
+      hasResizerHtmlCss && defaultInitOk && dragActiveOk && minClampOk && maxClampOk && dragEndSavedOk && tabSitesOk && tabQuoteOk && reloadPersistOk && mobileGuardOk && dblClickResetOk,
+      `htmlCss=${hasResizerHtmlCss}, init=${defaultInitOk}, dragActive=${dragActiveOk}, min=${minClampOk}, max=${maxClampOk}, saved=${dragEndSavedOk}, sites=${tabSitesOk}, quote=${tabQuoteOk}, reload=${reloadPersistOk}, mob=${mobileGuardOk}, dblReset=${dblClickResetOk}`
+    );
+  })());
+
 Promise.all(pendingAsyncTests).then(() => {
 if (isVerbose) {
   rawConsoleLog('\n========================================================');
