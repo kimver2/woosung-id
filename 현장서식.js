@@ -11751,13 +11751,18 @@ function getFinanceDbData(p) {
           ? (totalAmount - uncollectedAmount)
           : stageSum;
 
+        var rowStatus = String(r[5] || "진행중").trim();
+        if (totalAmount <= 0 && collected <= 0 && rowStatus === "완료") {
+          rowStatus = "진행중";
+        }
+
         return {
           id: String(r[0] || "").trim(),
           siteName: String(r[1] || "").trim(),
           period: String(r[2] || "").trim(),
           manager: String(r[3] || "").trim(),
           category: String(r[4] || "").trim(),
-          status: String(r[5] || "진행중").trim(),
+          status: rowStatus,
           clientName: String(r[6] || "").trim(),
           contractAmount: contractAmount,
           changeAmount: changeAmount,
@@ -11948,6 +11953,10 @@ function saveCollectionRow(p) {
 
     var progressRate = (rowData.progressRate !== undefined && rowData.progressRate !== null && rowData.progressRate !== "")
       ? Number(rowData.progressRate) : "";
+    var colStatus = String(rowData.status || "진행중").trim();
+    if (totalAmount <= 0 && collected <= 0 && colStatus === "완료") {
+      colStatus = "진행중";
+    }
 
     var rowValues = [
       id,                                                // 1: ID
@@ -11955,7 +11964,7 @@ function saveCollectionRow(p) {
       String(rowData.period || "").trim(),               // 3: 공사기간
       String(rowData.manager || "").trim(),              // 4: 담당자
       String(rowData.category || "").trim(),             // 5: 구분
-      String(rowData.status || "진행중").trim(),          // 6: 수금여부
+      colStatus,                                         // 6: 수금여부
       String(rowData.clientName || "").trim(),           // 7: 계약자명
       contractAmount,                                    // 8: 계약금액
       changeAmount,                                      // 9: 증감액
@@ -11987,7 +11996,7 @@ function saveCollectionRow(p) {
       period: String(rowData.period || "").trim(),
       manager: String(rowData.manager || "").trim(),
       category: String(rowData.category || "").trim(),
-      status: String(rowData.status || "진행중").trim(),
+      status: colStatus,
       clientName: String(rowData.clientName || "").trim(),
       contractAmount: contractAmount,
       changeAmount: changeAmount,

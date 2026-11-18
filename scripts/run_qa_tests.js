@@ -3819,6 +3819,308 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     );
   })());
 
+  // [0원 현장 수금상태/미수금/필터 오표시 수정 (total=0 vs total>0&uncollected=0 vs total>0&uncollected>0) 런타임 QA]
+  (() => {
+    const idxRootHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const fnEscHtml = idxRootHtml.match(/function escHtml\([\s\S]*?\n      \}/);
+    const fnEscJs = idxRootHtml.match(/function escJs\([\s\S]*?\n      \}/);
+    const fnFmtShort = idxRootHtml.match(/function formatShortAmount\([\s\S]*?\n      \}/);
+    const fnFmtKrw = idxRootHtml.match(/function formatKrw\([\s\S]*?\n      \}/);
+    const fnParseExtra = idxRootHtml.match(/function parseExtraAmountFromNote\([\s\S]*?\n      \}/);
+    const fnIsFixed = idxRootHtml.match(/function isFixedExpenseRow\([\s\S]*?\n      \}/);
+    const colHelperStart = idxRootHtml.indexOf('function isCollectionSiteCompleted(matchedSite, progress)');
+    const colHelperEnd = idxRootHtml.indexOf('window.setFinanceSubTab = function(subTab)');
+    const importStart = idxRootHtml.indexOf('window.openCollectionSiteImportModal = function');
+    const importEnd = idxRootHtml.indexOf('window.deleteAllFilteredExpenses = function()');
+    const detailStart = idxRootHtml.indexOf('window.openSiteFinanceDetailModal = function(');
+    const detailEnd = idxRootHtml.indexOf('window.closeSiteFinanceDetailModal = function()');
+    const monthlyStart = idxRootHtml.indexOf('function buildFinanceMonthlyDashboardHtml(isMobile)');
+    const monthlyEnd = idxRootHtml.indexOf('window.openDashboardVendorExpenses = function');
+    const pcFinStart = idxRootHtml.indexOf('function renderPcFinanceTab()');
+    const pcFinEnd = idxRootHtml.indexOf('// ================= [거래처 마스터 조회 & 필터 헬퍼');
+    const mFinStart = idxRootHtml.indexOf('function renderMobileFinanceTab()');
+    const mFinEnd = idxRootHtml.indexOf('function captureViewScrollPositions()');
+
+    const extractedOk = Boolean(
+      fnEscHtml && fnEscJs && fnFmtShort && fnFmtKrw && fnParseExtra && fnIsFixed &&
+      colHelperStart !== -1 && colHelperEnd > colHelperStart &&
+      importStart !== -1 && importEnd > importStart &&
+      detailStart !== -1 && detailEnd > detailStart &&
+      monthlyStart !== -1 && monthlyEnd > monthlyStart &&
+      pcFinStart !== -1 && pcFinEnd > pcFinStart &&
+      mFinStart !== -1 && mFinEnd > mFinStart
+    );
+    assertTest('0원 수금상태/미수금 런타임 검증용 핵심 렌더러 및 헬퍼 추출 검증', extractedOk);
+    if (!extractedOk) return;
+
+    const batchSavedCalls = [];
+    const domNodes = {
+      pcFinanceMain: { innerHTML: '' },
+      'm-page-finance': { innerHTML: '' },
+      syncStatusModalTitle: { textContent: '' },
+      syncStatusModalCloseBtn: { style: {} },
+      syncStatusModalBody: { innerHTML: '' },
+      syncStatusModalFooter: { innerHTML: '' },
+      siteFinanceDetailModalTitle: { textContent: '' },
+      siteFinanceDetailModalBody: { innerHTML: '' },
+      btnGoToCollectionEdit: { onclick: null }
+    };
+    const mockCheckboxes = [
+      { getAttribute: () => '0' },
+      { getAttribute: () => '1' }
+    ];
+
+    const finVm = vm.createContext({
+      window: {},
+      console,
+      state: {
+        user: '조항만',
+        authUser: '조항만',
+        currentUser: '조항만',
+        financeSubTab: 'collection',
+        financeStatusFilter: 'all',
+        financeManagerFilter: 'all',
+        financeTaxFilter: 'all',
+        financeYearFilter: 'all',
+        financeMonthFilter: 0,
+        financeMonthlyYear: '2026',
+        financeSearchQuery: '',
+        financeLoading: false,
+        financeLoaded: true,
+        dirtyPcTabs: {},
+        dirtyMobileTabs: {},
+        dashData: {
+          sites: [
+            { siteName: '미입력 진행현장', scope: 'site', progressRate: 30, tasks: [] },
+            { siteName: '미입력 공사완료현장', scope: 'site', progressRate: 100, isCompleted: true, tasks: [] },
+            { siteName: '완납현장', scope: 'site', progressRate: 100, isCompleted: true, tasks: [] },
+            { siteName: '미수현장', scope: 'site', progressRate: 60, tasks: [] }
+          ]
+        },
+        financeDbData: {
+          collection: [],
+          expense: [],
+          fixedMaster: [],
+          updatedAt: '2026-11-18 21:40'
+        }
+      },
+      FINANCE_EXT_FLAGS: {
+        extraContractAmount: true,
+        taxProofBadge: true,
+        kpiClickFilter: true,
+        transferExport: true,
+        lowMarginAlert: true
+      },
+      document: {
+        activeElement: null,
+        getElementById: (id) => domNodes[id] || null,
+        querySelector: () => null,
+        querySelectorAll: (sel) => (sel === '.col-import-cb:checked' ? mockCheckboxes : [])
+      },
+      canViewFinance: () => true,
+      ensureFinanceDbDataLoaded: () => {},
+      resetFinanceScrollTop: () => {},
+      renderActiveViews: () => {},
+      openModal: () => {},
+      closeModal: () => {},
+      showToast: () => {},
+      getAllSites: () => finVm.state.dashData.sites,
+      isSiteCompleted: (s) => Boolean(s && (s.isCompleted || s.progressRate >= 100)),
+      getUniqueSiteManagers: () => ['조항만'],
+      findMatchedSiteInfo: (name) => finVm.state.dashData.sites.find((s) => s.siteName === name) || null,
+      getCollectionPeriodInfo: () => ({ periodDisplay: '2026.11.01 ~ 2026.11.30', startYmd: '2026-11-01', endYmd: '2026-11-30', year: '2026', month: 11 }),
+      extractFirstManager: (m, fb) => (String(m || '').split(',')[0].trim() || fb || ''),
+      getTodayYmd: () => '2026-11-18',
+      getExpenseRowBalance: (e) => (Number(e && e.claimAmount) || 0) - (Number(e && e.paidAmount) || 0),
+      parseExpenseTaxProof: () => '',
+      stripExpenseTaxProof: (n) => n || '',
+      buildFinanceDashboardHtml: () => '',
+      getState: () => finVm.state
+    });
+    finVm.window = finVm;
+    finVm.window.WSDataService = {
+      saveFinanceCache: () => {},
+      saveCollectionBatchRows: async (rows) => {
+        batchSavedCalls.push(rows);
+        return { success: true };
+      }
+    };
+
+    const finRuntimeCode = [
+      fnEscHtml[0], fnEscJs[0], fnFmtShort[0], fnFmtKrw[0], fnParseExtra[0], fnIsFixed[0],
+      idxRootHtml.slice(colHelperStart, colHelperEnd),
+      idxRootHtml.slice(importStart, importEnd),
+      idxRootHtml.slice(detailStart, detailEnd),
+      idxRootHtml.slice(monthlyStart, monthlyEnd),
+      idxRootHtml.slice(pcFinStart, pcFinEnd),
+      idxRootHtml.slice(mFinStart, mFinEnd)
+    ].join('\n');
+    vm.runInContext(finRuntimeCode, finVm);
+
+    // 1) [등록 현장 불러오기] 실행 시 공사완료(isDone=true) 포함 0원 신규 행도 status='진행중'으로 저장 검증
+    finVm._colImportCandidates = [
+      { siteName: '미입력 진행현장', period: '2026.11.01 ~ 2026.11.30', manager: '조항만', category: '전체공사', isDone: false },
+      { siteName: '미입력 공사완료현장', period: '2026.11.01 ~ 2026.11.15', manager: '조항만', category: '전체공사', isDone: true }
+    ];
+    finVm.submitCollectionSiteImport();
+    const importedRows = finVm.state.financeDbData.collection;
+    const importOk = Boolean(
+      importedRows.length === 2 &&
+      importedRows.every((r) => r.totalAmount === 0 && r.collectedAmount === 0 && r.uncollectedAmount === 0 && r.status === '진행중') &&
+      batchSavedCalls.length === 1 &&
+      batchSavedCalls[0].every((r) => r.status === '진행중')
+    );
+
+    // 2) 3가지 케이스 (total=0 [stale status='완료' 포함] vs total>0 & uncollected=0 vs total>0 & uncollected>0)
+    const rowZeroNormal = importedRows[0];
+    const rowZeroStaleDone = {
+      id: 'COL-ZERO-STALE',
+      siteName: '구버전 0원 완료오염현장',
+      manager: '조항만',
+      category: '전체공사',
+      status: '완료',
+      contractAmount: 0,
+      changeAmount: 0,
+      totalAmount: 0,
+      collectedAmount: 0,
+      uncollectedAmount: 0,
+      taxInvoice: '미발행'
+    };
+    const rowPaidFull = {
+      id: 'COL-PAID-FULL',
+      siteName: '완납현장',
+      manager: '조항만',
+      category: '전체공사',
+      status: '진행중',
+      contractAmount: 10000000,
+      changeAmount: 0,
+      totalAmount: 10000000,
+      downPayment: 10000000,
+      collectedAmount: 10000000,
+      uncollectedAmount: 0,
+      stageMeta: { downPayment: { paid: true } },
+      taxInvoice: '세금계산서'
+    };
+    const rowUncollected = {
+      id: 'COL-UNCOL-1',
+      siteName: '미수현장',
+      manager: '조항만',
+      category: '전체공사',
+      status: '진행중',
+      contractAmount: 10000000,
+      changeAmount: 0,
+      totalAmount: 10000000,
+      downPayment: 4000000,
+      collectedAmount: 4000000,
+      uncollectedAmount: 6000000,
+      stageMeta: { downPayment: { paid: true }, finalPayment: { paid: false } },
+      taxInvoice: '미발행'
+    };
+
+    finVm.state.financeDbData.collection = [rowZeroNormal, rowZeroStaleDone, rowPaidFull, rowUncollected];
+
+    const fZero = finVm.getCollectionRowFinancials(rowZeroNormal);
+    const fStale = finVm.getCollectionRowFinancials(rowZeroStaleDone);
+    const fPaid = finVm.getCollectionRowFinancials(rowPaidFull);
+    const fUncol = finVm.getCollectionRowFinancials(rowUncollected);
+
+    const effZero = finVm.getCollectionEffectiveStatus(rowZeroNormal, fZero);
+    const effStale = finVm.getCollectionEffectiveStatus(rowZeroStaleDone, fStale);
+    const effPaid = finVm.getCollectionEffectiveStatus(rowPaidFull, fPaid);
+    const effUncol = finVm.getCollectionEffectiveStatus(rowUncollected, fUncol);
+
+    finVm.state.financeStatusFilter = 'all';
+    finVm.renderPcFinanceTab();
+    finVm.renderMobileFinanceTab();
+    const pcAllHtml = domNodes.pcFinanceMain.innerHTML;
+    const mobAllHtml = domNodes['m-page-finance'].innerHTML;
+
+    finVm.state.financeStatusFilter = 'completed';
+    const completedFiltered = finVm.getFilteredCollectionList();
+
+    finVm.state.financeStatusFilter = 'uncollected';
+    const uncollectedFiltered = finVm.getFilteredCollectionList();
+
+    finVm.state.financeStatusFilter = 'all';
+    const monthlyHtml = finVm.buildFinanceMonthlyDashboardHtml(false);
+
+    finVm.openSiteFinanceDetailModal('미입력 진행현장', rowZeroNormal.id);
+    const detailZeroHtml = domNodes.siteFinanceDetailModalBody.innerHTML;
+    finVm.openSiteFinanceDetailModal('완납현장', rowPaidFull.id);
+    const detailPaidHtml = domNodes.siteFinanceDetailModalBody.innerHTML;
+
+    // 2-1) 0원 행만 있을 때 PC/모바일/월간집계에 '완납', 행 '완료' 뱃지, '저마진' 오표시가 전혀 없는지 검증
+    finVm.state.financeDbData.collection = [rowZeroNormal, rowZeroStaleDone];
+    finVm.state.financeStatusFilter = 'all';
+    finVm.renderPcFinanceTab();
+    finVm.renderMobileFinanceTab();
+    const pcZeroOnlyHtml = domNodes.pcFinanceMain.innerHTML;
+    const mobZeroOnlyHtml = domNodes['m-page-finance'].innerHTML;
+    const monthlyZeroOnlyHtml = finVm.buildFinanceMonthlyDashboardHtml(false);
+    const zeroOnlyClean = Boolean(
+      pcZeroOnlyHtml.includes('완료 (0)') &&
+      pcZeroOnlyHtml.includes('금액 미입력') &&
+      !pcZeroOnlyHtml.includes('완납') &&
+      !pcZeroOnlyHtml.includes('>완료<') &&
+      mobZeroOnlyHtml.includes('완료 (0)') &&
+      mobZeroOnlyHtml.includes('금액 미입력') &&
+      !mobZeroOnlyHtml.includes('완납') &&
+      !mobZeroOnlyHtml.includes('>완료<') &&
+      monthlyZeroOnlyHtml.includes('금액 미입력') &&
+      !monthlyZeroOnlyHtml.includes('미수 0원') &&
+      !monthlyZeroOnlyHtml.includes('저마진')
+    );
+
+    // 3) 현장서식.js saveCollectionRow 내 total=0 & status='완료' 방어 검증
+    let writtenZeroRow = null;
+    const origOpenByIdZero = sandbox.SpreadsheetApp.openById;
+    sandbox.SpreadsheetApp.openById = () => ({
+      getSheetByName: () => ({
+        getLastRow: () => 1,
+        getRange: () => ({
+          getValues: () => [],
+          setValues: (vals) => { writtenZeroRow = vals[0]; },
+          setNumberFormat: () => {}
+        })
+      })
+    });
+    const gasZeroRes = sandbox.saveCollectionRow({
+      authUser: '조항만',
+      row: { siteName: 'GAS0원테스트', contractAmount: 0, totalAmount: 0, collectedAmount: 0, status: '완료' }
+    });
+    sandbox.SpreadsheetApp.openById = origOpenByIdZero;
+
+    assertTest('0원 현장 수금상태(진행중)·미수금(금액 미입력)·필터(완료 1건)·PC/모바일/월간집계/상세모달/GAS 3케이스 런타임 검증',
+      importOk &&
+      zeroOnlyClean &&
+      fZero.isAmountUnset === true && fZero.isFullyPaid === false &&
+      fStale.isAmountUnset === true && fStale.isFullyPaid === false &&
+      fPaid.isAmountUnset === false && fPaid.isFullyPaid === true &&
+      fUncol.isAmountUnset === false && fUncol.isFullyPaid === false &&
+      effZero === '진행중' && effStale === '진행중' && effPaid === '완료' && effUncol === '진행중' &&
+      completedFiltered.length === 1 && completedFiltered[0].id === 'COL-PAID-FULL' &&
+      uncollectedFiltered.length === 1 && uncollectedFiltered[0].id === 'COL-UNCOL-1' &&
+      pcAllHtml.includes('전체 (4)') &&
+      pcAllHtml.includes('미수 있음 (1)') &&
+      pcAllHtml.includes('완료 (1)') &&
+      pcAllHtml.includes('금액 미입력') &&
+      pcAllHtml.includes('완납 (0원)') &&
+      pcAllHtml.includes('6,000,000원') &&
+      mobAllHtml.includes('전체 (4)') &&
+      mobAllHtml.includes('미수 (1)') &&
+      mobAllHtml.includes('완료 (1)') &&
+      mobAllHtml.includes('금액 미입력') &&
+      mobAllHtml.includes('완납') &&
+      monthlyHtml.includes('금액 미입력') &&
+      monthlyHtml.includes('미수 0원') &&
+      detailZeroHtml.includes('금액 미입력') &&
+      !detailZeroHtml.includes('완납 (미수금 0원)') &&
+      detailPaidHtml.includes('완납 (미수금 0원)') &&
+      gasZeroRes.success === true && gasZeroRes.row.status === '진행중' &&
+      writtenZeroRow && writtenZeroRow[5] === '진행중'
+    );
+  })();
+
   // ========================================================
   // [A/S 보증·하자 대시보드] 진행 중 A/S 리스트 노출 + 업체별 건수·귀책사유 집계 + 모달 저장 런타임 QA
   // ========================================================

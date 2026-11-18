@@ -8510,7 +8510,7 @@ end $$;`;
 
       function getCollectionRowFinancials(r) {
         if (!r || typeof r !== "object") {
-          return { total: 0, collected: 0, uncollected: 0, rate: 0 };
+          return { total: 0, collected: 0, uncollected: 0, rate: 0, isAmountUnset: true, isFullyPaid: false };
         }
         const stageKeys = ["downPayment", "startPayment", "midPayment1", "midPayment2", "midPayment3", "finalPayment"];
         const hasExplicitTotal = r.totalAmount !== undefined && r.totalAmount !== null && r.totalAmount !== "";
@@ -8552,7 +8552,25 @@ end $$;`;
           uncollected = !isNaN(rawUncol) ? rawUncol : (total - collected);
         }
         const rate = total > 0 ? Math.round((collected / total) * 100) : 0;
-        return { total, collected, uncollected, rate };
+        const isAmountUnset = total <= 0 && collected <= 0;
+        const isFullyPaid = total > 0 && uncollected <= 0;
+        return { total, collected, uncollected, rate, isAmountUnset, isFullyPaid };
+      }
+
+      /**
+       * 수금 행의 유효 수금상태를 계산합니다.
+       * - 최종금액·수금액 모두 0원 이하(금액 미입력)인 행은 '완료'로 취급하지 않습니다.
+       * - 최종금액 > 0 이고 미수금 <= 0 일 때 완납 '완료'로 분류합니다.
+       */
+      function getCollectionEffectiveStatus(r, finObj) {
+        const fin = finObj || getCollectionRowFinancials(r);
+        const rawStatus = String((r && r.status) || "").trim();
+        if (fin.isAmountUnset) {
+          return rawStatus === "마감중" ? "마감중" : "진행중";
+        }
+        if (rawStatus === "마감중") return "마감중";
+        if (fin.isFullyPaid || (rawStatus === "완료" && fin.total > 0)) return "완료";
+        return "진행중";
       }
 
       function renderCollectionStepsHtml(r) {
@@ -8739,7 +8757,7 @@ end $$;`;
 
           const fin = getCollectionRowFinancials(r);
           const uncollected = fin.uncollected;
-          const status = String(r.status || "").trim();
+          const effStatus = getCollectionEffectiveStatus(r, fin);
 
           if (stFilter === "uncollected") {
             if (uncollected <= 0) return false;
@@ -8748,9 +8766,9 @@ end $$;`;
             const isDone = isCollectionSiteCompleted(matchedSite, progress);
             if (!isDone) return false;
           } else if (stFilter === "closing") {
-            if (status !== "마감중") return false;
+            if (effStatus !== "마감중") return false;
           } else if (stFilter === "completed") {
-            if (status !== "완료" && uncollected > 0) return false;
+            if (effStatus !== "완료") return false;
           }
 
           if (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) {
@@ -8806,6 +8824,7 @@ end $$;`;
       window.isCollectionSiteCompleted = isCollectionSiteCompleted;
       window.isCollectionStagePaid = isCollectionStagePaid;
       window.getCollectionRowFinancials = getCollectionRowFinancials;
+      window.getCollectionEffectiveStatus = getCollectionEffectiveStatus;
 
       window.setFinanceSubTab = function(subTab) {
         state.financeSubTab = subTab;
@@ -9080,13 +9099,13 @@ end $$;`;
             rows.push([
               r.siteName || "",
               r.clientName || "",
-              Number(r.totalAmount) || 0,
+              fin.total,
               fin.collected,
               fin.uncollected,
               fin.rate + "%",
               r.taxInvoice || "미발행",
               r.manager || "",
-              r.status || "진행중",
+              getCollectionEffectiveStatus(r, fin),
               pInfo.periodDisplay || "",
               r.note || ""
             ]);
@@ -9581,7 +9600,9 @@ end $$;`;
         const uncollectedEl = document.getElementById("colUncollectedDisplay");
         if (uncollectedEl) {
           uncollectedEl.textContent = uncollected.toLocaleString("ko-KR") + "원";
-          uncollectedEl.style.color = uncollected > 0 ? "#f87171" : (uncollected === 0 ? "#4ade80" : "#38bdf8");
+          uncollectedEl.style.color = (total <= 0 && collected <= 0)
+            ? "#94a3b8"
+            : (uncollected > 0 ? "#f87171" : (uncollected === 0 ? "#4ade80" : "#38bdf8"));
         }
 
         const rateEl = document.getElementById("colRateDisplay");
@@ -10053,6 +10074,7 @@ end $$;`;
         const computedTotal = contractAmount + changeAmount;
         const computedCollected = stageCollected + extraCollected;
         const computedUncollected = computedTotal - computedCollected;
+        const normalizedStatus = (computedTotal <= 0 && computedCollected <= 0 && status === "완료") ? "진행중" : status;
 
         const payload = {
           id: id || "",
@@ -10060,7 +10082,7 @@ end $$;`;
           clientName: clientName,
           manager: manager,
           category: category,
-          status: status,
+          status: normalizedStatus,
           period: period,
           contractAmount: contractAmount,
           changeAmount: changeAmount,
@@ -12825,7 +12847,7 @@ end $$;`;
             period: item.period,
             manager: item.manager,
             category: item.category,
-            status: item.isDone ? "완료" : "진행중",
+            status: "진행중",
             clientName: "",
             contractAmount: 0,
             changeAmount: 0,
@@ -13750,8 +13772,8 @@ end $$;`;
             <div class="standard-card" style="margin-bottom:0;padding:12px 14px;border-left:4px solid #10b981;">
               <div style="font-size:11.5px;color:var(--text-muted);font-weight:700;">누적 수금액 (미수금)</div>
               <div style="font-size:18px;font-weight:800;color:#10b981;margin-top:2px;">${formatKrw(collected)}</div>
-              <div style="font-size:11px;color:${uncollected > 0 ? "#dc2626" : "#16a34a"};margin-top:2px;font-weight:700;">
-                ${uncollected > 0 ? `미수금: ${formatKrw(uncollected)}` : "완납 (미수금 0원)"}
+              <div style="font-size:11px;color:${colFin.isAmountUnset ? "#64748b" : (uncollected > 0 ? "#dc2626" : (uncollected < 0 ? "#2563eb" : "#16a34a"))};margin-top:2px;font-weight:700;">
+                ${colFin.isAmountUnset ? "금액 미입력" : (uncollected > 0 ? `미수금: ${formatKrw(uncollected)}` : (uncollected < 0 ? `초과수금: +${formatKrw(-uncollected)}` : "완납 (미수금 0원)"))}
               </div>
             </div>
             <div class="standard-card" style="margin-bottom:0;padding:12px 14px;border-left:4px solid #f59e0b;background:#fffdf7;">
@@ -14471,16 +14493,18 @@ end $$;`;
                   ${pagedSites.length === 0 ? `
                     <tr><td colspan="8" style="padding:32px 16px;text-align:center;color:#64748b;font-size:13px;">해당 조건의 현장 정산 데이터가 없습니다.</td></tr>
                   ` : pagedSites.map(s => {
+                    const isAmtUnset = s.contractAmount <= 0 && s.collected <= 0;
                     const profitColor = s.netProfit > 0 ? "#16a34a" : (s.netProfit < 0 ? "#dc2626" : "#64748b");
                     let marginBadgeBg = "#f1f5f9";
                     let marginBadgeColor = "#475569";
-                    if (s.marginRate >= 30) { marginBadgeBg = "#dcfce7"; marginBadgeColor = "#15803d"; }
+                    if (isAmtUnset && s.expenseClaim <= 0) { marginBadgeBg = "#f1f5f9"; marginBadgeColor = "#64748b"; }
+                    else if (s.marginRate >= 30) { marginBadgeBg = "#dcfce7"; marginBadgeColor = "#15803d"; }
                     else if (s.marginRate >= 15) { marginBadgeBg = "#e0f2fe"; marginBadgeColor = "#0369a1"; }
                     else if (s.marginRate >= 0) { marginBadgeBg = "#fef3c7"; marginBadgeColor = "#b45309"; }
                     else { marginBadgeBg = "#fee2e2"; marginBadgeColor = "#b91c1c"; }
 
                     let alertBadge = "";
-                    if (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.lowMarginAlert) {
+                    if (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.lowMarginAlert && !(isAmtUnset && s.expenseClaim <= 0)) {
                       if (s.marginRate < 0) {
                         alertBadge = `<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:800;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;margin-left:4px;white-space:nowrap;">🚨 적자</span>`;
                       } else if (s.marginRate < 15) {
@@ -14509,7 +14533,7 @@ end $$;`;
                           </div>
                         </td>
                         <td style="padding:8px 12px;font-size:11.5px;white-space:nowrap;">
-                          <span style="color:${s.uncollected > 0 ? "#dc2626" : "#16a34a"};font-weight:700;">미수 ${formatKrw(s.uncollected)}</span><br>
+                          <span style="color:${isAmtUnset ? "#64748b" : (s.uncollected > 0 ? "#dc2626" : (s.uncollected < 0 ? "#2563eb" : "#16a34a"))};font-weight:700;">${isAmtUnset ? "금액 미입력" : (s.uncollected < 0 ? `초과 +${formatKrw(-s.uncollected)}` : `미수 ${formatKrw(s.uncollected)}`)}</span><br>
                           <span style="color:${s.expenseBalance > 0 ? "#b45309" : "#64748b"};">외상 ${formatKrw(s.expenseBalance)}</span>
                         </td>
                         <td style="padding:8px 8px;text-align:center;white-space:nowrap;">
@@ -14649,7 +14673,7 @@ end $$;`;
         allCol.forEach((r) => {
           if (!r || !r.siteName) return;
           const fin = getCollectionRowFinancials(r);
-          if (fin.uncollected <= 0 && r.status === "완료") return;
+          if (fin.uncollected <= 0 && getCollectionEffectiveStatus(r, fin) === "완료") return;
           let addedExplicit = false;
           if (r.stageMeta && typeof r.stageMeta === "object") {
             COL_STAGE_DEFS.forEach((st) => {
@@ -14765,7 +14789,7 @@ end $$;`;
           const prog = (mSite && mSite.progressRate !== undefined && mSite.progressRate !== null)
             ? mSite.progressRate
             : (r.progressRate !== "" && r.progressRate !== null && r.progressRate !== undefined ? Number(r.progressRate) : null);
-          const isDone = isCollectionSiteCompleted(mSite, prog) || r.status === "완료";
+          const isDone = isCollectionSiteCompleted(mSite, prog) || getCollectionEffectiveStatus(r, fin) === "완료";
           taxCheckAlerts.push({
             row: r,
             fin,
@@ -15611,8 +15635,8 @@ end $$;`;
                 <button type="button" class="btn-sub-chip ${stFilter === "all" ? "active" : ""}" onclick="window.setFinanceStatusFilter('all')">전체 (${allCollection.length})</button>
                 <button type="button" class="btn-sub-chip ${stFilter === "uncollected" ? "active" : ""}" onclick="window.setFinanceStatusFilter('uncollected')">미수 있음 (${allCollection.filter(r => getCollectionRowFinancials(r).uncollected > 0).length})</button>
                 <button type="button" class="btn-sub-chip ${stFilter === "doneUncollected" ? "active" : ""}" style="${stFilter === "doneUncollected" ? "background:#fee2e2;color:#dc2626;border-color:#f87171;" : "color:#b91c1c;"}" onclick="window.setFinanceStatusFilter('doneUncollected')">공사완료 미수 ⚠️ (${doneUncollectedCount})</button>
-                <button type="button" class="btn-sub-chip ${stFilter === "closing" ? "active" : ""}" onclick="window.setFinanceStatusFilter('closing')">마감중 (${allCollection.filter(r => r.status === "마감중").length})</button>
-                <button type="button" class="btn-sub-chip ${stFilter === "completed" ? "active" : ""}" onclick="window.setFinanceStatusFilter('completed')">완료 (${allCollection.filter(r => r.status === "완료" || getCollectionRowFinancials(r).uncollected <= 0).length})</button>
+                <button type="button" class="btn-sub-chip ${stFilter === "closing" ? "active" : ""}" onclick="window.setFinanceStatusFilter('closing')">마감중 (${allCollection.filter(r => getCollectionEffectiveStatus(r) === "마감중").length})</button>
+                <button type="button" class="btn-sub-chip ${stFilter === "completed" ? "active" : ""}" onclick="window.setFinanceStatusFilter('completed')">완료 (${allCollection.filter(r => getCollectionEffectiveStatus(r) === "완료").length})</button>
               </div>
 
               <select onchange="window.setFinanceManagerFilter(this.value)" style="height:34px;padding:0 10px;border-radius:6px;border:1px solid var(--border-dark);font-size:12.5px;font-weight:600;">
@@ -15660,10 +15684,11 @@ end $$;`;
           const uncollected = fin.uncollected;
 
           const isDoneUncollected = uncollected > 0 && isCollectionSiteCompleted(matchedSite, progress);
+          const effStatus = getCollectionEffectiveStatus(r, fin);
 
           let stBadge = `<span style="padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;">진행중</span>`;
-          if (r.status === "마감중") stBadge = `<span style="padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;background:#fef3c7;color:#d97706;border:1px solid #fde68a;">마감중</span>`;
-          else if (r.status === "완료" || uncollected <= 0) stBadge = `<span style="padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;">완료</span>`;
+          if (effStatus === "마감중") stBadge = `<span style="padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;background:#fef3c7;color:#d97706;border:1px solid #fde68a;">마감중</span>`;
+          else if (effStatus === "완료") stBadge = `<span style="padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;">완료</span>`;
 
           let taxBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;">미발행</span>`;
           if (r.taxInvoice === "세금계산서") taxBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;background:#f0f9ff;color:#0284c7;border:1px solid #bae6fd;">세금계산서</span>`;
@@ -15714,9 +15739,11 @@ end $$;`;
               <td style="text-align:right;">
                 ${uncollected > 0
                   ? `<div style="color:#dc2626;font-weight:900;font-size:13.5px;">${Number(uncollected).toLocaleString("ko-KR")}원</div>`
-                  : (uncollected === 0
-                    ? `<span style="color:#15803d;font-weight:700;font-size:12px;">완납 (0원)</span>`
-                    : `<span style="color:#2563eb;font-weight:700;font-size:12px;">+${Number(-uncollected).toLocaleString("ko-KR")}원</span>`)}
+                  : (fin.isAmountUnset
+                    ? `<span style="color:#64748b;font-weight:700;font-size:12px;">금액 미입력</span>`
+                    : (uncollected === 0
+                      ? `<span style="color:#15803d;font-weight:700;font-size:12px;">완납 (0원)</span>`
+                      : `<span style="color:#2563eb;font-weight:700;font-size:12px;">+${Number(-uncollected).toLocaleString("ko-KR")}원</span>`))}
               </td>
               <td style="text-align:center;">${stBadge}</td>
               <td style="text-align:center;">${taxBadge}</td>
@@ -17852,8 +17879,8 @@ end $$;`;
             <button type="button" class="btn-sub-chip ${stFilter === "all" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('all')">전체 (${allCollection.length})</button>
             <button type="button" class="btn-sub-chip ${stFilter === "uncollected" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('uncollected')">미수 (${allCollection.filter(r => getCollectionRowFinancials(r).uncollected > 0).length})</button>
             <button type="button" class="btn-sub-chip ${stFilter === "doneUncollected" ? "active" : ""}" style="padding:4px 8px;font-size:11px;${stFilter === "doneUncollected" ? "background:#fee2e2;color:#dc2626;border-color:#f87171;" : "color:#b91c1c;"}" onclick="window.setFinanceStatusFilter('doneUncollected')">공사완료 미수 ⚠️ (${doneUncollectedCount})</button>
-            <button type="button" class="btn-sub-chip ${stFilter === "closing" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('closing')">마감중 (${allCollection.filter(r => r.status === "마감중").length})</button>
-            <button type="button" class="btn-sub-chip ${stFilter === "completed" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('completed')">완료 (${allCollection.filter(r => r.status === "완료" || getCollectionRowFinancials(r).uncollected <= 0).length})</button>
+            <button type="button" class="btn-sub-chip ${stFilter === "closing" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('closing')">마감중 (${allCollection.filter(r => getCollectionEffectiveStatus(r) === "마감중").length})</button>
+            <button type="button" class="btn-sub-chip ${stFilter === "completed" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('completed')">완료 (${allCollection.filter(r => getCollectionEffectiveStatus(r) === "완료").length})</button>
             ${FINANCE_EXT_FLAGS.taxProofBadge ? `
               <select onchange="window.setFinanceTaxFilter(this.value)" style="height:26px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;font-weight:700;">
                 <option value="all" ${state.financeTaxFilter === "all" ? "selected" : ""}>증빙전체</option>
@@ -17880,10 +17907,11 @@ end $$;`;
           const rRate = fin.rate;
 
           const isDoneUncollected = uncollected > 0 && isCollectionSiteCompleted(matchedSite, progress);
+          const effStatus = getCollectionEffectiveStatus(r, fin);
 
           let stBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#eff6ff;color:#2563eb;">진행중</span>`;
-          if (r.status === "마감중") stBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#fef3c7;color:#d97706;">마감중</span>`;
-          else if (r.status === "완료" || uncollected <= 0) stBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#ecfdf5;color:#059669;">완료</span>`;
+          if (effStatus === "마감중") stBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#fef3c7;color:#d97706;">마감중</span>`;
+          else if (effStatus === "완료") stBadge = `<span style="padding:2px 6px;border-radius:4px;font-size:10.5px;font-weight:700;background:#ecfdf5;color:#059669;">완료</span>`;
 
           let taxBadge = `<span style="padding:2px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#fef2f2;color:#dc2626;">미발행</span>`;
           if (r.taxInvoice === "세금계산서") taxBadge = `<span style="padding:2px 5px;border-radius:4px;font-size:10px;font-weight:700;background:#f0f9ff;color:#0284c7;">세금계산서</span>`;
@@ -17896,7 +17924,7 @@ end $$;`;
           const baseContract = r.contractAmount ? Number(r.contractAmount) : (Number(r.totalAmount || 0) - extraAmt);
 
           return `
-            <div class="m-card-box" style="cursor:pointer;margin-bottom:10px;padding:12px;border-left:3px solid ${isDoneUncollected ? "#dc2626" : (uncollected > 0 ? "#f59e0b" : "#10b981")};${isDoneUncollected ? "background:#fff8f8;" : ""}" onclick="window.openCollectionModal('${escJs(r.id)}')">
+            <div class="m-card-box" style="cursor:pointer;margin-bottom:10px;padding:12px;border-left:3px solid ${isDoneUncollected ? "#dc2626" : (uncollected > 0 ? "#f59e0b" : (effStatus === "완료" ? "#10b981" : "#94a3b8"))};${isDoneUncollected ? "background:#fff8f8;" : ""}" onclick="window.openCollectionModal('${escJs(r.id)}')">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
                 <div>
                   <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
@@ -17941,8 +17969,8 @@ end $$;`;
                 </div>
                 <div>
                   <div style="font-size:10px;color:var(--text-muted);">미수금</div>
-                  <div style="font-size:13px;font-weight:900;color:${uncollected > 0 ? "#dc2626" : "#15803d"};margin-top:2px;">
-                    ${uncollected > 0 ? formatKrw(uncollected) : (uncollected === 0 ? "완납" : "+" + formatKrw(-uncollected))}
+                  <div style="font-size:13px;font-weight:900;color:${uncollected > 0 ? "#dc2626" : (fin.isAmountUnset ? "#64748b" : (uncollected === 0 ? "#15803d" : "#2563eb"))};margin-top:2px;">
+                    ${uncollected > 0 ? formatKrw(uncollected) : (fin.isAmountUnset ? "금액 미입력" : (uncollected === 0 ? "완납" : "+" + formatKrw(-uncollected)))}
                   </div>
                 </div>
               </div>
@@ -28791,8 +28819,13 @@ end $$;`;
               const idx = nextCol.findIndex(r => r && r.id === savedId);
               const existingCreated = idx >= 0 ? (nextCol[idx].createdAtMs || 0) : 0;
               const createdAtMs = isRestore ? Date.now() : (cleanRow.createdAtMs || existingCreated || ((isNewId || idx < 0) ? Date.now() : 0));
+              let normStatus = String(cleanRow.status || "진행중").trim() || "진행중";
+              if (totalAmt <= 0 && collected <= 0 && normStatus === "완료") {
+                normStatus = "진행중";
+              }
               const saved = Object.assign({}, cleanRow, {
                 id: savedId,
+                status: normStatus,
                 totalAmount: totalAmt,
                 collectedAmount: collected,
                 uncollectedAmount: totalAmt - collected,
@@ -28827,13 +28860,19 @@ end $$;`;
               const fb = await ensureFinanceInMemory();
               const existingIds = new Set((fb.collection || []).map(c => c && c.id));
               const nowBatch = Date.now();
-              const newOnes = list.filter(r => r && !existingIds.has(r.id)).map(r => Object.assign({}, r, { createdAtMs: r.createdAtMs || nowBatch }));
-              newOnes.forEach((r) => {
+              const normalizedList = list.map(r => {
+                const finR = typeof getCollectionRowFinancials === "function" ? getCollectionRowFinancials(r) : { isAmountUnset: ((Number(r && r.totalAmount) || 0) <= 0 && (Number(r && r.collectedAmount) || 0) <= 0) };
+                let stR = String((r && r.status) || "진행중").trim() || "진행중";
+                if (finR.isAmountUnset && stR === "완료") stR = "진행중";
+                return Object.assign({}, r, { status: stR, createdAtMs: r.createdAtMs || nowBatch });
+              });
+              const newOnes = normalizedList.filter(r => r && !existingIds.has(r.id));
+              normalizedList.forEach((r) => {
                 if (r.id && typeof clearDeletedFinanceGuard === "function") {
                   clearDeletedFinanceGuard("collection", r.id, { skipRemoteSync: true });
                 }
               });
-              if (newOnes.length > 0 && typeof syncTombstonesToSupabase === "function") {
+              if (normalizedList.length > 0 && typeof syncTombstonesToSupabase === "function") {
                 await syncTombstonesToSupabase();
               }
               const nextFb = Object.assign({}, fb, {
@@ -28843,8 +28882,8 @@ end $$;`;
               state.financeDbData = nextFb;
               if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(nextFb);
               await persistDomainSnapshot("finance_db", nextFb);
-              if (newOnes.length > 0) {
-                await upsertRows("ws_finance_store", newOnes.map(r => ({ record_key: "collection::" + r.id, category: "collection", payload: r, updated_at: new Date().toISOString() })), "record_key");
+              if (normalizedList.length > 0) {
+                await upsertRows("ws_finance_store", normalizedList.map(r => ({ record_key: "collection::" + r.id, category: "collection", payload: r, updated_at: new Date().toISOString() })), "record_key");
               }
               return { success: true, createdCount: newOnes.length, source: "supabase" };
             });
