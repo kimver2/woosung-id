@@ -2013,6 +2013,11 @@
     .visible-scrollbar { scrollbar-width: thin; scrollbar-color: #94a3b8 #f1f5f9; }
     .visible-scrollbar thead th { position: sticky; top: 0; z-index: 2; background: #f8fafc; }
 
+    .exp-bank-grid { display: grid; grid-template-columns: 1fr 1.65fr 1fr; gap: 10px; }
+    @media (max-width: 560px) {
+      .exp-bank-grid { grid-template-columns: 1fr; gap: 8px; }
+    }
+
     @media (max-width: 720px) {
       .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
       .meta-5grid { grid-template-columns: 1fr 1fr; }
@@ -8297,7 +8302,7 @@ end $$;`;
           const bal = getExpenseRowBalance(e);
 
           const matchedFixed = fixedMaster.find(f => f.vendor === e.vendor);
-          let accountInfo = (e.category2 || "").trim();
+          let accountInfo = (e.category2 || e.accountNumber || "").trim();
           if (!accountInfo && matchedFixed && matchedFixed.bankAccount) {
             accountInfo = matchedFixed.bankAccount;
           }
@@ -9685,6 +9690,326 @@ end $$;`;
         renderActiveViews();
       };
 
+      function unwrapOuterParens(txt) {
+        let t = String(txt || "").trim();
+        while (t.length >= 2 && t[0] === "(" && t[t.length - 1] === ")") {
+          let depth = 0;
+          let closesAtEnd = true;
+          for (let i = 0; i < t.length; i++) {
+            const ch = t[i];
+            if (ch === "(") depth++;
+            else if (ch === ")") {
+              depth--;
+              if (depth === 0 && i < t.length - 1) {
+                closesAtEnd = false;
+                break;
+              }
+            }
+          }
+          if (closesAtEnd && depth === 0) {
+            t = t.slice(1, -1).trim();
+          } else {
+            break;
+          }
+        }
+        return t;
+      }
+
+      const EXP_KNOWN_BANK_RE = /^(?:(?:KB|NH|IBK|SC|MG|KDB|SH|IM|iM|DGB|BNK|JB|KJ|KEB|HSBC|SBI|OK)\s*)?(?:(?:지역|단위)?농협|축협|국민|신한|우리|하나|기업|카카오|카뱅|토스|케이|K|우체국|새마을|신협|수협|씨티|한국씨티|SC제일|제일|대구|부산|광주|제주|전북|경남|산업|외환|저축|아이엠|iM|산림조합|중소기업)(?:은행|뱅크|금고|중앙회|예금|저축은행|증권)?$|^(?:KB|NH|IBK|SC|MG|KDB|SH|BNK|DGB|JB|KJ|KEB)$/i;
+
+      function isKnownBankToken(tok) {
+        const s = String(tok || "").trim().replace(/\([^)]*\)/g, "").replace(/\s+/g, "");
+        if (!s) return false;
+        if (EXP_KNOWN_BANK_RE.test(s)) return true;
+        if (/(?:은행|뱅크|금고|저축은행|증권)$/.test(s) && s.length >= 3 && s.length <= 14) return true;
+        return false;
+      }
+
+      function parseBankAccountParts(rawStr) {
+        const s = String(rawStr || "").replace(/\u00A0/g, " ").trim();
+        if (!s) return { bank: "", account: "", holder: "" };
+
+        const cleanEdge = (txt) => String(txt || "")
+          .replace(/^[\s/|·,:\-]+/, "")
+          .replace(/[\s/|·,:\-]+$/, "")
+          .trim();
+
+        const cleanBank = (txt) => {
+          let t = cleanEdge(txt);
+          t = t.replace(/(?:^|[\s/|·,])(?:입금\s*)?(?:계좌(?:번호)?)\s*[:：]?\s*$/, "");
+          t = cleanEdge(t);
+          t = unwrapOuterParens(t);
+          t = t.replace(/^(?:입금\s*)?(?:은행명?|계좌(?:번호)?)\s*[:：]\s*/, "").trim();
+          return cleanEdge(t);
+        };
+
+        const cleanHolder = (txt) => {
+          let t = cleanEdge(txt);
+          t = unwrapOuterParens(t);
+          t = t.replace(/^(?:예금주명?|성명)\s*[:：]\s*/, "").trim();
+          t = unwrapOuterParens(t);
+          return cleanEdge(t);
+        };
+
+        // 1) 계좌번호 후보 탐색 (하이픈 포함 -> 공백 구분 -> 연속 7자리 이상 -> 은행/구분자 동반 3~6자리)
+        let accMatch = null;
+        const hyphenRe = /\d+(?:\s*-\s*\d+)+/g;
+        let hm;
+        while ((hm = hyphenRe.exec(s)) !== null) {
+          const normHyphen = hm[0].replace(/\s*-\s*/g, "-");
+          const digits = normHyphen.replace(/\D/g, "");
+          const segCount = normHyphen.split("-").length;
+          if ((segCount >= 3 && digits.length >= 6) || digits.length >= 7) {
+            accMatch = { start: hm.index, end: hm.index + hm[0].length, value: normHyphen };
+            break;
+          }
+        }
+        if (!accMatch) {
+          const spacedRe = /(^|[^가-힣A-Za-z0-9-])(\d{2,6}(?:\s+\d{2,6}){1,3})(?=$|[^가-힣A-Za-z0-9-])/g;
+          let sm;
+          while ((sm = spacedRe.exec(s)) !== null) {
+            const digits = sm[2].replace(/\D/g, "");
+            if (digits.length >= 8) {
+              const start = sm.index + sm[1].length;
+              accMatch = { start, end: start + sm[2].length, value: sm[2].replace(/\s+/g, " ") };
+              break;
+            }
+          }
+        }
+        if (!accMatch) {
+          const contRe = /(^|[^0-9-])(\d{7,})(?=$|[^0-9-])/;
+          const cm = s.match(contRe);
+          if (cm) {
+            const start = cm.index + cm[1].length;
+            accMatch = { start, end: start + cm[2].length, value: cm[2] };
+          }
+        }
+        if (!accMatch) {
+          const shortRe = /(^|[^가-힣A-Za-z0-9-])(\d{3,6})(?=$|[^가-힣A-Za-z0-9-])/;
+          const qm = s.match(shortRe);
+          if (qm) {
+            const start = qm.index + qm[1].length;
+            const beforeTxt = cleanBank(s.slice(0, start));
+            const afterTxt = cleanEdge(s.slice(start + qm[2].length));
+            if (/^\d+$/.test(s) || isKnownBankToken(beforeTxt) || isKnownBankToken(afterTxt) || /[\/|]/.test(s)) {
+              accMatch = { start, end: start + qm[2].length, value: qm[2] };
+            }
+          }
+        }
+
+        // 계좌번호가 전혀 없는 문자열 처리
+        if (!accMatch) {
+          if (/[\/|]/.test(s)) {
+            const segs = s.split(/[\/|]/).map(x => cleanEdge(x)).filter(Boolean);
+            if (segs.length >= 2) {
+              if (!isKnownBankToken(segs[0]) && isKnownBankToken(segs[1])) {
+                return { bank: cleanBank(segs[1]), account: "", holder: cleanHolder(segs[0]) };
+              }
+              return { bank: cleanBank(segs[0]), account: "", holder: cleanHolder(segs.slice(1).join(" ")) };
+            }
+          }
+          const bankParenM = s.match(/^(.+?)\s*(\([^)]+\))$/);
+          if (bankParenM && isKnownBankToken(bankParenM[1])) {
+            return { bank: cleanBank(bankParenM[1]), account: "", holder: cleanHolder(bankParenM[2]) };
+          }
+          const toks = s.split(/\s+/).filter(Boolean);
+          if (toks.length === 2 && !isKnownBankToken(s)) {
+            if (isKnownBankToken(toks[0]) && !isKnownBankToken(toks[1])) {
+              return { bank: cleanBank(toks[0]), account: "", holder: cleanHolder(toks[1]) };
+            }
+            if (!isKnownBankToken(toks[0]) && isKnownBankToken(toks[1])) {
+              return { bank: cleanBank(toks[1]), account: "", holder: cleanHolder(toks[0]) };
+            }
+          }
+          if (s[0] === "(" && s[s.length - 1] === ")" && unwrapOuterParens(s) !== s && !isKnownBankToken(unwrapOuterParens(s))) {
+            return { bank: "", account: "", holder: cleanHolder(s) };
+          }
+          return { bank: cleanBank(s), account: "", holder: "" };
+        }
+
+        const account = accMatch.value;
+        const rawLeft = cleanEdge(s.slice(0, accMatch.start));
+        const rawRight = cleanEdge(s.slice(accMatch.end));
+
+        let bank = "";
+        let holder = "";
+
+        if (rawLeft && rawRight) {
+          const leftClean = cleanBank(rawLeft);
+          const rightClean = cleanHolder(rawRight);
+          if (!isKnownBankToken(leftClean) && isKnownBankToken(rightClean)) {
+            bank = cleanBank(rawRight);
+            holder = cleanHolder(rawLeft);
+          } else {
+            bank = leftClean;
+            holder = rightClean;
+          }
+        } else if (rawLeft && !rawRight) {
+          if (/[\/|]/.test(rawLeft)) {
+            const segs = rawLeft.split(/[\/|]/).map(x => cleanEdge(x)).filter(Boolean);
+            if (segs.length >= 2) {
+              if (!isKnownBankToken(segs[0]) && isKnownBankToken(segs[1])) {
+                bank = cleanBank(segs[1]);
+                holder = cleanHolder(segs[0]);
+              } else {
+                bank = cleanBank(segs[0]);
+                holder = cleanHolder(segs.slice(1).join(" "));
+              }
+            } else {
+              bank = cleanBank(rawLeft);
+            }
+          } else if (isKnownBankToken(rawLeft)) {
+            bank = cleanBank(rawLeft);
+          } else {
+            const leftParenM = rawLeft.match(/^(.+?)\s*(\([^)]+\))$/);
+            if (leftParenM && isKnownBankToken(leftParenM[1]) && !/^(중앙회?|단위|지역|.*지점)$/.test(unwrapOuterParens(leftParenM[2]))) {
+              bank = cleanBank(leftParenM[1]);
+              holder = cleanHolder(leftParenM[2]);
+            } else {
+              const toks = rawLeft.split(/\s+/).filter(Boolean);
+              if (toks.length >= 2 && isKnownBankToken(toks[0]) && !isKnownBankToken(toks.slice(1).join(" "))) {
+                bank = cleanBank(toks[0]);
+                holder = cleanHolder(toks.slice(1).join(" "));
+              } else if (toks.length >= 2 && isKnownBankToken(toks[toks.length - 1]) && !isKnownBankToken(toks.slice(0, -1).join(" "))) {
+                bank = cleanBank(toks[toks.length - 1]);
+                holder = cleanHolder(toks.slice(0, -1).join(" "));
+              } else if (rawLeft[0] === "(" && rawLeft[rawLeft.length - 1] === ")" && unwrapOuterParens(rawLeft) !== rawLeft && !isKnownBankToken(unwrapOuterParens(rawLeft))) {
+                holder = cleanHolder(rawLeft);
+              } else {
+                bank = cleanBank(rawLeft);
+              }
+            }
+          }
+        } else if (!rawLeft && rawRight) {
+          const rightUnwrapped = unwrapOuterParens(rawRight);
+          if (/[\/|]/.test(rightUnwrapped)) {
+            const segs = rightUnwrapped.split(/[\/|]/).map(x => cleanEdge(x)).filter(Boolean);
+            if (segs.length >= 2 && isKnownBankToken(segs[0])) {
+              bank = cleanBank(segs[0]);
+              holder = cleanHolder(segs.slice(1).join(" "));
+            } else if (segs.length >= 2 && isKnownBankToken(segs[segs.length - 1])) {
+              bank = cleanBank(segs[segs.length - 1]);
+              holder = cleanHolder(segs.slice(0, -1).join(" "));
+            } else {
+              holder = cleanHolder(rawRight);
+            }
+          } else if (isKnownBankToken(rightUnwrapped)) {
+            bank = cleanBank(rightUnwrapped);
+          } else {
+            const toks = rightUnwrapped.split(/[\s,]+/).filter(Boolean);
+            if (toks.length >= 2 && isKnownBankToken(toks[0])) {
+              bank = cleanBank(toks[0]);
+              holder = cleanHolder(toks.slice(1).join(" "));
+            } else if (toks.length >= 2 && isKnownBankToken(toks[toks.length - 1])) {
+              bank = cleanBank(toks[toks.length - 1]);
+              holder = cleanHolder(toks.slice(0, -1).join(" "));
+            } else {
+              holder = cleanHolder(rawRight);
+            }
+          }
+        }
+
+        return { bank, account, holder };
+      }
+      window.parseBankAccountParts = parseBankAccountParts;
+
+      function formatBankAccountParts(bank, account, holder) {
+        if (bank && typeof bank === "object") {
+          holder = bank.holder;
+          account = bank.account;
+          bank = bank.bank;
+        }
+        const b = String(bank || "").trim();
+        const a = String(account || "").trim();
+        const h = unwrapOuterParens(String(holder || "").trim());
+        if (!b && !a && !h) return "";
+        if (b && a && h) return `${b} / ${a} (${h})`;
+        if (b && a) return `${b} / ${a}`;
+        if (b && h) return `${b} (${h})`;
+        if (a && h) return `${a} (${h})`;
+        return b || a || h;
+      }
+      window.formatBankAccountParts = formatBankAccountParts;
+
+      function getPartnerBankAccountStr(p) {
+        if (!p) return "";
+        const direct = String(p.bankAccount || p.accountNumber || p.accountNo || p.account || "").trim();
+        const pBank = String(p.bank || "").trim();
+        const pHolder = String(p.holder || p.accountHolder || "").trim();
+        if (direct) {
+          if (pBank && !direct.includes(pBank)) {
+            return formatBankAccountParts(pBank, direct, pHolder);
+          }
+          if (pHolder && !direct.includes(pHolder)) {
+            const parsed = parseBankAccountParts(direct);
+            return formatBankAccountParts(parsed.bank || pBank, parsed.account || direct, parsed.holder || pHolder);
+          }
+          return direct;
+        }
+        if (pBank || pHolder) return formatBankAccountParts(pBank, "", pHolder);
+        return "";
+      }
+
+      function findExpensePartnerMatch(partners, vendorVal) {
+        const list = Array.isArray(partners) ? partners : [];
+        const vNorm = String(vendorVal || "").toLowerCase().trim();
+        if (!vNorm) return null;
+        const exact = list.find(p => {
+          if (!p) return false;
+          const pFull = String(p.fullName || "").toLowerCase().trim();
+          const pName = String(p.name || "").toLowerCase().trim();
+          const pDrop = String(p.dropdownVal || "").toLowerCase().trim();
+          const pBizName = p.biz && p.name ? `${p.biz}_${p.name}`.toLowerCase().trim() : "";
+          return pFull === vNorm || pName === vNorm || pDrop === vNorm || (pBizName && pBizName === vNorm);
+        });
+        if (exact) return exact;
+
+        const stripped = vNorm.replace(/^[^_]+_/, "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+        if (stripped && stripped !== vNorm) {
+          const byStripped = list.find(p => {
+            if (!p) return false;
+            const pName = String(p.name || "").toLowerCase().trim();
+            const pFull = String(p.fullName || "").toLowerCase().trim();
+            return pName === stripped || pFull === stripped;
+          });
+          if (byStripped) return byStripped;
+        }
+        return null;
+      }
+
+      window.syncExpenseBankHidden = function() {
+        const bEl = document.getElementById("expBankName");
+        const aEl = document.getElementById("expAccountNo");
+        const hEl = document.getElementById("expAccountHolder");
+        const c2El = document.getElementById("expCategory2");
+        if (!bEl && !aEl && !hEl) return (c2El && c2El.value) || "";
+        const formatted = formatBankAccountParts(
+          bEl ? bEl.value : "",
+          aEl ? aEl.value : "",
+          hEl ? hEl.value : ""
+        );
+        if (c2El) c2El.value = formatted;
+        return formatted;
+      };
+
+      window.setExpenseBankFields = function(parts, sourceMode) {
+        const p = parts || { bank: "", account: "", holder: "" };
+        const bEl = document.getElementById("expBankName");
+        const aEl = document.getElementById("expAccountNo");
+        const hEl = document.getElementById("expAccountHolder");
+        if (bEl) bEl.value = String(p.bank || "").trim();
+        if (aEl) aEl.value = String(p.account || "").trim();
+        if (hEl) hEl.value = String(p.holder || "").trim();
+        window.syncExpenseBankHidden();
+        const hasVal = Boolean((bEl && bEl.value) || (aEl && aEl.value) || (hEl && hEl.value));
+        window._expBankSource = hasVal ? (sourceMode || "auto") : "none";
+      };
+
+      window.onExpenseBankInput = function() {
+        const formatted = window.syncExpenseBankHidden();
+        window._expBankSource = formatted ? "manual" : "none";
+      };
+
       window.openExpenseModal = function(id, prefill) {
         let row = null;
         const expList = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
@@ -9709,7 +10034,7 @@ end $$;`;
           item: prefill.item || "외주",
           category: prefill.category || "",
           vendor: prefill.vendor || "",
-          category2: prefill.category2 || "",
+          category2: prefill.category2 || prefill.accountNumber || prefill.accountNo || "",
           siteName: prefill.siteName || "공통",
           claimAmount: prefill.claimAmount || 0,
           paidAmount: prefill.paidAmount || 0,
@@ -9717,6 +10042,7 @@ end $$;`;
           payDate: prefill.payDate || "",
           note: prefill.note || ""
         };
+        rData.category2 = String(rData.category2 || rData.accountNumber || rData.accountNo || "").trim();
         window._expModalLastItem = String(rData.item || "외주").trim();
 
         const siteOptions = Array.from(new Set([
@@ -9726,15 +10052,20 @@ end $$;`;
         ].filter(Boolean)));
 
         const partnerList = getPartnersListForTab();
+        let bankFilledFromPartnerOnOpen = false;
         if (!rData.category2 && rData.vendor) {
-          const vNorm = rData.vendor.toLowerCase().trim();
-          const p = partnerList.find(p =>
-            (p.fullName && p.fullName.toLowerCase() === vNorm) ||
-            (p.name && p.name.toLowerCase() === vNorm) ||
-            (p.dropdownVal && p.dropdownVal.toLowerCase().includes(vNorm))
-          );
-          if (p && p.bankAccount) rData.category2 = p.bankAccount;
+          const p = findExpensePartnerMatch(partnerList, rData.vendor);
+          const pBank = getPartnerBankAccountStr(p);
+          if (pBank) {
+            rData.category2 = pBank;
+            bankFilledFromPartnerOnOpen = true;
+          }
         }
+        const initBankParts = parseBankAccountParts(rData.category2);
+        const initFormattedBank = formatBankAccountParts(initBankParts);
+        window._expBankSource = (initBankParts.bank || initBankParts.account || initBankParts.holder)
+          ? (bankFilledFromPartnerOnOpen ? "auto" : "existing")
+          : "none";
         const masterVendorNames = Array.from(new Set(
           partnerList.map(p => String((p && (p.fullName || p.name)) || "").trim()).filter(Boolean)
         ));
@@ -9827,17 +10158,35 @@ end $$;`;
             </div>
           </div>
 
-          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
-            <div>
-              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">연결 현장명</label>
-              <input type="text" id="expSiteName" list="expenseSiteDatalist" value="${escHtml(rData.siteName || "공통")}" placeholder="공통 또는 현장명 선택"
-                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+          <div>
+            <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">연결 현장명</label>
+            <input type="text" id="expSiteName" list="expenseSiteDatalist" value="${escHtml(rData.siteName || "공통")}" placeholder="공통 또는 현장명 선택"
+              style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
+          </div>
+
+          <div style="background:#f8fafc;padding:10px 12px;border-radius:8px;border:1px solid #e2e8f0;">
+            <label style="display:block;font-size:12px;font-weight:700;margin-bottom:6px;color:#334155;">계좌번호 (구분2)</label>
+            <div class="exp-bank-grid">
+              <div>
+                <label for="expBankName" style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">은행</label>
+                <input type="text" id="expBankName" value="${escHtml(initBankParts.bank)}" placeholder="예: 국민, 신한"
+                  oninput="window.onExpenseBankInput()"
+                  style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;" />
+              </div>
+              <div>
+                <label for="expAccountNo" style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">계좌번호</label>
+                <input type="text" id="expAccountNo" value="${escHtml(initBankParts.account)}" placeholder="예: 123-456-789012"
+                  oninput="window.onExpenseBankInput()"
+                  style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;" />
+              </div>
+              <div>
+                <label for="expAccountHolder" style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">예금주</label>
+                <input type="text" id="expAccountHolder" value="${escHtml(initBankParts.holder)}" placeholder="예: 홍길동"
+                  oninput="window.onExpenseBankInput()"
+                  style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;" />
+              </div>
             </div>
-            <div>
-              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">계좌번호 (구분2)</label>
-              <input type="text" id="expCategory2" value="${escHtml(rData.category2)}" placeholder="은행 / 계좌번호 (예금주)"
-                style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
-            </div>
+            <input type="hidden" id="expCategory2" value="${escHtml(initFormattedBank || rData.category2)}" />
           </div>
 
           <!-- 금액 및 잔금 영역 -->
@@ -10037,7 +10386,7 @@ end $$;`;
             customEl.value = "";
           }
           if (typeof syncEnhancedWsSelect === "function") syncEnhancedWsSelect(selEl);
-          window.onExpenseVendorChange(itemStr, true);
+          window.onExpenseVendorChange(itemStr, true, { fromItemAuto: true });
         } else if (itemStr === "외주") {
           const curVendor = String(hiddenEl.value || "").trim();
           if (curVendor && prevItem && prevItem !== "외주" && curVendor === prevItem) {
@@ -10048,44 +10397,58 @@ end $$;`;
               customEl.value = "";
             }
             if (typeof syncEnhancedWsSelect === "function") syncEnhancedWsSelect(selEl);
-            window.onExpenseVendorChange("", true);
+            window.onExpenseVendorChange("", true, { fromItemAuto: true });
           }
         }
       };
 
-      window.onExpenseVendorChange = function(vendorVal, isUserAction) {
+      window.onExpenseVendorChange = function(vendorVal, isUserAction, opts) {
         const hintEl = document.getElementById("expVendorHint");
+        const fromItemAuto = Boolean(opts && opts.fromItemAuto);
+        const bEl = document.getElementById("expBankName");
+        const aEl = document.getElementById("expAccountNo");
+        const hEl = document.getElementById("expAccountHolder");
+        const cat2El = document.getElementById("expCategory2");
+        const hasBankInputs = Boolean(bEl || aEl || hEl);
+        const isBankCurrentlyEmpty = hasBankInputs
+          ? !(String(bEl?.value || "").trim() || String(aEl?.value || "").trim() || String(hEl?.value || "").trim())
+          : !(String(cat2El?.value || "").trim());
+
         if (!vendorVal) {
           if (hintEl) hintEl.textContent = "";
+          if (isUserAction && window._expBankSource === "auto") {
+            window.setExpenseBankFields({ bank: "", account: "", holder: "" }, "none");
+          }
           return;
         }
         const partners = getPartnersListForTab();
-        const vNorm = vendorVal.toLowerCase().trim();
-        const found = partners.find(p =>
-          (p.name && p.name.toLowerCase() === vNorm) ||
-          (p.fullName && p.fullName.toLowerCase() === vNorm) ||
-          (p.dropdownVal && p.dropdownVal.toLowerCase().includes(vNorm))
-        );
-        const cat2El = document.getElementById("expCategory2");
+        const found = findExpensePartnerMatch(partners, vendorVal);
         const catEl = document.getElementById("expCategory");
         if (found) {
-          const bankDisp = found.bankAccount ? `계좌: ${found.bankAccount}` : "";
+          const pBankStr = getPartnerBankAccountStr(found);
+          const bankDisp = pBankStr ? `계좌: ${pBankStr}` : "";
           const info = [bankDisp, found.feature, found.phone, found.manager].filter(Boolean).join(" · ");
           if (hintEl) hintEl.textContent = info ? `💡 거래처 정보: ${info}` : "";
-          if (cat2El) {
-            if (isUserAction) {
-              cat2El.value = found.bankAccount || "";
-            } else if (!cat2El.value && found.bankAccount) {
-              cat2El.value = found.bankAccount;
+          if (pBankStr) {
+            if (isUserAction || isBankCurrentlyEmpty) {
+              const parsed = parseBankAccountParts(pBankStr);
+              if (hasBankInputs && typeof window.setExpenseBankFields === "function") {
+                window.setExpenseBankFields(parsed, "auto");
+              } else if (cat2El) {
+                cat2El.value = formatBankAccountParts(parsed) || pBankStr;
+              }
             }
+          } else if (isUserAction && !fromItemAuto && window._expBankSource === "auto") {
+            window.setExpenseBankFields({ bank: "", account: "", holder: "" }, "none");
           }
-          if (catEl && (!catEl.value || isUserAction) && (found.biz || found.category)) {
-            if (!catEl.value || isUserAction) {
-              catEl.value = found.biz || found.category;
-            }
+          if (catEl && (!catEl.value || (isUserAction && !fromItemAuto)) && (found.biz || found.category)) {
+            catEl.value = found.biz || found.category;
           }
         } else {
           if (hintEl) hintEl.textContent = "";
+          if (isUserAction && window._expBankSource === "auto") {
+            window.setExpenseBankFields({ bank: "", account: "", holder: "" }, "none");
+          }
         }
       };
 
@@ -10103,7 +10466,22 @@ end $$;`;
         ).trim();
         const category = (document.getElementById("expCategory")?.value || "").trim();
         const siteName = (document.getElementById("expSiteName")?.value || "공통").trim();
-        const category2 = (document.getElementById("expCategory2")?.value || "").trim();
+        const bankEl = document.getElementById("expBankName");
+        const acctEl = document.getElementById("expAccountNo");
+        const holderEl = document.getElementById("expAccountHolder");
+        const cat2El = document.getElementById("expCategory2");
+        let category2 = "";
+        if (bankEl || acctEl || holderEl) {
+          const bVal = (bankEl?.value || "").trim();
+          const aVal = (acctEl?.value || "").trim();
+          const hVal = (holderEl?.value || "").trim();
+          category2 = (typeof formatBankAccountParts === "function")
+            ? formatBankAccountParts(bVal, aVal, hVal)
+            : [bVal, aVal, hVal].filter(Boolean).join(" / ");
+          if (cat2El) cat2El.value = category2;
+        } else {
+          category2 = (cat2El?.value || "").trim();
+        }
         const claimAmount = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const paidAmount = Number(String(document.getElementById("expPaidAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const payDate = (document.getElementById("expPayDate")?.value || "").trim();
@@ -10145,6 +10523,7 @@ end $$;`;
           category: category,
           vendor: vendor,
           category2: category2,
+          accountNumber: category2,
           siteName: siteName,
           claimAmount: claimAmount,
           paidAmount: paidAmount,
@@ -13819,7 +14198,7 @@ end $$;`;
                   <div onclick="window.openExpenseModal('${escJs(row.id)}')" style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;cursor:pointer;gap:8px;">
                     <div style="min-width:0;">
                       <div style="font-size:12.5px;font-weight:800;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(row.vendor || row.item || "업체 미등록")} <span style="font-size:11px;color:#64748b;font-weight:600;">(${escHtml(row.siteName || "공통")})</span></div>
-                      <div style="font-size:11px;color:#64748b;">${escHtml(row.category || "-")} ${row.accountNumber ? "· " + escHtml(row.accountNumber) : ""}</div>
+                      <div style="font-size:11px;color:#64748b;">${escHtml(row.category || "-")} ${(row.accountNumber || row.category2) ? "· " + escHtml(row.accountNumber || row.category2) : ""}</div>
                     </div>
                     <strong style="font-size:13px;color:#d97706;white-space:nowrap;">${formatKrw(bal)}</strong>
                   </div>
