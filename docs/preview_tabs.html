@@ -9992,7 +9992,11 @@ end $$;`;
         const prevExpense = JSON.parse(JSON.stringify(state.financeDbData.expense));
         const beforeExpRow = id ? (prevExpense.find(e => e && e.id === id) || null) : null;
         if (beforeExpRow && typeof window.recordAuditLog === "function") {
-          window.recordAuditLog("재무", "비용 수정", `${beforeExpRow.vendor || beforeExpRow.item || ""} (${beforeExpRow.siteName || "공통"})`, `청구 ${formatKrw(beforeExpRow.claimAmount)}`, { type: "expense", id: beforeExpRow.id, beforeData: beforeExpRow });
+          const expFallback = `청구 ${(Number(payload.claimAmount) || 0).toLocaleString("ko-KR")}원 / 지급 ${(Number(payload.paidAmount) || 0).toLocaleString("ko-KR")}원`;
+          const expDiff = (typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+            ? window.computeAuditDiff(beforeExpRow, Object.assign({}, payload, { taxProof: expTaxProof }), window.AUDIT_FIELD_SPECS.expense, expFallback)
+            : expFallback;
+          window.recordAuditLog("재무", "비용 수정", `${payload.vendor || payload.item || ""} (${payload.siteName || "공통"})`, expDiff, { type: "expense", id: beforeExpRow.id, beforeData: beforeExpRow });
         }
 
         // 2) 즉시 메모리 상태 업데이트 (체감 0ms 낙관적 업데이트)
@@ -11588,6 +11592,7 @@ end $$;`;
         }
 
         window._isQuickPayingExpense = true;
+        const beforeExpSnap = JSON.parse(JSON.stringify(item));
         const updated = Object.assign({}, item, {
           paidAmount: targetPaid,
           balance: 0,
@@ -11601,6 +11606,13 @@ end $$;`;
             if (idx !== -1) expList[idx] = updated;
             if (WSDataService && typeof WSDataService.saveFinanceCache === "function") {
               WSDataService.saveFinanceCache(state.financeDbData);
+            }
+            if (typeof window.recordAuditLog === "function") {
+              const fb = `지급금액: ${(Number(beforeExpSnap.paidAmount) || 0).toLocaleString("ko-KR")}원 → ${(Number(updated.paidAmount) || 0).toLocaleString("ko-KR")}원`;
+              const diffRes = (typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+                ? window.computeAuditDiff(beforeExpSnap, updated, window.AUDIT_FIELD_SPECS.expense, fb)
+                : fb;
+              window.recordAuditLog("재무", "전액지급", `${item.vendor || item.item || ""} (${item.siteName || "공통"})`, diffRes, { type: "expense", id: item.id, beforeData: beforeExpSnap });
             }
 
             state.dirtyPcTabs.finance = true;
@@ -11646,6 +11658,9 @@ end $$;`;
             renderActiveViews();
 
             if (res.createdCount > 0) {
+              if (typeof window.recordAuditLog === "function") {
+                window.recordAuditLog("재무", "고정비 불러오기", `${targetMonth}월 ${res.createdCount}건`, `고정비 마스터에서 월별 비용마감 자동 생성`);
+              }
               alert(`${targetMonth}월 고정비 ${res.createdCount}건이 등록되었습니다.`);
             } else {
               alert(`해당 월에 이미 모든 고정비 항목이 등록되어 있거나 사용 중인 고정비 마스터가 없습니다.`);
@@ -11878,6 +11893,15 @@ end $$;`;
 
         // 1) 롤백용 백업 저장
         const prevFixedMaster = JSON.parse(JSON.stringify(state.financeDbData.fixedMaster));
+        const beforeFmRow = id ? (prevFixedMaster.find(f => f && f.id === id) || null) : null;
+        if (typeof window.recordAuditLog === "function") {
+          const fmTarget = payload.vendor || payload.category || id || "";
+          const fmFallback = `${payload.item || "고정비"} · ${(Number(payload.baseAmount) || 0).toLocaleString("ko-KR")}원`;
+          const fmDiff = (beforeFmRow && typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+            ? window.computeAuditDiff(beforeFmRow, payload, window.AUDIT_FIELD_SPECS.fixedMaster, fmFallback)
+            : fmFallback;
+          window.recordAuditLog("재무", beforeFmRow ? "고정비 수정" : "고정비 등록", fmTarget, fmDiff);
+        }
 
         // 2) 즉시 메모리 상태 업데이트 (체감 0ms 낙관적 업데이트)
         let tempId = "";
@@ -11963,6 +11987,10 @@ end $$;`;
 
         // 1) 롤백용 백업 저장
         const prevFixedMaster = JSON.parse(JSON.stringify(state.financeDbData.fixedMaster));
+        if (typeof window.recordAuditLog === "function") {
+          const fmSummary = curItem ? `${curItem.item || "고정비"} · ${(Number(curItem.baseAmount) || 0).toLocaleString("ko-KR")}원` : "";
+          window.recordAuditLog("재무", "고정비 삭제", itemLabel, fmSummary);
+        }
 
         // 2) 즉시 메모리 상태 업데이트 및 캐시 반영 (체감 0ms)
         state.financeDbData.fixedMaster = state.financeDbData.fixedMaster.filter(f => f.id !== id);
@@ -12024,6 +12052,13 @@ end $$;`;
 
         // 1) 즉시 메모리 및 UI 반영 (체감 0ms)
         item.active = nextActive;
+        if (typeof window.recordAuditLog === "function") {
+          const activeSpec = [{ key: "active", label: "사용여부", type: "boolean", trueLabel: "사용(Y)", falseLabel: "미사용(N)", getValue: (o) => String((o && o.active) || "Y").toUpperCase() !== "N" }];
+          const fmActDiff = typeof window.computeAuditDiff === "function"
+            ? window.computeAuditDiff({ active: prevActive }, { active: nextActive }, activeSpec, `${prevActive} → ${nextActive}`)
+            : `${prevActive} → ${nextActive}`;
+          window.recordAuditLog("재무", "고정비 상태변경", item.vendor || item.category || id, fmActDiff);
+        }
         if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
@@ -12282,6 +12317,9 @@ end $$;`;
             newRows.forEach(nr => {
               state.financeDbData.expense.unshift(nr);
             });
+            if (typeof window.recordAuditLog === "function") {
+              window.recordAuditLog("재무", "비용 일괄등록", `${targetMonth}월 ${rows.length}건`, rows.map(r => r.vendor).filter(Boolean).slice(0, 3).join(", "));
+            }
 
             closePartnerImportModal();
             state.dirtyPcTabs.finance = true;
@@ -18747,6 +18785,7 @@ end $$;`;
           const found = findTaskById(ctx.taskId);
           if (found && found.task && found.site) {
             const { site, task } = found;
+            const beforeTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, task) : null;
             const origTaskName = task.taskName || "";
             const origDateStr = task.dateDisplay || task.startDateStr || "";
             const origMgrStr = task.manager || "";
@@ -18755,6 +18794,7 @@ end $$;`;
             task.memo = ctx.memo;
             task.updatedAtMs = Date.now();
             task.memoUpdatedAtMs = Date.now();
+            const afterTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, task) : null;
             if (window.WSDataService) {
               window.WSDataService.saveTask(true, {
                 row: task.row || "", site: site.siteName, task: task.taskName, status: task.status,
@@ -18762,7 +18802,8 @@ end $$;`;
                 partner: task.partner, sheetName: task.sheetName || "현장데이터",
                 id: task.taskId || task.id, taskId: task.taskId || task.id,
                 isArchived: wasArchived, origDate: origDateStr, origTask: origTaskName,
-                origMgr: origMgrStr, origMemo: origMemoStr
+                origMgr: origMgrStr, origMemo: origMemoStr,
+                _auditBefore: beforeTaskSnap, _auditAfter: afterTaskSnap
               }, state.dashData);
             }
             markAllDirty();
@@ -18938,6 +18979,7 @@ end $$;`;
               const found = findTaskById(ctx.taskId);
               if (found && found.task && found.site) {
                 const { site, task } = found;
+                const beforeTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, task) : null;
                 const origTaskName = task.taskName || "";
                 const origDateStr = task.dateDisplay || task.startDateStr || "";
                 const origMgrStr = task.manager || "";
@@ -18946,6 +18988,7 @@ end $$;`;
                 task.memo = ctx.memo;
                 task.updatedAtMs = Date.now();
                 task.memoUpdatedAtMs = Date.now();
+                const afterTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, task) : null;
                 if (window.WSDataService) {
                   window.WSDataService.saveTask(true, {
                     row: task.row || "", site: site.siteName, task: task.taskName, status: task.status,
@@ -18953,7 +18996,8 @@ end $$;`;
                     partner: task.partner, sheetName: task.sheetName || "현장데이터",
                     id: task.taskId || task.id, taskId: task.taskId || task.id,
                     isArchived: wasArchived, origDate: origDateStr, origTask: origTaskName,
-                    origMgr: origMgrStr, origMemo: origMemoStr
+                    origMgr: origMgrStr, origMemo: origMemoStr,
+                    _auditBefore: beforeTaskSnap, _auditAfter: afterTaskSnap
                   }, state.dashData);
                 }
                 markAllDirty();
@@ -19234,6 +19278,7 @@ end $$;`;
           const found = findTaskById(ctx.taskId);
           if (!found) return;
           const { site, task } = found;
+          const beforeTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, task) : null;
           const origTaskName = task.taskName || "";
           const origDateStr = task.dateDisplay || task.startDateStr || "";
           const origMgrStr = task.manager || "";
@@ -19270,25 +19315,38 @@ end $$;`;
             task.isArchived = false;
             task.isCompleted = false;
           }
+          const afterTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, task) : null;
 
           if (ctx.cascadeShift && dateDiff !== 0) {
             const shifts = [];
+            const auditShiftChanges = [];
             (site.tasks || []).forEach((other) => {
               if ((other.id || other.taskId) === (task.id || task.taskId)) return;
               const oy = parseYmdFromTask(other);
               if (oy && oy > ctx.origStartYmd) {
+                const prevEnd = parseEndYmdFromTask(other, oy);
+                const prevDisp = prevEnd > oy ? `${oy} ~ ${prevEnd}` : oy;
                 const ns = addDaysYmd(oy, dateDiff);
-                const ne = addDaysYmd(parseEndYmdFromTask(other, oy), dateDiff);
+                const ne = addDaysYmd(prevEnd, dateDiff);
+                const nextDisp = ne > ns ? `${ns} ~ ${ne}` : ns;
                 other.startDateStr = ns;
                 other.endDateStr = ne;
                 other.dateDisplay = ne > ns ? `${formatKoreanDateLabel(ns)} ~ ${formatKoreanDateLabel(ne)}` : formatKoreanDateLabel(ns);
                 other.dateMs = new Date(ns + "T00:00:00").getTime();
                 other.isDelayed = ns < todayYmd && other.status !== "완료";
                 shifts.push({ row: other.row, newStart: ns, newEnd: ne });
+                auditShiftChanges.push({ key: other.id || other.taskName, label: other.taskName || "후속공정", before: prevDisp, after: nextDisp });
               }
             });
             if (shifts.length && window.WSDataService) {
-              window.WSDataService.cascadeShiftTasks({ site: site.siteName, sheetName: task.sheetName || "현장데이터", shifts: JSON.stringify(shifts) }, state.dashData);
+              const cascadeDetail = auditShiftChanges.map((c) => `${c.label}: ${c.before} → ${c.after}`).join(" · ");
+              window.WSDataService.cascadeShiftTasks({
+                site: site.siteName,
+                sheetName: task.sheetName || "현장데이터",
+                shifts: JSON.stringify(shifts),
+                _auditDetail: cascadeDetail,
+                _auditChanges: auditShiftChanges
+              }, state.dashData);
             }
           }
           recalcSiteStats(site);
@@ -19299,7 +19357,9 @@ end $$;`;
               partner: task.partner, sheetName: task.sheetName || "현장데이터",
               id: task.taskId || task.id, taskId: task.taskId || task.id,
               isArchived: wasArchived, origDate: origDateStr, origTask: origTaskName,
-              origMgr: origMgrStr, origMemo: origMemoStr, partnerPhone: finalPartnerPhone || ""
+              origMgr: origMgrStr, origMemo: origMemoStr, partnerPhone: finalPartnerPhone || "",
+              _auditBefore: beforeTaskSnap,
+              _auditAfter: afterTaskSnap
             }, state.dashData);
             if (req && typeof req.then === "function") {
               req.then((res) => {
@@ -19371,11 +19431,13 @@ end $$;`;
           };
           site.tasks.push(newTask);
           recalcSiteStats(site);
+          const newTaskAuditSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, newTask) : null;
           if (window.WSDataService) {
             const req = window.WSDataService.saveTask(false, {
               site: finalSiteName, task: newTask.taskName, date: dateParam, manager: managerCombined,
               status: ctx.status, shared: ctx.isShared, memo: finalMemo, partner: finalPartner,
-              category: ctx.scope, partnerPhone: finalPartnerPhone || ""
+              category: ctx.scope, partnerPhone: finalPartnerPhone || "",
+              _auditAfter: newTaskAuditSnap
             }, state.dashData);
             if (req && typeof req.then === "function") {
               req.then((res) => {
@@ -19539,6 +19601,7 @@ end $$;`;
             const { site, task } = found;
             const delSiteName = site.siteName || "";
             const delTaskName = task.taskName || "공정";
+            const delTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, task) : null;
             recordDeletedTaskGuard(site, task);
             const wasArchived = Boolean(task.isArchived || site.isArchived || task.sheetName === "완료현장");
             const effSheetName = task.sheetName || (site.scope === "as" ? "AS" : site.scope === "single" ? "단건" : wasArchived ? "완료현장" : "현장데이터");
@@ -19573,7 +19636,8 @@ end $$;`;
             if (window.WSDataService) {
               window.WSDataService.deleteTask({
                 row: deletedRowNum || "", site: site.siteName, task: task.taskName, id: delTaskId, taskId: delTaskId,
-                sheetName: effSheetName, isArchived: wasArchived, origDate, origMgr
+                sheetName: effSheetName, isArchived: wasArchived, origDate, origMgr,
+                _auditBefore: delTaskSnap
               }, state.dashData);
             }
             window.__wsDeletedPopupInfo = {
@@ -19610,7 +19674,14 @@ end $$;`;
           }
           showToast("🗑️ 현장이 삭제되었습니다.");
         } else if (type === "todo") {
+          const delTodo = (state.todoData && Array.isArray(state.todoData.list)) ? state.todoData.list.find((t) => t && t.id === targetId) : null;
           state.todoData.list = (state.todoData.list || []).filter((t) => t.id !== targetId);
+          if (typeof window.recordAuditLog === "function" && delTodo) {
+            const delSummary = (typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+              ? window.computeAuditDiff(null, delTodo, window.AUDIT_FIELD_SPECS.todo, delTodo.manager || "")
+              : (delTodo.manager || "");
+            window.recordAuditLog("To-Do", "삭제", delTodo.title || targetId, delSummary);
+          }
           if (window.WSDataService) window.WSDataService.deleteTodo(targetId, state.todoData);
           showToast("🗑️ To-Do가 삭제되었습니다.");
         }
@@ -19645,9 +19716,16 @@ end $$;`;
           state.dashData.siteInfoMap[siteName] = { address: "", doorPassword: "", officePhone: "", memo: "", driveUrl: "", consentDone: false, elevatorCoverDone: false, officeNoticeDone: false };
         }
         const info = state.dashData.siteInfoMap[siteName];
-        info[field] = !info[field];
+        const beforeVal = Boolean(info[field]);
+        info[field] = !beforeVal;
         if (window.WSDataService) {
-          window.WSDataService.toggleChecklist({ site: siteName, field, value: info[field] }, state.dashData);
+          window.WSDataService.toggleChecklist({
+            site: siteName,
+            field,
+            value: info[field],
+            _auditBefore: { [field]: beforeVal },
+            _auditAfter: { [field]: info[field] }
+          }, state.dashData);
         }
         markAllDirty();
         renderActiveViews();
@@ -19687,7 +19765,7 @@ end $$;`;
         const siteName = state._siteInfoName;
         if (!siteName) return;
         if (!state.dashData.siteInfoMap) state.dashData.siteInfoMap = {};
-        const prev = state.dashData.siteInfoMap[siteName] || {};
+        const prev = JSON.parse(JSON.stringify(state.dashData.siteInfoMap[siteName] || {}));
         const updated = Object.assign({}, prev, {
           address: document.getElementById("siAddr").value.trim(),
           doorPassword: document.getElementById("siPw").value.trim(),
@@ -19699,7 +19777,12 @@ end $$;`;
           officeNoticeDone: document.getElementById("siC3").checked
         });
         state.dashData.siteInfoMap[siteName] = updated;
-        if (window.WSDataService) window.WSDataService.saveSiteInfo(Object.assign({ site: siteName }, updated), state.dashData);
+        if (window.WSDataService) {
+          window.WSDataService.saveSiteInfo(
+            Object.assign({ site: siteName }, updated, { _auditBefore: prev, _auditAfter: updated }),
+            state.dashData
+          );
+        }
         window.closeModal("siteInfoModal");
         markAllDirty();
         renderActiveViews();
@@ -20356,6 +20439,7 @@ end $$;`;
         if (!state.dashData) state.dashData = {};
         if (!state.dashData.siteInfos) state.dashData.siteInfos = {};
         const prev = state.dashData.siteInfos[d.siteName] || {};
+        const prevShare = prev.clientShare || null;
         const clientShare = {
           token: d.token,
           enabled: !!d.enabled,
@@ -20365,6 +20449,17 @@ end $$;`;
         };
         state.dashData.siteInfos[d.siteName] = { ...prev, clientShare };
         const payload = buildClientSharePayload(d.siteName, clientShare);
+        if (!silent && typeof window.recordAuditLog === "function") {
+          const shareSpecs = [
+            { key: "enabled", label: "공유활성", type: "boolean", trueLabel: "ON", falseLabel: "OFF" },
+            { key: "showPayment", label: "수금표시", type: "boolean", trueLabel: "표시", falseLabel: "숨김" },
+            { key: "noticeText", label: "안내문구", emptyLabel: "(없음)", maxLen: 60 }
+          ];
+          const diffRes = typeof window.computeAuditDiff === "function"
+            ? window.computeAuditDiff(prevShare, clientShare, shareSpecs, clientShare.enabled ? "공유 ON" : "공유 OFF")
+            : (clientShare.enabled ? "공유 ON" : "공유 OFF");
+          window.recordAuditLog("현장", "고객 공유 설정", d.siteName, diffRes);
+        }
         if (window.WSDataService && typeof window.WSDataService.saveDashboardCache === "function") {
           window.WSDataService.saveDashboardCache(state.dashData);
         }
@@ -20807,6 +20902,7 @@ end $$;`;
         if (!state.dashData) state.dashData = {};
         if (!state.dashData.siteInfoMap) state.dashData.siteInfoMap = {};
         const baseInfo = state.dashData.siteInfoMap[d.siteName] || getSiteInfo(d.siteName) || {};
+        const prevPartnerShare = baseInfo.partnerShare || null;
         const partnerShare = {
           token: d.token,
           enabled: !!d.enabled,
@@ -20816,6 +20912,18 @@ end $$;`;
           siteKey: d.siteKey || "",
           updatedAt: new Date().toISOString()
         };
+        if (!silent && typeof window.recordAuditLog === "function") {
+          const pShareSpecs = [
+            { key: "enabled", label: "공유활성", type: "boolean", trueLabel: "ON", falseLabel: "OFF" },
+            { key: "scopeMode", label: "일정범위", getValue: (o) => (o && o.scopeMode === "task" ? "해당 공종만" : "전체 일정") },
+            { key: "targetTaskName", label: "대상공종", emptyLabel: "(전체)" },
+            { key: "noticeText", label: "지시사항", emptyLabel: "(없음)", maxLen: 60 }
+          ];
+          const diffRes = typeof window.computeAuditDiff === "function"
+            ? window.computeAuditDiff(prevPartnerShare, partnerShare, pShareSpecs, partnerShare.enabled ? "반장 공유 ON" : "반장 공유 OFF")
+            : (partnerShare.enabled ? "반장 공유 ON" : "반장 공유 OFF");
+          window.recordAuditLog("현장", "반장 공유 설정", d.siteName, diffRes);
+        }
         state.dashData.siteInfoMap[d.siteName] = Object.assign({
           address: "",
           doorPassword: "",
@@ -20930,6 +21038,7 @@ end $$;`;
         (site.tasks || []).forEach((t) => {
           const tid = t.id || t.taskId;
           if (!state.checkedTableTaskIds.has(tid)) return;
+          const beforeTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, t) : null;
           const origDate = t.dateDisplay || t.startDateStr || "";
           const origTask = t.taskName || "";
           const origMgr = t.manager || "";
@@ -20942,13 +21051,17 @@ end $$;`;
           } else if (field === "shared") {
             t.isShared = val;
           }
+          const afterTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, t) : null;
           cnt++;
           if (window.WSDataService) {
             window.WSDataService.saveTask(true, {
               row: t.row || "", site: site.siteName, task: t.taskName, status: t.status,
               shared: t.isShared, memo: t.memo || "", date: parseYmdFromTask(t), manager: t.manager || "",
               partner: t.partner || "", sheetName: t.sheetName || "현장데이터", id: tid, taskId: tid,
-              isArchived: wasArchived, origDate, origTask, origMgr, origMemo
+              isArchived: wasArchived, origDate, origTask, origMgr, origMemo,
+              _auditAction: field === "status" ? `일괄 ${val}` : "일괄 공유변경",
+              _auditBefore: beforeTaskSnap,
+              _auditAfter: afterTaskSnap
             }, state.dashData);
           }
         });
@@ -21071,13 +21184,22 @@ end $$;`;
         };
         if (!state.todoData) state.todoData = { list: [] };
         const isEdit = !!d.id;
+        let beforeTodoSnap = null;
         if (isEdit) {
           const idx = state.todoData.list.findIndex((x) => x.id === d.id);
-          if (idx > -1) state.todoData.list[idx] = payload;
+          if (idx > -1) {
+            beforeTodoSnap = JSON.parse(JSON.stringify(state.todoData.list[idx]));
+            state.todoData.list[idx] = payload;
+          }
         } else {
           state.todoData.list.unshift(payload);
         }
-        if (window.WSDataService) window.WSDataService.saveTodo(isEdit, payload, state.todoData);
+        if (window.WSDataService) {
+          window.WSDataService.saveTodo(isEdit, Object.assign({}, payload, {
+            _auditBefore: beforeTodoSnap,
+            _auditAfter: JSON.parse(JSON.stringify(payload))
+          }), state.todoData);
+        }
         window.closeModal("todoActionModal");
         markAllDirty();
         renderActiveViews();
@@ -21086,10 +21208,18 @@ end $$;`;
       window.toggleTodoItem = function (id) {
         const item = ((state.todoData && state.todoData.list) || []).find((t) => t.id === id);
         if (!item) return;
+        const beforeTodoSnap = JSON.parse(JSON.stringify(item));
         const willComplete = item.status !== "완료";
         item.status = willComplete ? "완료" : (item.isImportant ? "중요" : "미완료");
         item.completedAt = willComplete ? new Date().toISOString() : "";
-        if (window.WSDataService) window.WSDataService.toggleTodoStatus({ id: item.id, status: item.status, completedAt: item.completedAt, manager: item.manager || "", isImportant: !!item.isImportant }, state.todoData);
+        const afterTodoSnap = JSON.parse(JSON.stringify(item));
+        if (window.WSDataService) {
+          window.WSDataService.toggleTodoStatus({
+            id: item.id, status: item.status, completedAt: item.completedAt,
+            manager: item.manager || "", isImportant: !!item.isImportant,
+            _auditBefore: beforeTodoSnap, _auditAfter: afterTodoSnap
+          }, state.todoData);
+        }
         state.dirtyPcTabs.todo = true; state.dirtyPcTabs.home = true;
         state.dirtyMobileTabs.todo = true; state.dirtyMobileTabs.home = true;
         renderActiveViews();
@@ -21098,9 +21228,16 @@ end $$;`;
       window.toggleTodoImportant = function (id) {
         const item = ((state.todoData && state.todoData.list) || []).find((t) => t.id === id);
         if (!item) return;
+        const beforeTodoSnap = JSON.parse(JSON.stringify(item));
         item.isImportant = !item.isImportant;
         if (item.status !== "완료") item.status = item.isImportant ? "중요" : "미완료";
-        if (window.WSDataService) window.WSDataService.toggleTodoStatus({ id: item.id, status: item.status, manager: item.manager || "", isImportant: item.isImportant }, state.todoData);
+        const afterTodoSnap = JSON.parse(JSON.stringify(item));
+        if (window.WSDataService) {
+          window.WSDataService.toggleTodoStatus({
+            id: item.id, status: item.status, manager: item.manager || "", isImportant: item.isImportant,
+            _auditBefore: beforeTodoSnap, _auditAfter: afterTodoSnap
+          }, state.todoData);
+        }
         markAllDirty();
         renderActiveViews();
       };
@@ -21184,11 +21321,18 @@ end $$;`;
       window.quickUpdateTodoDue = function (id, dueMode) {
         const item = ((state.todoData && state.todoData.list) || []).find((t) => t.id === id);
         if (!item) return;
+        const beforeTodoSnap = JSON.parse(JSON.stringify(item));
         const todayYmd = getTodayYmd();
         if (dueMode === "today") item.dueDate = todayYmd.replace(/-/g, ".");
         else if (dueMode === "tomorrow") item.dueDate = addDaysYmd(todayYmd, 1).replace(/-/g, ".");
         else if (dueMode === "none") item.dueDate = "";
-        if (window.WSDataService) window.WSDataService.saveTodo(true, item, state.todoData);
+        const afterTodoSnap = JSON.parse(JSON.stringify(item));
+        if (window.WSDataService) {
+          window.WSDataService.saveTodo(true, Object.assign({}, item, {
+            _auditBefore: beforeTodoSnap,
+            _auditAfter: afterTodoSnap
+          }), state.todoData);
+        }
         state.dirtyPcTabs.todo = true;
         state.dirtyPcTabs.home = true;
         state.dirtyMobileTabs.todo = true;
@@ -21241,6 +21385,7 @@ end $$;`;
         const item = list.find(t => t.id === id);
         if (!item) return;
 
+        const beforeTodoSnap = JSON.parse(JSON.stringify(item));
         let changedDesc = "";
         const todayYmd = getTodayYmd();
 
@@ -21271,8 +21416,13 @@ end $$;`;
           changedDesc = "완료 처리";
         }
 
+        const afterTodoSnap = JSON.parse(JSON.stringify(item));
         if (window.WSDataService) {
-          window.WSDataService.saveTodo(false, item, state.todoData);
+          window.WSDataService.saveTodo(false, Object.assign({}, item, {
+            _auditAction: "수정",
+            _auditBefore: beforeTodoSnap,
+            _auditAfter: afterTodoSnap
+          }), state.todoData);
         }
 
         state.dirtyPcTabs.todo = true;
@@ -21286,8 +21436,15 @@ end $$;`;
       window.quickUpdateTodoManager = function (id, newManager) {
         const item = ((state.todoData && state.todoData.list) || []).find((t) => t.id === id);
         if (!item) return;
+        const beforeTodoSnap = JSON.parse(JSON.stringify(item));
         item.manager = (newManager || "").trim();
-        if (window.WSDataService) window.WSDataService.saveTodo(true, item, state.todoData);
+        const afterTodoSnap = JSON.parse(JSON.stringify(item));
+        if (window.WSDataService) {
+          window.WSDataService.saveTodo(true, Object.assign({}, item, {
+            _auditBefore: beforeTodoSnap,
+            _auditAfter: afterTodoSnap
+          }), state.todoData);
+        }
         state.dirtyPcTabs.todo = true;
         state.dirtyPcTabs.home = true;
         state.dirtyMobileTabs.todo = true;
@@ -21723,12 +21880,20 @@ end $$;`;
         // 1) Optimistic UI 즉시 반영 (0.01초 만에 모달 닫기 및 홈/캘린더/현장목록 즉시 반영)
         clearDeletedSiteGuardByName(siteName);
         const estSiteObj = getAllSites().find((s) => s.scope === "newSite" && (s.siteKey === curPromoteSiteKey || s.siteName === siteName));
+        const prevPromoteStatus = (estSiteObj && estSiteObj.estimateData && estSiteObj.estimateData.status) ? estSiteObj.estimateData.status : "";
         if (estSiteObj) {
           if (estSiteObj.estimateData) {
             estSiteObj.estimateData.status = "계약 완료";
           }
           estSiteObj.isArchived = true;
           estSiteObj.isAllCompleted = true;
+        }
+        if (typeof window.recordAuditLog === "function") {
+          const promoteChanges = prevPromoteStatus && prevPromoteStatus !== "계약 완료"
+            ? [{ key: "status", label: "상태", before: prevPromoteStatus, after: "계약 완료" }]
+            : [];
+          const promoteDetail = `${promoteChanges.length ? `상태: ${prevPromoteStatus} → 계약 완료 · ` : ""}${scope} · 공정 ${computedTasks.length}건 생성`;
+          window.recordAuditLog("신규견적", "현장 승격", siteName, promoteChanges.length ? { detail: promoteDetail, changes: promoteChanges } : promoteDetail);
         }
         const todayYmd = getTodayYmd();
         const qt = (ed.quoteType === "single" || ed.quoteType === "as") ? ed.quoteType : "site";
@@ -22432,6 +22597,12 @@ end $$;`;
           ed.asBillingType = "paid";
         }
         state.quoteCategory = qt;
+        const beforeEstSnap = (ctx.isEdit && ctx.siteKey)
+          ? (() => {
+              const ex = getAllSites().find(x => x && x.siteKey === ctx.siteKey);
+              return (ex && ex.estimateData) ? JSON.parse(JSON.stringify(ex.estimateData)) : null;
+            })()
+          : null;
         if (ctx.isEdit) {
           const s = getAllSites().find((x) => x.siteKey === ctx.siteKey);
           if (s) {
@@ -22450,12 +22621,6 @@ end $$;`;
           });
           state.selectedQuoteKey = newKey;
         }
-        const beforeEstSnap = (ctx.isEdit && ctx.siteKey)
-          ? (() => {
-              const ex = getAllSites().find(x => x && x.siteKey === ctx.siteKey);
-              return (ex && ex.estimateData) ? JSON.parse(JSON.stringify(ex.estimateData)) : null;
-            })()
-          : null;
         if (window.WSDataService) {
           const estReq = window.WSDataService.saveEstimate(ctx.isEdit, ed, state.dashData);
           if (!ctx.isEdit && estReq && typeof estReq.then === "function") {
@@ -22468,7 +22633,11 @@ end $$;`;
           }
         }
         if (typeof window.recordAuditLog === "function") {
-          window.recordAuditLog("신규견적", ctx.isEdit ? "수정" : "등록", siteName, `${ed.status || ""}`, beforeEstSnap ? { type: "estimate", siteKey: ctx.siteKey, beforeData: beforeEstSnap } : null);
+          const estFallback = `상태: ${ed.status || ""} · 담당자: ${ed.manager || "미지정"}`;
+          const estDiff = (typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+            ? window.computeAuditDiff(ctx.isEdit ? beforeEstSnap : null, ed, window.AUDIT_FIELD_SPECS.estimate, ctx.isEdit ? estFallback : "")
+            : (ed.status || "");
+          window.recordAuditLog("신규견적", ctx.isEdit ? "수정" : "등록", siteName, estDiff, beforeEstSnap ? { type: "estimate", siteKey: ctx.siteKey, beforeData: beforeEstSnap } : null);
         }
         window.closeModal("estimateEditModal");
         markAllDirty();
@@ -22496,7 +22665,10 @@ end $$;`;
           window.WSDataService.saveEstimate(true, ed, state.dashData);
         }
         if (typeof window.recordAuditLog === "function") {
-          window.recordAuditLog("신규견적", "계약 완료", s.siteName, `${prevStatus} → 계약 완료`, { type: "estimate", siteKey: s.siteKey, beforeData: beforeEst });
+          const doneDiff = (typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+            ? window.computeAuditDiff(beforeEst, ed, window.AUDIT_FIELD_SPECS.estimate, `상태: ${prevStatus} → 계약 완료`)
+            : `${prevStatus} → 계약 완료`;
+          window.recordAuditLog("신규견적", "계약 완료", s.siteName, doneDiff, { type: "estimate", siteKey: s.siteKey, beforeData: beforeEst });
         }
         markAllDirty();
         renderActiveViews();
@@ -22528,7 +22700,10 @@ end $$;`;
           window.WSDataService.saveEstimate(true, ed, state.dashData);
         }
         if (typeof window.recordAuditLog === "function") {
-          window.recordAuditLog("신규견적", "신규 복원", s.siteName, `계약 완료 → ${targetStatus}`, { type: "estimate", siteKey: s.siteKey, beforeData: beforeEst });
+          const revDiff = (typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+            ? window.computeAuditDiff(beforeEst, ed, window.AUDIT_FIELD_SPECS.estimate, `상태: 계약 완료 → ${targetStatus}`)
+            : `계약 완료 → ${targetStatus}`;
+          window.recordAuditLog("신규견적", "신규 복원", s.siteName, revDiff, { type: "estimate", siteKey: s.siteKey, beforeData: beforeEst });
         }
         markAllDirty();
         renderActiveViews();
@@ -22642,9 +22817,609 @@ end $$;`;
         ["공정", "현장·공정"],
         ["현장", "현장"],
         ["재무", "재무·원장"],
-        ["To-Do", "To-Do"]
+        ["To-Do", "To-Do"],
+        ["시스템", "설정·시스템"]
       ];
       let _auditRefreshPromise = null;
+
+      function normalizeAuditDateStr(val) {
+        const s = String(val === null || val === undefined ? "" : val).trim();
+        if (!s) return "";
+        const m = s.match(/^(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+        if (m) {
+          return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+        }
+        return s;
+      }
+
+      function normalizeAuditMonthStr(val) {
+        if (typeof normalizeMonthStr === "function") return normalizeMonthStr(val);
+        const s = String(val === null || val === undefined ? "" : val).trim();
+        if (!s) return "";
+        const m = s.match(/^(\d{4})[.\-\/](\d{1,2})/);
+        return m ? `${m[1]}-${m[2].padStart(2, "0")}` : s;
+      }
+
+      function parseAuditMoney(val) {
+        if (val === null || val === undefined || val === "") return 0;
+        if (typeof val === "number") return Number.isFinite(val) ? val : 0;
+        const n = Number(String(val).replace(/,/g, "").replace(/원$/g, "").trim());
+        return Number.isFinite(n) ? n : 0;
+      }
+
+      function formatAuditMoney(val) {
+        return parseAuditMoney(val).toLocaleString("ko-KR") + "원";
+      }
+
+      function formatTaskAuditDateValue(obj) {
+        if (!obj || typeof obj !== "object") return "";
+        let start = normalizeAuditDateStr(obj.startDate || obj.startDateStr || "");
+        let end = normalizeAuditDateStr(obj.endDate || obj.endDateStr || "");
+        const rawDate = String(obj.date || obj.dateDisplay || "").trim();
+        if (!start && rawDate) {
+          const mAll = rawDate.match(/\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2}/g);
+          if (mAll && mAll.length > 0) {
+            start = normalizeAuditDateStr(mAll[0]);
+            if (mAll.length > 1) end = normalizeAuditDateStr(mAll[1]);
+          } else {
+            start = rawDate;
+          }
+        }
+        if (!end) end = start;
+        let timeStr = String(obj.timeStr || obj.time || "").trim();
+        if (!timeStr && obj.startTime) {
+          timeStr = obj.endTime && obj.endTime !== obj.startTime
+            ? `${obj.startTime} ~ ${obj.endTime}`
+            : String(obj.startTime).trim();
+        }
+        if (!timeStr && rawDate) {
+          const tMatches = rawDate.match(/\b\d{1,2}:\d{2}\b/g);
+          if (tMatches && tMatches.length > 0) {
+            timeStr = tMatches.length > 1 ? `${tMatches[0]} ~ ${tMatches[1]}` : tMatches[0];
+          }
+        }
+        const base = (start && end && end !== start) ? `${start} ~ ${end}` : (start || "");
+        if (!base) return timeStr || "";
+        return timeStr ? `${base} (${timeStr})` : base;
+      }
+
+      function snapshotTaskForAudit(site, task) {
+        if (!task || typeof task !== "object") return null;
+        const start = task.startDateStr || (typeof parseYmdFromTask === "function" ? parseYmdFromTask(task) : "") || "";
+        const end = task.endDateStr || (typeof parseEndYmdFromTask === "function" ? parseEndYmdFromTask(task, start) : start) || start;
+        const mgr = (task.manager !== undefined && task.manager !== "")
+          ? String(task.manager)
+          : [task.manager1, task.manager2].filter(Boolean).join(", ");
+        return {
+          siteName: (site && site.siteName) || task.siteName || task.site || "",
+          taskName: task.taskName || task.task || "",
+          startDate: start,
+          endDate: end,
+          timeStr: task.timeStr || task.time || "",
+          status: task.status || "예정",
+          partner: task.partner || "",
+          manager: mgr,
+          isShared: task.isShared !== undefined ? Boolean(task.isShared) : Boolean(task.shared),
+          memo: task.memo || "",
+          asMeta: task.asMeta ? JSON.parse(JSON.stringify(task.asMeta)) : null
+        };
+      }
+
+      function truncateAuditSingleText(str, maxLen) {
+        if (!maxLen || str.length <= maxLen) return str;
+        return str.slice(0, Math.max(1, maxLen - 1)) + "…";
+      }
+
+      function formatAuditTextPair(beforeRaw, afterRaw, emptyLabel, maxLen) {
+        const bClean = String(beforeRaw || "").replace(/\s*\r?\n+\s*/g, " / ").trim();
+        const aClean = String(afterRaw || "").replace(/\s*\r?\n+\s*/g, " / ").trim();
+        if (!bClean && !aClean) return [emptyLabel, emptyLabel];
+        if (!maxLen || (bClean.length <= maxLen && aClean.length <= maxLen)) {
+          return [bClean || emptyLabel, aClean || emptyLabel];
+        }
+        if (bClean && aClean.startsWith(bClean)) {
+          const added = aClean.slice(bClean.length).replace(/^\s*\/\s*/, "").trim();
+          const bDisp = truncateAuditSingleText(bClean, Math.min(35, maxLen));
+          const aDisp = added ? `… + ${truncateAuditSingleText(added, maxLen)}` : truncateAuditSingleText(aClean, maxLen);
+          return [bDisp, aDisp];
+        }
+        return [
+          bClean ? truncateAuditSingleText(bClean, maxLen) : emptyLabel,
+          aClean ? truncateAuditSingleText(aClean, maxLen) : emptyLabel
+        ];
+      }
+
+      const AUDIT_FIELD_SPECS = {
+        task: [
+          { key: "taskName", label: "공종", emptyLabel: "(없음)" },
+          {
+            key: "date",
+            label: "날짜",
+            emptyLabel: "(없음)",
+            getValue: (obj) => formatTaskAuditDateValue(obj)
+          },
+          { key: "status", label: "상태", emptyLabel: "(없음)" },
+          { key: "partner", label: "협력업체", emptyLabel: "미지정" },
+          {
+            key: "manager",
+            label: "담당자",
+            emptyLabel: "미지정",
+            getValue: (obj) => {
+              if (!obj) return "";
+              const m = obj.manager !== undefined ? obj.manager : [obj.manager1, obj.manager2].filter(Boolean).join(", ");
+              return String(m || "").split(",").map((x) => x.trim()).filter(Boolean).join(", ");
+            }
+          },
+          {
+            key: "isShared",
+            label: "공유",
+            type: "boolean",
+            trueLabel: "공유(ON)",
+            falseLabel: "미공유(OFF)",
+            getValue: (obj) => (obj ? (obj.isShared !== undefined ? Boolean(obj.isShared) : Boolean(obj.shared)) : false)
+          },
+          { key: "memo", label: "메모", emptyLabel: "(없음)", maxLen: 80 },
+          {
+            key: "asSpace",
+            label: "AS공간",
+            emptyLabel: "(없음)",
+            getValue: (obj) => (obj && obj.asMeta ? obj.asMeta.space || "" : "")
+          },
+          {
+            key: "asSymptom",
+            label: "AS증상",
+            emptyLabel: "(없음)",
+            maxLen: 60,
+            getValue: (obj) => (obj && obj.asMeta ? obj.asMeta.symptom || "" : "")
+          },
+          {
+            key: "asChargeAmount",
+            label: "유상청구액",
+            type: "money",
+            getValue: (obj) => (obj && obj.asMeta ? obj.asMeta.chargeAmount || 0 : 0)
+          },
+          {
+            key: "asCostAmount",
+            label: "처리비용",
+            type: "money",
+            getValue: (obj) => (obj && obj.asMeta ? obj.asMeta.costAmount || 0 : 0)
+          }
+        ],
+        collection: [
+          { key: "siteName", label: "현장명", emptyLabel: "(없음)" },
+          { key: "status", label: "상태", emptyLabel: "(없음)" },
+          { key: "category", label: "구분", emptyLabel: "(없음)" },
+          { key: "manager", label: "담당자", emptyLabel: "미지정" },
+          { key: "clientName", label: "계약자", emptyLabel: "미지정" },
+          { key: "period", label: "공사기간", emptyLabel: "(없음)" },
+          {
+            key: "vatMode",
+            label: "부가세",
+            getValue: (obj) => (obj && obj.vatMode === "excl" ? "면세/별도" : "부가세 포함")
+          },
+          { key: "contractAmount", label: "계약금액", type: "money" },
+          {
+            key: "changeAmount",
+            label: "추가공사금액",
+            type: "money",
+            getValue: (obj) => {
+              if (!obj) return 0;
+              if (obj.changeAmount !== undefined && obj.changeAmount !== null && obj.changeAmount !== "") {
+                return parseAuditMoney(obj.changeAmount);
+              }
+              return typeof parseExtraAmountFromNote === "function" ? parseExtraAmountFromNote(obj.note) : 0;
+            }
+          },
+          { key: "changeDesc", label: "증감사유", emptyLabel: "(없음)" },
+          { key: "downPayment", label: "계약금", type: "money" },
+          { key: "startPayment", label: "착수금", type: "money" },
+          { key: "midPayment1", label: "중도금1", type: "money" },
+          { key: "midPayment2", label: "중도금2", type: "money" },
+          { key: "midPayment3", label: "중도금3", type: "money" },
+          { key: "finalPayment", label: "잔금", type: "money" },
+          { key: "taxInvoice", label: "증빙구분", emptyLabel: "미발행" },
+          {
+            key: "note",
+            label: "비고",
+            emptyLabel: "(없음)",
+            maxLen: 80,
+            getValue: (obj) => {
+              if (!obj) return "";
+              const raw = obj.note || "";
+              return typeof stripExtraAmountFromNote === "function" ? stripExtraAmountFromNote(raw) : raw;
+            }
+          }
+        ],
+        expense: [
+          { key: "settleMonth", label: "정산월", type: "month", emptyLabel: "(없음)" },
+          { key: "item", label: "항목", emptyLabel: "(없음)" },
+          { key: "category", label: "구분", emptyLabel: "(없음)" },
+          { key: "vendor", label: "업체명", emptyLabel: "미지정" },
+          { key: "siteName", label: "연결현장명", emptyLabel: "공통" },
+          {
+            key: "category2",
+            label: "계좌번호",
+            emptyLabel: "(없음)",
+            getValue: (obj) => (obj ? (obj.category2 || obj.accountNumber || "") : "")
+          },
+          { key: "claimAmount", label: "청구금액", type: "money" },
+          { key: "paidAmount", label: "지급금액", type: "money" },
+          { key: "payDate", label: "지급일", type: "date", emptyLabel: "(없음)" },
+          {
+            key: "taxProof",
+            label: "증빙구분",
+            emptyLabel: "미선택",
+            getValue: (obj) => {
+              if (!obj) return "";
+              if (obj.taxProof) return String(obj.taxProof).trim();
+              return typeof parseExpenseTaxProof === "function" ? parseExpenseTaxProof(obj.note) : "";
+            }
+          },
+          {
+            key: "note",
+            label: "비고",
+            emptyLabel: "(없음)",
+            maxLen: 80,
+            getValue: (obj) => {
+              if (!obj) return "";
+              const raw = obj.note || "";
+              return typeof stripExpenseTaxProof === "function" ? stripExpenseTaxProof(raw) : raw;
+            }
+          }
+        ],
+        fixedMaster: [
+          {
+            key: "active",
+            label: "사용여부",
+            type: "boolean",
+            trueLabel: "사용(Y)",
+            falseLabel: "미사용(N)",
+            getValue: (obj) => (obj ? String(obj.active || "Y").toUpperCase() !== "N" : true)
+          },
+          { key: "item", label: "항목", emptyLabel: "(없음)" },
+          { key: "category", label: "구분", emptyLabel: "(없음)" },
+          { key: "vendor", label: "업체명", emptyLabel: "미지정" },
+          { key: "payDay", label: "지급일", emptyLabel: "(없음)" },
+          {
+            key: "accountNumber",
+            label: "계좌번호",
+            emptyLabel: "(없음)",
+            getValue: (obj) => (obj ? (obj.accountNumber || obj.category2 || "") : "")
+          },
+          { key: "baseAmount", label: "월고정금액", type: "money" },
+          { key: "note", label: "비고", emptyLabel: "(없음)", maxLen: 80 }
+        ],
+        estimate: [
+          { key: "siteName", label: "현장명", emptyLabel: "(없음)" },
+          { key: "status", label: "상태", emptyLabel: "(없음)" },
+          { key: "priority", label: "우선순위", emptyLabel: "(없음)" },
+          { key: "scope", label: "공사범위", emptyLabel: "(없음)" },
+          { key: "source", label: "유입경로", emptyLabel: "(없음)" },
+          { key: "manager", label: "담당자", emptyLabel: "미지정" },
+          { key: "clientName", label: "고객명", emptyLabel: "미지정" },
+          { key: "clientPhone", label: "연락처", emptyLabel: "(없음)" },
+          { key: "expectedAmount", label: "예상금액", type: "money" },
+          { key: "contractAmount", label: "견적·계약금액", type: "money" },
+          { key: "costAmount", label: "예상원가", type: "money" },
+          { key: "inquiryDate", label: "문의일", type: "date", emptyLabel: "(없음)" },
+          { key: "consultDate", label: "상담일", type: "date", emptyLabel: "(없음)" },
+          { key: "visitDate", label: "방문일", type: "date", emptyLabel: "(없음)" },
+          { key: "estimateSendDate", label: "견적전달일", type: "date", emptyLabel: "(없음)" },
+          { key: "expectedDate", label: "예정일", type: "date", emptyLabel: "(없음)" },
+          { key: "taskName", label: "공종", emptyLabel: "(없음)" },
+          { key: "partner", label: "협력업체", emptyLabel: "미지정" },
+          { key: "address", label: "현장주소", emptyLabel: "(없음)" },
+          { key: "nextAction", label: "다음할일", emptyLabel: "(없음)" },
+          { key: "failReason", label: "보류·실패사유", emptyLabel: "(없음)" },
+          { key: "memo", label: "메모", emptyLabel: "(없음)", maxLen: 80 }
+        ],
+        todo: [
+          { key: "title", label: "제목", emptyLabel: "(없음)" },
+          { key: "status", label: "상태", emptyLabel: "(없음)" },
+          {
+            key: "isImportant",
+            label: "중요표시",
+            type: "boolean",
+            trueLabel: "중요",
+            falseLabel: "일반",
+            getValue: (obj) => Boolean(obj && obj.isImportant)
+          },
+          { key: "manager", label: "담당자", emptyLabel: "미지정" },
+          { key: "dueDate", label: "마감일", type: "date", emptyLabel: "(없음)" },
+          { key: "siteName", label: "현장명", emptyLabel: "(없음)" },
+          { key: "tag", label: "분류", emptyLabel: "(없음)" },
+          { key: "detail", label: "메모", emptyLabel: "(없음)", maxLen: 80 }
+        ],
+        siteInfo: [
+          { key: "address", label: "현장주소", emptyLabel: "(없음)" },
+          { key: "doorPassword", label: "도어락 비번", emptyLabel: "(없음)" },
+          { key: "officePhone", label: "관리사무소", emptyLabel: "(없음)" },
+          { key: "driveUrl", label: "드라이브URL", emptyLabel: "(없음)", maxLen: 60 },
+          { key: "memo", label: "특이사항", emptyLabel: "(없음)", maxLen: 80 },
+          { key: "consentDone", label: "입주민 동의서", type: "boolean", trueLabel: "완료", falseLabel: "미완료" },
+          { key: "elevatorCoverDone", label: "승강기 보양", type: "boolean", trueLabel: "완료", falseLabel: "미완료" },
+          { key: "officeNoticeDone", label: "관리실 신고", type: "boolean", trueLabel: "완료", falseLabel: "미완료" }
+        ],
+        partner: [
+          { key: "name", label: "업체명", emptyLabel: "(없음)" },
+          { key: "biz", label: "대표공종", emptyLabel: "(없음)" },
+          { key: "category", label: "대구분", emptyLabel: "(없음)" },
+          { key: "priority", label: "우선순위", emptyLabel: "미지정" },
+          { key: "manager", label: "담당자", emptyLabel: "미지정" },
+          { key: "phone", label: "연락처", emptyLabel: "(없음)" },
+          { key: "status", label: "관리상태", emptyLabel: "(없음)" },
+          {
+            key: "bankAccount",
+            label: "계좌번호",
+            emptyLabel: "(없음)",
+            getValue: (obj) => (obj ? (obj.bankAccount || obj.account || "") : "")
+          },
+          { key: "orderMethod", label: "발주방식", emptyLabel: "(없음)" },
+          { key: "feature", label: "주력분야", emptyLabel: "(없음)" },
+          {
+            key: "note",
+            label: "비고",
+            emptyLabel: "(없음)",
+            maxLen: 80,
+            getValue: (obj) => (obj ? (obj.note || obj.memo || "") : "")
+          }
+        ],
+        member: [
+          { key: "name", label: "이름", emptyLabel: "(없음)" },
+          { key: "role", label: "직급", emptyLabel: "(없음)" },
+          { key: "phone", label: "연락처", emptyLabel: "(없음)" },
+          {
+            key: "receive",
+            label: "알림수신",
+            type: "boolean",
+            trueLabel: "수신(ON)",
+            falseLabel: "미수신(OFF)",
+            getValue: (obj) => (obj ? (obj.receive !== false && obj.notifyEnabled !== false) : true)
+          },
+          { key: "note", label: "비고", emptyLabel: "(없음)", maxLen: 80 }
+        ]
+      };
+
+      function resolveSpecEmptyLabel(spec) {
+        if (spec && spec.emptyLabel !== undefined) return String(spec.emptyLabel);
+        const k = spec && spec.key ? String(spec.key) : "";
+        if (["partner", "manager", "manager1", "manager2", "clientName", "vendor"].includes(k)) {
+          return "미지정";
+        }
+        return "(없음)";
+      }
+
+      function computeAuditDiff(beforeObj, afterObj, fieldSpecs, fallbackText) {
+        const fb = String(fallbackText || "").trim();
+        const specs = Array.isArray(fieldSpecs) ? fieldSpecs : [];
+        if (!beforeObj || typeof beforeObj !== "object" || !afterObj || typeof afterObj !== "object") {
+          if (fb) return { detail: fb, changes: [], hasChanges: false };
+          if (afterObj && typeof afterObj === "object" && specs.length > 0) {
+            const summaryParts = [];
+            specs.forEach((spec) => {
+              if (!spec || (!spec.key && typeof spec.getValue !== "function")) return;
+              const raw = typeof spec.getValue === "function" ? spec.getValue(afterObj) : afterObj[spec.key];
+              const type = spec.type || "text";
+              if (type === "money" || type === "currency" || type === "krw") {
+                const n = parseAuditMoney(raw);
+                if (n !== 0) summaryParts.push(`${spec.label || spec.key}: ${formatAuditMoney(n)}`);
+              } else if (type === "boolean" || type === "bool") {
+                if (Boolean(raw)) summaryParts.push(`${spec.label || spec.key}: ${spec.trueLabel || "ON"}`);
+              } else {
+                const v = type === "date" ? normalizeAuditDateStr(raw)
+                  : (type === "month" ? normalizeAuditMonthStr(raw) : String(raw === null || raw === undefined ? "" : raw).trim());
+                if (v) summaryParts.push(`${spec.label || spec.key}: ${truncateAuditSingleText(v.replace(/\s*\r?\n+\s*/g, " / "), spec.maxLen || 50)}`);
+              }
+            });
+            return { detail: summaryParts.slice(0, 5).join(" · "), changes: [], hasChanges: false };
+          }
+          return { detail: "", changes: [], hasChanges: false };
+        }
+
+        const changes = [];
+        specs.forEach((spec) => {
+          if (!spec || (!spec.key && typeof spec.getValue !== "function")) return;
+          const label = spec.label || spec.key;
+          const emptyLabel = resolveSpecEmptyLabel(spec);
+          const type = spec.type || "text";
+          const rawB = typeof spec.getValue === "function" ? spec.getValue(beforeObj) : beforeObj[spec.key];
+          const rawA = typeof spec.getValue === "function" ? spec.getValue(afterObj) : afterObj[spec.key];
+
+          if (type === "money" || type === "currency" || type === "krw") {
+            const bNum = parseAuditMoney(rawB);
+            const aNum = parseAuditMoney(rawA);
+            if (bNum !== aNum) {
+              changes.push({
+                key: spec.key || label,
+                label,
+                before: formatAuditMoney(bNum),
+                after: formatAuditMoney(aNum)
+              });
+            }
+          } else if (type === "boolean" || type === "bool") {
+            const bBool = Boolean(rawB);
+            const aBool = Boolean(rawA);
+            if (bBool !== aBool) {
+              const tLbl = spec.trueLabel || "ON";
+              const fLbl = spec.falseLabel || "OFF";
+              changes.push({
+                key: spec.key || label,
+                label,
+                before: bBool ? tLbl : fLbl,
+                after: aBool ? tLbl : fLbl
+              });
+            }
+          } else if (type === "date") {
+            const bDate = normalizeAuditDateStr(rawB);
+            const aDate = normalizeAuditDateStr(rawA);
+            if (bDate !== aDate) {
+              changes.push({
+                key: spec.key || label,
+                label,
+                before: bDate || emptyLabel,
+                after: aDate || emptyLabel
+              });
+            }
+          } else if (type === "month") {
+            const bMonth = normalizeAuditMonthStr(rawB);
+            const aMonth = normalizeAuditMonthStr(rawA);
+            if (bMonth !== aMonth) {
+              changes.push({
+                key: spec.key || label,
+                label,
+                before: bMonth || emptyLabel,
+                after: aMonth || emptyLabel
+              });
+            }
+          } else {
+            const bStr = String(rawB === null || rawB === undefined ? "" : rawB).replace(/\r\n/g, "\n").trim();
+            const aStr = String(rawA === null || rawA === undefined ? "" : rawA).replace(/\r\n/g, "\n").trim();
+            if (bStr !== aStr) {
+              const [bDisp, aDisp] = formatAuditTextPair(bStr, aStr, emptyLabel, spec.maxLen || 0);
+              changes.push({
+                key: spec.key || label,
+                label,
+                before: bDisp,
+                after: aDisp
+              });
+            }
+          }
+        });
+
+        if (changes.length === 0) {
+          return { detail: fb || "변경된 항목 없음", changes: [], hasChanges: false };
+        }
+        const detail = changes.map((c) => `${c.label}: ${c.before} → ${c.after}`).join(" · ");
+        return { detail, changes, hasChanges: true };
+      }
+
+      function buildAuditDiffDetail(beforeObj, afterObj, fieldSpecs, fallbackText) {
+        return computeAuditDiff(beforeObj, afterObj, fieldSpecs, fallbackText).detail;
+      }
+
+      function computeSettingsAuditDiff(beforeSettings, afterSettings) {
+        const b = (beforeSettings && typeof beforeSettings === "object") ? beforeSettings : { partners: [], tasks: [], members: [] };
+        const a = (afterSettings && typeof afterSettings === "object") ? afterSettings : { partners: [], tasks: [], members: [] };
+        const changes = [];
+
+        const diffCollection = (bList, aList, getId, groupLabel, itemSpecs) => {
+          const prevArr = Array.isArray(bList) ? bList.filter(Boolean) : [];
+          const nextArr = Array.isArray(aList) ? aList.filter(Boolean) : [];
+          const prevMap = new Map();
+          const nextMap = new Map();
+          prevArr.forEach((item) => {
+            const id = String(getId(item) || "").trim();
+            if (id && !prevMap.has(id)) prevMap.set(id, item);
+          });
+          nextArr.forEach((item) => {
+            const id = String(getId(item) || "").trim();
+            if (id && !nextMap.has(id)) nextMap.set(id, item);
+          });
+
+          const prevOnly = [];
+          const nextOnly = [];
+          prevArr.forEach((item) => {
+            const id = String(getId(item) || "").trim();
+            if (!id) return;
+            if (nextMap.has(id)) {
+              if (itemSpecs) {
+                const sub = computeAuditDiff(item, nextMap.get(id), itemSpecs);
+                if (sub.hasChanges) {
+                  sub.changes.forEach((c) => {
+                    changes.push({
+                      key: `${groupLabel}_${id}_${c.key}`,
+                      label: `[${groupLabel}·${id}] ${c.label}`,
+                      before: c.before,
+                      after: c.after
+                    });
+                  });
+                }
+              }
+            } else {
+              prevOnly.push(item);
+            }
+          });
+          nextArr.forEach((item) => {
+            const id = String(getId(item) || "").trim();
+            if (id && !prevMap.has(id)) nextOnly.push(item);
+          });
+
+          if (itemSpecs && prevOnly.length === 1 && nextOnly.length === 1) {
+            const sub = computeAuditDiff(prevOnly[0], nextOnly[0], itemSpecs);
+            const idLabel = String(getId(nextOnly[0]) || getId(prevOnly[0]) || "").trim();
+            if (sub.hasChanges) {
+              sub.changes.forEach((c) => {
+                changes.push({
+                  key: `${groupLabel}_${idLabel}_${c.key}`,
+                  label: `[${groupLabel}·${idLabel}] ${c.label}`,
+                  before: c.before,
+                  after: c.after
+                });
+              });
+            }
+          } else {
+            prevOnly.forEach((item) => {
+              changes.push({
+                key: `${groupLabel}_del`,
+                label: `${groupLabel} 삭제`,
+                before: String(getId(item) || ""),
+                after: "(삭제)"
+              });
+            });
+            nextOnly.forEach((item) => {
+              changes.push({
+                key: `${groupLabel}_add`,
+                label: `${groupLabel} 추가`,
+                before: "(없음)",
+                after: String(getId(item) || "")
+              });
+            });
+          }
+
+          if (changes.length === 0 && prevOnly.length === 0 && nextOnly.length === 0 && prevArr.length === nextArr.length) {
+            const bOrder = prevArr.map((x) => String(getId(x) || "")).join("||");
+            const aOrder = nextArr.map((x) => String(getId(x) || "")).join("||");
+            if (bOrder !== aOrder) {
+              changes.push({
+                key: `${groupLabel}_order`,
+                label: `${groupLabel} 순서`,
+                before: "기존 순서",
+                after: "순서 변경"
+              });
+            }
+          }
+        };
+
+        diffCollection(b.partners, a.partners, (p) => (p && (p.name || p.fullName)), "거래처", AUDIT_FIELD_SPECS.partner);
+        diffCollection(
+          b.tasks,
+          a.tasks,
+          (t) => (t && (t.name || t.taskName)),
+          "공종",
+          [
+            { key: "name", label: "공종명", emptyLabel: "(없음)", getValue: (o) => (o ? (o.name || o.taskName || "") : "") },
+            { key: "category", label: "구분", emptyLabel: "기타" },
+            { key: "note", label: "비고", emptyLabel: "(없음)", maxLen: 60 }
+          ]
+        );
+        diffCollection(b.members, a.members, (m) => (m && m.name), "구성원", AUDIT_FIELD_SPECS.member);
+
+        if (changes.length === 0) {
+          const pCnt = Array.isArray(a.partners) ? a.partners.length : 0;
+          const tCnt = Array.isArray(a.tasks) ? a.tasks.length : 0;
+          const mCnt = Array.isArray(a.members) ? a.members.length : 0;
+          return {
+            detail: `변경된 항목 없음 (거래처 ${pCnt} · 공종 ${tCnt} · 구성원 ${mCnt})`,
+            changes: [],
+            hasChanges: false
+          };
+        }
+        return {
+          detail: changes.map((c) => `${c.label}: ${c.before} → ${c.after}`).join(" · "),
+          changes,
+          hasChanges: true
+        };
+      }
 
       function normalizeAuditLogList(raw) {
         if (!Array.isArray(raw)) return [];
@@ -22721,6 +23496,7 @@ end $$;`;
         if (d === "현장") return { key: "현장", label: "현장", bg: "#f0fdfa", fg: "#0f766e", border: "#99f6e4" };
         if (d === "재무" || d === "재무·원장") return { key: "재무", label: "재무·원장", bg: "#fffbeb", fg: "#b45309", border: "#fde68a" };
         if (d === "To-Do") return { key: "To-Do", label: "To-Do", bg: "#ecfdf5", fg: "#047857", border: "#a7f3d0" };
+        if (d === "시스템" || d === "설정" || d === "설정·시스템") return { key: "시스템", label: "설정·시스템", bg: "#f1f5f9", fg: "#475569", border: "#cbd5e1" };
         return { key: d || "시스템", label: d || "시스템", bg: "#f1f5f9", fg: "#475569", border: "#cbd5e1" };
       }
 
@@ -22728,7 +23504,7 @@ end $$;`;
         const a = String(action || "수정").trim();
         if (a.includes("삭제")) return { bg: "#fef2f2", fg: "#dc2626", border: "#fecaca" };
         if (a.includes("복원")) return { bg: "#f5f3ff", fg: "#6d28d9", border: "#ddd6fe" };
-        if (a.includes("완료")) return { bg: "#ecfdf5", fg: "#059669", border: "#a7f3d0" };
+        if (a.includes("완료") || a.includes("전액지급")) return { bg: "#ecfdf5", fg: "#059669", border: "#a7f3d0" };
         if (a.includes("등록") || a.includes("추가") || a.includes("불러오기")) return { bg: "#f0fdf4", fg: "#15803d", border: "#bbf7d0" };
         return { bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe" };
       }
@@ -22769,6 +23545,7 @@ end $$;`;
         const d = String(logDomain || "").trim();
         if (filterDomain === "공정") return d === "공정" || d === "현장·공정";
         if (filterDomain === "재무") return d === "재무" || d === "재무·원장";
+        if (filterDomain === "시스템") return !d || d === "시스템" || d === "설정" || d === "설정·시스템";
         return d === filterDomain;
       }
 
@@ -22781,8 +23558,12 @@ end $$;`;
           if (!matchesAuditDomain(l.domain, dom)) return false;
           if (qWords.length > 0) {
             const dm = getAuditDomainMeta(l.domain);
-            const hay = [l.target, l.detail, l.user, l.action, l.domain, dm.label].filter(Boolean).join(" ").toLowerCase();
-            if (!qWords.every((w) => hay.includes(w))) return false;
+            const changesText = Array.isArray(l.changes)
+              ? l.changes.map((c) => (c ? [c.label, c.before, c.after].filter(Boolean).join(" ") : "")).join(" ")
+              : "";
+            const hay = [l.target, l.detail, changesText, l.user, l.action, l.domain, dm.label].filter(Boolean).join(" ").toLowerCase();
+            const hayCompact = hay.replace(/(\d),(?=\d{3})/g, "$1");
+            if (!qWords.every((w) => hay.includes(w) || hayCompact.includes(w.replace(/,/g, "")))) return false;
           }
           return true;
         });
@@ -22827,6 +23608,51 @@ end $$;`;
           </div>`;
       }
 
+      function renderAuditDiffChipHtml(label, beforeVal, afterVal) {
+        return `
+          <div style="display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:3px 8px;font-size:11.5px;line-height:1.4;max-width:100%;">
+            ${label ? `<span style="font-weight:800;color:#334155;">${escHtml(label)}</span>` : ""}
+            <span style="color:#475569;background:#f1f5f9;padding:1px 5px;border-radius:4px;word-break:break-word;">${escHtml(beforeVal)}</span>
+            <span style="color:#2563eb;font-weight:900;">→</span>
+            <span style="color:#1e40af;font-weight:700;background:#eff6ff;border:1px solid #dbeafe;padding:1px 5px;border-radius:4px;word-break:break-word;">${escHtml(afterVal)}</span>
+          </div>`;
+      }
+
+      function buildAuditDetailHtml(logEntry) {
+        if (!logEntry || typeof logEntry !== "object") return "";
+        const structured = Array.isArray(logEntry.changes)
+          ? logEntry.changes.filter((c) => c && (c.before !== undefined || c.after !== undefined))
+          : [];
+        if (structured.length > 0) {
+          return `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;">${structured.map((c) => renderAuditDiffChipHtml(c.label || "", c.before || "", c.after || "")).join("")}</div>`;
+        }
+        const detail = String(logEntry.detail || "").trim();
+        if (!detail) return "";
+        if (detail.includes("→")) {
+          const segments = detail.split(" · ").map((s) => s.trim()).filter(Boolean);
+          const hasArrowSeg = segments.some((s) => s.includes("→"));
+          if (hasArrowSeg) {
+            const partsHtml = segments.map((seg) => {
+              const arrowIdx = seg.indexOf("→");
+              if (arrowIdx !== -1) {
+                const leftRaw = seg.slice(0, arrowIdx).trim();
+                const rightRaw = seg.slice(arrowIdx + 1).trim();
+                const colonIdx = leftRaw.indexOf(": ");
+                if (colonIdx > 0 && colonIdx <= 24) {
+                  const lbl = leftRaw.slice(0, colonIdx).trim();
+                  const bVal = leftRaw.slice(colonIdx + 2).trim();
+                  return renderAuditDiffChipHtml(lbl, bVal, rightRaw);
+                }
+                return renderAuditDiffChipHtml("", leftRaw, rightRaw);
+              }
+              return `<span style="display:inline-flex;align-items:center;font-size:11.5px;color:#475569;padding:3px 6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;word-break:break-word;">${escHtml(seg)}</span>`;
+            }).join("");
+            return `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;">${partsHtml}</div>`;
+          }
+        }
+        return `<div style="font-size:11.5px;color:#475569;margin-top:5px;padding-left:2px;line-height:1.45;word-break:break-word;">${escHtml(detail)}</div>`;
+      }
+
       function buildAuditTimelineListHtml(allLogs, filteredLogs) {
         const limit = Number(state.auditDisplayLimit) > 0 ? Number(state.auditDisplayLimit) : 100;
         const visible = filteredLogs.slice(0, limit);
@@ -22840,7 +23666,7 @@ end $$;`;
           const dm = getAuditDomainMeta(l.domain);
           const am = getAuditActionMeta(l.action);
           const ts = formatAuditTime(l.at);
-          const canRestore = Boolean(l.id && l.snapshot && l.snapshot.beforeData);
+          const canRestore = Boolean(l.id && l.snapshot && l.snapshot.beforeData && ["estimate", "collection", "expense"].includes(l.snapshot.type));
           const safeId = escHtml(escJs(l.id || ""));
           return `
             <div style="padding:10px 12px;border-radius:9px;border:1px solid #e2e8f0;background:#ffffff;box-shadow:0 1px 2px rgba(15,23,42,0.03);">
@@ -22856,7 +23682,7 @@ end $$;`;
                   ${canRestore ? `<button type="button" class="btn-sub-xs" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-weight:700;padding:2px 8px;" onclick="window.restoreAuditLogSnapshot('${safeId}')">↩️ 복원</button>` : ""}
                 </div>
               </div>
-              ${l.detail ? `<div style="font-size:11.5px;color:#475569;margin-top:5px;padding-left:2px;line-height:1.45;word-break:break-word;">${escHtml(l.detail)}</div>` : ""}
+              ${buildAuditDetailHtml(l)}
             </div>`;
         }).join("");
         const moreBtn = filteredLogs.length > limit
@@ -22908,6 +23734,13 @@ end $$;`;
         updateAuditSyncIndicators();
       }
 
+      window.AUDIT_FIELD_SPECS = AUDIT_FIELD_SPECS;
+      window.computeAuditDiff = computeAuditDiff;
+      window.buildAuditDiffDetail = buildAuditDiffDetail;
+      window.computeSettingsAuditDiff = computeSettingsAuditDiff;
+      window.snapshotTaskForAudit = snapshotTaskForAudit;
+      window.buildAuditDetailHtml = buildAuditDetailHtml;
+      window.buildAuditTimelineListHtml = buildAuditTimelineListHtml;
       window.mergeAuditLogLists = mergeAuditLogLists;
       window.getLocalAuditLogs = getLocalAuditLogs;
       window.saveLocalAuditLogs = saveLocalAuditLogs;
@@ -23020,6 +23853,11 @@ end $$;`;
       // ================= 모달 9: 마스터 설정 관리 모달 =================
       window.openSettingsModal = function (opts) {
         if (!state.settingsData && window.WSDataService) state.settingsData = window.WSDataService.getInitialSettingsData();
+        try {
+          state._settingsBeforeSnap = JSON.parse(JSON.stringify(state.settingsData || { partners: [], tasks: [], members: [] }));
+        } catch (_) {
+          state._settingsBeforeSnap = null;
+        }
         state.partnerSearchQuery = "";
         state.partnerBizFilter = "";
         state.partnerCatFilter = "";
@@ -23529,7 +24367,7 @@ end $$;`;
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
                 <div style="position:relative;display:flex;align-items:center;flex:1;min-width:220px;">
                   <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;color:#64748b;pointer-events:none;">🔍</span>
-                  <input id="stAuditSearchInput" class="ws-input" style="height:32px;font-size:12.5px;padding:4px 30px 4px 28px;box-sizing:border-box;width:100%;" placeholder="현장명, 작업내용, 작성자, 액션 검색..." value="${escHtml(state.auditSearchQuery || "")}" oninput="onAuditSearchInput(this.value)">
+                  <input id="stAuditSearchInput" class="ws-input" style="height:32px;font-size:12.5px;padding:4px 30px 4px 28px;box-sizing:border-box;width:100%;" placeholder="현장명, 변경 전/후 내용, 작성자, 액션 검색..." value="${escHtml(state.auditSearchQuery || "")}" oninput="onAuditSearchInput(this.value)">
                   <button type="button" id="stAuditSearchClearBtn" onclick="clearAuditSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:transparent;color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer;padding:2px 4px;display:${state.auditSearchQuery ? "inline-block" : "none"};" title="검색어 지우기">✕</button>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
@@ -23848,8 +24686,14 @@ end $$;`;
       window.saveSettingsModalAll = function () {
         const useSb = window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive();
         showToast(useSb ? "⚡ 기준정보 설정을 Supabase에 즉시 저장 중입니다..." : "💾 기준정보 설정을 구글 시트에 일괄 저장 중입니다...");
+        const beforeSettingsSnap = state._settingsBeforeSnap || null;
         if (window.WSDataService) {
-          const res = window.WSDataService.saveSettings(state.settingsData);
+          const payloadSettings = state.settingsData;
+          if (beforeSettingsSnap && typeof window.recordAuditLog === "function" && typeof window.computeSettingsAuditDiff === "function") {
+            const diffRes = window.computeSettingsAuditDiff(beforeSettingsSnap, payloadSettings);
+            window.recordAuditLog("시스템", "설정 변경", "기준정보(거래처·공종·구성원)", diffRes);
+          }
+          const res = window.WSDataService.saveSettings(payloadSettings);
           if (res && typeof res.then === "function") {
             res.then((r) => {
               if (r && r.message) showToast("✅ " + r.message);
@@ -23859,6 +24703,9 @@ end $$;`;
             });
           }
         }
+        try {
+          state._settingsBeforeSnap = JSON.parse(JSON.stringify(state.settingsData || { partners: [], tasks: [], members: [] }));
+        } catch (_) {}
         sanitizeUnregisteredMembers();
         syncUserSelectorOptions();
         window.closeModal("settingsModal");
@@ -24950,6 +25797,33 @@ end $$;`;
           });
         }
 
+        function extractAuditMeta(obj) {
+          if (!obj || typeof obj !== "object") return { clean: obj, meta: null };
+          const hasMeta = Object.prototype.hasOwnProperty.call(obj, "_auditBefore") ||
+            Object.prototype.hasOwnProperty.call(obj, "_auditAfter") ||
+            Object.prototype.hasOwnProperty.call(obj, "_auditAction") ||
+            Object.prototype.hasOwnProperty.call(obj, "_auditDetail") ||
+            Object.prototype.hasOwnProperty.call(obj, "_auditChanges") ||
+            Object.prototype.hasOwnProperty.call(obj, "_skipAudit");
+          if (!hasMeta) return { clean: obj, meta: null };
+          const clean = Object.assign({}, obj);
+          const meta = {
+            before: clean._auditBefore || null,
+            after: clean._auditAfter || null,
+            action: clean._auditAction || "",
+            detail: clean._auditDetail || "",
+            changes: Array.isArray(clean._auditChanges) ? clean._auditChanges : null,
+            skip: Boolean(clean._skipAudit)
+          };
+          delete clean._auditBefore;
+          delete clean._auditAfter;
+          delete clean._auditAction;
+          delete clean._auditDetail;
+          delete clean._auditChanges;
+          delete clean._skipAudit;
+          return { clean, meta };
+        }
+
         function installServiceHooks() {
           if (hooksInstalled) return;
           const ds = window.WSDataService;
@@ -24966,65 +25840,117 @@ end $$;`;
           };
 
           ds.saveTask = function (isEdit, payload, dashData) {
-            if (typeof window.recordAuditLog === "function" && payload) {
-              window.recordAuditLog("공정", isEdit ? "수정" : "등록", `[${payload.site || ""}] ${payload.task || ""}`, `${payload.startDate || payload.date || ""} · ${payload.status || ""}`);
+            const { clean, meta } = extractAuditMeta(payload);
+            if (typeof window.recordAuditLog === "function" && clean && (!meta || !meta.skip)) {
+              const fallbackTxt = [clean.startDate || clean.date || "", clean.status || "", clean.partner || ""].filter(Boolean).join(" · ");
+              let diffInput = fallbackTxt;
+              const afterObj = (meta && meta.after) || {
+                taskName: clean.task || "",
+                date: clean.startDate || clean.date || "",
+                status: clean.status || "예정",
+                partner: clean.partner || "",
+                manager: clean.manager || "",
+                isShared: clean.shared !== undefined ? Boolean(clean.shared) : Boolean(clean.isShared),
+                memo: clean.memo || ""
+              };
+              let beforeObj = meta && meta.before ? meta.before : null;
+              if (isEdit && !beforeObj && (clean.origTask !== undefined || clean.origDate !== undefined || clean.origMgr !== undefined || clean.origMemo !== undefined)) {
+                beforeObj = {
+                  taskName: clean.origTask !== undefined ? clean.origTask : (clean.task || ""),
+                  date: clean.origDate !== undefined ? clean.origDate : (clean.date || ""),
+                  status: afterObj.status,
+                  partner: afterObj.partner,
+                  manager: clean.origMgr !== undefined ? clean.origMgr : (clean.manager || ""),
+                  isShared: afterObj.isShared,
+                  memo: clean.origMemo !== undefined ? clean.origMemo : (clean.memo || "")
+                };
+              }
+              if (meta && meta.detail) {
+                diffInput = meta.changes ? { detail: meta.detail, changes: meta.changes } : meta.detail;
+              } else if (typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS) {
+                diffInput = window.computeAuditDiff(isEdit ? beforeObj : null, afterObj, window.AUDIT_FIELD_SPECS.task, fallbackTxt);
+              }
+              window.recordAuditLog(
+                "공정",
+                (meta && meta.action) || (isEdit ? "수정" : "등록"),
+                `[${clean.site || ""}] ${clean.task || ""}`,
+                diffInput
+              );
             }
-            if (!isSupabaseActive()) return orig.saveTask.call(ds, isEdit, payload, dashData);
+            if (!isSupabaseActive()) return orig.saveTask.call(ds, isEdit, clean, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
-            bgDualWrite("saveTask", () => orig.saveTask.call(ds, isEdit, payload, dashData));
+            bgDualWrite("saveTask", () => orig.saveTask.call(ds, isEdit, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
               await persistDomainSnapshot("dashboard_main", d);
-              if (payload && payload.site) {
-                await syncNormalizedForSite(payload.site, d, payload.id || payload.taskId || "");
+              if (clean && clean.site) {
+                await syncNormalizedForSite(clean.site, d, clean.id || clean.taskId || "");
               }
-              return { ok: true, success: true, taskId: (payload && (payload.id || payload.taskId)) || "", source: "supabase" };
+              return { ok: true, success: true, taskId: (clean && (clean.id || clean.taskId)) || "", source: "supabase" };
             });
           };
 
           ds.deleteTask = function (payload, dashData) {
-            if (typeof window.recordAuditLog === "function" && payload) {
-              window.recordAuditLog("공정", "삭제", `[${payload.site || ""}] ${payload.task || ""}`, payload.origDate || "");
+            const { clean, meta } = extractAuditMeta(payload);
+            if (typeof window.recordAuditLog === "function" && clean && (!meta || !meta.skip)) {
+              const delBefore = meta && meta.before ? meta.before : null;
+              const delSummary = delBefore && typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS
+                ? window.computeAuditDiff(null, delBefore, window.AUDIT_FIELD_SPECS.task, clean.origDate || "")
+                : [clean.origDate || "", clean.origMgr || ""].filter(Boolean).join(" · ");
+              window.recordAuditLog("공정", "삭제", `[${clean.site || ""}] ${clean.task || ""}`, delSummary);
             }
-            if (!isSupabaseActive()) return orig.deleteTask.call(ds, payload, dashData);
+            if (!isSupabaseActive()) return orig.deleteTask.call(ds, clean, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
-            bgDualWrite("deleteTask", () => orig.deleteTask.call(ds, payload, dashData));
+            bgDualWrite("deleteTask", () => orig.deleteTask.call(ds, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
               await persistDomainSnapshot("dashboard_main", d);
-              if (payload && (payload.id || payload.taskId)) {
-                await removeNormalizedTask(payload.id || payload.taskId);
+              if (clean && (clean.id || clean.taskId)) {
+                await removeNormalizedTask(clean.id || clean.taskId);
               }
-              if (payload && payload.site) {
-                await removeNormalizedSite(payload.site, d);
+              if (clean && clean.site) {
+                await removeNormalizedSite(clean.site, d);
               }
               return { ok: true, success: true, source: "supabase" };
             });
           };
 
           ds.moveTaskDate = function (payload, dashData) {
-            if (!isSupabaseActive()) return orig.moveTaskDate.call(ds, payload, dashData);
+            const { clean, meta } = extractAuditMeta(payload);
+            if (typeof window.recordAuditLog === "function" && clean && (!meta || !meta.skip)) {
+              const fb = clean.origDate && clean.date ? `날짜: ${clean.origDate} → ${clean.date}` : (clean.date || "");
+              const diffInput = (meta && meta.before && meta.after && typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+                ? window.computeAuditDiff(meta.before, meta.after, window.AUDIT_FIELD_SPECS.task, fb)
+                : fb;
+              window.recordAuditLog("공정", "일정 이동", `[${clean.site || ""}] ${clean.task || ""}`, diffInput);
+            }
+            if (!isSupabaseActive()) return orig.moveTaskDate.call(ds, clean, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
-            bgDualWrite("moveTaskDate", () => orig.moveTaskDate.call(ds, payload, dashData));
+            bgDualWrite("moveTaskDate", () => orig.moveTaskDate.call(ds, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
               await persistDomainSnapshot("dashboard_main", d);
-              if (payload && payload.site) {
-                await syncNormalizedForSite(payload.site, d, payload.id || payload.taskId || "");
+              if (clean && clean.site) {
+                await syncNormalizedForSite(clean.site, d, clean.id || clean.taskId || "");
               }
               return { ok: true, success: true, source: "supabase" };
             });
           };
 
           ds.cascadeShiftTasks = function (payload, dashData) {
-            if (!isSupabaseActive()) return orig.cascadeShiftTasks.call(ds, payload, dashData);
+            const { clean, meta } = extractAuditMeta(payload);
+            if (typeof window.recordAuditLog === "function" && clean && meta && meta.detail && !meta.skip) {
+              const diffInput = meta.changes ? { detail: meta.detail, changes: meta.changes } : meta.detail;
+              window.recordAuditLog("공정", "후속 일정 이동", `[${clean.site || ""}]`, diffInput);
+            }
+            if (!isSupabaseActive()) return orig.cascadeShiftTasks.call(ds, clean, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
-            bgDualWrite("cascadeShiftTasks", () => orig.cascadeShiftTasks.call(ds, payload, dashData));
+            bgDualWrite("cascadeShiftTasks", () => orig.cascadeShiftTasks.call(ds, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
               await persistDomainSnapshot("dashboard_main", d);
-              if (payload && payload.site) {
-                await syncNormalizedForSite(payload.site, d);
+              if (clean && clean.site) {
+                await syncNormalizedForSite(clean.site, d);
               }
               return { ok: true, success: true, source: "supabase" };
             });
@@ -25048,28 +25974,47 @@ end $$;`;
           };
 
           ds.saveSiteInfo = function (payload, dashData) {
-            if (!isSupabaseActive()) return orig.saveSiteInfo.call(ds, payload, dashData);
+            const { clean, meta } = extractAuditMeta(payload);
+            if (typeof window.recordAuditLog === "function" && clean && (!meta || !meta.skip)) {
+              const siteLabel = clean.site || clean.siteName || "";
+              const diffInput = (meta && meta.before && typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+                ? window.computeAuditDiff(meta.before, meta.after || clean, window.AUDIT_FIELD_SPECS.siteInfo, "현장 정보 저장")
+                : "현장 정보 저장";
+              window.recordAuditLog("현장", "정보 수정", siteLabel, diffInput);
+            }
+            if (!isSupabaseActive()) return orig.saveSiteInfo.call(ds, clean, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
-            bgDualWrite("saveSiteInfo", () => orig.saveSiteInfo.call(ds, payload, dashData));
+            bgDualWrite("saveSiteInfo", () => orig.saveSiteInfo.call(ds, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
               await persistDomainSnapshot("dashboard_main", d);
-              if (payload && (payload.site || payload.siteName)) {
-                await syncNormalizedForSite(payload.site || payload.siteName, d);
+              if (clean && (clean.site || clean.siteName)) {
+                await syncNormalizedForSite(clean.site || clean.siteName, d);
               }
               return { ok: true, success: true, source: "supabase" };
             });
           };
 
           ds.toggleChecklist = function (payload, dashData) {
-            if (!isSupabaseActive()) return orig.toggleChecklist.call(ds, payload, dashData);
+            const { clean, meta } = extractAuditMeta(payload);
+            if (typeof window.recordAuditLog === "function" && clean && (!meta || !meta.skip)) {
+              const fieldLabels = { consentDone: "입주민 동의서", elevatorCoverDone: "승강기 보양", officeNoticeDone: "관리실 신고" };
+              const fKey = clean.field || "";
+              const fLbl = fieldLabels[fKey] || fKey || "체크항목";
+              const singleSpec = [{ key: fKey, label: fLbl, type: "boolean", trueLabel: "완료", falseLabel: "미완료" }];
+              const diffInput = (meta && meta.before && typeof window.computeAuditDiff === "function")
+                ? window.computeAuditDiff(meta.before, meta.after || { [fKey]: Boolean(clean.value) }, singleSpec, `${fLbl}: ${clean.value ? "완료" : "미완료"}`)
+                : `${fLbl}: ${clean.value ? "완료" : "미완료"}`;
+              window.recordAuditLog("현장", "착공체크 변경", clean.site || "", diffInput);
+            }
+            if (!isSupabaseActive()) return orig.toggleChecklist.call(ds, clean, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
-            bgDualWrite("toggleChecklist", () => orig.toggleChecklist.call(ds, payload, dashData));
+            bgDualWrite("toggleChecklist", () => orig.toggleChecklist.call(ds, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
               await persistDomainSnapshot("dashboard_main", d);
-              if (payload && payload.site) {
-                await syncNormalizedForSite(payload.site, d);
+              if (clean && clean.site) {
+                await syncNormalizedForSite(clean.site, d);
               }
               return { ok: true, success: true, source: "supabase" };
             });
@@ -25172,13 +26117,22 @@ end $$;`;
           };
 
           ds.saveTodo = function (isEdit, payload, todoData) {
-            if (typeof window.recordAuditLog === "function" && payload) {
-              window.recordAuditLog("To-Do", isEdit ? "수정" : "등록", payload.title || "", payload.manager || "");
+            const { clean, meta } = extractAuditMeta(payload);
+            if (typeof window.recordAuditLog === "function" && clean && (!meta || !meta.skip)) {
+              const afterObj = (meta && meta.after) || clean;
+              const beforeObj = meta && meta.before ? meta.before : null;
+              const actionLbl = (meta && meta.action) || (isEdit ? "수정" : "등록");
+              const isEditAction = actionLbl === "수정" || (isEdit && !meta);
+              const fb = [afterObj.manager ? `담당자: ${afterObj.manager}` : "", afterObj.dueDate ? `마감일: ${afterObj.dueDate}` : ""].filter(Boolean).join(" · ");
+              const diffInput = (typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+                ? window.computeAuditDiff(isEditAction ? beforeObj : null, afterObj, window.AUDIT_FIELD_SPECS.todo, isEditAction ? fb : "")
+                : fb;
+              window.recordAuditLog("To-Do", actionLbl, afterObj.title || clean.title || "", diffInput);
             }
-            if (!isSupabaseActive()) return orig.saveTodo.call(ds, isEdit, payload, todoData);
+            if (!isSupabaseActive()) return orig.saveTodo.call(ds, isEdit, clean, todoData);
             const td = todoData || state.todoData;
             if (td) ds.saveTodoCache(td);
-            bgDualWrite("saveTodo", () => orig.saveTodo.call(ds, isEdit, payload, todoData));
+            bgDualWrite("saveTodo", () => orig.saveTodo.call(ds, isEdit, clean, todoData));
             return enqueueKeyWrite("todo_main", async () => {
               await persistDomainSnapshot("todo_main", td);
               return { ok: true, success: true, source: "supabase" };
@@ -25186,10 +26140,20 @@ end $$;`;
           };
 
           ds.toggleTodoStatus = function (payload, todoData) {
-            if (!isSupabaseActive()) return orig.toggleTodoStatus.call(ds, payload, todoData);
+            const { clean, meta } = extractAuditMeta(payload);
+            if (typeof window.recordAuditLog === "function" && clean && (!meta || !meta.skip)) {
+              const afterObj = (meta && meta.after) || clean;
+              const beforeObj = meta && meta.before ? meta.before : null;
+              const titleTarget = (afterObj && afterObj.title) || (beforeObj && beforeObj.title) || clean.id || "";
+              const diffInput = (beforeObj && typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+                ? window.computeAuditDiff(beforeObj, afterObj, window.AUDIT_FIELD_SPECS.todo, `상태: ${clean.status || ""}`)
+                : `상태: ${clean.status || ""}`;
+              window.recordAuditLog("To-Do", "상태 변경", titleTarget, diffInput);
+            }
+            if (!isSupabaseActive()) return orig.toggleTodoStatus.call(ds, clean, todoData);
             const td = todoData || state.todoData;
             if (td) ds.saveTodoCache(td);
-            bgDualWrite("toggleTodoStatus", () => orig.toggleTodoStatus.call(ds, payload, todoData));
+            bgDualWrite("toggleTodoStatus", () => orig.toggleTodoStatus.call(ds, clean, todoData));
             return enqueueKeyWrite("todo_main", async () => {
               await persistDomainSnapshot("todo_main", td);
               return { ok: true, success: true, source: "supabase" };
@@ -25257,28 +26221,34 @@ end $$;`;
           };
 
           ds.saveCollectionRow = function (row, authUser) {
-            if (typeof window.recordAuditLog === "function" && row) {
-              const prevCol = (row.id && state.financeDbData && Array.isArray(state.financeDbData.collection))
-                ? state.financeDbData.collection.find(c => c && c.id === row.id)
-                : null;
+            const { clean: cleanRow, meta } = extractAuditMeta(row);
+            if (typeof window.recordAuditLog === "function" && cleanRow && (!meta || !meta.skip)) {
+              const prevCol = (meta && meta.before) || ((cleanRow.id && state.financeDbData && Array.isArray(state.financeDbData.collection))
+                ? state.financeDbData.collection.find(c => c && c.id === cleanRow.id)
+                : null);
+              const isEditCol = Boolean(cleanRow.id && prevCol);
+              const fb = `계약 ${(Number(cleanRow.contractAmount) || 0).toLocaleString("ko-KR")}원 · ${cleanRow.status || ""}`;
+              const diffInput = (isEditCol && typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
+                ? window.computeAuditDiff(prevCol, cleanRow, window.AUDIT_FIELD_SPECS.collection, fb)
+                : fb;
               window.recordAuditLog(
                 "재무",
-                row.id ? "수금 수정" : "수금 등록",
-                row.siteName || "",
-                `계약 ${formatKrw(row.contractAmount)} · ${row.status || ""}`,
+                isEditCol ? "수금 수정" : "수금 등록",
+                cleanRow.siteName || "",
+                diffInput,
                 prevCol ? { type: "collection", id: prevCol.id, beforeData: JSON.parse(JSON.stringify(prevCol)) } : null
               );
             }
-            if (!isSupabaseActive()) return orig.saveCollectionRow.call(ds, row, authUser);
-            bgDualWrite("saveCollectionRow", () => orig.saveCollectionRow.call(ds, row, authUser));
+            if (!isSupabaseActive()) return orig.saveCollectionRow.call(ds, cleanRow, authUser);
+            bgDualWrite("saveCollectionRow", () => orig.saveCollectionRow.call(ds, cleanRow, authUser));
             return enqueueKeyWrite("finance_db", async () => {
               const fb = await ensureFinanceInMemory();
-              const savedId = (row && row.id) ? String(row.id) : ("COL-" + Date.now());
-              const cAmt = Number(row.contractAmount) || 0;
-              const chgAmt = Number(row.changeAmount) || 0;
+              const savedId = (cleanRow && cleanRow.id) ? String(cleanRow.id) : ("COL-" + Date.now());
+              const cAmt = Number(cleanRow.contractAmount) || 0;
+              const chgAmt = Number(cleanRow.changeAmount) || 0;
               const totalAmt = cAmt + chgAmt;
-              const collected = (Number(row.downPayment) || 0) + (Number(row.startPayment) || 0) + (Number(row.midPayment1) || 0) + (Number(row.midPayment2) || 0) + (Number(row.midPayment3) || 0) + (Number(row.finalPayment) || 0);
-              const saved = Object.assign({}, row, {
+              const collected = (Number(cleanRow.downPayment) || 0) + (Number(cleanRow.startPayment) || 0) + (Number(cleanRow.midPayment1) || 0) + (Number(cleanRow.midPayment2) || 0) + (Number(cleanRow.midPayment3) || 0) + (Number(cleanRow.finalPayment) || 0);
+              const saved = Object.assign({}, cleanRow, {
                 id: savedId,
                 totalAmount: totalAmt,
                 collectedAmount: collected,
@@ -25335,7 +26305,8 @@ end $$;`;
 
           ds.saveExpenseRow = function (row, authUser) {
             if (typeof window.recordAuditLog === "function" && row && !row.id) {
-              window.recordAuditLog("재무", "비용 등록", `${row.vendor || row.item || ""} (${row.siteName || "공통"})`, `청구 ${formatKrw(row.claimAmount)} / 지급 ${formatKrw(row.paidAmount)}`);
+              const regSummary = `청구 ${(Number(row.claimAmount) || 0).toLocaleString("ko-KR")}원 / 지급 ${(Number(row.paidAmount) || 0).toLocaleString("ko-KR")}원` + (row.category ? ` · ${row.category}` : "");
+              window.recordAuditLog("재무", "비용 등록", `${row.vendor || row.item || ""} (${row.siteName || "공통"})`, regSummary);
             }
             if (!isSupabaseActive()) return orig.saveExpenseRow.call(ds, row, authUser);
             bgDualWrite("saveExpenseRow", () => orig.saveExpenseRow.call(ds, row, authUser));
@@ -25811,6 +26782,7 @@ end $$;`;
         const origStart = parseYmdFromTask(task);
         if (!origStart || origStart === targetYmd) return;
         const origDateStr = task.dateDisplay || origStart;
+        const beforeTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, task) : null;
         const wasArchived = Boolean(task.isArchived || site.isArchived || task.sheetName === "완료현장");
         const dur = diffDaysYmd(origStart, parseEndYmdFromTask(task, origStart));
         const newEnd = addDaysYmd(targetYmd, Math.max(0, dur));
@@ -25825,6 +26797,7 @@ end $$;`;
         task.isToday = targetYmd === todayYmd;
         task.isDelayed = targetYmd < todayYmd && task.status !== "완료";
         recalcSiteStats(site);
+        const afterTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, task) : null;
 
         let dateParam = newEnd > targetYmd ? `${targetYmd} ~ ${newEnd}` : targetYmd;
         if (existingTime) {
@@ -25837,7 +26810,9 @@ end $$;`;
             date: dateParam,
             sheetName: task.sheetName || "현장데이터",
             isArchived: wasArchived, origDate: origDateStr, origMgr: task.manager || "",
-            id: task.taskId || task.id, taskId: task.taskId || task.id
+            id: task.taskId || task.id, taskId: task.taskId || task.id,
+            _auditBefore: beforeTaskSnap,
+            _auditAfter: afterTaskSnap
           }, state.dashData);
         }
         markAllDirty();
@@ -27377,19 +28352,41 @@ end $$;`;
       });
 
       // ================= [1-2 변경이력(Audit Log) & 1-4 통합 검색(Ctrl+K)] =================
-      window.recordAuditLog = function (domain, action, targetName, detail, snapshotObj) {
+      let _auditEntrySeq = 0;
+      window.recordAuditLog = function (domain, action, targetName, detailOrDiff, snapshotObj, extraOpts) {
         try {
           const actor = getActualAuthUser() || state.authUser || state.currentUser || state.user || "사용자";
+          let detailStr = "";
+          let changesArr = null;
+          if (detailOrDiff && typeof detailOrDiff === "object") {
+            detailStr = String(detailOrDiff.detail || "");
+            if (Array.isArray(detailOrDiff.changes) && detailOrDiff.changes.length > 0) {
+              changesArr = detailOrDiff.changes.map((c) => ({
+                key: c.key || "",
+                label: String(c.label || ""),
+                before: String(c.before !== undefined ? c.before : ""),
+                after: String(c.after !== undefined ? c.after : "")
+              }));
+            }
+          } else {
+            detailStr = String(detailOrDiff || "");
+            if (extraOpts && Array.isArray(extraOpts.changes) && extraOpts.changes.length > 0) {
+              changesArr = extraOpts.changes;
+            }
+          }
+          _auditEntrySeq = (_auditEntrySeq + 1) % 1000;
+          const seqPad = String(_auditEntrySeq).padStart(3, "0");
           const entry = {
-            id: "AUD_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+            id: "AUD_" + Date.now() + "_" + seqPad + "_" + Math.random().toString(36).slice(2, 6),
             at: new Date().toISOString(),
             user: actor,
             domain: String(domain || "시스템"),
             action: String(action || "수정"),
             target: String(targetName || ""),
-            detail: String(detail || ""),
+            detail: detailStr,
             snapshot: snapshotObj || null
           };
+          if (changesArr) entry.changes = changesArr;
           const logs = saveLocalAuditLogs([entry, ...getLocalAuditLogs()]);
           if (typeof window.refreshAuditTimelineViewIfOpen === "function") {
             window.refreshAuditTimelineViewIfOpen();
@@ -27423,6 +28420,7 @@ end $$;`;
         if (snap.type === "estimate") {
           const s = getAllSites().find(x => x && (x.siteKey === snap.siteKey || x.siteName === before.siteName));
           if (!s) return showToast("⚠️ 대상 신규견적 현장을 찾을 수 없습니다.");
+          const curEst = s.estimateData ? JSON.parse(JSON.stringify(s.estimateData)) : null;
           s.estimateData = before;
           s.isArchived = before.status === "계약 완료" || before.status === "수주 실패" || before.status === "실패";
           s.isAllCompleted = s.isArchived;
@@ -27435,7 +28433,10 @@ end $$;`;
           if (ds && typeof ds.saveEstimate === "function") {
             ds.saveEstimate(true, before, state.dashData);
           }
-          window.recordAuditLog("신규견적", "이력 복원", s.siteName, `복원됨 → ${before.status || ""}`);
+          const diffRes = (typeof window.computeAuditDiff === "function" && curEst)
+            ? window.computeAuditDiff(curEst, before, window.AUDIT_FIELD_SPECS.estimate, `복원됨 → ${before.status || ""}`)
+            : `복원됨 → ${before.status || ""}`;
+          window.recordAuditLog("신규견적", "이력 복원", s.siteName, diffRes);
           markAllDirty();
           renderActiveViews();
           showToast(`↩️ [${s.siteName}] '${before.status || ""}' 상태로 복원되었습니다.`);
@@ -27444,7 +28445,11 @@ end $$;`;
         }
 
         if (snap.type === "collection" && ds && typeof ds.saveCollectionRow === "function") {
-          ds.saveCollectionRow(before, user).then((res) => {
+          const curCol = (state.financeDbData && Array.isArray(state.financeDbData.collection))
+            ? state.financeDbData.collection.find(r => r && r.id === before.id)
+            : null;
+          const curColSnap = curCol ? JSON.parse(JSON.stringify(curCol)) : null;
+          ds.saveCollectionRow(Object.assign({}, before, { _skipAudit: true }), user).then((res) => {
             if (res && res.success) {
               if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
               if (!Array.isArray(state.financeDbData.collection)) state.financeDbData.collection = [];
@@ -27452,7 +28457,10 @@ end $$;`;
               if (idx >= 0) state.financeDbData.collection[idx] = before;
               else state.financeDbData.collection.unshift(before);
               if (ds.saveFinanceCache) ds.saveFinanceCache(state.financeDbData);
-              window.recordAuditLog("재무", "수금 복원", before.siteName || before.id, "변경 전 스냅샷 복원");
+              const diffRes = (typeof window.computeAuditDiff === "function" && curColSnap)
+                ? window.computeAuditDiff(curColSnap, before, window.AUDIT_FIELD_SPECS.collection, "변경 전 스냅샷 복원")
+                : "변경 전 스냅샷 복원";
+              window.recordAuditLog("재무", "수금 복원", before.siteName || before.id, diffRes);
               markAllDirty();
               renderActiveViews();
               showToast(`↩️ [${before.siteName || before.id}] 수금 내역이 복원되었습니다.`);
@@ -27463,6 +28471,10 @@ end $$;`;
         }
 
         if (snap.type === "expense" && ds && typeof ds.saveExpenseRow === "function") {
+          const curExp = (state.financeDbData && Array.isArray(state.financeDbData.expense))
+            ? state.financeDbData.expense.find(e => e && e.id === before.id)
+            : null;
+          const curExpSnap = curExp ? JSON.parse(JSON.stringify(curExp)) : null;
           ds.saveExpenseRow(before, user).then((res) => {
             if (res && res.success) {
               if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
@@ -27471,7 +28483,10 @@ end $$;`;
               if (idx >= 0) state.financeDbData.expense[idx] = before;
               else state.financeDbData.expense.unshift(before);
               if (ds.saveFinanceCache) ds.saveFinanceCache(state.financeDbData);
-              window.recordAuditLog("재무", "비용 복원", `${before.vendor || before.item || ""} (${before.siteName || "공통"})`, "변경 전 스냅샷 복원");
+              const diffRes = (typeof window.computeAuditDiff === "function" && curExpSnap)
+                ? window.computeAuditDiff(curExpSnap, before, window.AUDIT_FIELD_SPECS.expense, "변경 전 스냅샷 복원")
+                : "변경 전 스냅샷 복원";
+              window.recordAuditLog("재무", "비용 복원", `${before.vendor || before.item || ""} (${before.siteName || "공통"})`, diffRes);
               markAllDirty();
               renderActiveViews();
               showToast(`↩️ [${before.vendor || before.item || before.id}] 비용 내역이 복원되었습니다.`);
@@ -27486,6 +28501,9 @@ end $$;`;
 
       window.openAuditLogModal = function (filterDomain) {
         if (!state.settingsData && window.WSDataService) state.settingsData = window.WSDataService.getInitialSettingsData();
+        try {
+          state._settingsBeforeSnap = JSON.parse(JSON.stringify(state.settingsData || { partners: [], tasks: [], members: [] }));
+        } catch (_) {}
         state.settingsTab = "audit";
         if (typeof filterDomain === "string" && filterDomain) {
           state.auditFilterDomain = filterDomain;

@@ -2752,6 +2752,429 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     }
   })());
 
+  // [Audit Log 변경 전/후 Diff (buildAuditDiffDetail) 및 전 도메인 수정·렌더링·검색 런타임 QA]
+  pendingAsyncTests.push((async () => {
+    const extractBlock = (startMarker, endMarker) => {
+      const s = idxRootHtml.indexOf(startMarker);
+      const e = idxRootHtml.indexOf(endMarker, s > -1 ? s : 0);
+      return (s !== -1 && e > s) ? idxRootHtml.slice(s, e) : '';
+    };
+    const extractFn = (name) => {
+      const m = idxRootHtml.match(new RegExp(`(?:window\\.${name}\\s*=\\s*function|function\\s+${name})[\\s\\S]*?\\n      \\};?`));
+      return m ? m[0] : '';
+    };
+
+    const auditHelperBlock = extractBlock(
+      '// ================= 변경이력(Audit Log) 공통 저장·병합·UI 헬퍼 =================',
+      '// ================= 모달 9: 마스터 설정 관리 모달 ================='
+    );
+    const recordAuditBlock = extractBlock(
+      '// ================= [1-2 변경이력(Audit Log) & 1-4 통합 검색(Ctrl+K)] =================',
+      'window.openGlobalSearchModal = function'
+    );
+    const hooksBlock = extractBlock(
+      'function extractAuditMeta(obj) {',
+      'function renderSetupModal() {'
+    );
+
+    const fnNames = [
+      'escHtml', 'escJs', 'formatKrw', 'getTodayYmd', 'addDaysYmd', 'diffDaysYmd', 'formatKoreanDateLabel',
+      'parseYmdFromTask', 'parseEndYmdFromTask', 'normalizeMonthStr',
+      'parseExpenseTaxProof', 'stripExpenseTaxProof', 'isExpense33Withholding', 'calcExpenseFinancials',
+      'getExpenseRowBalance', 'buildExpenseNoteWithTaxProof', 'parseExtraAmountFromNote',
+      'stripExtraAmountFromNote', 'buildCollectionNoteWithExtra',
+      'getAllSites', 'getSiteInfo', 'findTaskById', 'recalcSiteStats', 'recalcDashMeta',
+      'saveTaskSheetModal', 'bulkUpdateSiteTasks', 'onCalDayDrop',
+      'onSaveCollectionRow', 'onSaveExpenseRow', 'onQuickPayFullExpense',
+      'saveTodoModal', 'toggleTodoItem', 'quickUpdateTodoDue', 'quickUpdateTodoManager',
+      'saveEstimateModal', 'markEstimateContractDone', 'revertEstimateFromDone',
+      'togglePreChecklist', 'saveSiteInfoModal', 'saveSettingsModalAll'
+    ];
+    const fnSnippets = fnNames.map(extractFn);
+    const allExtractedOk = Boolean(auditHelperBlock && recordAuditBlock && hooksBlock && fnSnippets.every(Boolean));
+    assertTest('index.html Audit Log Diff 헬퍼 및 전 도메인 핸들러 블록 추출 가능 여부 검증', allExtractedOk);
+    if (!allExtractedOk) return;
+
+    const storageMap = {};
+    const domInputs = {};
+    const makeInput = (val = '', checked = false) => ({ value: val, checked, textContent: '', innerHTML: '', style: {}, classList: { contains: () => false, add() {}, remove() {} }, focus() {} });
+    const gasCalls = [];
+    const origGasMock = {
+      syncLiveFromGAS: async () => ({}),
+      saveDashboardCache: () => {},
+      saveTodoCache: () => {},
+      saveFinanceCache: () => {},
+      saveSettingsCache: () => {},
+      getInitialSettingsData: () => ({ partners: [], tasks: [], members: [] }),
+      saveTask: async (isEdit, payload) => { gasCalls.push({ fn: 'saveTask', isEdit, payload }); return { ok: true, success: true }; },
+      deleteTask: async (payload) => { gasCalls.push({ fn: 'deleteTask', payload }); return { ok: true, success: true }; },
+      moveTaskDate: async (payload) => { gasCalls.push({ fn: 'moveTaskDate', payload }); return { ok: true, success: true }; },
+      cascadeShiftTasks: async (payload) => { gasCalls.push({ fn: 'cascadeShiftTasks', payload }); return { ok: true, success: true }; },
+      deleteSite: async (payload) => { gasCalls.push({ fn: 'deleteSite', payload }); return { ok: true, success: true }; },
+      saveSiteInfo: async (payload) => { gasCalls.push({ fn: 'saveSiteInfo', payload }); return { ok: true, success: true }; },
+      toggleChecklist: async (payload) => { gasCalls.push({ fn: 'toggleChecklist', payload }); return { ok: true, success: true }; },
+      saveEstimate: async (isEdit, payload) => { gasCalls.push({ fn: 'saveEstimate', isEdit, payload }); return { ok: true, success: true }; },
+      promoteEstimateToSite: async (payload) => ({ success: true }),
+      saveTodo: async (isEdit, payload) => { gasCalls.push({ fn: 'saveTodo', isEdit, payload }); return { ok: true, success: true }; },
+      toggleTodoStatus: async (payload) => { gasCalls.push({ fn: 'toggleTodoStatus', payload }); return { ok: true, success: true }; },
+      deleteTodo: async (id) => ({ ok: true, success: true }),
+      saveSettings: async (s) => { gasCalls.push({ fn: 'saveSettings', s }); return { success: true }; },
+      getFinanceDbData: async () => ({ success: true, collection: [], expense: [], fixedMaster: [] }),
+      saveCollectionRow: async (row) => { gasCalls.push({ fn: 'saveCollectionRow', row }); return { success: true, row }; },
+      saveCollectionBatchRows: async () => ({ success: true }),
+      deleteCollectionRow: async () => ({ success: true }),
+      saveExpenseRow: async (row) => { gasCalls.push({ fn: 'saveExpenseRow', row }); return { success: true, row }; },
+      deleteExpenseRow: async () => ({ success: true }),
+      deleteExpenseBatchRows: async () => ({ success: true }),
+      generateFixedExpensesForMonth: async () => ({ success: true }),
+      saveExpenseBatchRows: async () => ({ success: true }),
+      saveFixedMasterRow: async () => ({ success: true }),
+      deleteFixedMasterRow: async () => ({ success: true })
+    };
+
+    const auditVm = vm.createContext({
+      window: {},
+      console,
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      location: { protocol: 'file:', href: 'file:///index.html' },
+      localStorage: {
+        getItem: (k) => (Object.prototype.hasOwnProperty.call(storageMap, k) ? storageMap[k] : null),
+        setItem: (k, v) => { storageMap[k] = String(v); },
+        removeItem: (k) => { delete storageMap[k]; }
+      },
+      document: {
+        getElementById: (id) => domInputs[id] || null
+      },
+      state: {
+        user: '송지은',
+        authUser: '송지은',
+        currentUser: '송지은',
+        dirtyPcTabs: {},
+        dirtyMobileTabs: {},
+        checkedTableTaskIds: new Set(['task_1']),
+        selectedSiteKey: 'site::테스트현장',
+        auditFilterDomain: 'all',
+        auditSearchQuery: '',
+        auditDisplayLimit: 100,
+        dashData: {
+          sites: [
+            {
+              siteKey: 'site::테스트현장',
+              siteName: '테스트현장',
+              scope: 'site',
+              tasks: [
+                { id: 'task_1', taskId: 'task_1', taskName: '전기', startDateStr: '2026-11-15', endDateStr: '2026-11-15', dateDisplay: '2026.11.15 (일)', status: '예정', partner: '', manager: '송지은', manager1: '송지은', manager2: '', isShared: false, memo: '기존 메모' },
+                { id: 'task_2', taskId: 'task_2', taskName: '도배', startDateStr: '2026-11-20', endDateStr: '2026-11-20', dateDisplay: '2026.11.20 (금)', status: '예정', partner: '도배팀', manager: '송지은', isShared: false, memo: '' }
+              ]
+            },
+            {
+              siteKey: 'NEWSITE::견적테스트',
+              siteName: '견적테스트',
+              scope: 'newSite',
+              isArchived: false,
+              isAllCompleted: false,
+              tasks: [{ id: 'est_1', taskName: '1차상담 예정', status: '1차상담 예정', scope: 'newSite' }],
+              estimateData: {
+                siteName: '견적테스트', status: '1차상담 예정', priority: '보통', scope: '전체공사', source: '소개',
+                manager: '송지은', clientName: '김고객', clientPhone: '010-1111-2222', expectedAmount: 40000000,
+                inquiryDate: '2026-11-10', contractAmount: '', costAmount: '', memo: '초기 상담'
+              }
+            }
+          ],
+          siteInfoMap: {
+            '테스트현장': { address: '서울 동작구 101', doorPassword: '1234*', officePhone: '02-111-2222', driveUrl: '', memo: '주차 가능', consentDone: false, elevatorCoverDone: false, officeNoticeDone: false }
+          }
+        },
+        financeDbData: {
+          collection: [{
+            id: 'COL-1', siteName: '테스트현장', clientName: '홍길동', manager: '송지은', category: '전체공사', status: '진행중',
+            period: '2026.11.01 ~ 2026.11.30', contractAmount: 45000000, changeAmount: 0, changeDesc: '',
+            downPayment: 10000000, startPayment: 0, midPayment1: 0, midPayment2: 0, midPayment3: 0, finalPayment: 0,
+            taxInvoice: '미발행', note: ''
+          }],
+          expense: [{
+            id: 'EXP-1', settleMonth: '2026-11', item: '외주', category: '전기', vendor: '번개전기', category2: '국민 111',
+            siteName: '테스트현장', claimAmount: 1000000, paidAmount: 0, balance: 1000000, payDate: '', note: ''
+          }],
+          fixedMaster: []
+        },
+        todoData: {
+          list: [{
+            id: 'todo_1', title: '자재 발주 확인', dueDate: '2026.11.15', manager: '송지은', siteName: '테스트현장',
+            tag: '발주', detail: '전등 스위치 확인', status: '미완료', isImportant: false
+          }]
+        },
+        settingsData: {
+          partners: [{ name: '번개전기', biz: '전기', category: '시공', priority: '1팀', manager: '이반장', phone: '010-1111-0000', status: '운영 중', bankAccount: '', note: '' }],
+          tasks: [{ name: '전기', taskName: '전기', category: '설비', note: '' }],
+          members: [{ name: '송지은', role: '과장', phone: '010-2222-3333', receive: true, notifyEnabled: true, note: '' }]
+        },
+        _settingsBeforeSnap: {
+          partners: [{ name: '번개전기', biz: '전기', category: '시공', priority: '1팀', manager: '이반장', phone: '010-1111-0000', status: '운영 중', bankAccount: '', note: '' }],
+          tasks: [{ name: '전기', taskName: '전기', category: '설비', note: '' }],
+          members: [{ name: '송지은', role: '과장', phone: '010-2222-3333', receive: true, notifyEnabled: true, note: '' }]
+        }
+      },
+      FINANCE_EXT_FLAGS: { extraContractAmount: true, taxProofBadge: true },
+      getActualAuthUser: () => '송지은',
+      showToast: () => {},
+      openModal: () => {},
+      closeModal: () => {},
+      markAllDirty: () => {},
+      renderActiveViews: () => {},
+      renderSettingsModal: () => {},
+      sanitizeUnregisteredMembers: () => {},
+      syncUserSelectorOptions: () => {},
+      isSiteCompleted: () => false,
+      isTaskCompleted: (t) => Boolean(t && t.status === '완료'),
+      getUniqueSiteManagers: () => ['송지은'],
+      getSiteDateMetrics: () => ({ earliest: '2026-11-15', latest: '2026-11-25', earliestMs: 0, latestMs: 0 }),
+      closeCollectionModal: () => {},
+      closeExpenseModal: () => {},
+      extractFirstManager: (m, fb) => (m ? String(m).split(',')[0].trim() : fb),
+      getResolvedSheetPartner: (ctx) => ({ partnerVal: ctx.partner || '', partnerPhone: '', isCustom: false }),
+      registerOptimisticCustomPartner: () => {},
+      lookupPartnerPhone: () => '',
+      hooksInstalled: false,
+      isSupabaseActive: () => false,
+      bgDualWrite: () => {},
+      syncNormalizedForSite: async () => {},
+      removeNormalizedTask: async () => {},
+      removeNormalizedSite: async () => {},
+      persistDomainSnapshot: async () => {},
+      enqueueKeyWrite: (k, fn) => fn(),
+      ensureFinanceInMemory: async () => auditVm.state.financeDbData,
+      upsertRows: async () => {},
+      deleteRowsByIds: async () => {},
+      canViewFinance: () => true,
+      isEstimatePromotedToSite: () => false,
+      openPromoteEstimateModal: () => {}
+    });
+    auditVm.window = auditVm;
+    auditVm.window.WSDataService = Object.assign({}, origGasMock);
+    auditVm.window.WSSupabaseV3 = { isSupabaseActive: () => false };
+
+    const fullAuditVmCode = [
+      ...fnSnippets.slice(0, 23),
+      auditHelperBlock,
+      recordAuditBlock,
+      hooksBlock,
+      'installServiceHooks();',
+      ...fnSnippets.slice(23)
+    ].join('\n');
+    vm.runInContext(fullAuditVmCode, auditVm);
+
+    // 1) buildAuditDiffDetail 단위 검증
+    const d1 = auditVm.buildAuditDiffDetail(
+      { status: '예정', date: '2026-11-15', partner: '' },
+      { status: '완료', date: '2026-11-18', partner: '번개전기' },
+      auditVm.AUDIT_FIELD_SPECS.task,
+      'fallback'
+    );
+    const dMoney = auditVm.buildAuditDiffDetail(
+      { contractAmount: '', downPayment: 10000000 },
+      { contractAmount: 0, downPayment: 20000000 },
+      auditVm.AUDIT_FIELD_SPECS.collection,
+      'fallback'
+    );
+    const dNoOp = auditVm.buildAuditDiffDetail(
+      { dueDate: '2026.11.15', title: '확인' },
+      { dueDate: '2026-11-15', title: '확인' },
+      auditVm.AUDIT_FIELD_SPECS.todo,
+      '기존 요약'
+    );
+    const dNew = auditVm.buildAuditDiffDetail(
+      null,
+      { title: '새 할일', manager: '송지은', dueDate: '2026-11-20', status: '미완료' },
+      auditVm.AUDIT_FIELD_SPECS.todo,
+      ''
+    );
+    assertTest('buildAuditDiffDetail 포맷팅, 금액 천단위 쉼표+원, 날짜 정규화(. vs -), 미지정/(없음), 신규/무변경 fallback 검증',
+      d1.includes('날짜: 2026-11-15 → 2026-11-18') &&
+      d1.includes('상태: 예정 → 완료') &&
+      d1.includes('협력업체: 미지정 → 번개전기') &&
+      dMoney === '계약금: 10,000,000원 → 20,000,000원' &&
+      dNoOp === '기존 요약' &&
+      dNew.includes('제목: 새 할일') && dNew.includes('담당자: 송지은')
+    );
+
+    // 2) 공정 도메인 수정 (saveTaskSheetModal, bulkUpdateSiteTasks, onCalDayDrop)
+    auditVm.state.sheetCtx = {
+      mode: 'edit', taskId: 'task_1', siteName: '테스트현장', scope: 'site',
+      taskName: '전기', origStartYmd: '2026-11-15', startYmd: '2026-11-18', endYmd: '2026-11-18',
+      isRange: false, hasTime: false, manager1: '송지은', manager2: '차정률', partner: '번개전기',
+      status: '진행 중', isShared: true, memo: '기존 메모', newMemo: '스위치 추가', editFullMemo: false, cascadeShift: false
+    };
+    auditVm.saveTaskSheetModal();
+    auditVm.state.checkedTableTaskIds = new Set(['task_1']);
+    auditVm.bulkUpdateSiteTasks('status', '완료');
+    auditVm.onCalDayDrop({ preventDefault() {}, dataTransfer: { getData: () => 'task_2' } }, '2026-11-25');
+
+    // 3) 재무 도메인 수정 (onSaveCollectionRow, onSaveExpenseRow, onQuickPayFullExpense)
+    domInputs.colSiteName = makeInput('테스트현장');
+    domInputs.colClientName = makeInput('홍길동');
+    domInputs.colManager = makeInput('송지은');
+    domInputs.colCategory = makeInput('전체공사');
+    domInputs.colStatus = makeInput('마감중');
+    domInputs.colPeriod = makeInput('2026.11.01 ~ 2026.11.30');
+    domInputs.colContractAmount = makeInput('48,000,000');
+    domInputs.colChangeAmount = makeInput('2,000,000');
+    domInputs.colChangeDesc = makeInput('조명 추가');
+    domInputs.colDownPayment = makeInput('10,000,000');
+    domInputs.colStartPayment = makeInput('15,000,000');
+    domInputs.colMidPayment1 = makeInput('0');
+    domInputs.colMidPayment2 = makeInput('0');
+    domInputs.colMidPayment3 = makeInput('0');
+    domInputs.colFinalPayment = makeInput('0');
+    domInputs.colTaxInvoice = makeInput('세금계산서');
+    domInputs.colNote = makeInput('착수금 입금');
+    auditVm._colModalState = { vatMode: 'incl', percentMode: false, stageMeta: {}, extraItems: [] };
+    auditVm.onSaveCollectionRow('COL-1');
+    await Promise.resolve();
+
+    domInputs.expSettleMonth = makeInput('2026-11');
+    domInputs.expItem = makeInput('외주');
+    domInputs.expVendorSelect = makeInput('번개전기');
+    domInputs.expVendor = makeInput('번개전기');
+    domInputs.expCategory = makeInput('전기');
+    domInputs.expSiteName = makeInput('테스트현장');
+    domInputs.expCategory2 = makeInput('국민 111');
+    domInputs.expClaimAmount = makeInput('1,200,000');
+    domInputs.expPaidAmount = makeInput('500,000');
+    domInputs.expPayDate = makeInput('2026-11-18');
+    domInputs.expTaxProof = makeInput('세금계산서');
+    domInputs.expNote = makeInput('선지급');
+    auditVm._isSavingExpense = false;
+    auditVm.onSaveExpenseRow('EXP-1');
+    await Promise.resolve();
+
+    auditVm.confirm = () => true;
+    auditVm._isQuickPayingExpense = false;
+    auditVm.onQuickPayFullExpense('EXP-1');
+    await Promise.resolve();
+
+    // 4) 신규견적 수정 / 상태 변경
+    auditVm.state._estCtx = { siteKey: 'NEWSITE::견적테스트', isEdit: true, quoteType: 'site', ed: Object.assign({}, auditVm.state.dashData.sites[1].estimateData) };
+    domInputs.esSite = makeInput('견적테스트');
+    domInputs.esStatus = makeInput('견적서 전달');
+    domInputs.esPrio = makeInput('높음');
+    domInputs.esScope = makeInput('전체공사');
+    domInputs.esSource = makeInput('소개');
+    domInputs.esMgr = makeInput('조항만');
+    domInputs.esCName = makeInput('김고객');
+    domInputs.esCPhone = makeInput('010-1111-2222');
+    domInputs.esExpAmt = makeInput('52000000');
+    domInputs.esConAmt = makeInput('');
+    domInputs.esCostAmt = makeInput('');
+    domInputs.esInq = makeInput('2026-11-10');
+    domInputs.esCons = makeInput('');
+    domInputs.esVisit = makeInput('');
+    domInputs.esSend = makeInput('2026-11-18');
+    domInputs.esExpD = makeInput('');
+    domInputs.esMemo = makeInput('견적서 발송 완료');
+    auditVm.saveEstimateModal();
+    auditVm.markEstimateContractDone('NEWSITE::견적테스트');
+    auditVm.revertEstimateFromDone('NEWSITE::견적테스트');
+
+    // 5) To-Do 수정 / 상태 / 기한 / 담당자 변경
+    auditVm.state._todoDraft = Object.assign({}, auditVm.state.todoData.list[0]);
+    domInputs.tdTitle = makeInput('자재 발주 및 검수 확인');
+    domInputs.tdDue = makeInput('2026-11-19');
+    domInputs.tdManager = makeInput('차정률');
+    domInputs.tdSite = makeInput('테스트현장');
+    domInputs.tdTag = makeInput('발주');
+    domInputs.tdDetail = makeInput('스위치 2구 추가');
+    auditVm.saveTodoModal();
+    auditVm.toggleTodoItem('todo_1');
+    auditVm.quickUpdateTodoDue('todo_1', 'today');
+    auditVm.quickUpdateTodoManager('todo_1', '조항만');
+
+    // 6) 현장정보 · 체크리스트 · 마스터 설정 변경
+    auditVm.togglePreChecklist('테스트현장', 'consentDone');
+    auditVm.state._siteInfoName = '테스트현장';
+    domInputs.siAddr = makeInput('서울 동작구 101동 202호');
+    domInputs.siPw = makeInput('1234*');
+    domInputs.siOffice = makeInput('02-111-2222');
+    domInputs.siDrive = makeInput('');
+    domInputs.siMemo = makeInput('사다리차 불가');
+    domInputs.siC1 = makeInput('', true);
+    domInputs.siC2 = makeInput('', true);
+    domInputs.siC3 = makeInput('', false);
+    auditVm.saveSiteInfoModal();
+
+    auditVm.state.settingsData.partners[0].phone = '010-9999-8888';
+    auditVm.saveSettingsModalAll();
+
+    const recordedLogs = auditVm.getLocalAuditLogs();
+    const findLog = (dom, act) => recordedLogs.find((l) => l.domain === dom && l.action === act);
+
+    const taskEditLog = findLog('공정', '수정');
+    const taskBulkLog = findLog('공정', '일괄 완료');
+    const taskMoveLog = findLog('공정', '일정 이동');
+    const colEditLog = findLog('재무', '수금 수정');
+    const expEditLog = findLog('재무', '비용 수정');
+    const expPayLog = findLog('재무', '전액지급');
+    const estEditLog = findLog('신규견적', '수정');
+    const estDoneLog = findLog('신규견적', '계약 완료');
+    const estRevLog = findLog('신규견적', '신규 복원');
+    const todoEditLogs = recordedLogs.filter((l) => l.domain === 'To-Do' && l.action === '수정');
+    const todoModalLog = todoEditLogs.find((l) => l.detail.includes('제목:'));
+    const todoDueLog = todoEditLogs.find((l) => l.detail.includes('마감일: 2026-11-19 →'));
+    const todoMgrLog = todoEditLogs.find((l) => l.detail.includes('담당자: 차정률 → 조항만'));
+    const todoToggleLog = findLog('To-Do', '상태 변경');
+    const siteCheckLog = findLog('현장', '착공체크 변경');
+    const siteInfoLog = findLog('현장', '정보 수정');
+    const settingsLog = findLog('시스템', '설정 변경');
+
+    const gasCleanOk = gasCalls.every((c) => {
+      const obj = c.payload || c.row;
+      if (!obj || typeof obj !== 'object') return true;
+      return !Object.prototype.hasOwnProperty.call(obj, '_auditBefore') &&
+        !Object.prototype.hasOwnProperty.call(obj, '_auditAfter') &&
+        !Object.prototype.hasOwnProperty.call(obj, '_skipAudit');
+    });
+
+    assertTest('전 도메인(공정·재무·신규견적·To-Do·현장·설정) 수정 시 이전값 → 변경값 기록 및 GAS payload 오염 방지 검증',
+      Boolean(taskEditLog && taskEditLog.detail.includes('날짜: 2026-11-15 → 2026-11-18') && taskEditLog.detail.includes('협력업체: 미지정 → 번개전기') && taskEditLog.detail.includes('공유: 미공유(OFF) → 공유(ON)')) &&
+      Boolean(taskBulkLog && taskBulkLog.detail.includes('상태: 진행 중 → 완료')) &&
+      Boolean(taskMoveLog && taskMoveLog.detail.includes('날짜: 2026-11-20 → 2026-11-25')) &&
+      Boolean(colEditLog && colEditLog.detail.includes('계약금액: 45,000,000원 → 48,000,000원') && colEditLog.detail.includes('착수금: 0원 → 15,000,000원') && colEditLog.detail.includes('증빙구분: 미발행 → 세금계산서')) &&
+      Boolean(expEditLog && expEditLog.detail.includes('청구금액: 1,000,000원 → 1,200,000원') && expEditLog.detail.includes('지급금액: 0원 → 500,000원') && expEditLog.detail.includes('증빙구분: 미선택 → 세금계산서')) &&
+      Boolean(expPayLog && expPayLog.detail.includes('지급금액: 500,000원 → 1,200,000원')) &&
+      Boolean(estEditLog && estEditLog.detail.includes('상태: 1차상담 예정 → 견적서 전달') && estEditLog.detail.includes('예상금액: 40,000,000원 → 52,000,000원') && estEditLog.detail.includes('담당자: 송지은 → 조항만')) &&
+      Boolean(estDoneLog && estDoneLog.detail.includes('상태: 견적서 전달 → 계약 완료')) &&
+      Boolean(estRevLog && estRevLog.detail.includes('상태: 계약 완료 → 견적서 전달')) &&
+      Boolean(todoModalLog && todoModalLog.detail.includes('담당자: 송지은 → 차정률') && todoDueLog && todoMgrLog) &&
+      Boolean(todoToggleLog && todoToggleLog.detail.includes('상태: 미완료 → 완료')) &&
+      Boolean(siteCheckLog && siteCheckLog.detail.includes('입주민 동의서: 미완료 → 완료')) &&
+      Boolean(siteInfoLog && siteInfoLog.detail.includes('현장주소: 서울 동작구 101 → 서울 동작구 101동 202호') && siteInfoLog.detail.includes('승강기 보양: 미완료 → 완료')) &&
+      Boolean(settingsLog && settingsLog.detail.includes('010-1111-0000 → 010-9999-8888')) &&
+      gasCleanOk
+    );
+
+    // 7) UI 렌더링(신규 + 구버전 로그 공존) & 변경 전/후 키워드 검색 검증
+    const legacyLog = { id: 'AUD_LEGACY_1', at: '2026-11-10T01:00:00.000Z', user: '조항만', domain: '공정', action: '수정', target: '[구현장] 철거', detail: '2026-11-10 · 예정' };
+    const malformedLog = { id: '', at: 'invalid', target: '<script>alert(1)</script>' };
+    const mixedLogs = [legacyLog, malformedLog, ...recordedLogs];
+    const timelineHtml = auditVm.buildAuditTimelineListHtml(mixedLogs, mixedLogs);
+    const searchBeforeHits = auditVm.filterAuditLogsList(mixedLogs, 'all', '45,000,000');
+    const searchCompactHits = auditVm.filterAuditLogsList(mixedLogs, '재무', '48000000');
+    const searchAfterHits = auditVm.filterAuditLogsList(mixedLogs, '공정', '번개전기');
+
+    assertTest('📜 변경 이력 UI 타임라인 Diff 칩 렌더링, 구버전 로그 호환 및 변경 전/후 키워드 검색 검증',
+      timelineHtml.includes('45,000,000원') &&
+      timelineHtml.includes('48,000,000원') &&
+      timelineHtml.includes('→') &&
+      timelineHtml.includes('2026-11-10 · 예정') &&
+      timelineHtml.includes('&lt;script&gt;') &&
+      !timelineHtml.includes('<script>alert(1)') &&
+      searchBeforeHits.some((l) => l.id === colEditLog.id) &&
+      searchCompactHits.some((l) => l.id === colEditLog.id) &&
+      searchAfterHits.some((l) => l.id === taskEditLog.id)
+    );
+  })());
+
 Promise.all(pendingAsyncTests).then(() => {
 if (isVerbose) {
   rawConsoleLog('\n========================================================');
