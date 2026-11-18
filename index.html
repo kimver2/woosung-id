@@ -7989,7 +7989,7 @@ end $$;`;
           const expectedAmtStr = formatEstimateAmtStr(est.expectedAmount);
           const contractAmtStr = formatEstimateAmtStr(est.contractAmount);
           const isContractDone = (est.status === "계약 완료");
-          const isPromoted = isContractDone && isEstimatePromotedToSite(siteName);
+          const isPromoted = isContractDone && isEstimatePromotedToSite(siteName, est.quoteType || qCat);
 
           const statusBadge = buildEstimateBadgeHtml("status", est.status || "신규 문의");
           const priorityBadge = buildEstimateBadgeHtml("priority", est.priority || "보통", "우선순위: ");
@@ -8007,7 +8007,7 @@ end $$;`;
             const rCleanPhone = rRawPhone.replace(/[^0-9+]/g, "");
             const rHasPhone = Boolean(rCleanPhone && rCleanPhone.length >= 7 && rRawPhone !== "-" && rRawPhone !== "미등록");
             const rIsDone = (e.status === "계약 완료");
-            const rIsPromoted = rIsDone && isEstimatePromotedToSite(s.siteName);
+            const rIsPromoted = rIsDone && isEstimatePromotedToSite(s.siteName, e.quoteType || qCat);
             const searchStr = [s.siteName, e.clientName, e.clientPhone, e.memo, e.nextAction, e.manager, e.scope, e.status].join(" ").toLowerCase();
             return `
               <tr class="pc-est-table-row ${isRowSel ? "selected-row" : ""}" data-search="${escHtml(searchStr)}" onclick="selectQuoteCard('${escJs(s.siteKey)}')" ondblclick="openEstimateModal('${escJs(s.siteKey)}')" title="클릭: 상세 보기 · 더블클릭: 정보 수정">
@@ -8023,7 +8023,7 @@ end $$;`;
                 <td style="text-align:right;font-weight:700;color:#2563eb;white-space:nowrap;">${rowAmtStr}</td>
                 <td style="text-align:center;font-size:12px;color:#475569;white-space:nowrap;">${escHtml(formatEstimateDateYMD(e.expectedDate))}</td>
                 <td style="text-align:center;white-space:nowrap;" onclick="event.stopPropagation();">
-                  ${rIsDone ? (rIsPromoted ? `<button type="button" class="btn-tool-tag" style="color:#15803d;border-color:#86efac;background:#dcfce7;font-weight:800;margin-right:3px;" onclick="navigateToSiteDetail('${escJs(s.siteName)}', false)">보기</button>` : `<button type="button" class="btn-tool-tag" style="color:#2563eb;border-color:#93c5fd;background:#eff6ff;font-weight:800;margin-right:3px;" onclick="openPromoteEstimateModal('${escJs(s.siteKey)}')">승격</button>`) : ""}
+                  ${rIsDone ? (rIsPromoted ? `<button type="button" class="btn-tool-tag" style="color:#15803d;border-color:#86efac;background:#dcfce7;font-weight:800;margin-right:3px;" onclick="openPromotedSiteFromEstimate('${escJs(s.siteKey)}', '${escJs(s.siteName)}', false, '${escJs(e.quoteType || qCat)}')">보기</button>` : `<button type="button" class="btn-tool-tag" style="color:#2563eb;border-color:#93c5fd;background:#eff6ff;font-weight:800;margin-right:3px;" onclick="openPromoteEstimateModal('${escJs(s.siteKey)}')">승격</button>`) : ""}
                   <button type="button" class="btn-tool-tag" onclick="openEstimateModal('${escJs(s.siteKey)}')">수정</button>
                   <button type="button" class="btn-tool-tag" style="color:#dc2626;border-color:#fca5a5;background:#fef2f2;margin-left:3px;" onclick="openDeleteConfirm('site', '${escJs(s.siteKey)}')">삭제</button>
                 </td>
@@ -8037,7 +8037,7 @@ end $$;`;
                   <div class="pc-est-title-wrap">
                     <div class="pc-est-badge-row">
                       ${statusBadge} ${priorityBadge} ${scopeBadge} ${sourceBadge}
-                      ${isContractDone && isPromoted ? `<span class="pc-badge-promoted" style="background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px;cursor:pointer;display:inline-flex;align-items:center;gap:3px;" onclick="navigateToSiteDetail('${escJs(siteName)}', false)" title="진행 현장 바로가기">✅ 현장 승격됨</span>` : ""}
+                      ${isContractDone && isPromoted ? `<span class="pc-badge-promoted" style="background:#dcfce7;color:#15803d;border:1px solid #86efac;font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px;cursor:pointer;display:inline-flex;align-items:center;gap:3px;" onclick="openPromotedSiteFromEstimate('${escJs(curSite.siteKey)}', '${escJs(siteName)}', false, '${escJs(est.quoteType || qCat)}')" title="진행 현장 바로가기">✅ 현장 승격됨</span>` : ""}
                     </div>
                     <h2 class="pc-est-site-name">📋 ${escHtml(siteName)}</h2>
                     <div class="pc-est-meta-line">
@@ -8050,7 +8050,7 @@ end $$;`;
                     </div>
                   </div>
                   <div class="pc-est-hero-actions">
-                    ${isContractDone ? (isPromoted ? `<button type="button" class="btn-act-blue" style="background:#16a34a;color:#ffffff;font-weight:800;" onclick="navigateToSiteDetail('${escJs(siteName)}', false)" title="진행 현장 바로가기"><span>✅</span> 현장 등록됨 → 보기</button>` : `<button type="button" class="btn-act-blue" style="background:linear-gradient(135deg, #2563eb, #1d4ed8);color:#ffffff;font-weight:800;box-shadow:0 2px 6px rgba(37,99,235,0.3);" onclick="openPromoteEstimateModal('${escJs(curSite.siteKey)}')" title="진행 현장으로 승격"><span>🚀</span> 현장으로 승격</button>`) + `<button type="button" class="btn-act-white" onclick="window.revertEstimateFromDone('${escJs(curSite.siteKey)}')" title="계약 완료 취소 후 신규견적(진행 중)으로 복원">↩️ 신규로 되돌리기</button>` : `<button type="button" class="btn-act-blue" style="background:#059669;color:#ffffff;font-weight:800;" onclick="window.markEstimateContractDone('${escJs(curSite.siteKey)}')" title="진행 단계를 계약 완료로 변경">✅ 계약 완료</button>`}
+                    ${isContractDone ? (isPromoted ? `<button type="button" class="btn-act-blue" style="background:#16a34a;color:#ffffff;font-weight:800;" onclick="openPromotedSiteFromEstimate('${escJs(curSite.siteKey)}', '${escJs(siteName)}', false, '${escJs(est.quoteType || qCat)}')" title="진행 현장 바로가기"><span>✅</span> 현장 등록됨 → 보기</button>` : `<button type="button" class="btn-act-blue" style="background:linear-gradient(135deg, #2563eb, #1d4ed8);color:#ffffff;font-weight:800;box-shadow:0 2px 6px rgba(37,99,235,0.3);" onclick="openPromoteEstimateModal('${escJs(curSite.siteKey)}')" title="진행 현장으로 승격"><span>🚀</span> 현장으로 승격</button>`) + `<button type="button" class="btn-act-white" onclick="window.revertEstimateFromDone('${escJs(curSite.siteKey)}')" title="계약 완료 취소 후 신규견적(진행 중)으로 복원">↩️ 신규로 되돌리기</button>` : `<button type="button" class="btn-act-blue" style="background:#059669;color:#ffffff;font-weight:800;" onclick="window.markEstimateContractDone('${escJs(curSite.siteKey)}')" title="진행 단계를 계약 완료로 변경">✅ 계약 완료</button>`}
                     <button type="button" class="btn-act-blue" style="background:#3b82f6;" onclick="openEstimateModal('${escJs(curSite.siteKey)}')" title="신규현장 정보 수정">✏️ 정보 수정</button>
                     <button type="button" class="btn-act-danger" onclick="openDeleteConfirm('site', '${escJs(curSite.siteKey)}')" title="이 신규현장 삭제">🗑️ 현장 삭제</button>
                   </div>
@@ -17314,7 +17314,7 @@ end $$;`;
           const mCleanPhone = mRawPhone.replace(/[^0-9+]/g, "");
           const mHasPhone = Boolean(mCleanPhone && mCleanPhone.length >= 7 && mRawPhone !== "-" && mRawPhone !== "미등록");
           const mIsDone = (eSt === "계약 완료");
-          const mIsPromoted = mIsDone && isEstimatePromotedToSite(s.siteName);
+          const mIsPromoted = mIsDone && isEstimatePromotedToSite(s.siteName, eData.quoteType || qCat);
 
           return `
             <div class="mobile-est-card" style="background:#ffffff;border:1.5px solid ${isExpanded ? "#93c5fd" : "#e2e8f0"};border-radius:10px;padding:12px 14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.04);cursor:pointer;" onclick="toggleMobileQuoteCard('${escJs(s.siteKey)}')">
@@ -17322,7 +17322,7 @@ end $$;`;
                 <div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1;">
                   <span style="width:8px;height:8px;border-radius:50%;background:${stStyle.fg};flex-shrink:0;"></span>
                   <span style="font-size:14px;font-weight:800;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.siteName)}</span>
-                  ${mIsDone && mIsPromoted ? `<span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:8px;background:#dcfce7;color:#15803d;border:1px solid #86efac;cursor:pointer;white-space:nowrap;" onclick="event.stopPropagation(); navigateToSiteDetail('${escJs(s.siteName)}', true);">✅ 승격됨</span>` : ""}
+                  ${mIsDone && mIsPromoted ? `<span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:8px;background:#dcfce7;color:#15803d;border:1px solid #86efac;cursor:pointer;white-space:nowrap;" onclick="event.stopPropagation(); openPromotedSiteFromEstimate('${escJs(s.siteKey)}', '${escJs(s.siteName)}', true, '${escJs(eData.quoteType || qCat)}');">✅ 승격됨</span>` : ""}
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
                   ${(!mIsDone && !isFailedMode) ? getQuoteElapsedBadgeHtml(eData.inquiryDate) : ""}
@@ -17380,7 +17380,7 @@ end $$;`;
                     </div>` : ""}
                   ${mIsDone ? (mIsPromoted ? `
                     <div style="margin-bottom:6px;">
-                      <button type="button" onclick="navigateToSiteDetail('${escJs(s.siteName)}', true)" style="width:100%;padding:8px;background:#16a34a;color:#ffffff;border:none;border-radius:6px;font-weight:800;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">✅ 현장 등록됨 → 해당 현장 보기</button>
+                      <button type="button" onclick="openPromotedSiteFromEstimate('${escJs(s.siteKey)}', '${escJs(s.siteName)}', true, '${escJs(eData.quoteType || qCat)}')" style="width:100%;padding:8px;background:#16a34a;color:#ffffff;border:none;border-radius:6px;font-weight:800;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">✅ 현장 등록됨 → 해당 현장 보기</button>
                     </div>` : `
                     <div style="margin-bottom:6px;">
                       <button type="button" onclick="openPromoteEstimateModal('${escJs(s.siteKey)}')" style="width:100%;padding:8px;background:linear-gradient(135deg, #2563eb, #1d4ed8);color:#ffffff;border:none;border-radius:6px;font-weight:800;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;box-shadow:0 2px 6px rgba(37,99,235,0.3);">🚀 진행 현장으로 승격</button>
@@ -23515,36 +23515,114 @@ end $$;`;
         showToast(`✅ 담당자가 ${item.manager ? item.manager + "님으로" : "미지정으로"} 변경되었습니다.`);
       };
 
-      window.navigateToSiteDetail = function (siteName, isMobile) {
-        if (!siteName) return;
-        const useMobile = typeof isMobile === "boolean" ? isMobile : state.device === "mobile";
-        const site = getAllSites().find((s) => s.siteName === siteName && (s.scope || "site") !== "newSite")
-          || getAllSites().find((s) => s.siteName === siteName);
-        if (useMobile) {
-          if (site && window.openSiteDetailMobile) window.openSiteDetailMobile(site.siteKey);
-          else if (window.switchMobileTab) window.switchMobileTab("sites");
-        } else {
-          state.scope = "site";
-          state.showArchivedSites = false;
-          if (site && window.selectSiteCard) window.selectSiteCard(site.siteKey);
-          if (window.switchMainTab) window.switchMainTab("sites");
+      function stripSiteKeyAndTagPrefix(str) {
+        if (!str) return "";
+        return String(str)
+          .trim()
+          .replace(/^(?:ARCHIVED::)?(?:(?:NEWSITE|SINGLE|AS|site)::)?/i, "")
+          .replace(/^\[(단건|AS|as|신규|현장|단품|완료)\]\s*/i, "")
+          .replace(/^\((단건|AS|as|신규|현장|단품|완료)\)\s*/i, "")
+          .trim();
+      }
+
+      function normalizeSiteNameForMatch(str) {
+        return stripSiteKeyAndTagPrefix(str).replace(/\s+/g, "").toLowerCase();
+      }
+
+      function findPromotedSite(siteNameOrKey, preferredScope) {
+        if (!siteNameOrKey) return null;
+        const allSites = getAllSites();
+        if (!Array.isArray(allSites) || allSites.length === 0) return null;
+
+        let rawInput = String(siteNameOrKey).trim();
+        let prefScope = (preferredScope === "site" || preferredScope === "single" || preferredScope === "as") ? preferredScope : "";
+
+        const estObj = allSites.find((s) => s && (s.scope || "site") === "newSite" && (s.siteKey === rawInput || s.siteName === rawInput));
+        if (estObj) {
+          if (estObj.siteName) rawInput = String(estObj.siteName).trim();
+          if (!prefScope) prefScope = getQuoteTypeOfSite(estObj);
         }
+
+        const strippedInput = stripSiteKeyAndTagPrefix(rawInput);
+        const normInput = normalizeSiteNameForMatch(rawInput);
+        if (!normInput) return null;
+
+        const candidates = [];
+        for (let i = 0; i < allSites.length; i++) {
+          const s = allSites[i];
+          if (!s) continue;
+          const sc = s.scope || "site";
+          if (sc === "newSite" || String(s.siteKey || "").startsWith("NEWSITE::")) continue;
+
+          const sNameRaw = String(s.siteName || "").trim();
+          const sKeyRaw = String(s.siteKey || "").trim();
+          const sNameStripped = stripSiteKeyAndTagPrefix(sNameRaw);
+          const sNameNorm = normalizeSiteNameForMatch(sNameRaw);
+          const sKeyNorm = normalizeSiteNameForMatch(sKeyRaw);
+
+          let matchRank = 0;
+          if (sNameRaw === rawInput || (strippedInput && sNameRaw === strippedInput) || (strippedInput && sNameStripped === strippedInput)) {
+            matchRank = 3;
+          } else if (sNameNorm === normInput || sKeyNorm === normInput) {
+            matchRank = 2;
+          }
+          if (!matchRank) continue;
+
+          const isDone = isSiteCompleted(s);
+          const scopeMatchesPref = Boolean(prefScope && sc === prefScope);
+          const scopeOrder = sc === "site" ? 3 : (sc === "single" ? 2 : (sc === "as" ? 1 : 0));
+          candidates.push({
+            site: s,
+            matchRank,
+            scopeMatchesPref: scopeMatchesPref ? 1 : 0,
+            activeRank: isDone ? 0 : 1,
+            scopeOrder
+          });
+        }
+
+        if (candidates.length === 0) return null;
+        candidates.sort((a, b) => {
+          if (b.matchRank !== a.matchRank) return b.matchRank - a.matchRank;
+          if (b.scopeMatchesPref !== a.scopeMatchesPref) return b.scopeMatchesPref - a.scopeMatchesPref;
+          if (b.activeRank !== a.activeRank) return b.activeRank - a.activeRank;
+          return b.scopeOrder - a.scopeOrder;
+        });
+        return candidates[0].site;
+      }
+
+      window.navigateToSiteDetail = function (siteNameOrKey, isMobile, preferredScope) {
+        if (!siteNameOrKey) return;
+        const useMobile = typeof isMobile === "boolean" ? isMobile : state.device === "mobile";
+        let site = findPromotedSite(siteNameOrKey, preferredScope);
+        if (!site) {
+          const targetNorm = normalizeSiteNameForMatch(siteNameOrKey);
+          site = getAllSites().find((s) => s && (s.siteKey === siteNameOrKey || s.siteName === siteNameOrKey || (targetNorm && normalizeSiteNameForMatch(s.siteName) === targetNorm)));
+        }
+        if (useMobile) {
+          if (site && window.openSiteDetailMobile) {
+            window.openSiteDetailMobile(site.siteKey);
+          } else if (window.switchMobileTab) {
+            window.switchMobileTab("sites");
+          }
+          return;
+        }
+        if (site && window.openSiteDetail) {
+          window.openSiteDetail(site.siteKey);
+          return;
+        }
+        if (window.switchMainTab) window.switchMainTab("sites");
+      };
+
+      window.openPromotedSiteFromEstimate = function (quoteSiteKey, siteName, isMobile, preferredScope) {
+        return window.navigateToSiteDetail(siteName || quoteSiteKey, isMobile, preferredScope);
       };
 
       // ================= 신규 견적 -> 진행 현장 승격 모달 =================
       let curPromoteSiteKey = "";
       let curPromoteEstimateData = null;
 
-      function isEstimatePromotedToSite(siteName) {
-        if (!siteName) return false;
-        const clean = String(siteName).trim().replace(/\s+/g, "").toLowerCase();
-        const allSites = getAllSites();
-        if (!Array.isArray(allSites)) return false;
-        return allSites.some(function (s) {
-          if (!s || (s.scope || "site") === "newSite") return false;
-          const sName = String(s.siteName || "").trim().replace(/\s+/g, "").toLowerCase();
-          return sName === clean;
-        });
+      function isEstimatePromotedToSite(siteName, preferredScope) {
+        return Boolean(findPromotedSite(siteName, preferredScope));
       }
 
       function getDefaultProcessSchedule(scope, startDateStr, manager) {
@@ -29600,6 +29678,21 @@ end $$;`;
       }
       window.resetFinanceScrollTop = resetFinanceScrollTop;
 
+      function restoreSiteScopeFromQuote(opts) {
+        opts = opts || {};
+        state.scope = (opts.targetScope && opts.targetScope !== "newSite") ? opts.targetScope : "site";
+        state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
+        const hasValidSelectedSite = Boolean(
+          state.selectedSiteKey
+          && !String(state.selectedSiteKey).startsWith("NEWSITE::")
+          && getScopeSites(Boolean(state.showArchivedSites)).some((s) => s.siteKey === state.selectedSiteKey)
+        );
+        if (!opts.preserveSelectedSite && !hasValidSelectedSite) {
+          state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
+        }
+        markAllDirty();
+      }
+
       window.switchMainTab = function (tabKey, opts) {
         opts = opts || {};
         if (tabKey === "finance" && !canViewFinance()) {
@@ -29629,10 +29722,7 @@ end $$;`;
             markAllDirty();
           }
         } else if (state.scope === "newSite") {
-          state.scope = "site";
-          state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
-          state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
-          markAllDirty();
+          restoreSiteScopeFromQuote(opts);
         }
         document.querySelectorAll(".nav-tab-item").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-tab") === tabKey));
         document.querySelectorAll(".page-container").forEach((page) => page.classList.remove("active"));
@@ -29662,6 +29752,9 @@ end $$;`;
         const prevTab = state.mobileTab;
         state.mobileTab = tabKey;
         state.mobileExpandedSiteKeys.clear();
+        if (opts.expandSiteKey) {
+          state.mobileExpandedSiteKeys.add(opts.expandSiteKey);
+        }
         state.dirtyMobileTabs[tabKey] = true;
 
         if (tabKey === "home") {
@@ -29695,10 +29788,7 @@ end $$;`;
             markAllDirty();
           }
         } else if (state.scope === "newSite") {
-          state.scope = "site";
-          state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
-          state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
-          markAllDirty();
+          restoreSiteScopeFromQuote(opts);
         }
         document.querySelectorAll(".m-bottom-btn").forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-mtab") === tabKey));
         document.querySelectorAll(".m-page-pane").forEach((p) => p.classList.remove("active"));
@@ -29939,19 +30029,19 @@ end $$;`;
         if (ev && ev.target && ev.target.tagName === "INPUT") return;
         window.openSiteDetail(siteKey);
       };
-      window.openSiteDetail = function (siteKey) {
+      function prepareOpenSiteDetailState(siteKey) {
         const site = getAllSites().find((s) => s.siteKey === siteKey);
-        const isDone = Boolean(site && ((typeof isSiteCompleted === "function" && isSiteCompleted(site)) || site.isArchived || site.status === "계약 완료" || site.status === "완료" || site.status === "보관"));
-        if (site && site.scope) state.scope = site.scope;
-        state.showArchivedSites = isDone;
         if (site && site.scope === "newSite") {
+          const isDoneQuote = Boolean((typeof isSiteCompleted === "function" && isSiteCompleted(site)) || site.isArchived || site.status === "계약 완료" || site.status === "완료" || site.status === "보관");
+          state.scope = "newSite";
+          state.showArchivedSites = isDoneQuote;
           state.quoteCategory = getQuoteTypeOfSite(site);
           state.selectedQuoteKey = siteKey;
           if (isQuoteFailedOrHold(site)) {
             state.quoteStatusFilter = "failed";
             state.quoteShowArchived = false;
             state.showFailedQuotes = true;
-          } else if (isDone) {
+          } else if (isDoneQuote) {
             state.quoteStatusFilter = "done";
             state.quoteShowArchived = true;
           } else {
@@ -29959,49 +30049,55 @@ end $$;`;
             state.quoteShowArchived = false;
           }
           markAllDirty();
-          window.switchMainTab("quote");
-          renderActiveViews();
-          return;
+          return { tab: "quote", site, targetScope: "newSite", expandSiteKey: siteKey };
         }
+        const targetScope = (site && site.scope && site.scope !== "newSite") ? site.scope : "site";
+        const isDone = Boolean(site && (typeof isSiteCompleted === "function" ? isSiteCompleted(site) : (site.isArchived || site.status === "완료" || site.status === "보관")));
+        state.scope = targetScope;
+        state.showArchivedSites = isDone;
         state.sitesSubView = "list";
-        state.selectedSiteKey = siteKey;
+        const resolvedKey = site ? site.siteKey : siteKey;
+        state.selectedSiteKey = resolvedKey;
         state.siteTaskStatusFilter = "all";
         state.checkedTableTaskIds.clear();
-        markAllDirty();
-        window.switchMainTab("sites");
-        renderActiveViews();
-      };
-      window.openSiteDetailMobile = function (siteKey) {
-        const site = getAllSites().find((s) => s.siteKey === siteKey);
-        const isDone = Boolean(site && ((typeof isSiteCompleted === "function" && isSiteCompleted(site)) || site.isArchived || site.status === "계약 완료" || site.status === "완료" || site.status === "보관"));
-        if (site && site.scope) state.scope = site.scope;
-        state.showArchivedSites = isDone;
-        if (site && site.scope === "newSite") {
-          state.quoteCategory = getQuoteTypeOfSite(site);
-          state.selectedQuoteKey = siteKey;
-          if (isQuoteFailedOrHold(site)) {
-            state.quoteStatusFilter = "failed";
-            state.quoteShowArchived = false;
-            state.showFailedQuotes = true;
-          } else if (isDone) {
-            state.quoteStatusFilter = "done";
-            state.quoteShowArchived = true;
-          } else {
-            state.quoteStatusFilter = "active";
-            state.quoteShowArchived = false;
+        if (site) {
+          if (state.memberFilter) {
+            const hasMemberTask = isDone
+              ? (site.tasks || []).some((t) => taskMatchesMember(t, state.memberFilter))
+              : (site.tasks || []).some((t) => !isTaskCompleted(t) && taskMatchesMember(t, state.memberFilter));
+            if (!hasMemberTask) state.memberFilter = "";
           }
-          markAllDirty();
-          window.switchMobileTab("quote");
-          if (siteKey) state.mobileExpandedSiteKeys.add(siteKey);
-          renderActiveViews();
-          return;
+          if (state.searchQuery && state.searchQuery.trim()) {
+            const hay = [site.siteName, ...(site.tasks || []).map((t) => t.taskName + " " + t.partner + " " + t.manager + " " + t.memo)].join(" ");
+            if (!matchesQuery(hay, state.searchQuery.trim())) {
+              state.searchQuery = "";
+              const pcIn = document.getElementById("pcSearchInput");
+              if (pcIn) pcIn.value = "";
+              const mIn = document.getElementById("mSearchInput");
+              if (mIn) mIn.value = "";
+            }
+          }
         }
-        state.sitesSubView = "list";
-        state.selectedSiteKey = siteKey;
         markAllDirty();
-        window.switchMobileTab("sites");
-        if (siteKey) state.mobileExpandedSiteKeys.add(siteKey);
-        renderActiveViews();
+        return { tab: "sites", site, targetScope, expandSiteKey: resolvedKey };
+      }
+
+      window.openSiteDetail = function (siteKey) {
+        const nav = prepareOpenSiteDetailState(siteKey);
+        if (nav.tab === "quote") {
+          window.switchMainTab("quote");
+        } else {
+          window.switchMainTab("sites", { preserveSelectedSite: true, targetScope: nav.targetScope });
+        }
+      };
+
+      window.openSiteDetailMobile = function (siteKey) {
+        const nav = prepareOpenSiteDetailState(siteKey);
+        if (nav.tab === "quote") {
+          window.switchMobileTab("quote", { expandSiteKey: nav.expandSiteKey });
+        } else {
+          window.switchMobileTab("sites", { preserveSelectedSite: true, targetScope: nav.targetScope, expandSiteKey: nav.expandSiteKey });
+        }
       };
       window.selectSiteCard = function (siteKey) { state.selectedSiteKey = siteKey; state.siteTaskStatusFilter = "all"; state.checkedTableTaskIds.clear(); state.dirtyPcTabs.sites = true; state.dirtyPcTabs.quote = true; renderActiveViews(); };
       window.focusSiteOnCalendar = function (siteKey, isMobile) {
