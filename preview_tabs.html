@@ -20302,13 +20302,36 @@ end $$;`;
         }
       };
 
+      async function openSharePreviewWindow(url, saveFn) {
+        if (!url) return;
+        // noopener를 window.open에 전달하면 스펙상 null이 반환되어 fallback이 두 번째 탭을 여는 버그가 발생하므로
+        // 먼저 창 핸들을 확보한 뒤 opener를 끊고 저장 완료 후 동일 탭으로 이동한다.
+        const win = window.open("", "_blank");
+        if (win) {
+          try { win.opener = null; } catch (e) {}
+          try {
+            if (win.document) win.document.title = "공유 페이지 불러오는 중...";
+          } catch (e) {}
+        }
+        try {
+          await saveFn();
+        } catch (err) {
+          if (win && !win.closed) {
+            try { win.close(); } catch (e) {}
+          }
+          throw err;
+        }
+        if (win) {
+          if (!win.closed) win.location.replace(url);
+        } else {
+          window.open(url, "_blank", "noopener,noreferrer");
+        }
+      }
+
       window.previewClientShare = async function () {
         if (!state._clientShareDraft) return;
         const url = getClientShareUrl(state._clientShareDraft.token);
-        const win = window.open("", "_blank", "noopener,noreferrer");
-        await window.saveClientShareModal(true);
-        if (win) win.location.href = url;
-        else window.open(url, "_blank", "noopener,noreferrer");
+        await openSharePreviewWindow(url, () => window.saveClientShareModal(true));
       };
 
       window.regenerateClientShareToken = function () {
@@ -20774,10 +20797,7 @@ end $$;`;
       window.previewPartnerShare = async function () {
         if (!state._partnerShareDraft) return;
         const url = getPartnerShareUrl(state._partnerShareDraft.token);
-        const win = window.open("", "_blank", "noopener,noreferrer");
-        await window.savePartnerShareModal(true);
-        if (win) win.location.href = url;
-        else window.open(url, "_blank", "noopener,noreferrer");
+        await openSharePreviewWindow(url, () => window.savePartnerShareModal(true));
       };
 
       window.savePartnerShareModal = async function (silent) {
