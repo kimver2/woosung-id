@@ -2671,7 +2671,13 @@
     .ws-as-chip.ok { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
     .ws-as-chip.amber { background: #fffbeb; color: #d97706; border-color: #fde68a; }
     .ws-as-chip.warn { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+    .ws-as-chip.blue { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+    .ws-as-chip.purple { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
+    .ws-as-chip.orange { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+    .ws-as-chip.teal { background: #f0fdfa; color: #0f766e; border-color: #99f6e4; }
     .ws-as-chip.muted { background: #f1f5f9; color: #64748b; border-color: #cbd5e1; }
+    .ws-as-chip.dashed { border-style: dashed; }
+    .ws-as-chip-wrap { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; white-space: normal; }
     .ws-as-panel {
       display: flex;
       flex-direction: column;
@@ -2704,6 +2710,26 @@
       border: 1px solid #e2e8f0;
       border-radius: 10px;
       padding: 12px 14px;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    }
+    .ws-as-kpi-card.is-clickable:hover {
+      border-color: #94a3b8;
+      box-shadow: 0 3px 10px rgba(15, 23, 42, 0.06);
+    }
+    .ws-as-kpi-card.is-active-ok {
+      border-color: #059669;
+      background: #ecfdf5;
+      box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.14);
+    }
+    .ws-as-kpi-card.is-active-amber {
+      border-color: #d97706;
+      background: #fffbeb;
+      box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.14);
+    }
+    .ws-as-kpi-card.is-active-warn {
+      border-color: #dc2626;
+      background: #fef2f2;
+      box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.14);
     }
     .ws-as-kpi-lbl { font-size: 11.5px; color: #64748b; font-weight: 700; }
     .ws-as-kpi-val { font-size: 21px; font-weight: 900; margin-top: 5px; color: #0f172a; line-height: 1.2; }
@@ -2721,12 +2747,71 @@
       box-shadow: var(--shadow-sm);
       min-width: 0;
     }
+    .ws-as-active-list-card {
+      border: 1.5px solid #fecaca;
+      background: #ffffff;
+    }
     .ws-as-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 10px; }
     .ws-as-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 480px; }
-    .ws-as-table th, .ws-as-table td { padding: 9px 8px; border-bottom: 1px solid #f1f5f9; text-align: left; white-space: nowrap; }
+    .ws-as-table th, .ws-as-table td { padding: 9px 8px; border-bottom: 1px solid #f1f5f9; text-align: left; white-space: nowrap; vertical-align: middle; }
     .ws-as-table th { color: #64748b; font-weight: 700; font-size: 11px; background: #f8fafc; border-bottom: 1.5px solid #e2e8f0; }
     .ws-as-table tbody tr { cursor: pointer; transition: background 0.12s; }
     .ws-as-table tbody tr:hover { background: #f8fafc; }
+    .ws-as-table tbody tr.is-selected { background: #eff6ff; }
+    .ws-as-table tbody tr.is-selected td:first-child { box-shadow: inset 3px 0 0 #2563eb; }
+    .ws-as-memo-cell { white-space: normal !important; min-width: 190px; max-width: 340px; line-height: 1.45; color: #334155; word-break: keep-all; }
+    .ws-as-mobile-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+    .ws-as-mobile-item {
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 11px;
+      background: #f8fafc;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: border-color 0.12s, background 0.12s;
+    }
+    .ws-as-mobile-item:hover { background: #f1f5f9; }
+    .ws-as-mobile-item.is-selected { border-color: #2563eb; background: #eff6ff; }
+    .ws-as-partner-detail-box {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border: 1.5px solid #bfdbfe;
+      border-radius: 10px;
+      background: #f8fafc;
+    }
+    .ws-as-filter-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #475569;
+      cursor: pointer;
+      line-height: 1.2;
+    }
+    .ws-as-filter-pill:hover { border-color: #94a3b8; color: #0f172a; }
+    .ws-as-filter-pill.active { background: #1e40af; border-color: #1e40af; color: #ffffff; }
+    .ws-as-inline-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #0f172a;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      margin: 2px 3px 2px 0;
+    }
+    .ws-as-inline-btn:hover { border-color: #2563eb; color: #1d4ed8; background: #eff6ff; }
     .ws-as-bar-track { height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-top: 5px; }
     .ws-as-bar-fill { height: 100%; border-radius: 999px; background: #2563eb; }
     .ws-as-bar-fill.red { background: #dc2626; }
@@ -2758,6 +2843,7 @@
     .mobile-screen-inner .ws-as-kpi-val { font-size: 17px; }
     .mobile-screen-inner .ws-as-two-col { grid-template-columns: 1fr; gap: 10px; }
     .mobile-screen-inner .ws-as-subcard { padding: 11px; }
+    .mobile-screen-inner .ws-as-partner-detail-box { padding: 10px; }
   </style>
 </head>
 <body>
@@ -3490,6 +3576,9 @@ end $$;`;
         sitesSubView: "list",
         asWarrantyDays: 365,
         asWarrantyStatusFilter: "all",
+        asWarrantyActiveListOpen: false,
+        asWarrantySelectedPartner: "",
+        asWarrantyPartnerFaultFilter: "all",
         checkedSiteKeys: null,
         selectedSiteKey: null,
         siteTaskStatusFilter: "all",
@@ -4382,6 +4471,108 @@ end $$;`;
         { label: "창호 / 유리·코킹", colorClass: "slate", keywords: ["창호", "샷시", "샤시", "유리", "방충망", "실리콘", "코킹", "결로", "외벽"] },
         { label: "가구 / 주방·싱크", colorClass: "orange", keywords: ["가구", "주방", "싱크", "싱크대", "붙박이", "신발장", "서랍", "레일", "상판", "인조대리석"] }
       ];
+      const AS_FAULT_REASON_OPTIONS = [
+        { value: "", label: "미지정", colorClass: "muted" },
+        { value: "협력업체 시공불량", label: "협력업체 시공불량", colorClass: "warn" },
+        { value: "당사(시공) 귀책", label: "당사(시공) 귀책", colorClass: "orange" },
+        { value: "자재 하자", label: "자재 하자", colorClass: "amber" },
+        { value: "고객 과실·변심", label: "고객 과실·변심", colorClass: "blue" },
+        { value: "보증기간 만료", label: "보증기간 만료", colorClass: "muted" },
+        { value: "원인 확인중", label: "원인 확인중", colorClass: "purple" },
+        { value: "기타", label: "기타", colorClass: "muted" }
+      ];
+      const AS_FAULT_KEYWORD_RULES = [
+        {
+          label: "고객 과실·변심",
+          keywords: ["고객 과실", "고객과실", "고객 변심", "고객변심", "고객이 시공", "고객 직접", "고객 파손", "사용자 과실", "사용상 과실", "사용 과실", "입주자 과실", "소비자 과실"]
+        },
+        {
+          label: "협력업체 시공불량",
+          keywords: ["시공불량", "시공 불량", "협력업체 귀책", "업체 귀책", "업체 과실", "업체과실", "반장 과실", "작업 불량", "작업불량", "오시공", "시공 실수"]
+        },
+        {
+          label: "당사(시공) 귀책",
+          keywords: ["당사 귀책", "당사귀책", "당사 과실", "우성 귀책", "우성아이디 귀책", "본사 귀책"]
+        },
+        {
+          label: "자재 하자",
+          keywords: ["자재 하자", "자재하자", "제품 하자", "제품하자", "자재 불량", "제품 불량", "초기 불량", "기구 불량", "자재 결함"]
+        },
+        {
+          label: "보증기간 만료",
+          keywords: ["보증기간 만료", "보증 만료", "무상기간 경과", "보증 경과"]
+        },
+        {
+          label: "원인 확인중",
+          keywords: ["원인 확인중", "원인확인중", "원인 파악", "점검필요", "점검 필요", "원인 불명", "확인 필요"]
+        }
+      ];
+
+      /** A/S 귀책사유 문자열을 표준 라벨로 정규화합니다. */
+      function normalizeAsFaultReasonLabel(raw) {
+        const clean = String(raw || "").replace(/\s+/g, " ").trim();
+        if (!clean || clean === "선택 안 함" || clean === "미지정" || clean === "없음") return "";
+        if (["협력업체 시공불량", "협력업체 귀책", "시공불량", "시공 불량", "업체 귀책", "업체 과실", "반장 귀책"].includes(clean)) {
+          return "협력업체 시공불량";
+        }
+        if (["당사(시공) 귀책", "당사 귀책", "당사 시공 귀책", "당사 과실", "우성 귀책", "우성아이디 귀책"].includes(clean)) {
+          return "당사(시공) 귀책";
+        }
+        if (["자재 하자", "자재·제품 하자", "제품 하자", "자재 불량", "제품 불량"].includes(clean)) {
+          return "자재 하자";
+        }
+        if (["고객 과실·변심", "고객 사용 과실", "고객 과실", "고객 변심", "사용자 과실"].includes(clean)) {
+          return "고객 과실·변심";
+        }
+        if (["보증기간 만료", "보증 만료"].includes(clean)) {
+          return "보증기간 만료";
+        }
+        if (["원인 확인중", "원인확인중", "확인중"].includes(clean)) {
+          return "원인 확인중";
+        }
+        return clean;
+      }
+
+      /** A/S 귀책사유 라벨에 대응하는 배지 메타 정보를 반환합니다. */
+      function getAsFaultReasonMeta(label) {
+        const clean = normalizeAsFaultReasonLabel(label);
+        if (!clean) return { label: "미지정", colorClass: "muted" };
+        const hit = AS_FAULT_REASON_OPTIONS.find((opt) => opt.value === clean);
+        if (hit) return { label: hit.label, colorClass: hit.colorClass };
+        return { label: clean, colorClass: "amber" };
+      }
+
+      /** A/S 공정의 asMeta·메모 태그·메모 키워드를 순서대로 확인해 귀책사유를 해석합니다. */
+      function resolveAsTaskFaultReason(task) {
+        if (!task) return { label: "미지정", key: "미지정", colorClass: "muted", isExplicit: false, isInferred: false, source: "none" };
+        const meta = task.asMeta || {};
+        const rawExplicit = meta.faultType || meta.faultReason || meta.blame || meta.fault || meta.responsibility || "";
+        const normExplicit = normalizeAsFaultReasonLabel(rawExplicit);
+        if (normExplicit) {
+          const info = getAsFaultReasonMeta(normExplicit);
+          return { label: info.label, key: info.label, colorClass: info.colorClass, isExplicit: true, isInferred: false, source: "asMeta" };
+        }
+        const memoText = String(task.memo || "");
+        const tagMatch = memoText.match(/^\[(?:무상AS|유상AS)·([^\]]+)\]/m);
+        if (tagMatch && tagMatch[1]) {
+          const normTag = normalizeAsFaultReasonLabel(tagMatch[1]);
+          if (normTag) {
+            const info = getAsFaultReasonMeta(normTag);
+            return { label: info.label, key: info.label, colorClass: info.colorClass, isExplicit: true, isInferred: false, source: "memoTag" };
+          }
+        }
+        const hay = [meta.symptom, memoText].filter(Boolean).join(" ").toLowerCase();
+        if (hay) {
+          for (let i = 0; i < AS_FAULT_KEYWORD_RULES.length; i++) {
+            const rule = AS_FAULT_KEYWORD_RULES[i];
+            if (rule.keywords.some((kw) => hay.includes(kw.toLowerCase()))) {
+              const info = getAsFaultReasonMeta(rule.label);
+              return { label: info.label, key: info.label, colorClass: info.colorClass, isExplicit: false, isInferred: true, source: "keyword" };
+            }
+          }
+        }
+        return { label: "미지정", key: "미지정", colorClass: "muted", isExplicit: false, isInferred: false, source: "none" };
+      }
 
       /** 기준 날짜가 속한 월~일 주간 정보 및 주차를 반환합니다. */
       function getGanttWeekInfo(anchorYmd) {
@@ -4859,37 +5050,121 @@ end $$;`;
         return { label: "일반 A/S (공종 미지정)", colorClass: "slate" };
       }
 
+      /** A/S 귀책사유 배지 HTML을 생성합니다. */
+      function renderAsFaultBadgeHtml(faultInfo, compact) {
+        const f = faultInfo || { label: "미지정", colorClass: "muted", isInferred: false };
+        const isUnset = !f.label || f.label === "미지정";
+        const suffix = f.isInferred ? " (추정)" : "";
+        const tip = isUnset
+          ? "귀책사유 미지정 (클릭해 상세 모달에서 입력)"
+          : (f.isInferred ? "메모 키워드 기반 보조 표시 (클릭해 귀책 확정)" : "저장된 귀책사유");
+        return `<span class="ws-as-chip ${escHtml(f.colorClass || "muted")}${compact ? " compact" : ""}${isUnset || f.isInferred ? " dashed" : ""}" title="${escHtml(tip)}">${escHtml((f.label || "미지정") + suffix)}</span>`;
+      }
+
+      /** A/S 공정 상태 배지 HTML을 생성합니다. */
+      function renderAsTaskStatusBadgeHtml(r) {
+        const isDone = Boolean(r && r.isCompleted);
+        const isDel = Boolean(r && r.isDelayed && !isDone);
+        const stLabel = (r && r.statusLabel) || "예정";
+        const cls = isDone ? "ok" : isDel ? "warn" : (stLabel === "AS" ? "amber" : "blue");
+        const text = isDone ? "✓ 완료" : isDel ? `⚠️ 지연 (${stLabel})` : stLabel;
+        const paidBadge = (r && r.billingType === "paid")
+          ? `<span class="ws-as-chip compact blue" title="유상 A/S">유상</span>`
+          : "";
+        return `<span class="ws-as-chip compact ${cls}">${escHtml(text)}</span>${paidBadge}`;
+      }
+
+      /** A/S 공정의 증상·공간·메모 요약 HTML을 생성합니다. */
+      function formatAsRecordSummaryHtml(r) {
+        if (!r) return "-";
+        const parts = [];
+        if (r.space) parts.push(`<span class="ws-as-chip compact muted">${escHtml(r.space)}</span>`);
+        if (r.symptom) parts.push(`<strong style="color:#0f172a;">${escHtml(r.symptom)}</strong>`);
+        let memoClean = String(r.rawMemo || "").trim();
+        if (memoClean) {
+          const lines = memoClean.split(/\r?\n/);
+          if (lines[0] && /^\[(무상AS|유상AS)(?:·[^\]]+)?\]/.test(lines[0])) {
+            const strippedFirst = lines[0].replace(/^\[(무상AS|유상AS)(?:·[^\]]+)?\]\s*/, "").trim();
+            if (!strippedFirst || (r.space && r.symptom && strippedFirst === `${r.space} - ${r.symptom}`) || strippedFirst === r.symptom || strippedFirst === r.space) {
+              lines.shift();
+            } else {
+              lines[0] = strippedFirst;
+            }
+            memoClean = lines.join("\n").trim();
+          }
+        }
+        const memoHtml = memoClean ? formatMemoTextInlineHtml(memoClean) : "";
+        if (memoHtml && memoHtml !== "-") {
+          parts.push(`<span style="color:#475569;">${memoHtml}</span>`);
+        }
+        if (!parts.length) return `<span style="color:#94a3b8;">증상/메모 없음</span>`;
+        return parts.join(" ");
+      }
+
       /** AS 시트(scope==='as') 및 완료현장에 편입된 A/S 이력을 모두 수집합니다. */
       function collectAllAsTaskRecords() {
         const records = [];
-        getAllSites().forEach((site) => {
+        const todayYmd = getTodayYmd();
+        getAllSites().forEach((site, siteIdx) => {
           if (!site || site.scope === "newSite") return;
           const isAsSite = site.scope === "as" || /^\[AS\]/i.test(site.siteName || "");
-          (site.tasks || []).forEach((task) => {
+          (site.tasks || []).forEach((task, taskIdx) => {
             if (!task) return;
             const st = String(task.status || "").replace(/\s+/g, "");
             if (st.indexOf("취소") !== -1 || st.indexOf("제외") !== -1) return;
             const tNameUpper = String(task.taskName || "").trim().toUpperCase();
+            const hasAsMemoTag = /^\[(?:무상AS|유상AS)(?:·[^\]]+)?\]/m.test(String(task.memo || ""));
             const isAsTask = isAsSite ||
               task.sheetName === "AS" ||
               task.status === "AS" ||
               tNameUpper === "AS" ||
               tNameUpper === "A/S" ||
+              hasAsMemoTag ||
               Boolean(task.asMeta && (site.scope === "as" || task.status === "AS" || tNameUpper === "AS"));
             if (!isAsTask) return;
 
+            if (!task.id && !task.taskId) {
+              task.id = `as_auto_${siteIdx}_${taskIdx}`;
+            }
+            const taskId = task.id || task.taskId;
             const trade = classifyAsDefectTrade(task);
             const pNorm = normalizeGanttPartnerKey(task.partner);
+            const faultInfo = resolveAsTaskFaultReason(task);
+            const dateYmd = parseYmdFromTask(task);
+            const endYmd = dateYmd ? parseEndYmdFromTask(task, dateYmd) : "";
+            const isCompleted = isTaskCompleted(task);
+            const meta = task.asMeta || {};
+            let dateDisplay = String(task.dateDisplay || "").trim();
+            if (!dateDisplay) {
+              if (dateYmd && endYmd && endYmd > dateYmd) {
+                dateDisplay = `${dateYmd.replace(/-/g, ".")} ~ ${endYmd.replace(/-/g, ".")}`;
+              } else if (dateYmd) {
+                dateDisplay = dateYmd.replace(/-/g, ".");
+              } else {
+                dateDisplay = "일정 미정";
+              }
+            }
             records.push({
               site,
               task,
+              taskId,
               isFromAsSheet: Boolean(site.scope === "as" || task.sheetName === "AS"),
-              isCompleted: isTaskCompleted(task),
+              isCompleted,
               normSite: normalizeSiteNameForAsMatch(site.siteName),
               tradeLabel: trade.label,
               tradeColor: trade.colorClass,
               partnerName: pNorm ? pNorm.display : "",
-              dateYmd: parseYmdFromTask(task)
+              partnerKey: pNorm ? pNorm.display : "__UNASSIGNED__",
+              dateYmd,
+              endYmd,
+              dateDisplay,
+              isDelayed: Boolean(!isCompleted && dateYmd && dateYmd < todayYmd),
+              statusLabel: String(task.status || "예정").trim() || "예정",
+              faultInfo,
+              space: meta.space ? String(meta.space).trim() : "",
+              symptom: meta.symptom ? String(meta.symptom).trim() : "",
+              rawMemo: String(task.memo || "").trim(),
+              billingType: meta.billingType === "paid" || /^\[유상AS(?:·|\])/m.test(String(task.memo || "")) ? "paid" : "free"
             });
           });
         });
@@ -4917,7 +5192,18 @@ end $$;`;
           .sort(compareDoneSites);
 
         const allAsRecords = collectAllAsTaskRecords();
-        const activeAsRecords = allAsRecords.filter((r) => (r.isFromAsSheet || r.task.status === "AS") && !r.isCompleted);
+        const sortAsRecords = (a, b) => {
+          if (Boolean(a.isCompleted) !== Boolean(b.isCompleted)) return a.isCompleted ? 1 : -1;
+          if (Boolean(a.isDelayed) !== Boolean(b.isDelayed)) return a.isDelayed ? -1 : 1;
+          if (a.dateYmd && b.dateYmd && a.dateYmd !== b.dateYmd) return a.dateYmd.localeCompare(b.dateYmd);
+          if (a.dateYmd && !b.dateYmd) return -1;
+          if (!a.dateYmd && b.dateYmd) return 1;
+          return String(a.site.siteName || "").localeCompare(String(b.site.siteName || ""), "ko");
+        };
+        const activeAsRecords = allAsRecords
+          .filter((r) => (r.isFromAsSheet || r.task.status === "AS") && !r.isCompleted)
+          .slice()
+          .sort(sortAsRecords);
 
         const asCountByNormSite = {};
         allAsRecords.forEach((r) => {
@@ -4948,22 +5234,86 @@ end $$;`;
           return true;
         });
 
-        // 공종별 하자 빈도 집계
+        // 공종별 · 협력업체별 · 귀책사유별 하자 빈도 집계
         const tradeBuckets = {};
         const partnerBuckets = {};
+        const globalFaultBuckets = {};
+        const makePartnerBucket = (key, displayName, isUnassigned) => ({
+          partnerKey: key,
+          partnerName: displayName,
+          isUnassigned: Boolean(isUnassigned),
+          count: 0,
+          pendingCount: 0,
+          completedCount: 0,
+          partnerFaultCount: 0,
+          tradeBuckets: {},
+          faultBuckets: {},
+          records: []
+        });
+        const unassignedPartnerBucket = makePartnerBucket("__UNASSIGNED__", "업체 미지정 (배정 필요)", true);
+
         allAsRecords.forEach((r) => {
           if (!tradeBuckets[r.tradeLabel]) {
             tradeBuckets[r.tradeLabel] = { label: r.tradeLabel, colorClass: r.tradeColor, count: 0 };
           }
           tradeBuckets[r.tradeLabel].count++;
+
+          const fInfo = r.faultInfo || { label: "미지정", colorClass: "muted" };
+          const fLabel = fInfo.label || "미지정";
+          if (!globalFaultBuckets[fLabel]) {
+            globalFaultBuckets[fLabel] = { label: fLabel, colorClass: fInfo.colorClass || "muted", count: 0 };
+          }
+          globalFaultBuckets[fLabel].count++;
+
+          let pb;
           if (r.partnerName) {
             if (!partnerBuckets[r.partnerName]) {
-              partnerBuckets[r.partnerName] = { partnerName: r.partnerName, count: 0, pendingCount: 0 };
+              partnerBuckets[r.partnerName] = makePartnerBucket(r.partnerName, r.partnerName, false);
             }
-            partnerBuckets[r.partnerName].count++;
-            if (!r.isCompleted) partnerBuckets[r.partnerName].pendingCount++;
+            pb = partnerBuckets[r.partnerName];
+          } else {
+            pb = unassignedPartnerBucket;
           }
+          pb.count++;
+          if (r.isCompleted) pb.completedCount++;
+          else pb.pendingCount++;
+          if (fLabel === "협력업체 시공불량") pb.partnerFaultCount++;
+
+          if (!pb.tradeBuckets[r.tradeLabel]) {
+            pb.tradeBuckets[r.tradeLabel] = { label: r.tradeLabel, colorClass: r.tradeColor, count: 0 };
+          }
+          pb.tradeBuckets[r.tradeLabel].count++;
+
+          if (!pb.faultBuckets[fLabel]) {
+            pb.faultBuckets[fLabel] = { label: fLabel, colorClass: fInfo.colorClass || "muted", count: 0 };
+          }
+          pb.faultBuckets[fLabel].count++;
+          pb.records.push(r);
         });
+
+        const finalizePartnerBucket = (pb) => {
+          const topTrades = Object.values(pb.tradeBuckets)
+            .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "ko"));
+          const faultSummaryList = Object.values(pb.faultBuckets)
+            .sort((a, b) => {
+              if (a.label === "미지정" && b.label !== "미지정") return 1;
+              if (b.label === "미지정" && a.label !== "미지정") return -1;
+              return b.count - a.count || a.label.localeCompare(b.label, "ko");
+            });
+          return {
+            partnerKey: pb.partnerKey,
+            partnerName: pb.partnerName,
+            isUnassigned: pb.isUnassigned,
+            count: pb.count,
+            pendingCount: pb.pendingCount,
+            completedCount: pb.completedCount,
+            partnerFaultCount: pb.partnerFaultCount,
+            topTrades,
+            faultBuckets: pb.faultBuckets,
+            faultSummaryList,
+            records: pb.records.slice().sort(sortAsRecords)
+          };
+        };
 
         const totalAsCount = allAsRecords.length;
         const tradeStats = Object.values(tradeBuckets)
@@ -4976,7 +5326,32 @@ end $$;`;
           .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "ko"));
 
         const partnerStats = Object.values(partnerBuckets)
+          .map(finalizePartnerBucket)
           .sort((a, b) => b.count - a.count || b.pendingCount - a.pendingCount || a.partnerName.localeCompare(b.partnerName, "ko"));
+
+        const allPartnerAnalysisRows = partnerStats.slice();
+        if (unassignedPartnerBucket.count > 0) {
+          allPartnerAnalysisRows.push(finalizePartnerBucket(unassignedPartnerBucket));
+        }
+
+        const partnerAnalysisRows = searchQuery
+          ? allPartnerAnalysisRows.filter((row) => {
+              const hay = [
+                row.partnerName,
+                row.topTrades.map((t) => t.label).join(" "),
+                row.faultSummaryList.map((f) => f.label).join(" "),
+                row.records.map((r) => `${r.site.siteName} ${r.symptom} ${r.rawMemo}`).join(" ")
+              ].join(" ");
+              return matchesQuery(hay, searchQuery);
+            })
+          : allPartnerAnalysisRows;
+
+        const faultSummaryStats = Object.values(globalFaultBuckets)
+          .sort((a, b) => {
+            if (a.label === "미지정" && b.label !== "미지정") return 1;
+            if (b.label === "미지정" && a.label !== "미지정") return -1;
+            return b.count - a.count || a.label.localeCompare(b.label, "ko");
+          });
 
         return {
           warrantyDays,
@@ -4987,14 +5362,110 @@ end $$;`;
           expiredCount,
           unknownCount,
           activeAsCount: activeAsRecords.length,
+          activeAsRecords,
           totalAsCount,
+          allAsRecords,
           topDefectTrade: tradeStats[0] || null,
           rows: filteredRows,
           allRows,
           tradeStats,
           partnerStats,
-          unassignedPartnerAsCount: allAsRecords.filter((r) => !r.partnerName).length
+          allPartnerAnalysisRows,
+          partnerAnalysisRows,
+          faultSummaryStats,
+          unassignedPartnerAsCount: unassignedPartnerBucket.count
         };
+      }
+
+      /** A/S 내역 테이블 또는 모바일 카드 목록 HTML을 생성합니다. */
+      function renderAsTaskRecordsListHtml(records, isMobile, emptyMsg) {
+        if (!records || !records.length) {
+          return `<div style="font-size:12px;color:#64748b;padding:22px 10px;text-align:center;font-weight:700;">${escHtml(emptyMsg || "해당하는 A/S 내역이 없습니다.")}</div>`;
+        }
+        if (isMobile) {
+          return `
+            <div class="ws-as-mobile-list">
+              ${records.map((r) => {
+                const rawTaskName = String((r.task && r.task.taskName) || "").trim();
+                const isGeneric = !rawTaskName || rawTaskName.toUpperCase() === "AS" || rawTaskName.toUpperCase() === "A/S";
+                const tradeDisp = isGeneric ? r.tradeLabel : (r.tradeLabel !== rawTaskName ? `${rawTaskName} · ${r.tradeLabel}` : rawTaskName);
+                return `
+                  <div class="ws-as-mobile-item" onclick="openTaskEditModal('${escJs(r.taskId)}')" title="클릭하여 A/S 상세/귀책 수정">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">
+                      <div style="font-size:13px;font-weight:800;color:#0f172a;min-width:0;word-break:keep-all;">
+                        <span style="color:${escHtml((r.site && r.site.colorHex) || "#d97706")};">●</span> ${escHtml((r.site && r.site.siteName) || "-")}
+                      </div>
+                      <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
+                        ${renderAsTaskStatusBadgeHtml(r)}
+                      </div>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;color:#475569;font-weight:700;">
+                      <span>📅 ${escHtml(r.dateDisplay)}</span>
+                      <span>· 🔧 ${escHtml(tradeDisp)}</span>
+                      <span>· 👷 ${r.partnerName ? `<strong style="color:#0f172a;">${escHtml(r.partnerName)}</strong>` : `<span style="color:#94a3b8;">업체 미지정</span>`}</span>
+                    </div>
+                    <div style="font-size:11.5px;line-height:1.45;color:#334155;word-break:keep-all;">
+                      ${formatAsRecordSummaryHtml(r)}
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding-top:4px;border-top:1px dashed #e2e8f0;">
+                      <div style="display:flex;align-items:center;gap:5px;">
+                        <span style="font-size:10.5px;color:#64748b;font-weight:700;">귀책:</span>
+                        ${renderAsFaultBadgeHtml(r.faultInfo, true)}
+                      </div>
+                      <span style="font-size:11px;font-weight:800;color:#2563eb;">✏️ 수정/귀책입력 ›</span>
+                    </div>
+                  </div>`;
+              }).join("")}
+            </div>`;
+        }
+        return `
+          <div class="ws-as-table-wrap">
+            <table class="ws-as-table" style="min-width:740px;">
+              <thead>
+                <tr>
+                  <th>현장명</th>
+                  <th>접수·예정일</th>
+                  <th>공종</th>
+                  <th>협력업체</th>
+                  <th>상태</th>
+                  <th>증상 / 메모</th>
+                  <th>귀책사유</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${records.map((r) => {
+                  const rawTaskName = String((r.task && r.task.taskName) || "").trim();
+                  const isGeneric = !rawTaskName || rawTaskName.toUpperCase() === "AS" || rawTaskName.toUpperCase() === "A/S";
+                  return `
+                    <tr onclick="openTaskEditModal('${escJs(r.taskId)}')" title="클릭하여 A/S 상세/귀책 수정">
+                      <td>
+                        <div style="display:flex;align-items:center;gap:5px;">
+                          <span style="color:${escHtml((r.site && r.site.colorHex) || "#d97706")};">●</span>
+                          <strong>${escHtml((r.site && r.site.siteName) || "-")}</strong>
+                          ${!r.isFromAsSheet ? `<span class="ws-as-chip compact muted">${escHtml((r.task && r.task.sheetName) || "현장")}</span>` : ""}
+                        </div>
+                      </td>
+                      <td>
+                        <span style="font-weight:700;color:${r.isDelayed ? "#dc2626" : "#334155"};">${escHtml(r.dateDisplay)}</span>
+                        ${r.task && r.task.isToday && !r.isCompleted ? `<span class="ws-as-chip compact blue" style="margin-left:3px;">오늘</span>` : ""}
+                      </td>
+                      <td>
+                        <span style="font-weight:700;color:#0f172a;">${escHtml(isGeneric ? r.tradeLabel : rawTaskName)}</span>
+                        ${!isGeneric && r.tradeLabel !== rawTaskName ? `<div style="font-size:10.5px;color:#64748b;">${escHtml(r.tradeLabel)}</div>` : ""}
+                      </td>
+                      <td>
+                        ${r.partnerName
+                          ? `<strong style="color:#0f172a;">${escHtml(r.partnerName)}</strong>`
+                          : `<span style="color:#94a3b8;font-weight:600;">미지정</span>`}
+                      </td>
+                      <td><div class="ws-as-chip-wrap">${renderAsTaskStatusBadgeHtml(r)}</div></td>
+                      <td class="ws-as-memo-cell">${formatAsRecordSummaryHtml(r)}</td>
+                      <td>${renderAsFaultBadgeHtml(r.faultInfo, false)}</td>
+                    </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>`;
       }
 
       /** 준공 현장 A/S 보증기간 & 하자 통계 대시보드 HTML을 생성합니다(PC·모바일 공용). */
@@ -5003,6 +5474,8 @@ end $$;`;
         const validPct = model.totalDoneCount ? Math.round((model.validCount / model.totalDoneCount) * 100) : 0;
         const topTrade = model.topDefectTrade;
         const rowClickFn = isMobile ? "openSiteDetailMobile" : "openSiteDetail";
+        const domPrefix = isMobile ? "m" : "pc";
+        const isActiveListOpen = Boolean(state.asWarrantyActiveListOpen);
 
         const tableRowsHtml = model.rows.map((r) => {
           const s = r.site;
@@ -5042,9 +5515,146 @@ end $$;`;
           : `<div style="font-size:12px;color:#64748b;padding:18px 0;text-align:center;">집계된 A/S 하자 이력이 없습니다.</div>`;
 
         const partnerTopHtml = model.partnerStats.length
-          ? `<strong>업체별 주의 TOP ${Math.min(5, model.partnerStats.length)}:</strong> ` +
-            model.partnerStats.slice(0, 5).map((p) => `<span style="color:#0f172a;font-weight:700;">${escHtml(p.partnerName)}</span>(${p.count}건)`).join(" · ")
-          : `<strong>업체별 주의 TOP:</strong> 협력업체가 지정된 A/S 이력이 아직 없습니다.${model.unassignedPartnerAsCount ? ` (업체 미지정 ${model.unassignedPartnerAsCount}건)` : ""}`;
+          ? `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">` +
+            `<strong style="margin-right:2px;">업체별 주의 TOP ${Math.min(5, model.partnerStats.length)}:</strong>` +
+            model.partnerStats.slice(0, 5).map((p) =>
+              `<button type="button" class="ws-as-inline-btn" onclick="selectAsWarrantyPartner('${escJs(p.partnerKey)}', true)" title="클릭 시 해당 업체 A/S 내역 확인">${escHtml(p.partnerName)} <span style="color:#dc2626;">${p.count}건</span></button>`
+            ).join("") +
+            `</div>`
+          : `<strong>업체별 주의 TOP:</strong> 협력업체가 지정된 A/S 이력이 아직 없습니다.${model.unassignedPartnerAsCount ? ` <button type="button" class="ws-as-inline-btn" onclick="selectAsWarrantyPartner('__UNASSIGNED__', true)">업체 미지정 ${model.unassignedPartnerAsCount}건 확인 ▾</button>` : ""}`;
+
+        const activeAsSectionHtml = isActiveListOpen ? `
+          <div id="${domPrefix}WsAsActiveListCard" class="ws-as-subcard ws-as-active-list-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+              <div>
+                <strong style="font-size:13.5px;color:#b91c1c;">🔧 진행 중 A/S 접수 내역 (${model.activeAsCount}건)</strong>
+                <div style="font-size:11px;color:#64748b;margin-top:2px;font-weight:600;">
+                  항목을 클릭하면 상세/수정 모달이 열려 상태 완료·협력업체 배정·귀책사유 입력을 바로 처리할 수 있습니다.
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                <button type="button" class="btn-tool-tag" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-weight:700;" onclick="openNewTaskModal('', '', 'as')">➕ 신규 A/S 등록</button>
+                <button type="button" class="btn-tool-tag" onclick="jumpToAsScopeList()">AS 탭으로 이동 →</button>
+                <button type="button" class="btn-tool-tag" onclick="toggleAsWarrantyActiveList(false)">✕ 접기</button>
+              </div>
+            </div>
+            ${renderAsTaskRecordsListHtml(model.activeAsRecords, isMobile, "현재 진행 중인 미완료 A/S 접수가 없습니다.")}
+          </div>` : "";
+
+        const selectedPartnerKey = state.asWarrantySelectedPartner || "";
+        const selectedPartner = selectedPartnerKey
+          ? model.allPartnerAnalysisRows.find((p) => p.partnerKey === selectedPartnerKey) || null
+          : null;
+        const activePartnerFaultFilter = state.asWarrantyPartnerFaultFilter || "all";
+
+        const faultOverviewHtml = model.faultSummaryStats.length
+          ? `<div class="ws-as-chip-wrap" style="margin-top:6px;">
+              <span style="font-size:11px;color:#64748b;font-weight:700;">전체 귀책 분포:</span>
+              ${model.faultSummaryStats.map((f) => `<span class="ws-as-chip compact ${escHtml(f.colorClass)}">${escHtml(f.label)} ${f.count}건</span>`).join("")}
+            </div>`
+          : "";
+
+        const renderPartnerFaultBadges = (p) => {
+          if (!p.faultSummaryList || !p.faultSummaryList.length) return `<span class="ws-as-chip compact muted dashed">미지정</span>`;
+          return `<div class="ws-as-chip-wrap">${p.faultSummaryList.map((f) =>
+            `<span class="ws-as-chip compact ${escHtml(f.colorClass)}${f.label === "미지정" ? " dashed" : ""}">${escHtml(f.label)} ${f.count}</span>`
+          ).join("")}</div>`;
+        };
+
+        const renderPartnerTrades = (p) => {
+          if (!p.topTrades || !p.topTrades.length) return "-";
+          return p.topTrades.slice(0, 2).map((t) => `${escHtml(t.label)}(${t.count})`).join(", ") +
+            (p.topTrades.length > 2 ? ` 외 ${p.topTrades.length - 2}` : "");
+        };
+
+        const partnerListHtml = model.partnerAnalysisRows.length
+          ? (isMobile
+              ? `<div class="ws-as-mobile-list">
+                  ${model.partnerAnalysisRows.map((p) => {
+                    const isSel = selectedPartner && selectedPartner.partnerKey === p.partnerKey;
+                    return `
+                      <div class="ws-as-mobile-item ${isSel ? "is-selected" : ""}" onclick="selectAsWarrantyPartner('${escJs(p.partnerKey)}')" title="클릭하여 해당 업체 A/S 내역 확인">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                          <strong style="font-size:13px;color:${p.isUnassigned ? "#b45309" : "#0f172a"};">
+                            ${p.isUnassigned ? "⚠️ " : "🏢 "}${escHtml(p.partnerName)}
+                          </strong>
+                          <span class="ws-as-chip compact ${p.pendingCount > 0 ? "warn" : "ok"}">총 ${p.count}건 (진행 ${p.pendingCount} / 완료 ${p.completedCount})</span>
+                        </div>
+                        <div style="font-size:11px;color:#475569;font-weight:700;">
+                          주요 공종: ${renderPartnerTrades(p)}
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+                          ${renderPartnerFaultBadges(p)}
+                          <span style="font-size:11px;font-weight:800;color:#2563eb;margin-left:auto;">${isSel ? "선택됨 ▴" : "내역 보기 ▾"}</span>
+                        </div>
+                      </div>`;
+                  }).join("")}
+                </div>`
+              : `<div class="ws-as-table-wrap">
+                  <table class="ws-as-table" style="min-width:680px;">
+                    <thead>
+                      <tr>
+                        <th>업체명</th>
+                        <th>총 A/S 건수 (진행 중 / 완료)</th>
+                        <th>주요 공종</th>
+                        <th>귀책사유 분포</th>
+                        <th style="text-align:right;">상세</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${model.partnerAnalysisRows.map((p) => {
+                        const isSel = selectedPartner && selectedPartner.partnerKey === p.partnerKey;
+                        return `
+                          <tr class="${isSel ? "is-selected" : ""}" onclick="selectAsWarrantyPartner('${escJs(p.partnerKey)}')" title="클릭하여 해당 업체 A/S 내역 확인">
+                            <td>
+                              <strong style="color:${p.isUnassigned ? "#b45309" : "#0f172a"};">${p.isUnassigned ? "⚠️ " : ""}${escHtml(p.partnerName)}</strong>
+                            </td>
+                            <td>
+                              <div class="ws-as-chip-wrap">
+                                <strong style="color:#0f172a;">${p.count}건</strong>
+                                ${p.pendingCount > 0 ? `<span class="ws-as-chip compact warn">진행 중 ${p.pendingCount}</span>` : `<span class="ws-as-chip compact muted">진행 중 0</span>`}
+                                <span class="ws-as-chip compact ok">완료 ${p.completedCount}</span>
+                              </div>
+                            </td>
+                            <td style="white-space:normal;max-width:210px;color:#334155;font-weight:600;">${renderPartnerTrades(p)}</td>
+                            <td style="white-space:normal;max-width:300px;">${renderPartnerFaultBadges(p)}</td>
+                            <td style="text-align:right;">
+                              <span style="font-size:11px;font-weight:800;color:${isSel ? "#1d4ed8" : "#64748b"};">${isSel ? "열림 ▴" : "내역 보기 ▾"}</span>
+                            </td>
+                          </tr>`;
+                      }).join("")}
+                    </tbody>
+                  </table>
+                </div>`)
+          : `<div style="font-size:12px;color:#64748b;padding:20px 0;text-align:center;font-weight:700;">집계된 협력업체별 A/S 이력이 없습니다.</div>`;
+
+        let partnerDetailHtml = "";
+        if (selectedPartner) {
+          const filteredPartnerRecords = activePartnerFaultFilter === "all"
+            ? selectedPartner.records
+            : selectedPartner.records.filter((r) => (r.faultInfo && r.faultInfo.label ? r.faultInfo.label : "미지정") === activePartnerFaultFilter);
+          partnerDetailHtml = `
+            <div id="${domPrefix}WsAsPartnerDetailBox" class="ws-as-partner-detail-box">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+                <div>
+                  <strong style="font-size:13px;color:#1e3a8a;">
+                    🔍 [${escHtml(selectedPartner.partnerName)}] A/S 상세 내역 (${filteredPartnerRecords.length}건)
+                  </strong>
+                  <div style="font-size:11px;color:#64748b;margin-top:2px;font-weight:600;">
+                    전체 ${selectedPartner.count}건 (진행 중 ${selectedPartner.pendingCount} · 완료 ${selectedPartner.completedCount}) · 항목 클릭 시 상세/귀책 수정 모달 열기
+                  </div>
+                </div>
+                <button type="button" class="btn-tool-tag" onclick="selectAsWarrantyPartner('')">✕ 선택 해제</button>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;">
+                <button type="button" class="ws-as-filter-pill ${activePartnerFaultFilter === "all" ? "active" : ""}" onclick="setAsWarrantyPartnerFaultFilter('all')">전체 (${selectedPartner.count})</button>
+                ${selectedPartner.faultSummaryList.map((f) =>
+                  `<button type="button" class="ws-as-filter-pill ${activePartnerFaultFilter === f.label ? "active" : ""}" onclick="setAsWarrantyPartnerFaultFilter('${escJs(f.label)}')">${escHtml(f.label)} (${f.count})</button>`
+                ).join("")}
+              </div>
+              ${renderAsTaskRecordsListHtml(filteredPartnerRecords, isMobile, "선택한 귀책사유에 해당하는 A/S 내역이 없습니다.")}
+            </div>`;
+        }
 
         return `
           <div class="ws-as-panel">
@@ -5071,20 +5681,23 @@ end $$;`;
               </div>
 
               <div class="ws-as-kpi-grid">
-                <div class="ws-as-kpi-card" style="cursor:pointer;" onclick="setAsWarrantyStatusFilter('valid')">
+                <div class="ws-as-kpi-card is-clickable ${model.statusFilter === "valid" ? "is-active-ok" : ""}" style="cursor:pointer;" onclick="setAsWarrantyStatusFilter('${model.statusFilter === "valid" ? "all" : "valid"}')">
                   <div class="ws-as-kpi-lbl">무상 보증 유효 현장</div>
                   <div class="ws-as-kpi-val" style="color:#059669;">${model.validCount}건</div>
                   <div class="ws-as-kpi-sub">전체 완료현장 ${model.totalDoneCount}건 중 ${validPct}%</div>
                 </div>
-                <div class="ws-as-kpi-card" style="cursor:pointer;" onclick="setAsWarrantyStatusFilter('expiring')">
+                <div class="ws-as-kpi-card is-clickable ${model.statusFilter === "expiring" ? "is-active-amber" : ""}" style="cursor:pointer;" onclick="setAsWarrantyStatusFilter('${model.statusFilter === "expiring" ? "all" : "expiring"}')">
                   <div class="ws-as-kpi-lbl">보증 만료 임박 (D-30 이내)</div>
                   <div class="ws-as-kpi-val" style="color:#d97706;">${model.expiringCount}건</div>
                   <div class="ws-as-kpi-sub">사전 해피콜/점검 권장</div>
                 </div>
-                <div class="ws-as-kpi-card" style="cursor:pointer;" onclick="jumpToAsScopeList()">
-                  <div class="ws-as-kpi-lbl">진행 중 A/S 접수</div>
+                <div class="ws-as-kpi-card is-clickable ${isActiveListOpen ? "is-active-warn" : ""}" style="cursor:pointer;" onclick="toggleAsWarrantyActiveList()">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:4px;">
+                    <div class="ws-as-kpi-lbl">진행 중 A/S 접수</div>
+                    <span class="ws-as-chip compact ${isActiveListOpen ? "warn" : "muted"}">${isActiveListOpen ? "닫기 ▴" : "목록 ▾"}</span>
+                  </div>
                   <div class="ws-as-kpi-val" style="color:#dc2626;">${model.activeAsCount}건</div>
-                  <div class="ws-as-kpi-sub">AS 시트 미완료 기준 · 클릭 시 AS 목록</div>
+                  <div class="ws-as-kpi-sub">클릭 시 미완료 ${model.activeAsCount}건 바로 보기</div>
                 </div>
                 <div class="ws-as-kpi-card">
                   <div class="ws-as-kpi-lbl">최다 하자 공종</div>
@@ -5093,6 +5706,8 @@ end $$;`;
                 </div>
               </div>
             </div>
+
+            ${activeAsSectionHtml}
 
             <div class="ws-as-two-col">
               <div class="ws-as-subcard">
@@ -5128,6 +5743,21 @@ end $$;`;
                 </div>
               </div>
             </div>
+
+            <div id="${domPrefix}WsAsPartnerCard" class="ws-as-subcard">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+                <div>
+                  <strong style="font-size:13.5px;color:#0f172a;">🏢 협력업체(시공팀)별 A/S 건수 &amp; 귀책사유 현황</strong>
+                  <div style="font-size:11px;color:#64748b;margin-top:2px;font-weight:600;">
+                    업체 행을 클릭하면 해당 업체의 A/S 상세 내역 및 귀책사유별 필터를 바로 확인할 수 있습니다.
+                  </div>
+                </div>
+                <span class="ws-as-chip compact muted">누적 A/S ${model.totalAsCount}건 · 협력업체 ${model.partnerStats.length}개사</span>
+              </div>
+              ${faultOverviewHtml}
+              ${partnerListHtml}
+              ${partnerDetailHtml}
+            </div>
           </div>`;
       }
 
@@ -5137,8 +5767,12 @@ end $$;`;
       window.getCompletedSiteCompletionYmd = getCompletedSiteCompletionYmd;
       window.computeSiteAsWarranty = computeSiteAsWarranty;
       window.classifyAsDefectTrade = classifyAsDefectTrade;
+      window.AS_FAULT_REASON_OPTIONS = AS_FAULT_REASON_OPTIONS;
+      window.normalizeAsFaultReasonLabel = normalizeAsFaultReasonLabel;
+      window.resolveAsTaskFaultReason = resolveAsTaskFaultReason;
       window.collectAllAsTaskRecords = collectAllAsTaskRecords;
       window.buildAsWarrantyAndStatsModel = buildAsWarrantyAndStatsModel;
+      window.renderAsWarrantyDashboardHtml = renderAsWarrantyDashboardHtml;
 
       window.setGanttTradeFilter = function (val) {
         state.ganttTradeFilter = val || "all";
@@ -5198,6 +5832,46 @@ end $$;`;
       };
       window.setAsWarrantyStatusFilter = function (statusKey) {
         state.asWarrantyStatusFilter = statusKey || "all";
+        state.dirtyPcTabs.sites = true;
+        state.dirtyMobileTabs.sites = true;
+        renderActiveViews();
+      };
+      window.toggleAsWarrantyActiveList = function (forceOpen) {
+        const next = typeof forceOpen === "boolean" ? forceOpen : !state.asWarrantyActiveListOpen;
+        state.asWarrantyActiveListOpen = next;
+        state.dirtyPcTabs.sites = true;
+        state.dirtyMobileTabs.sites = true;
+        renderActiveViews();
+        if (next && typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(() => {
+            const pfx = state.device === "mobile" ? "m" : "pc";
+            const el = document.getElementById(pfx + "WsAsActiveListCard") || document.querySelector(".ws-as-active-list-card");
+            if (el && typeof el.scrollIntoView === "function") {
+              el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+          });
+        }
+      };
+      window.selectAsWarrantyPartner = function (partnerKey, shouldScroll) {
+        const key = String(partnerKey || "");
+        const next = (!key || (state.asWarrantySelectedPartner === key && !shouldScroll)) ? "" : key;
+        state.asWarrantySelectedPartner = next;
+        state.asWarrantyPartnerFaultFilter = "all";
+        state.dirtyPcTabs.sites = true;
+        state.dirtyMobileTabs.sites = true;
+        renderActiveViews();
+        if (next && shouldScroll && typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(() => {
+            const pfx = state.device === "mobile" ? "m" : "pc";
+            const el = document.getElementById(pfx + "WsAsPartnerDetailBox") || document.getElementById(pfx + "WsAsPartnerCard");
+            if (el && typeof el.scrollIntoView === "function") {
+              el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+          });
+        }
+      };
+      window.setAsWarrantyPartnerFaultFilter = function (faultLabel) {
+        state.asWarrantyPartnerFaultFilter = faultLabel || "all";
         state.dirtyPcTabs.sites = true;
         state.dirtyMobileTabs.sites = true;
         renderActiveViews();
@@ -17733,6 +18407,31 @@ end $$;`;
           startTime = parts[0] ? (parts[0].length === 4 ? "0" + parts[0] : parts[0]) : "";
           endTime = parts[1] ? (parts[1].length === 4 ? "0" + parts[1] : parts[1]) : "";
         }
+        const rawAsMeta = task.asMeta || {};
+        const resolvedFaultForEdit = resolveAsTaskFaultReason(task);
+        const initialFaultType = normalizeAsFaultReasonLabel(rawAsMeta.faultType || rawAsMeta.faultReason || "") ||
+          (resolvedFaultForEdit.source === "memoTag" ? resolvedFaultForEdit.label : "");
+        const initialBillingType = rawAsMeta.billingType || (/^\[유상AS(?:·|\])/m.test(String(task.memo || "")) ? "paid" : "free");
+        const mergedAsMeta = Object.assign({
+          billingType: initialBillingType,
+          faultType: initialFaultType,
+          space: "",
+          symptom: "",
+          costPayer: initialBillingType === "paid" ? "고객 부담" : "협력업체 무상재시공",
+          chargeAmount: 0,
+          costAmount: 0,
+          autoSyncFinance: !!(rawAsMeta && rawAsMeta.autoSyncFinance),
+          financeSynced: !!(rawAsMeta && rawAsMeta.financeSynced)
+        }, rawAsMeta, {
+          billingType: initialBillingType,
+          faultType: initialFaultType
+        });
+        const origAsTag = `[${mergedAsMeta.billingType === "paid" ? "유상AS" : "무상AS"}${mergedAsMeta.faultType ? "·" + mergedAsMeta.faultType : ""}]`;
+        const origAsBody = [mergedAsMeta.space, mergedAsMeta.symptom].filter(Boolean).join(" - ");
+        const origAsSummaryLine = (mergedAsMeta.space || mergedAsMeta.symptom || mergedAsMeta.faultType || mergedAsMeta.billingType === "paid")
+          ? `${origAsTag} ${origAsBody}`.trim()
+          : "";
+
         state.sheetCtx = {
           mode: "edit",
           taskId: task.id || task.taskId,
@@ -17764,6 +18463,7 @@ end $$;`;
           partnerSearchQuery: "",
           partnerDropOpen: false,
           partnerPhone: lookupPartnerPhone(task.partner),
+          origStatus: task.status || "예정",
           status: task.status || "예정",
           isShared: !!task.isShared,
           memo: task.memo || "",
@@ -17772,17 +18472,9 @@ end $$;`;
           cascadeShift: false,
           sameDayList,
           sameDayIdx: sameIdx,
-          asMeta: Object.assign({
-            billingType: "free",
-            faultType: "",
-            space: "",
-            symptom: "",
-            costPayer: "협력업체 무상재시공",
-            chargeAmount: 0,
-            costAmount: 0,
-            autoSyncFinance: !!(task.asMeta && task.asMeta.autoSyncFinance),
-            financeSynced: !!(task.asMeta && task.asMeta.financeSynced)
-          }, task.asMeta || {})
+          hadAsMeta: Boolean(task.asMeta && (site.scope === "as" || task.sheetName === "AS" || task.status === "AS" || /^A\/?S$/i.test(String(task.taskName || "").trim()) || /^\[(?:무상AS|유상AS)(?:·[^\]]+)?\]/m.test(String(task.memo || "")))),
+          origAsSummaryLine,
+          asMeta: mergedAsMeta
         };
         presentTaskSheet();
       };
@@ -18113,11 +18805,26 @@ end $$;`;
           .filter((s) => (s.scope || "site") !== curScope)
           .sort(siteSortFn);
         const scopeTagMap = { site: "[현장] ", single: "[단독] ", as: "[A/S] " };
-        const isAsMode = (curScope === "as" || ctx.status === "AS");
+        const isAsMode = (
+          curScope === "as" ||
+          ctx.status === "AS" ||
+          ctx.origStatus === "AS" ||
+          ctx.sheetName === "AS" ||
+          /^A\/?S$/i.test(String(ctx.taskName || "").trim()) ||
+          Boolean(ctx.hadAsMeta)
+        );
         const isSingleMode = (!isAsMode && curScope === "single");
         const isSiteMode = (!isAsMode && !isSingleMode && curScope === "site");
         const asMeta = ctx.asMeta || { billingType: "free", faultType: "", space: "", symptom: "", costPayer: "협력업체 무상재시공", chargeAmount: 0, costAmount: 0, clientName: "", autoSyncFinance: true, financeSynced: false };
         const isPaidAs = (asMeta.billingType === "paid");
+        const curFaultVal = normalizeAsFaultReasonLabel(asMeta.faultType || asMeta.faultReason || "");
+        const faultOptionsList = AS_FAULT_REASON_OPTIONS.slice();
+        if (curFaultVal && !faultOptionsList.some((o) => o.value === curFaultVal)) {
+          faultOptionsList.push({ value: curFaultVal, label: curFaultVal, colorClass: "amber" });
+        }
+        const inferredFaultHint = !curFaultVal
+          ? resolveAsTaskFaultReason({ memo: [ctx.memo, ctx.newMemo].filter(Boolean).join("\n"), asMeta: { symptom: asMeta.symptom } })
+          : null;
 
         bodyEl.innerHTML = `
           ${topActionsHtml}
@@ -18335,15 +19042,17 @@ end $$;`;
                   <input type="text" class="ws-input" value="${escHtml(asMeta.space || "")}" placeholder="예: 안방 욕실 / 주방 / 거실" oninput="window.updateTaskAsMeta('space', this.value, false)" style="height:32px;font-size:12px;">
                 </div>
                 <div class="fg" style="margin:0;">
-                  <label style="font-size:11.5px;">귀책 판단</label>
-                  <select class="ws-select" onchange="window.updateTaskAsMeta('faultType', this.value, false)" style="height:32px;font-size:12px;">
-                    <option value="" ${!asMeta.faultType ? "selected" : ""}>선택 안 함</option>
-                    <option value="협력업체 시공불량" ${asMeta.faultType === "협력업체 시공불량" ? "selected" : ""}>협력업체 시공불량</option>
-                    <option value="자재 하자" ${asMeta.faultType === "자재 하자" ? "selected" : ""}>자재 하자</option>
-                    <option value="고객 과실·변심" ${asMeta.faultType === "고객 과실·변심" ? "selected" : ""}>고객 과실·변심</option>
-                    <option value="보증기간 만료" ${asMeta.faultType === "보증기간 만료" ? "selected" : ""}>보증기간 만료</option>
-                    <option value="기타" ${asMeta.faultType === "기타" ? "selected" : ""}>기타</option>
+                  <label style="font-size:11.5px;">귀책사유 (귀책 판단)</label>
+                  <select id="sheetAsFaultTypeSelect" class="ws-select" onchange="window.updateTaskAsMeta('faultType', this.value, false)" style="height:32px;font-size:12px;">
+                    ${faultOptionsList.map((opt) =>
+                      `<option value="${escHtml(opt.value)}" ${curFaultVal === opt.value ? "selected" : ""}>${escHtml(opt.value ? opt.label : "미지정 (선택 안 함)")}</option>`
+                    ).join("")}
                   </select>
+                  ${inferredFaultHint && inferredFaultHint.isInferred ? `
+                    <div style="margin-top:4px;font-size:10.5px;color:#1d4ed8;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                      <span>💡 메모 키워드 추정: <strong>${escHtml(inferredFaultHint.label)}</strong></span>
+                      <button type="button" class="btn-tool-tag" style="padding:1px 6px;font-size:10px;" onclick="window.updateTaskAsMeta('faultType','${escJs(inferredFaultHint.label)}',true)">적용</button>
+                    </div>` : ""}
                 </div>
               </div>
 
@@ -19852,11 +20561,28 @@ end $$;`;
         if (ctx.mode === "edit" && !ctx.editFullMemo && ctx.newMemo && ctx.newMemo.trim()) {
           finalMemo = (finalMemo ? finalMemo + "\n" : "") + `${stamp} ${ctx.newMemo.trim()}`;
         }
-        const isAsMode = (ctx.scope === "as" || ctx.status === "AS");
+        const isAsMode = (
+          ctx.scope === "as" ||
+          ctx.status === "AS" ||
+          ctx.origStatus === "AS" ||
+          ctx.sheetName === "AS" ||
+          /^A\/?S$/i.test(String(ctx.taskName || "").trim()) ||
+          Boolean(ctx.hadAsMeta)
+        );
         const isSingleMode = (!isAsMode && ctx.scope === "single");
         const isSiteMode = (!isAsMode && !isSingleMode && ctx.scope === "site");
         if (isAsMode && ctx.asMeta) {
           const am = ctx.asMeta;
+          am.faultType = normalizeAsFaultReasonLabel(am.faultType || am.faultReason || "");
+          if (Object.prototype.hasOwnProperty.call(am, "faultReason")) delete am.faultReason;
+          if (ctx.origAsSummaryLine && String(finalMemo).startsWith(ctx.origAsSummaryLine)) {
+            finalMemo = String(finalMemo).slice(ctx.origAsSummaryLine.length).replace(/^\r?\n/, "");
+          } else if (/^\[(?:무상AS|유상AS)(?:·[^\]]+)?\](?:[ \t]+[^\n]*)?(?:\r?\n|$)/.test(String(finalMemo))) {
+            const firstLine = String(finalMemo).split(/\r?\n/)[0] || "";
+            if (!/\[\d{1,2}\/\d{1,2}\s+\d{2}:\d{2}\s*\|/.test(firstLine)) {
+              finalMemo = String(finalMemo).replace(/^\[(?:무상AS|유상AS)(?:·[^\]]+)?\](?:[ \t]+[^\n]*)?(?:\r?\n)?/, "");
+            }
+          }
           if (am.space || am.symptom || am.faultType || am.billingType === "paid") {
             const tag = `[${am.billingType === "paid" ? "유상AS" : "무상AS"}${am.faultType ? "·" + am.faultType : ""}]`;
             const body = [am.space, am.symptom].filter(Boolean).join(" - ");
@@ -23136,22 +23862,18 @@ end $$;`;
               <div class="form-grid-3" style="gap:8px;">
                 <div class="fg" style="margin:0;"><label style="font-size:11.5px;">공간 (위치)</label><input class="ws-input" id="esAsSpace" value="${escHtml(ed.asSpace || "")}" placeholder="예: 안방 욕실 / 주방"></div>
                 <div class="fg" style="margin:0;">
-                  <label style="font-size:11.5px;">귀책 판단</label>
+                  <label style="font-size:11.5px;">귀책사유 (귀책 판단)</label>
                   ${renderWsCustomDropdownHtml({
                     id: "esAsFaultDrop",
                     hiddenInputId: "esAsFaultType",
                     value: ed.asFaultType || "",
-                    displayText: ed.asFaultType || "선택 안 함",
-                    placeholder: "선택 안 함",
+                    displayText: ed.asFaultType || "미지정 (선택 안 함)",
+                    placeholder: "미지정 (선택 안 함)",
                     searchable: false,
-                    items: [
-                      { value: "", label: "선택 안 함" },
-                      { value: "협력업체 시공불량", label: "협력업체 시공불량" },
-                      { value: "자재 하자", label: "자재 하자" },
-                      { value: "고객 과실·변심", label: "고객 과실·변심" },
-                      { value: "보증기간 만료", label: "보증기간 만료" },
-                      { value: "기타", label: "기타" }
-                    ]
+                    items: AS_FAULT_REASON_OPTIONS.map((o) => ({
+                      value: o.value,
+                      label: o.value ? o.label : "미지정 (선택 안 함)"
+                    }))
                   })}
                 </div>
                 <div class="fg" style="margin:0;">
@@ -23709,6 +24431,12 @@ end $$;`;
             getValue: (obj) => (obj ? (obj.isShared !== undefined ? Boolean(obj.isShared) : Boolean(obj.shared)) : false)
           },
           { key: "memo", label: "메모", emptyLabel: "(없음)", maxLen: 80 },
+          {
+            key: "asFaultType",
+            label: "AS귀책사유",
+            emptyLabel: "미지정",
+            getValue: (obj) => (obj && obj.asMeta ? (obj.asMeta.faultType || obj.asMeta.faultReason || "") : "")
+          },
           {
             key: "asSpace",
             label: "AS공간",

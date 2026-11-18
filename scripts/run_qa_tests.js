@@ -3819,6 +3819,300 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     );
   })());
 
+  // ========================================================
+  // [A/S 보증·하자 대시보드] 진행 중 A/S 리스트 노출 + 업체별 건수·귀책사유 집계 + 모달 저장 런타임 QA
+  // ========================================================
+  console.log('\n🛠️ [A/S 보증·하자 대시보드]: 진행 중 A/S 리스트 클릭 노출 · 업체별 귀책사유 분석 · 모달 귀책 저장 런타임 QA');
+  (() => {
+    const idxRootHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const snapCode = fs.readFileSync(path.join(__dirname, '..', 'data', 'dashboard_data.js'), 'utf8');
+
+    const sliceBetween = (startMarker, endMarker) => {
+      const s = idxRootHtml.indexOf(startMarker);
+      const e = idxRootHtml.indexOf(endMarker, s > -1 ? s : 0);
+      if (s === -1 || e <= s) throw new Error(`Missing marker: ${startMarker} .. ${endMarker}`);
+      return idxRootHtml.slice(s, e);
+    };
+
+    const coreStart = 'function escHtml(str)';
+    const coreEnd = '// ================= 공유 사이드바 =================';
+    const memoStart = 'function extractMemoPhotos(memoText)';
+    const memoEnd = 'function renderTaskMemoPhotosPreviewHtml(memoText)';
+    const openEditStart = 'window.openTaskEditModal = function (taskId)';
+    const openEditEnd = 'window.switchNewRegistrationType = function (targetType)';
+    const renderSheetStart = 'function renderTaskSheetModal()';
+    const renderSheetEnd = 'window.renderTaskSheetModal = renderTaskSheetModal;';
+    const updateAsMetaStart = 'window.updateTaskAsMeta = function (field, val, shouldRender)';
+    const updateAsMetaEnd = 'window.onTaskSheetSiteChange = function (val)';
+    const checkConflictStart = 'function checkScheduleConflict(ctx)';
+    const checkConflictEnd = 'function renderTaskSheetModal()';
+    const resolvedPartnerStart = 'function getResolvedSheetPartner(ctx)';
+    const resolvedPartnerEnd = 'function registerOptimisticCustomPartner(';
+    const saveTaskStart = 'window.saveTaskSheetModal = function ()';
+    const saveTaskEnd = '// ================= 모달 2: 삭제 확인 모달 =================';
+
+    const domEls = {
+      taskSheetTitle: { innerHTML: '', textContent: '' },
+      taskSheetBody: { innerHTML: '', textContent: '' },
+      taskSheetFooter: { innerHTML: '', textContent: '' },
+      pcCalDetailDrawer: { style: { display: 'none' } },
+      pcWsAsActiveListCard: { scrollIntoView: () => {} },
+      pcWsAsPartnerDetailBox: { scrollIntoView: () => {} }
+    };
+    const savedTaskPayloads = [];
+    const openedModals = [];
+
+    const asVm = vm.createContext({
+      console,
+      Math, Date, Number, String, Array, Object, Set, Map, JSON, RegExp, encodeURIComponent, decodeURIComponent,
+      requestAnimationFrame: (fn) => { if (typeof fn === 'function') fn(); },
+      localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+      location: { protocol: 'file:', pathname: '/index.html', search: '' },
+      document: {
+        getElementById: (id) => domEls[id] || null,
+        querySelector: () => null,
+        querySelectorAll: () => []
+      },
+      getTodayYmd: () => '2026-11-18',
+      normalizeMonthStr: (m) => m,
+      normalizeSiteNameForAsMatch: (s) => String(s || '').replace(/^\[(?:단건|AS)\]\s*/i, '').replace(/\s+/g, '').toLowerCase(),
+      isPcCalendarDrawerMode: () => false,
+      presentTaskSheet: () => {
+        asVm.renderTaskSheetModal();
+        openedModals.push('taskSheetModal');
+      },
+      openModal: (id) => { openedModals.push(id); },
+      closeModal: () => {},
+      markAllDirty: () => {},
+      renderActiveViews: () => {},
+      renderWsCustomDropdownHtml: () => '<div></div>',
+      buildDatalistHtml: () => '',
+      renderSheetPartnerDropdownHtml: () => '',
+      renderTaskMemoPhotosPreviewHtml: () => '',
+      renderSheetTaskDropdownHtml: () => '',
+      extractDriveIdFromAnyUrl: () => '',
+      formatPartnerPhoneInputValue: (v) => String(v || '').trim(),
+      registerOptimisticCustomPartner: () => {},
+      syncAsTaskToFinance: () => {},
+      syncSingleTaskToFinance: () => {},
+      snapshotTaskForAudit: (s, t) => ({ siteName: s && s.siteName, taskName: t && t.taskName, asMeta: t && t.asMeta ? JSON.parse(JSON.stringify(t.asMeta)) : null }),
+      getTopSavedAuth: () => ({ user: '조항만' }),
+      applyAuthenticatedUser: () => {},
+      populateAuthMembersDatalist: () => {},
+      isUserAssignedTodo: () => false,
+      state: {
+        user: '조항만',
+        authUser: '조항만',
+        device: 'pc',
+        pcTab: 'sites',
+        mobileTab: 'sites',
+        scope: 'site',
+        sitesSubView: 'asWarranty',
+        showArchivedSites: false,
+        asWarrantyDays: 365,
+        asWarrantyStatusFilter: 'all',
+        asWarrantyActiveListOpen: false,
+        asWarrantySelectedPartner: '',
+        asWarrantyPartnerFaultFilter: 'all',
+        searchQuery: '',
+        memberFilter: '',
+        checkedSiteKeys: null,
+        dirtyPcTabs: { sites: false, calendar: false, finance: false },
+        dirtyMobileTabs: { sites: false, calendar: false, finance: false },
+        dashData: null,
+        settingsData: { members: [{ name: '조항만', role: '대표' }], partners: [], tasks: [] }
+      }
+    });
+    asVm.window = asVm;
+    asVm.global = asVm;
+
+    vm.runInContext(snapCode, asVm);
+    asVm.WSDataService = {
+      saveDashboardCache: () => {},
+      saveTask: (isEdit, payload) => {
+        savedTaskPayloads.push({ isEdit, payload });
+        return Promise.resolve({ ok: true, success: true });
+      }
+    };
+    const dashClone = JSON.parse(JSON.stringify(asVm.WS_SNAPSHOT_DASHBOARD));
+    // 업체별/귀책사유별 모의 데이터 보강 (기존 스냅샷 AS 8건 + 테스트용 업체/귀책 AS 4건)
+    dashClone.sites.push(
+      {
+        siteKey: 'AS::테스트빌라 301호',
+        siteName: '테스트빌라 301호',
+        scope: 'as',
+        colorHex: '#d97706',
+        isArchived: false,
+        isAllCompleted: false,
+        tasks: [
+          {
+            id: 'as_qa_1',
+            taskId: 'as_qa_1',
+            taskName: '설비',
+            dateDisplay: '2026.11.10 (화)',
+            startDateStr: '2026-11-10',
+            endDateStr: '2026-11-10',
+            partner: '설비_정경식 반장 (개인)',
+            manager: '조항만',
+            status: 'AS',
+            isShared: false,
+            memo: '싱크대 하부 배관 미세 누수',
+            scope: 'as',
+            sheetName: 'AS',
+            asMeta: { billingType: 'free', faultType: '', space: '주방', symptom: '배관 연결부 누수', costPayer: '협력업체 무상재시공', chargeAmount: 0, costAmount: 0 }
+          },
+          {
+            id: 'as_qa_2',
+            taskId: 'as_qa_2',
+            taskName: 'AS',
+            dateDisplay: '2026.11.05 (목)',
+            startDateStr: '2026-11-05',
+            endDateStr: '2026-11-05',
+            partner: '설비_정경식 반장 (개인)',
+            manager: '조항만',
+            status: '완료',
+            isShared: true,
+            memo: '[무상AS·자재 하자] 거실 - 수전 카트리지 불량 교체 완료',
+            scope: 'as',
+            sheetName: 'AS'
+          }
+        ]
+      },
+      {
+        siteKey: 'AS::테스트아파트 502호',
+        siteName: '테스트아파트 502호',
+        scope: 'as',
+        colorHex: '#2563eb',
+        isArchived: false,
+        isAllCompleted: false,
+        tasks: [
+          {
+            id: 'as_qa_3',
+            taskId: 'as_qa_3',
+            taskName: '타일',
+            dateDisplay: '2026.11.15 (일)',
+            startDateStr: '2026-11-15',
+            endDateStr: '2026-11-15',
+            partner: '타일_큐브타일',
+            manager: '조항만',
+            status: '예정',
+            isShared: false,
+            memo: '안방 욕실 벽타일 1장 크랙',
+            scope: 'as',
+            sheetName: 'AS',
+            asMeta: { billingType: 'free', faultType: '협력업체 시공불량', space: '안방 욕실', symptom: '타일 크랙', costPayer: '협력업체 무상재시공', chargeAmount: 0, costAmount: 0 }
+          },
+          {
+            id: 'as_qa_4',
+            taskId: 'as_qa_4',
+            taskName: 'AS',
+            dateDisplay: '2026.11.02 (월)',
+            startDateStr: '2026-11-02',
+            endDateStr: '2026-11-02',
+            partner: '타일_큐브타일',
+            manager: '조항만',
+            status: '완료',
+            isShared: true,
+            memo: '고객 파손으로 유상 처리 요청',
+            scope: 'as',
+            sheetName: 'AS'
+          }
+        ]
+      }
+    );
+    asVm.state.dashData = dashClone;
+
+    const asScript = [
+      sliceBetween(coreStart, coreEnd),
+      sliceBetween(memoStart, memoEnd),
+      sliceBetween(checkConflictStart, checkConflictEnd),
+      sliceBetween(openEditStart, openEditEnd),
+      sliceBetween(renderSheetStart, renderSheetEnd),
+      sliceBetween(updateAsMetaStart, updateAsMetaEnd),
+      sliceBetween(resolvedPartnerStart, resolvedPartnerEnd),
+      sliceBetween(saveTaskStart, saveTaskEnd)
+    ].join('\n');
+    vm.runInContext(asScript, asVm);
+
+    const modelBefore = asVm.buildAsWarrantyAndStatsModel({ todayYmd: '2026-11-18' });
+    const pcCollapsedHtml = asVm.renderAsWarrantyDashboardHtml(false);
+
+    // 1) 진행 중 A/S KPI 카드 클릭 -> N건 전체 리스트 노출 검증
+    asVm.toggleAsWarrantyActiveList();
+    const pcOpenHtml = asVm.renderAsWarrantyDashboardHtml(false);
+    const mobOpenHtml = asVm.renderAsWarrantyDashboardHtml(true);
+
+    const allActiveIdsPresentPc = modelBefore.activeAsRecords.every((r) => pcOpenHtml.includes(`openTaskEditModal('${r.taskId}')`));
+    const allActiveIdsPresentMob = modelBefore.activeAsRecords.every((r) => mobOpenHtml.includes(`openTaskEditModal('${r.taskId}')`));
+    const hasMemoKeywordFallback = pcOpenHtml.includes('고객 과실·변심 (추정)');
+
+    // 2) 협력업체별 A/S 건수 & 귀책사유 분석 & 클릭 필터 검증
+    const jungStat = modelBefore.partnerStats.find((p) => p.partnerName === '정경식 반장 (개인)');
+    const cubeStat = modelBefore.partnerStats.find((p) => p.partnerName === '큐브타일');
+    asVm.selectAsWarrantyPartner('정경식 반장 (개인)', true);
+    const partnerSelHtml = asVm.renderAsWarrantyDashboardHtml(false);
+    const partnerSelDetailSub = partnerSelHtml.slice(partnerSelHtml.indexOf('id="pcWsAsPartnerDetailBox"'));
+    asVm.setAsWarrantyPartnerFaultFilter('자재 하자');
+    const partnerFaultFilteredHtml = asVm.renderAsWarrantyDashboardHtml(false);
+    const partnerFaultFilteredSub = partnerFaultFilteredHtml.slice(partnerFaultFilteredHtml.indexOf('id="pcWsAsPartnerDetailBox"'));
+
+    // 3) 진행 중 A/S 항목 클릭 -> openTaskEditModal -> 귀책사유 저장 & 완료 전환 -> 대시보드 즉시 갱신 검증
+    asVm.openTaskEditModal('as_qa_1');
+    const modalHtmlHasFaultSelect = domEls.taskSheetBody.innerHTML.includes('id="sheetAsFaultTypeSelect"') &&
+      domEls.taskSheetBody.innerHTML.includes('당사(시공) 귀책') &&
+      domEls.taskSheetBody.innerHTML.includes('원인 확인중');
+    asVm.updateTaskAsMeta('faultType', '협력업체 시공불량', false);
+    asVm.setSheetField('status', '완료');
+    asVm.saveTaskSheetModal();
+
+    const modelAfterFirstSave = asVm.buildAsWarrantyAndStatsModel({ todayYmd: '2026-11-18' });
+    const jungStatAfter = modelAfterFirstSave.partnerStats.find((p) => p.partnerName === '정경식 반장 (개인)');
+
+    // 4) 완료 상태로 바뀐 A/S 항목을 재오픈해 귀책사유 변경 시 중복 태그 없이 갱신되는지 검증
+    asVm.openTaskEditModal('as_qa_1');
+    const reopenedHasAsSection = domEls.taskSheetBody.innerHTML.includes('id="sheetAsFaultTypeSelect"');
+    asVm.updateTaskAsMeta('faultType', '자재 하자', false);
+    asVm.saveTaskSheetModal();
+    const savedTaskObj = asVm.state.dashData.sites.find((s) => s.siteKey === 'AS::테스트빌라 301호').tasks.find((t) => t.id === 'as_qa_1');
+    const memoTagMatches = (String(savedTaskObj.memo || '').match(/\[무상AS/g) || []).length;
+
+    assertTest('진행 중 A/S 접수 KPI 카드 클릭 시 미완료 N건 전체 노출·PC/모바일 반응형·openTaskEditModal 연동 검증',
+      modelBefore.activeAsCount === 10 &&
+      pcCollapsedHtml.includes('toggleAsWarrantyActiveList()') &&
+      !pcCollapsedHtml.includes('id="pcWsAsActiveListCard"') &&
+      pcOpenHtml.includes('id="pcWsAsActiveListCard"') &&
+      mobOpenHtml.includes('id="mWsAsActiveListCard"') &&
+      allActiveIdsPresentPc &&
+      allActiveIdsPresentMob &&
+      hasMemoKeywordFallback
+    );
+    assertTest('협력업체별 A/S 건수(진행/완료)·주요공종·귀책사유 분포 집계 및 클릭 필터링 검증',
+      Boolean(jungStat && cubeStat) &&
+      jungStat.count === 2 && jungStat.pendingCount === 1 && jungStat.completedCount === 1 &&
+      jungStat.faultBuckets['미지정'] && jungStat.faultBuckets['미지정'].count === 1 &&
+      jungStat.faultBuckets['자재 하자'] && jungStat.faultBuckets['자재 하자'].count === 1 &&
+      cubeStat.count === 2 && cubeStat.faultBuckets['협력업체 시공불량'] && cubeStat.faultBuckets['고객 과실·변심'] &&
+      partnerSelHtml.includes('id="pcWsAsPartnerDetailBox"') &&
+      partnerSelDetailSub.includes("openTaskEditModal('as_qa_1')") &&
+      partnerSelDetailSub.includes("openTaskEditModal('as_qa_2')") &&
+      !partnerFaultFilteredSub.includes("openTaskEditModal('as_qa_1')") &&
+      partnerFaultFilteredSub.includes("openTaskEditModal('as_qa_2')")
+    );
+    assertTest('openTaskEditModal 귀책사유 저장·완료 전환·메모 태그 비중복 갱신 및 대시보드 재집계 검증',
+      openedModals.includes('taskSheetModal') &&
+      modalHtmlHasFaultSelect &&
+      reopenedHasAsSection &&
+      savedTaskPayloads.length === 2 &&
+      modelAfterFirstSave.activeAsCount === 9 &&
+      jungStatAfter.pendingCount === 0 &&
+      jungStatAfter.completedCount === 2 &&
+      jungStatAfter.faultBuckets['협력업체 시공불량'].count === 1 &&
+      savedTaskObj.asMeta.faultType === '자재 하자' &&
+      String(savedTaskObj.memo || '').includes('[무상AS·자재 하자]') &&
+      memoTagMatches === 1
+    );
+  })();
+
 Promise.all(pendingAsyncTests).then(() => {
 if (isVerbose) {
   rawConsoleLog('\n========================================================');
