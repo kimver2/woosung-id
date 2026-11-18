@@ -2389,6 +2389,370 @@
     }
     .sb-stat-val { font-size: 16px; font-weight: 800; color: #0f766e; }
     .sb-stat-lbl { font-size: 11px; color: #64748b; font-weight: 700; margin-top: 2px; }
+
+    /* ================= 주간 멀티현장 타임라인 (간트 뷰) ================= */
+    .ws-gantt-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 12px 14px;
+      background: #ffffff;
+      flex: 1;
+      min-height: 0;
+      min-width: 0;
+    }
+    .ws-gantt-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ws-gantt-nav-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .ws-gantt-week-title {
+      font-size: 14.5px;
+      font-weight: 900;
+      color: #0f172a;
+      letter-spacing: -0.2px;
+      margin-right: 4px;
+    }
+    .ws-gantt-nav-btn {
+      height: 30px;
+      padding: 0 10px;
+      border-radius: 7px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #334155;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+    .ws-gantt-nav-btn:hover { background: #f8fafc; border-color: #94a3b8; color: #0f172a; }
+    .ws-gantt-nav-btn.today-btn { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; font-weight: 800; }
+    .ws-gantt-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+    }
+    .ws-gantt-select {
+      height: 30px;
+      border: 1px solid #cbd5e1;
+      border-radius: 7px;
+      padding: 0 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #0f172a;
+      background: #ffffff;
+      max-width: 190px;
+    }
+    .ws-gantt-conflict-chk {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #991b1b;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 7px;
+      padding: 0 10px;
+      height: 30px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .ws-gantt-conflict-chk input { accent-color: #dc2626; cursor: pointer; }
+    .ws-gantt-conflict-banner {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      border-radius: 10px;
+      padding: 9px 13px;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ws-gantt-conflict-link {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      cursor: pointer;
+      font-weight: 700;
+      color: #b91c1c;
+    }
+    .ws-gantt-conflict-link:hover { color: #7f1d1d; }
+    .ws-gantt-conflict-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      background: #fee2e2;
+      color: #dc2626;
+      border: 1px solid #fca5a5;
+      white-space: nowrap;
+    }
+    .ws-gantt-wrap {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #ffffff;
+    }
+    .ws-gantt-table {
+      width: 100%;
+      min-width: 900px;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12px;
+    }
+    .ws-gantt-table th,
+    .ws-gantt-table td {
+      border-bottom: 1px solid #e2e8f0;
+      border-right: 1px solid #f1f5f9;
+      padding: 7px 6px;
+      vertical-align: top;
+      min-width: 100px;
+    }
+    .ws-gantt-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      background: #f8fafc;
+      font-weight: 800;
+      text-align: center;
+      color: #334155;
+      border-bottom: 1.5px solid #cbd5e1;
+      padding: 8px 6px;
+      white-space: nowrap;
+    }
+    .ws-gantt-table th.sun { color: #ef4444; }
+    .ws-gantt-table th.sat { color: #2563eb; }
+    .ws-gantt-table th.today-col { background: #eff6ff; color: #1d4ed8; }
+    .ws-gantt-table td.today-col { background: #f8fbff; }
+    .ws-gantt-table th.site-col,
+    .ws-gantt-table td.site-col {
+      width: 205px;
+      min-width: 205px;
+      max-width: 220px;
+      text-align: left;
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: #ffffff;
+      border-right: 2px solid #e2e8f0;
+    }
+    .ws-gantt-table thead th.site-col {
+      z-index: 4;
+      background: #f8fafc;
+    }
+    .ws-gantt-table td.site-col { cursor: pointer; transition: background 0.12s; }
+    .ws-gantt-table td.site-col:hover { background: #f8fafc; }
+    .ws-gantt-site-name {
+      font-weight: 800;
+      font-size: 12.5px;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      line-height: 1.3;
+      word-break: keep-all;
+    }
+    .ws-gantt-site-meta {
+      font-size: 10.5px;
+      color: #64748b;
+      margin-top: 3px;
+      font-weight: 600;
+    }
+    .ws-gantt-day-cell { position: relative; min-height: 52px; }
+    .ws-gantt-cell-add {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 3px;
+      opacity: 0;
+      transition: opacity 0.12s;
+    }
+    .ws-gantt-day-cell:hover .ws-gantt-cell-add { opacity: 1; }
+    .ws-gantt-cell-add-btn {
+      border: 1px dashed #cbd5e1;
+      background: #ffffff;
+      color: #64748b;
+      font-size: 10px;
+      font-weight: 800;
+      border-radius: 4px;
+      padding: 1px 5px;
+      cursor: pointer;
+    }
+    .ws-gantt-cell-add-btn:hover { background: #eff6ff; color: #1d4ed8; border-color: #93c5fd; }
+    .ws-gantt-bar {
+      padding: 5px 7px;
+      border-radius: 7px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+    .ws-gantt-bar:last-of-type { margin-bottom: 0; }
+    .ws-gantt-bar:hover { transform: translateY(-1px); filter: brightness(0.97); }
+    .ws-gantt-bar.wood { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+    .ws-gantt-bar.elec { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+    .ws-gantt-bar.paint { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
+    .ws-gantt-bar.tile { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+    .ws-gantt-bar.demo { background: #f1f5f9; color: #334155; border-color: #cbd5e1; }
+    .ws-gantt-bar.etc { background: #f8fafc; color: #1e293b; border-color: #cbd5e1; }
+    .ws-gantt-bar.is-done { opacity: 0.6; }
+    .ws-gantt-bar.is-done .ws-gantt-bar-title { text-decoration: line-through; }
+    .ws-gantt-bar.is-delayed { border-left: 3px solid #dc2626; }
+    .ws-gantt-bar.conflict {
+      outline: 2px solid #dc2626;
+      box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14);
+      background: #fef2f2 !important;
+      color: #991b1b !important;
+      border-color: #fecaca !important;
+      opacity: 1;
+    }
+    .ws-gantt-conflict-tag {
+      display: inline-block;
+      background: #dc2626;
+      color: #ffffff;
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 1px 5px;
+      border-radius: 4px;
+      width: fit-content;
+      line-height: 1.25;
+    }
+    .ws-gantt-bar-title { font-weight: 800; line-height: 1.25; word-break: keep-all; }
+    .ws-gantt-bar-partner { font-size: 10px; font-weight: 600; opacity: 0.88; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ================= 준공 A/S 보증기간 & 하자 통계 ================= */
+    .pc-c-status-tab.as-tab.active { color: #b45309; }
+    .pc-badge-count-as { font-size: 10.5px; padding: 1px 6px; border-radius: 8px; background: #fef3c7; color: #b45309; font-weight: 800; }
+    .ws-as-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      color: #475569;
+      white-space: nowrap;
+      line-height: 1.3;
+    }
+    .ws-as-chip.compact { font-size: 10px; padding: 1.5px 6px; }
+    .ws-as-chip.ok { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
+    .ws-as-chip.amber { background: #fffbeb; color: #d97706; border-color: #fde68a; }
+    .ws-as-chip.warn { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+    .ws-as-chip.muted { background: #f1f5f9; color: #64748b; border-color: #cbd5e1; }
+    .ws-as-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .ws-as-header-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 15px 17px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .ws-as-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .ws-as-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 11px;
+    }
+    .ws-as-kpi-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .ws-as-kpi-lbl { font-size: 11.5px; color: #64748b; font-weight: 700; }
+    .ws-as-kpi-val { font-size: 21px; font-weight: 900; margin-top: 5px; color: #0f172a; line-height: 1.2; }
+    .ws-as-kpi-sub { font-size: 11px; color: #64748b; margin-top: 4px; font-weight: 600; }
+    .ws-as-two-col {
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 14px;
+    }
+    .ws-as-subcard {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      box-shadow: var(--shadow-sm);
+      min-width: 0;
+    }
+    .ws-as-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 10px; }
+    .ws-as-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 480px; }
+    .ws-as-table th, .ws-as-table td { padding: 9px 8px; border-bottom: 1px solid #f1f5f9; text-align: left; white-space: nowrap; }
+    .ws-as-table th { color: #64748b; font-weight: 700; font-size: 11px; background: #f8fafc; border-bottom: 1.5px solid #e2e8f0; }
+    .ws-as-table tbody tr { cursor: pointer; transition: background 0.12s; }
+    .ws-as-table tbody tr:hover { background: #f8fafc; }
+    .ws-as-bar-track { height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-top: 5px; }
+    .ws-as-bar-fill { height: 100%; border-radius: 999px; background: #2563eb; }
+    .ws-as-bar-fill.red { background: #dc2626; }
+    .ws-as-bar-fill.amber { background: #d97706; }
+    .ws-as-bar-fill.green { background: #059669; }
+    .ws-as-bar-fill.purple { background: #7c3aed; }
+    .ws-as-bar-fill.teal { background: #0d9488; }
+    .ws-as-bar-fill.orange { background: #ea580c; }
+    .ws-as-bar-fill.slate { background: #475569; }
+
+    @media (max-width: 900px) {
+      .ws-as-two-col { grid-template-columns: 1fr; }
+      .ws-as-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    .mobile-screen-inner .ws-gantt-panel { padding: 8px; border-radius: 10px; border: 1px solid var(--border); }
+    .mobile-screen-inner .ws-gantt-week-title { font-size: 12.5px; }
+    .mobile-screen-inner .ws-gantt-nav-btn { height: 26px; padding: 0 7px; font-size: 11px; }
+    .mobile-screen-inner .ws-gantt-select { height: 26px; font-size: 11px; max-width: 145px; }
+    .mobile-screen-inner .ws-gantt-conflict-chk { height: 26px; font-size: 11px; padding: 0 7px; }
+    .mobile-screen-inner .ws-gantt-table { min-width: 740px; font-size: 11px; }
+    .mobile-screen-inner .ws-gantt-table th,
+    .mobile-screen-inner .ws-gantt-table td { min-width: 84px; padding: 5px 4px; }
+    .mobile-screen-inner .ws-gantt-table th.site-col,
+    .mobile-screen-inner .ws-gantt-table td.site-col { width: 126px; min-width: 126px; max-width: 132px; }
+    .mobile-screen-inner .ws-gantt-cell-add { opacity: 0.7; }
+    .mobile-screen-inner .ws-as-header-card { padding: 11px; }
+    .mobile-screen-inner .ws-as-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .mobile-screen-inner .ws-as-kpi-card { padding: 10px; }
+    .mobile-screen-inner .ws-as-kpi-val { font-size: 17px; }
+    .mobile-screen-inner .ws-as-two-col { grid-template-columns: 1fr; gap: 10px; }
+    .mobile-screen-inner .ws-as-subcard { padding: 11px; }
   </style>
 </head>
 <body>
@@ -3115,6 +3479,12 @@ end $$;`;
         selectedDayStr: _initTodayYmd,
         userSelectedCalDay: false,
         mobileCalMode: "month",
+        ganttTradeFilter: "all",
+        ganttPartnerFilter: "all",
+        ganttOnlyConflict: false,
+        sitesSubView: "list",
+        asWarrantyDays: 365,
+        asWarrantyStatusFilter: "all",
         checkedSiteKeys: null,
         selectedSiteKey: null,
         siteTaskStatusFilter: "all",
@@ -3988,6 +4358,855 @@ end $$;`;
         return map;
       }
 
+      // ================= 주간 멀티현장 타임라인(간트) & A/S 보증·하자 통계 공통 엔진 =================
+      const GANTT_UNASSIGNED_SET = new Set(["", "-", "미등록", "업체 미등록", "미지정", "없음", "미정", "공란", "선택안함", "선택 안 함", "직접입력"]);
+      const GANTT_TRADE_CLASS_RULES = [
+        { cls: "wood", keywords: ["목공", "도어", "중문", "창호", "샷시", "샤시", "가구", "주방", "싱크", "수납", "몰딩"] },
+        { cls: "elec", keywords: ["전기", "조명", "에어컨", "통신", "인덕션"] },
+        { cls: "paint", keywords: ["도배", "필름", "도장", "벽지", "탄성", "페인트"] },
+        { cls: "tile", keywords: ["타일", "설비", "방수", "줄눈", "도기", "누수", "코킹", "smc", "욕실", "보일러", "방통", "양생"] },
+        { cls: "demo", keywords: ["철거", "보양", "청소", "양중", "정리"] }
+      ];
+      const AS_TRADE_RULES = [
+        { label: "설비 / 누수", colorClass: "red", keywords: ["누수", "설비", "배관", "분배기", "수전", "변기", "세면대", "보일러", "방수", "하수구", "배수", "양변기", "트랩", "수도"] },
+        { label: "전기 / 조명", colorClass: "blue", keywords: ["전기", "조명", "다운라이트", "스위치", "콘센트", "차단기", "전등", "센서등", "감지기", "타공", "배선", "인덕션"] },
+        { label: "목공 / 도어·중문", colorClass: "amber", keywords: ["목공", "방문", "문틀", "문선", "경첩", "도어", "손잡이", "잠김", "중문", "몰딩", "걸레받이", "천정", "천장", "석고"] },
+        { label: "타일 / 줄눈·도기", colorClass: "green", keywords: ["타일", "메지", "줄눈", "도기", "젠다이", "졸리컷"] },
+        { label: "도배 / 필름·도장", colorClass: "purple", keywords: ["도배", "벽지", "실크", "초배", "필름", "인테리어필름", "도장", "탄성", "페인트", "들뜸", "터짐"] },
+        { label: "바닥 / 장판·마루", colorClass: "teal", keywords: ["장판", "마루", "강마루", "바닥", "데코타일", "굽도리"] },
+        { label: "창호 / 유리·코킹", colorClass: "slate", keywords: ["창호", "샷시", "샤시", "유리", "방충망", "실리콘", "코킹", "결로", "외벽"] },
+        { label: "가구 / 주방·싱크", colorClass: "orange", keywords: ["가구", "주방", "싱크", "싱크대", "붙박이", "신발장", "서랍", "레일", "상판", "인조대리석"] }
+      ];
+
+      /** 기준 날짜가 속한 월~일 주간 정보 및 주차를 반환합니다. */
+      function getGanttWeekInfo(anchorYmd) {
+        const baseYmd = (anchorYmd && /^\d{4}-\d{2}-\d{2}$/.test(anchorYmd)) ? anchorYmd : getTodayYmd();
+        const d = new Date(baseYmd + "T00:00:00");
+        const dow = d.getDay();
+        const diffToMon = dow === 0 ? -6 : 1 - dow;
+        const weekStartYmd = addDaysYmd(baseYmd, diffToMon);
+        const dowKoList = ["월", "화", "수", "목", "금", "토", "일"];
+        const days = [];
+        for (let i = 0; i < 7; i++) {
+          const ymd = addDaysYmd(weekStartYmd, i);
+          const dd = new Date(ymd + "T00:00:00");
+          days.push({
+            ymd,
+            month: dd.getMonth() + 1,
+            day: dd.getDate(),
+            dowIdx: i,
+            dowKo: dowKoList[i],
+            isSun: i === 6,
+            isSat: i === 5,
+            shortLabel: ymd.slice(5).replace("-", "."),
+            slashLabel: (dd.getMonth() + 1) + "/" + dd.getDate()
+          });
+        }
+        const thu = new Date(days[3].ymd + "T00:00:00");
+        const weekNum = Math.ceil(thu.getDate() / 7);
+        const weekLabel = `${thu.getFullYear()}년 ${thu.getMonth() + 1}월 ${weekNum}주차 (${days[0].shortLabel} ~ ${days[6].shortLabel})`;
+        return {
+          weekStartYmd,
+          weekEndYmd: days[6].ymd,
+          days,
+          weekNum,
+          weekLabel
+        };
+      }
+
+      /** 미지정/공란 업체를 제외한 정규화 협력업체 키를 반환합니다. */
+      function normalizeGanttPartnerKey(rawPartner) {
+        const cleanRaw = String(rawPartner || "").replace(/\s+/g, " ").trim();
+        if (!cleanRaw || GANTT_UNASSIGNED_SET.has(cleanRaw)) return null;
+        const stripped = cleanRaw.includes("_") ? cleanRaw.split("_").slice(1).join("_").trim() : cleanRaw;
+        const key = stripped || cleanRaw;
+        if (!key || GANTT_UNASSIGNED_SET.has(key)) return null;
+        return { raw: cleanRaw, key, display: key };
+      }
+
+      /** 공종명에 따른 간트 막대 스타일 클래스를 반환합니다. */
+      function getGanttTradeStyle(taskName) {
+        const low = String(taskName || "").toLowerCase();
+        for (let i = 0; i < GANTT_TRADE_CLASS_RULES.length; i++) {
+          const rule = GANTT_TRADE_CLASS_RULES[i];
+          if (rule.keywords.some((kw) => low.includes(kw))) return rule.cls;
+        }
+        return "etc";
+      }
+
+      /** 주간 간트 모델 및 협력업체 동시 배정 충돌을 계산합니다. */
+      function computeWeeklyGanttModel(events, options) {
+        const opts = options || {};
+        const weekInfo = getGanttWeekInfo(opts.anchorYmd || state.selectedDayStr || getTodayYmd());
+        const weekStart = weekInfo.weekStartYmd;
+        const weekEnd = weekInfo.weekEndYmd;
+        const tradeFilter = opts.tradeFilter !== undefined ? opts.tradeFilter : (state.ganttTradeFilter || "all");
+        const partnerFilter = opts.partnerFilter !== undefined ? opts.partnerFilter : (state.ganttPartnerFilter || "all");
+        const onlyConflict = opts.onlyConflict !== undefined ? Boolean(opts.onlyConflict) : Boolean(state.ganttOnlyConflict);
+
+        const weekEvents = (events || []).filter((item) => {
+          if (!item || !item.site || !item.task) return false;
+          const st = String(item.task.status || "").replace(/\s+/g, "");
+          if (st.indexOf("취소") !== -1 || st.indexOf("제외") !== -1) return false;
+          const sYmd = item.startYmd;
+          const eYmd = item.endYmd && item.endYmd >= sYmd ? item.endYmd : sYmd;
+          return Boolean(sYmd && sYmd <= weekEnd && eYmd >= weekStart);
+        });
+
+        // 1) 충돌 감지 (공종/업체 서브필터 적용 전 주간 전체 활성 공정 기준)
+        const dayPartnerBuckets = {};
+        const tradeSet = new Set();
+        const partnerMap = new Map();
+
+        weekEvents.forEach((item) => {
+          const { site, task, startYmd } = item;
+          const endYmd = item.endYmd && item.endYmd >= startYmd ? item.endYmd : startYmd;
+          const tName = String(task.taskName || "").trim();
+          if (tName) tradeSet.add(tName);
+          const pNorm = normalizeGanttPartnerKey(task.partner);
+          if (pNorm) {
+            if (!partnerMap.has(pNorm.key)) partnerMap.set(pNorm.key, pNorm.raw);
+            let cur = startYmd < weekStart ? weekStart : startYmd;
+            const limitEnd = endYmd > weekEnd ? weekEnd : endYmd;
+            let guard = 0;
+            while (cur <= limitEnd && guard < 14) {
+              const bk = cur + "||" + pNorm.key;
+              if (!dayPartnerBuckets[bk]) {
+                dayPartnerBuckets[bk] = {
+                  ymd: cur,
+                  partnerKey: pNorm.key,
+                  partnerName: pNorm.display,
+                  siteKeys: new Set(),
+                  siteNames: new Set(),
+                  entries: []
+                };
+              }
+              dayPartnerBuckets[bk].siteKeys.add(site.siteKey || site.siteName);
+              dayPartnerBuckets[bk].siteNames.add(site.siteName);
+              dayPartnerBuckets[bk].entries.push(item);
+              cur = addDaysYmd(cur, 1);
+              guard++;
+            }
+          }
+        });
+
+        const conflictMap = {};
+        const conflicts = [];
+        const dayMetaByYmd = {};
+        weekInfo.days.forEach((d) => { dayMetaByYmd[d.ymd] = d; });
+
+        Object.keys(dayPartnerBuckets).forEach((bk) => {
+          const bucket = dayPartnerBuckets[bk];
+          if (bucket.siteKeys.size < 2) return;
+          const dMeta = dayMetaByYmd[bucket.ymd];
+          conflicts.push({
+            ymd: bucket.ymd,
+            slashLabel: dMeta ? dMeta.slashLabel : bucket.ymd.slice(5).replace("-", "/"),
+            dowKo: dMeta ? dMeta.dowKo : "",
+            partnerKey: bucket.partnerKey,
+            partnerName: bucket.partnerName,
+            siteCount: bucket.siteKeys.size,
+            siteNames: Array.from(bucket.siteNames)
+          });
+          bucket.entries.forEach((entry) => {
+            const tid = entry.task.id || entry.task.taskId || (entry.site.siteKey + "::" + entry.task.taskName);
+            const ck = bucket.ymd + "||" + tid;
+            const otherSites = Array.from(bucket.siteNames).filter((sn) => sn !== entry.site.siteName);
+            conflictMap[ck] = {
+              partnerKey: bucket.partnerKey,
+              partnerName: bucket.partnerName,
+              otherSites
+            };
+          });
+        });
+
+        conflicts.sort((a, b) => a.ymd.localeCompare(b.ymd) || a.partnerName.localeCompare(b.partnerName, "ko"));
+
+        // 2) 현장별/날짜별 매트릭스 구성 및 필터 반영
+        const siteMap = new Map();
+        weekEvents.forEach((item) => {
+          const { site, task, startYmd } = item;
+          const endYmd = item.endYmd && item.endYmd >= startYmd ? item.endYmd : startYmd;
+          const tName = String(task.taskName || "").trim();
+          if (tradeFilter !== "all" && tName !== tradeFilter) return;
+          const pNorm = normalizeGanttPartnerKey(task.partner);
+          if (partnerFilter !== "all" && (!pNorm || pNorm.key !== partnerFilter)) return;
+
+          const totalSpanDays = Math.max(1, diffDaysYmd(startYmd, endYmd) + 1);
+          const tid = task.id || task.taskId || (site.siteKey + "::" + tName);
+          let cur = startYmd < weekStart ? weekStart : startYmd;
+          const limitEnd = endYmd > weekEnd ? weekEnd : endYmd;
+          let guard = 0;
+
+          while (cur <= limitEnd && guard < 14) {
+            const conflictInfo = conflictMap[cur + "||" + tid] || null;
+            if (!onlyConflict || conflictInfo) {
+              if (!siteMap.has(site.siteKey)) {
+                const cellsByDay = {};
+                weekInfo.days.forEach((d) => { cellsByDay[d.ymd] = []; });
+                siteMap.set(site.siteKey, {
+                  site,
+                  managersLabel: getUniqueSiteManagers(site.tasks).slice(0, 2).join(", ") || "미지정",
+                  cellsByDay,
+                  totalBars: 0,
+                  hasConflict: false,
+                  firstTaskYmd: cur
+                });
+              }
+              const row = siteMap.get(site.siteKey);
+              const dayIdx = diffDaysYmd(startYmd, cur) + 1;
+              row.cellsByDay[cur].push({
+                site,
+                task,
+                tid,
+                ymd: cur,
+                dayIdx,
+                totalSpanDays,
+                partnerDisplay: pNorm ? pNorm.display : "",
+                conflictInfo
+              });
+              row.totalBars++;
+              if (conflictInfo) row.hasConflict = true;
+              if (cur < row.firstTaskYmd) row.firstTaskYmd = cur;
+            }
+            cur = addDaysYmd(cur, 1);
+            guard++;
+          }
+        });
+
+        const siteRows = Array.from(siteMap.values()).sort((a, b) => {
+          if (a.hasConflict !== b.hasConflict) return a.hasConflict ? -1 : 1;
+          if (a.firstTaskYmd !== b.firstTaskYmd) return a.firstTaskYmd.localeCompare(b.firstTaskYmd);
+          return String(a.site.siteName || "").localeCompare(String(b.site.siteName || ""), "ko");
+        });
+
+        if (tradeFilter !== "all") tradeSet.add(tradeFilter);
+        if (partnerFilter !== "all" && !partnerMap.has(partnerFilter)) partnerMap.set(partnerFilter, partnerFilter);
+
+        return {
+          weekInfo,
+          tradeOptions: Array.from(tradeSet).sort((a, b) => a.localeCompare(b, "ko")),
+          partnerOptions: Array.from(partnerMap.entries())
+            .map(([key, label]) => ({ key, label }))
+            .sort((a, b) => a.key.localeCompare(b.key, "ko")),
+          conflicts,
+          conflictMap,
+          siteRows,
+          totalWeekEvents: weekEvents.length
+        };
+      }
+
+      /** 주간 멀티현장 간트 타임라인 HTML을 생성합니다(PC·모바일 공용). */
+      function renderWeeklyGanttTimelineHtml(events, isMobile) {
+        const model = computeWeeklyGanttModel(events);
+        const todayYmd = getTodayYmd();
+        const tradeVal = state.ganttTradeFilter || "all";
+        const partnerVal = state.ganttPartnerFilter || "all";
+        const onlyConflict = Boolean(state.ganttOnlyConflict);
+        const hasSubFilter = tradeVal !== "all" || partnerVal !== "all" || onlyConflict;
+
+        const tradeOptionsHtml = model.tradeOptions
+          .map((t) => `<option value="${escHtml(t)}" ${tradeVal === t ? "selected" : ""}>${escHtml(t)}</option>`)
+          .join("");
+        const partnerOptionsHtml = model.partnerOptions
+          .map((p) => `<option value="${escHtml(p.key)}" ${partnerVal === p.key ? "selected" : ""}>${escHtml(p.label)}</option>`)
+          .join("");
+
+        const conflictBannerHtml = model.conflicts.length > 0 ? `
+          <div class="ws-gantt-conflict-banner">
+            <div style="line-height:1.5;">
+              <strong>⚠️ 반장님·업체 일정 겹침 감지 (${model.conflicts.length}건)</strong> —
+              ${model.conflicts.map((c) => `
+                <span class="ws-gantt-conflict-link" onclick="focusGanttConflictPartner('${escJs(c.partnerKey)}')" title="${escHtml(c.siteNames.join(', '))}">
+                  ${escHtml(c.slashLabel)}(${escHtml(c.dowKo)}) ${escHtml(c.partnerName)} ${c.siteCount}개 현장 동시 배정
+                </span>
+              `).join(" · ")}
+            </div>
+            <span class="ws-gantt-conflict-pill">실시간 충돌 체크 ON</span>
+          </div>` : "";
+
+        const headerColsHtml = model.weekInfo.days.map((d) => {
+          const isToday = d.ymd === todayYmd;
+          const w = state.weatherData && state.weatherData[d.ymd];
+          const cls = [isToday ? "today-col" : "", d.isSun ? "sun" : "", d.isSat ? "sat" : ""].filter(Boolean).join(" ");
+          return `
+            <th class="${cls}">
+              <div>${escHtml(d.shortLabel)} (${escHtml(d.dowKo)})${isToday ? " · 오늘" : ""}</div>
+              ${w ? `<div style="font-size:10px;font-weight:700;color:#64748b;margin-top:2px;">${escHtml(w.badgeText)}</div>` : ""}
+            </th>`;
+        }).join("");
+
+        const rowsHtml = model.siteRows.map((row) => {
+          const s = row.site;
+          const doneCnt = s.completedTasksCount || 0;
+          const totalCnt = s.totalTasksCount || (s.tasks ? s.tasks.length : 0);
+          const siteClick = isMobile ? `openSiteDetailMobile('${escJs(s.siteKey)}')` : `openSiteDetail('${escJs(s.siteKey)}')`;
+          const dayCellsHtml = model.weekInfo.days.map((d) => {
+            const bars = row.cellsByDay[d.ymd] || [];
+            const barsHtml = bars.map((b) => {
+              const t = b.task;
+              const isDone = isTaskCompleted(t);
+              const isDel = !isDone && isTaskDelayed(t, todayYmd);
+              const tradeCls = getGanttTradeStyle(t.taskName);
+              const timeStr = extractTaskTimeStr(t);
+              const spanBadge = b.totalSpanDays > 1 ? ` · ${b.dayIdx}/${b.totalSpanDays}일차` : "";
+              const barTitle = `${t.taskName}${spanBadge}`;
+              const conflictTitle = b.conflictInfo ? `동시 배정 현장: ${b.conflictInfo.otherSites.join(", ")}` : "";
+              return `
+                <div class="ws-gantt-bar ${tradeCls} ${b.conflictInfo ? "conflict" : ""} ${isDone ? "is-done" : ""} ${isDel ? "is-delayed" : ""}"
+                     title="${escHtml(conflictTitle || `[${s.siteName}] ${t.taskName} (${t.partner || "업체 미지정"})`)}"
+                     onclick="event.stopPropagation(); openTaskEditModal('${escJs(b.tid)}')">
+                  ${b.conflictInfo ? `<span class="ws-gantt-conflict-tag">겹침 · ${escHtml(b.conflictInfo.partnerName)}</span>` : ""}
+                  <div class="ws-gantt-bar-title">
+                    ${isDel ? "⚠️ " : isDone ? "✓ " : ""}${timeStr ? `<span style="font-size:9.5px;opacity:0.85;">[${escHtml(timeStr)}]</span> ` : ""}${escHtml(barTitle)}
+                  </div>
+                  <div class="ws-gantt-bar-partner">${escHtml(b.partnerDisplay || "업체 미지정")}${isDel ? " · 지연" : ""}</div>
+                </div>`;
+            }).join("");
+            return `
+              <td class="ws-gantt-day-cell ${d.ymd === todayYmd ? "today-col" : ""}">
+                ${barsHtml}
+                <div class="ws-gantt-cell-add">
+                  <button type="button" class="ws-gantt-cell-add-btn" onclick="event.stopPropagation(); openNewTaskModal('${escJs(s.siteName)}', '${d.ymd}')" title="이 현장에 일정 추가">+</button>
+                </div>
+              </td>`;
+          }).join("");
+
+          return `
+            <tr>
+              <td class="site-col" onclick="${siteClick}" title="현장 상세 보기">
+                <div class="ws-gantt-site-name">
+                  <span style="color:${escHtml(s.colorHex || "#2563eb")};flex-shrink:0;">●</span>
+                  <span>${escHtml(s.siteName)}</span>
+                </div>
+                <div class="ws-gantt-site-meta">담당: ${escHtml(row.managersLabel)} · 진행 ${doneCnt}/${totalCnt}</div>
+              </td>
+              ${dayCellsHtml}
+            </tr>`;
+        }).join("");
+
+        const emptyMsg = onlyConflict && model.conflicts.length === 0
+          ? "이번 주에는 겹치는 협력업체 일정이 없습니다. 👍"
+          : (hasSubFilter ? "선택한 필터 조건에 해당하는 주간 공정이 없습니다." : "이번 주에 등록된 공정이 없습니다.");
+
+        return `
+          <div class="ws-gantt-panel">
+            <div class="ws-gantt-toolbar">
+              <div class="ws-gantt-nav-group">
+                <span class="ws-gantt-week-title">${escHtml(model.weekInfo.weekLabel)}</span>
+                <button type="button" class="ws-gantt-nav-btn" onclick="moveCalendarMonth(-1)">◀ 이전 주</button>
+                <button type="button" class="ws-gantt-nav-btn today-btn" onclick="resetCalendarToday()">이번 주</button>
+                <button type="button" class="ws-gantt-nav-btn" onclick="moveCalendarMonth(1)">다음 주 ▶</button>
+              </div>
+              <div class="ws-gantt-filter-row">
+                <select id="${isMobile ? "mGanttTradeFilter" : "pcGanttTradeFilter"}" class="ws-gantt-select" onchange="setGanttTradeFilter(this.value)">
+                  <option value="all">전체 공종</option>
+                  ${tradeOptionsHtml}
+                </select>
+                <select id="${isMobile ? "mGanttPartnerFilter" : "pcGanttPartnerFilter"}" class="ws-gantt-select" onchange="setGanttPartnerFilter(this.value)">
+                  <option value="all">전체 협력업체/반장님</option>
+                  ${partnerOptionsHtml}
+                </select>
+                <label class="ws-gantt-conflict-chk">
+                  <input type="checkbox" ${onlyConflict ? "checked" : ""} onchange="setGanttOnlyConflict(this.checked)">
+                  겹침(충돌)만 보기
+                </label>
+                ${hasSubFilter ? `<button type="button" class="ws-gantt-nav-btn" onclick="resetGanttFilters()">초기화</button>` : ""}
+              </div>
+            </div>
+            ${conflictBannerHtml}
+            <div class="ws-gantt-wrap">
+              <table class="ws-gantt-table">
+                <thead>
+                  <tr>
+                    <th class="site-col">현장명 / 담당 소장</th>
+                    ${headerColsHtml}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rowsHtml || `<tr><td colspan="8" style="text-align:center;padding:34px 16px;color:#64748b;font-weight:700;">${escHtml(emptyMsg)}</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+      }
+
+      /** 현장명에서 [AS]/[단건] 등 접두사를 제거해 매칭용 이름을 정규화합니다. */
+      function normalizeSiteNameForAsMatch(name) {
+        return String(name || "")
+          .replace(/^(?:\[(?:단건|AS|as|신규|현장|단품)\]|\((?:단건|AS|단품)\))\s*/gi, "")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      /** 완료현장의 준공일(마지막 공정 날짜 YYYY-MM-DD)을 계산합니다. 날짜가 없으면 빈 문자열을 반환합니다. */
+      function getCompletedSiteCompletionYmd(site) {
+        if (!site) return "";
+        const tasks = Array.isArray(site.tasks) ? site.tasks : [];
+        const collectDates = (list) => {
+          const ymds = [];
+          list.forEach((t) => {
+            if (!t) return;
+            const s = parseYmdFromTask(t);
+            const e = parseEndYmdFromTask(t, s);
+            const last = (e && s && e >= s) ? e : (e || s);
+            if (last) ymds.push(last);
+          });
+          return ymds;
+        };
+        const validTasks = tasks.filter((t) => {
+          if (!t) return false;
+          const st = String(t.status || "").replace(/\s+/g, "");
+          return st.indexOf("취소") === -1 && st.indexOf("제외") === -1;
+        });
+        let ymds = collectDates(validTasks);
+        if (ymds.length === 0 && tasks.length > 0) ymds = collectDates(tasks);
+        if (ymds.length === 0) return "";
+        ymds.sort();
+        return ymds[ymds.length - 1];
+      }
+
+      /** 완료현장별 무상 A/S 보증 만료일 및 잔여 상태(보증 D-N, 만료임박 D-N, 보증 만료)를 계산합니다. */
+      function computeSiteAsWarranty(site, warrantyDays, todayYmd) {
+        const days = Number(warrantyDays) === 730 ? 730 : 365;
+        const today = (todayYmd && /^\d{4}-\d{2}-\d{2}$/.test(todayYmd)) ? todayYmd : getTodayYmd();
+        const completionYmd = getCompletedSiteCompletionYmd(site);
+        if (!completionYmd) {
+          return {
+            completionYmd: "",
+            completionDisplay: "미정",
+            expiryYmd: "",
+            expiryDisplay: "미정",
+            remainingDays: null,
+            statusKey: "unknown",
+            badgeText: "준공일 미정",
+            badgeClass: "muted"
+          };
+        }
+        const expiryYmd = addDaysYmd(completionYmd, days);
+        const remainingDays = diffDaysYmd(today, expiryYmd);
+        if (remainingDays < 0) {
+          return {
+            completionYmd,
+            completionDisplay: completionYmd.replace(/-/g, "."),
+            expiryYmd,
+            expiryDisplay: expiryYmd.replace(/-/g, "."),
+            remainingDays,
+            statusKey: "expired",
+            badgeText: "보증 만료",
+            badgeClass: "muted"
+          };
+        }
+        if (remainingDays <= 30) {
+          return {
+            completionYmd,
+            completionDisplay: completionYmd.replace(/-/g, "."),
+            expiryYmd,
+            expiryDisplay: expiryYmd.replace(/-/g, "."),
+            remainingDays,
+            statusKey: "expiring",
+            badgeText: "만료임박 D-" + remainingDays,
+            badgeClass: "amber"
+          };
+        }
+        return {
+          completionYmd,
+          completionDisplay: completionYmd.replace(/-/g, "."),
+          expiryYmd,
+          expiryDisplay: expiryYmd.replace(/-/g, "."),
+          remainingDays,
+          statusKey: "valid",
+          badgeText: "보증 D-" + remainingDays,
+          badgeClass: "ok"
+        };
+      }
+
+      function renderWarrantyBadgeHtml(wInfo, compact) {
+        if (!wInfo) return "";
+        const tip = `준공일: ${wInfo.completionDisplay} · 만료일: ${wInfo.expiryDisplay}`;
+        return `<span class="ws-as-chip ${wInfo.badgeClass}${compact ? " compact" : ""}" title="${escHtml(tip)}">${escHtml(wInfo.badgeText)}</span>`;
+      }
+
+      /** A/S 공정의 공종·메모·협력업체 정보를 기반으로 하자 공종 카테고리를 분류합니다. */
+      function classifyAsDefectTrade(task) {
+        if (!task) return { label: "일반 A/S (공종 미지정)", colorClass: "slate" };
+        const partnerStr = String(task.partner || "").trim();
+        if (partnerStr.includes("_")) {
+          const prefix = partnerStr.split("_")[0].toLowerCase();
+          const byPrefix = AS_TRADE_RULES.find((r) => r.keywords.some((kw) => prefix.includes(kw)));
+          if (byPrefix) return { label: byPrefix.label, colorClass: byPrefix.colorClass };
+        }
+        const rawTaskName = String(task.taskName || "").trim();
+        const isGenericAs = !rawTaskName || rawTaskName.toUpperCase() === "AS" || rawTaskName.toUpperCase() === "A/S" || rawTaskName === "기타";
+        if (!isGenericAs) {
+          const lowName = rawTaskName.toLowerCase();
+          const byName = AS_TRADE_RULES.find((r) => r.keywords.some((kw) => lowName.includes(kw)));
+          if (byName) return { label: byName.label, colorClass: byName.colorClass };
+          return { label: rawTaskName, colorClass: "blue" };
+        }
+        const meta = task.asMeta || {};
+        const hay = [meta.space, meta.symptom, meta.faultType, task.memo].filter(Boolean).join(" ").toLowerCase();
+        if (hay) {
+          const byMemo = AS_TRADE_RULES.find((r) => r.keywords.some((kw) => hay.includes(kw)));
+          if (byMemo) return { label: byMemo.label, colorClass: byMemo.colorClass };
+        }
+        if (meta.faultType) return { label: String(meta.faultType).trim(), colorClass: "amber" };
+        return { label: "일반 A/S (공종 미지정)", colorClass: "slate" };
+      }
+
+      /** AS 시트(scope==='as') 및 완료현장에 편입된 A/S 이력을 모두 수집합니다. */
+      function collectAllAsTaskRecords() {
+        const records = [];
+        getAllSites().forEach((site) => {
+          if (!site || site.scope === "newSite") return;
+          const isAsSite = site.scope === "as" || /^\[AS\]/i.test(site.siteName || "");
+          (site.tasks || []).forEach((task) => {
+            if (!task) return;
+            const st = String(task.status || "").replace(/\s+/g, "");
+            if (st.indexOf("취소") !== -1 || st.indexOf("제외") !== -1) return;
+            const tNameUpper = String(task.taskName || "").trim().toUpperCase();
+            const isAsTask = isAsSite ||
+              task.sheetName === "AS" ||
+              task.status === "AS" ||
+              tNameUpper === "AS" ||
+              tNameUpper === "A/S" ||
+              Boolean(task.asMeta && (site.scope === "as" || task.status === "AS" || tNameUpper === "AS"));
+            if (!isAsTask) return;
+
+            const trade = classifyAsDefectTrade(task);
+            const pNorm = normalizeGanttPartnerKey(task.partner);
+            records.push({
+              site,
+              task,
+              isFromAsSheet: Boolean(site.scope === "as" || task.sheetName === "AS"),
+              isCompleted: isTaskCompleted(task),
+              normSite: normalizeSiteNameForAsMatch(site.siteName),
+              tradeLabel: trade.label,
+              tradeColor: trade.colorClass,
+              partnerName: pNorm ? pNorm.display : "",
+              dateYmd: parseYmdFromTask(task)
+            });
+          });
+        });
+        return records;
+      }
+
+      /** 준공 현장 A/S 보증 잔여기간 및 공종·업체별 하자 통계를 계산합니다. */
+      function buildAsWarrantyAndStatsModel(options) {
+        const opts = options || {};
+        const warrantyDays = Number(opts.warrantyDays !== undefined ? opts.warrantyDays : (state.asWarrantyDays || 365)) === 730 ? 730 : 365;
+        const statusFilter = opts.statusFilter !== undefined ? opts.statusFilter : (state.asWarrantyStatusFilter || "all");
+        const searchQuery = String(opts.searchQuery !== undefined ? opts.searchQuery : (state.searchQuery || "")).trim();
+        const todayYmd = opts.todayYmd || getTodayYmd();
+
+        const completedSites = getAllSites()
+          .filter((s) => {
+            if (!s || s.scope === "newSite" || s.scope === "as") return false;
+            return Boolean(
+              s.isAllCompleted ||
+              s.isArchived ||
+              isSiteCompleted(s) ||
+              (s.tasks || []).some((t) => t && (t.sheetName === "완료현장" || t.sheetName === "99_완료현장"))
+            );
+          })
+          .sort(compareDoneSites);
+
+        const allAsRecords = collectAllAsTaskRecords();
+        const activeAsRecords = allAsRecords.filter((r) => (r.isFromAsSheet || r.task.status === "AS") && !r.isCompleted);
+
+        const asCountByNormSite = {};
+        allAsRecords.forEach((r) => {
+          if (!r.normSite) return;
+          asCountByNormSite[r.normSite] = (asCountByNormSite[r.normSite] || 0) + 1;
+        });
+
+        const allRows = completedSites.map((s) => {
+          const warranty = computeSiteAsWarranty(s, warrantyDays, todayYmd);
+          const asCount = asCountByNormSite[normalizeSiteNameForAsMatch(s.siteName)] || 0;
+          return { site: s, warranty, asCount };
+        });
+
+        const totalDoneCount = allRows.length;
+        const validCount = allRows.filter((r) => r.warranty.statusKey === "valid" || r.warranty.statusKey === "expiring").length;
+        const expiringCount = allRows.filter((r) => r.warranty.statusKey === "expiring").length;
+        const expiredCount = allRows.filter((r) => r.warranty.statusKey === "expired").length;
+        const unknownCount = allRows.filter((r) => r.warranty.statusKey === "unknown").length;
+
+        const filteredRows = allRows.filter((r) => {
+          if (statusFilter === "valid" && !(r.warranty.statusKey === "valid" || r.warranty.statusKey === "expiring")) return false;
+          if (statusFilter === "expiring" && r.warranty.statusKey !== "expiring") return false;
+          if (statusFilter === "expired" && r.warranty.statusKey !== "expired") return false;
+          if (searchQuery) {
+            const mgrs = getUniqueSiteManagers(r.site.tasks).join(" ");
+            if (!matchesQuery(r.site.siteName + " " + mgrs, searchQuery)) return false;
+          }
+          return true;
+        });
+
+        // 공종별 하자 빈도 집계
+        const tradeBuckets = {};
+        const partnerBuckets = {};
+        allAsRecords.forEach((r) => {
+          if (!tradeBuckets[r.tradeLabel]) {
+            tradeBuckets[r.tradeLabel] = { label: r.tradeLabel, colorClass: r.tradeColor, count: 0 };
+          }
+          tradeBuckets[r.tradeLabel].count++;
+          if (r.partnerName) {
+            if (!partnerBuckets[r.partnerName]) {
+              partnerBuckets[r.partnerName] = { partnerName: r.partnerName, count: 0, pendingCount: 0 };
+            }
+            partnerBuckets[r.partnerName].count++;
+            if (!r.isCompleted) partnerBuckets[r.partnerName].pendingCount++;
+          }
+        });
+
+        const totalAsCount = allAsRecords.length;
+        const tradeStats = Object.values(tradeBuckets)
+          .map((tb) => ({
+            label: tb.label,
+            colorClass: tb.colorClass,
+            count: tb.count,
+            pct: totalAsCount ? Math.round((tb.count / totalAsCount) * 100) : 0
+          }))
+          .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "ko"));
+
+        const partnerStats = Object.values(partnerBuckets)
+          .sort((a, b) => b.count - a.count || b.pendingCount - a.pendingCount || a.partnerName.localeCompare(b.partnerName, "ko"));
+
+        return {
+          warrantyDays,
+          statusFilter,
+          totalDoneCount,
+          validCount,
+          expiringCount,
+          expiredCount,
+          unknownCount,
+          activeAsCount: activeAsRecords.length,
+          totalAsCount,
+          topDefectTrade: tradeStats[0] || null,
+          rows: filteredRows,
+          allRows,
+          tradeStats,
+          partnerStats,
+          unassignedPartnerAsCount: allAsRecords.filter((r) => !r.partnerName).length
+        };
+      }
+
+      /** 준공 현장 A/S 보증기간 & 하자 통계 대시보드 HTML을 생성합니다(PC·모바일 공용). */
+      function renderAsWarrantyDashboardHtml(isMobile) {
+        const model = buildAsWarrantyAndStatsModel();
+        const validPct = model.totalDoneCount ? Math.round((model.validCount / model.totalDoneCount) * 100) : 0;
+        const topTrade = model.topDefectTrade;
+        const rowClickFn = isMobile ? "openSiteDetailMobile" : "openSiteDetail";
+
+        const tableRowsHtml = model.rows.map((r) => {
+          const s = r.site;
+          const w = r.warranty;
+          return `
+            <tr onclick="${rowClickFn}('${escJs(s.siteKey)}')" title="해당 현장 상세 보기">
+              <td>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span style="color:${escHtml(s.colorHex || "#64748b")};">●</span>
+                  <strong>${escHtml(s.siteName)}</strong>
+                  ${s.scope === "single" ? `<span class="ws-as-chip compact muted">단건</span>` : ""}
+                </div>
+              </td>
+              <td>${escHtml(w.completionDisplay)}</td>
+              <td>${escHtml(w.expiryDisplay)}</td>
+              <td>${renderWarrantyBadgeHtml(w, false)}</td>
+              <td>
+                ${r.asCount > 0
+                  ? `<span class="ws-as-chip compact warn">${r.asCount}건</span>`
+                  : `<span style="color:#64748b;font-weight:700;">0건</span>`}
+              </td>
+            </tr>`;
+        }).join("");
+
+        const tradeBarsHtml = model.tradeStats.length
+          ? model.tradeStats.slice(0, 8).map((t, idx) => {
+              const barCls = idx === 0 ? "red" : idx === 1 ? "amber" : (t.colorClass || "");
+              return `
+                <div>
+                  <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;gap:8px;">
+                    <span>${escHtml(t.label)}</span>
+                    <span style="white-space:nowrap;">${t.count}건 (${t.pct}%)</span>
+                  </div>
+                  <div class="ws-as-bar-track"><div class="ws-as-bar-fill ${escHtml(barCls)}" style="width:${Math.max(4, t.pct)}%;"></div></div>
+                </div>`;
+            }).join("")
+          : `<div style="font-size:12px;color:#64748b;padding:18px 0;text-align:center;">집계된 A/S 하자 이력이 없습니다.</div>`;
+
+        const partnerTopHtml = model.partnerStats.length
+          ? `<strong>업체별 주의 TOP ${Math.min(5, model.partnerStats.length)}:</strong> ` +
+            model.partnerStats.slice(0, 5).map((p) => `<span style="color:#0f172a;font-weight:700;">${escHtml(p.partnerName)}</span>(${p.count}건)`).join(" · ")
+          : `<strong>업체별 주의 TOP:</strong> 협력업체가 지정된 A/S 이력이 아직 없습니다.${model.unassignedPartnerAsCount ? ` (업체 미지정 ${model.unassignedPartnerAsCount}건)` : ""}`;
+
+        return `
+          <div class="ws-as-panel">
+            <div class="ws-as-header-card">
+              <div class="ws-as-toolbar">
+                <div>
+                  <strong style="font-size:${isMobile ? "14px" : "15.5px"};color:#0f172a;">🛠️ 준공 현장 무상 A/S 보증기간 &amp; 하자 통계</strong>
+                  <div style="font-size:11.5px;color:#64748b;margin-top:3px;font-weight:600;">
+                    완료현장 마지막 공정일(준공일) 기준 무상 보증 ${model.warrantyDays === 730 ? "2년 (730일)" : "1년 (365일)"} 자동 계산 · AS 시트 실시간 집계
+                  </div>
+                </div>
+                <div class="ws-gantt-filter-row">
+                  <select class="ws-gantt-select" onchange="setAsWarrantyDays(Number(this.value))">
+                    <option value="365" ${model.warrantyDays === 365 ? "selected" : ""}>보증 기준: 준공 후 1년 (365일)</option>
+                    <option value="730" ${model.warrantyDays === 730 ? "selected" : ""}>보증 기준: 준공 후 2년 (730일)</option>
+                  </select>
+                  <select class="ws-gantt-select" onchange="setAsWarrantyStatusFilter(this.value)">
+                    <option value="all" ${model.statusFilter === "all" ? "selected" : ""}>전체 상태 (${model.totalDoneCount}건)</option>
+                    <option value="valid" ${model.statusFilter === "valid" ? "selected" : ""}>보증 유효 (${model.validCount}건)</option>
+                    <option value="expiring" ${model.statusFilter === "expiring" ? "selected" : ""}>만료 임박 · 30일 이내 (${model.expiringCount}건)</option>
+                    <option value="expired" ${model.statusFilter === "expired" ? "selected" : ""}>보증 만료 (${model.expiredCount}건)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="ws-as-kpi-grid">
+                <div class="ws-as-kpi-card" style="cursor:pointer;" onclick="setAsWarrantyStatusFilter('valid')">
+                  <div class="ws-as-kpi-lbl">무상 보증 유효 현장</div>
+                  <div class="ws-as-kpi-val" style="color:#059669;">${model.validCount}건</div>
+                  <div class="ws-as-kpi-sub">전체 완료현장 ${model.totalDoneCount}건 중 ${validPct}%</div>
+                </div>
+                <div class="ws-as-kpi-card" style="cursor:pointer;" onclick="setAsWarrantyStatusFilter('expiring')">
+                  <div class="ws-as-kpi-lbl">보증 만료 임박 (D-30 이내)</div>
+                  <div class="ws-as-kpi-val" style="color:#d97706;">${model.expiringCount}건</div>
+                  <div class="ws-as-kpi-sub">사전 해피콜/점검 권장</div>
+                </div>
+                <div class="ws-as-kpi-card" style="cursor:pointer;" onclick="jumpToAsScopeList()">
+                  <div class="ws-as-kpi-lbl">진행 중 A/S 접수</div>
+                  <div class="ws-as-kpi-val" style="color:#dc2626;">${model.activeAsCount}건</div>
+                  <div class="ws-as-kpi-sub">AS 시트 미완료 기준 · 클릭 시 AS 목록</div>
+                </div>
+                <div class="ws-as-kpi-card">
+                  <div class="ws-as-kpi-lbl">최다 하자 공종</div>
+                  <div class="ws-as-kpi-val" style="font-size:${isMobile ? "15px" : "17px"};">${topTrade ? `${escHtml(topTrade.label)} (${topTrade.pct}%)` : "데이터 없음"}</div>
+                  <div class="ws-as-kpi-sub">총 ${model.totalAsCount}건 중 ${topTrade ? topTrade.count + "건" : "0건"}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="ws-as-two-col">
+              <div class="ws-as-subcard">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                  <strong style="font-size:13.5px;color:#0f172a;">📋 완료현장별 A/S 보증 잔여기간 (${model.rows.length}건)</strong>
+                  ${model.unknownCount > 0 ? `<span style="font-size:11px;color:#64748b;">준공일 미정 ${model.unknownCount}건</span>` : ""}
+                </div>
+                <div class="ws-as-table-wrap">
+                  <table class="ws-as-table">
+                    <thead>
+                      <tr>
+                        <th>현장명</th>
+                        <th>준공일</th>
+                        <th>보증 만료일</th>
+                        <th>잔여 상태</th>
+                        <th>누적 AS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${tableRowsHtml || `<tr><td colspan="5" style="text-align:center;padding:28px 12px;color:#64748b;font-weight:700;">조건에 해당하는 완료현장이 없습니다.</td></tr>`}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="ws-as-subcard">
+                <strong style="font-size:13.5px;color:#0f172a;">📊 공종별 · 협력업체별 하자 빈도 요약</strong>
+                <div style="margin-top:12px;display:flex;flex-direction:column;gap:11px;">
+                  ${tradeBarsHtml}
+                  <div style="border-top:1px dashed #cbd5e1;padding-top:10px;font-size:11.5px;color:#64748b;line-height:1.5;">
+                    ${partnerTopHtml}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      window.getGanttWeekInfo = getGanttWeekInfo;
+      window.normalizeGanttPartnerKey = normalizeGanttPartnerKey;
+      window.computeWeeklyGanttModel = computeWeeklyGanttModel;
+      window.getCompletedSiteCompletionYmd = getCompletedSiteCompletionYmd;
+      window.computeSiteAsWarranty = computeSiteAsWarranty;
+      window.classifyAsDefectTrade = classifyAsDefectTrade;
+      window.collectAllAsTaskRecords = collectAllAsTaskRecords;
+      window.buildAsWarrantyAndStatsModel = buildAsWarrantyAndStatsModel;
+
+      window.setGanttTradeFilter = function (val) {
+        state.ganttTradeFilter = val || "all";
+        state.dirtyPcTabs.calendar = true;
+        state.dirtyMobileTabs.calendar = true;
+        renderActiveViews();
+      };
+      window.setGanttPartnerFilter = function (val) {
+        state.ganttPartnerFilter = val || "all";
+        state.dirtyPcTabs.calendar = true;
+        state.dirtyMobileTabs.calendar = true;
+        renderActiveViews();
+      };
+      window.setGanttOnlyConflict = function (checked) {
+        state.ganttOnlyConflict = Boolean(checked);
+        state.dirtyPcTabs.calendar = true;
+        state.dirtyMobileTabs.calendar = true;
+        renderActiveViews();
+      };
+      window.resetGanttFilters = function () {
+        state.ganttTradeFilter = "all";
+        state.ganttPartnerFilter = "all";
+        state.ganttOnlyConflict = false;
+        state.dirtyPcTabs.calendar = true;
+        state.dirtyMobileTabs.calendar = true;
+        renderActiveViews();
+      };
+      window.focusGanttConflictPartner = function (partnerKey) {
+        if (!partnerKey) return;
+        state.ganttPartnerFilter = (state.ganttPartnerFilter === partnerKey) ? "all" : partnerKey;
+        state.dirtyPcTabs.calendar = true;
+        state.dirtyMobileTabs.calendar = true;
+        renderActiveViews();
+      };
+      window.setSitesSubView = function (subView, archivedFlag) {
+        state.sitesSubView = subView === "asWarranty" ? "asWarranty" : "list";
+        if (typeof archivedFlag === "boolean") state.showArchivedSites = archivedFlag;
+        state.dirtyPcTabs.sites = true;
+        state.dirtyMobileTabs.sites = true;
+        renderActiveViews();
+      };
+      window.setMobileSitesSubView = function (subView, archivedFlag) {
+        state.sitesSubView = subView === "asWarranty" ? "asWarranty" : "list";
+        if (typeof archivedFlag === "boolean") {
+          state.showArchivedSites = archivedFlag;
+          state.mobileExpandedSiteKeys.clear();
+        }
+        state.dirtyMobileTabs.sites = true;
+        state.dirtyPcTabs.sites = true;
+        renderActiveViews();
+      };
+      window.setAsWarrantyDays = function (days) {
+        state.asWarrantyDays = Number(days) === 730 ? 730 : 365;
+        state.dirtyPcTabs.sites = true;
+        state.dirtyMobileTabs.sites = true;
+        renderActiveViews();
+      };
+      window.setAsWarrantyStatusFilter = function (statusKey) {
+        state.asWarrantyStatusFilter = statusKey || "all";
+        state.dirtyPcTabs.sites = true;
+        state.dirtyMobileTabs.sites = true;
+        renderActiveViews();
+      };
+      window.jumpToAsScopeList = function () {
+        state.scope = "as";
+        state.sitesSubView = "list";
+        state.showArchivedSites = false;
+        state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
+        state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
+        markAllDirty();
+        renderActiveViews();
+      };
+
       function markAllDirty() {
         Object.keys(state.dirtyPcTabs).forEach((k) => { state.dirtyPcTabs[k] = true; });
         Object.keys(state.dirtyMobileTabs).forEach((k) => { state.dirtyMobileTabs[k] = true; });
@@ -4840,7 +6059,9 @@ end $$;`;
         const slideCls = state._lastCalSlideDir === "next" ? "cal-slide-next" : state._lastCalSlideDir === "prev" ? "cal-slide-prev" : "";
         let bodyHtml = "";
 
-        if (state.calViewMode === "week") {
+        if (state.calViewMode === "gantt") {
+          bodyHtml = renderWeeklyGanttTimelineHtml(events, false);
+        } else if (state.calViewMode === "week") {
           const anchor = new Date(state.selectedDayStr + "T00:00:00");
           const dow = anchor.getDay();
           anchor.setDate(anchor.getDate() - dow);
@@ -4972,7 +6193,7 @@ end $$;`;
         const existingInput = document.getElementById("pcSearchInput");
         const isCalendarActive = state.pcTab === "calendar";
         const paperEl = pcCalEl ? pcCalEl.querySelector(".calendar-paper") : null;
-        if (pcCalEl && existingInput && paperEl && isCalendarActive && pcCalEl.querySelector(".cal-body-matrix") && pcCalEl.contains(existingInput)) {
+        if (state.calViewMode === "month" && pcCalEl && existingInput && paperEl && isCalendarActive && pcCalEl.querySelector(".cal-body-matrix") && pcCalEl.contains(existingInput)) {
           paperEl.innerHTML = `
             <div class="cal-header-row">
               <div class="cal-header-cell sun">일</div><div class="cal-header-cell">월</div>
@@ -5033,20 +6254,23 @@ end $$;`;
               </span>
               <div class="pc-cal-divider"></div>
               <div class="cal-view-switch">
-                <button type="button" class="cal-view-btn ${state.calViewMode === "month" ? "active" : ""}" onclick="setCalViewMode('month')">월간</button>
+                <button type="button" class="cal-view-btn ${state.calViewMode === "month" ? "active" : ""}" onclick="setCalViewMode('month')">📅 월간</button>
                 <button type="button" class="cal-view-btn ${state.calViewMode === "week" ? "active" : ""}" onclick="setCalViewMode('week')">주간</button>
+                <button type="button" class="cal-view-btn ${state.calViewMode === "gantt" ? "active" : ""}" onclick="setCalViewMode('gantt')">📊 주간 타임라인</button>
               </div>
               <button type="button" class="btn-tool-tag btn-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐">📸 캡쳐</button>
             </div>
           </div>
           <div class="calendar-paper">
-            <div class="cal-header-row">
-              <div class="cal-header-cell sun">일</div><div class="cal-header-cell">월</div>
-              <div class="cal-header-cell">화</div><div class="cal-header-cell">수</div>
-              <div class="cal-header-cell">목</div><div class="cal-header-cell">금</div>
-              <div class="cal-header-cell sat">토</div>
-            </div>
-            ${bodyHtml}
+            ${state.calViewMode === "gantt" ? bodyHtml : `
+              <div class="cal-header-row">
+                <div class="cal-header-cell sun">일</div><div class="cal-header-cell">월</div>
+                <div class="cal-header-cell">화</div><div class="cal-header-cell">수</div>
+                <div class="cal-header-cell">목</div><div class="cal-header-cell">금</div>
+                <div class="cal-header-cell sat">토</div>
+              </div>
+              ${bodyHtml}
+            `}
           </div>
         `;
         state._lastCalSlideDir = "";
@@ -5197,8 +6421,10 @@ end $$;`;
 
         const activeCountAll = sitesPool.filter((s) => !isSiteCompleted(s)).length;
         const doneCountAll = sitesPool.filter((s) => isSiteCompleted(s)).length;
+        const isAsWarrantyView = !isQ && state.sitesSubView === "asWarranty";
+        const asPendingCount = !isQ ? collectAllAsTaskRecords().filter((r) => (r.isFromAsSheet || r.task.status === "AS") && !r.isCompleted).length : 0;
 
-        const carouselHtml = visibleSites.map((s) => {
+        const carouselHtml = isAsWarrantyView ? "" : visibleSites.map((s) => {
           const uniqueMgrs = getUniqueSiteManagers(s.tasks);
           const mgrs = uniqueMgrs.slice(0, 3).join(", ") || "미정";
           const pct = s.progressRate || 0;
@@ -5215,6 +6441,9 @@ end $$;`;
           } else if (startDot || endDot) {
             periodText = `기간 : ${startDot || endDot}`;
           }
+          const warrantyInfo = (isDoneSite && s.scope !== "newSite" && s.scope !== "as")
+            ? computeSiteAsWarranty(s, state.asWarrantyDays || 365)
+            : null;
           return `
             <div class="site-carousel-card ${selectedSite && s.siteKey === selectedSite.siteKey ? "active" : ""}" data-site-key="${escHtml(s.siteKey)}" onclick="selectSiteCard('${escJs(s.siteKey)}')">
               <div class="scc-top">
@@ -5225,7 +6454,7 @@ end $$;`;
                 <div class="scc-sub-line1" title="${escHtml(mgrs)}">👤 ${escHtml(mgrs)}</div>
                 <div class="scc-sub-line2">
                   <span class="scc-count-txt">${s.completedTasksCount || 0}/${s.totalTasksCount || 0} 완료</span>
-                  ${s.delayedTasksCount > 0 ? `<span class="scc-delay-tag">⚠️ 지연 ${s.delayedTasksCount}</span>` : `<span class="scc-ok-tag">정상</span>`}
+                  ${warrantyInfo ? renderWarrantyBadgeHtml(warrantyInfo, true) : (s.delayedTasksCount > 0 ? `<span class="scc-delay-tag">⚠️ 지연 ${s.delayedTasksCount}</span>` : `<span class="scc-ok-tag">정상</span>`)}
                 </div>
                 ${isDoneSite && periodText ? `<div style="font-size:10.5px;color:#0f766e;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(periodText)}</div>` : (!isDoneSite ? (function() {
                   const up = getSiteUpcomingDateMetrics(s);
@@ -5278,8 +6507,9 @@ end $$;`;
                     <span style="color:${escHtml(selectedSite.colorHex || "#10b981")};">●</span>
                     <span>${escHtml(selectedSite.siteName)}</span>
                     ${delayCnt > 0 ? `<span class="dcp-delay-badge">공정지연 ${delayCnt}건 ⚠️</span>` : `<span class="dcp-ok-badge">정상 진행 (${selectedSite.progressRate || 0}%)</span>`}
+                    ${(isSiteCompleted(selectedSite) && selectedSite.scope !== "newSite" && selectedSite.scope !== "as") ? renderWarrantyBadgeHtml(computeSiteAsWarranty(selectedSite, state.asWarrantyDays || 365), false) : ""}
                   </div>
-                  <div class="dcp-meta-text">담당자: <strong>${escHtml(mgrs)}</strong> &nbsp;•&nbsp; 공정 기간: <strong>${escHtml(periodStr)}</strong></div>
+                  <div class="dcp-meta-text">담당자: <strong>${escHtml(mgrs)}</strong> &nbsp;•&nbsp; 공정 기간: <strong>${escHtml(periodStr)}</strong>${(isSiteCompleted(selectedSite) && selectedSite.scope !== "newSite" && selectedSite.scope !== "as") ? (() => { const dw = computeSiteAsWarranty(selectedSite, state.asWarrantyDays || 365); return ` &nbsp;•&nbsp; A/S 보증만료: <strong>${escHtml(dw.expiryDisplay)}</strong>`; })() : ""}</div>
                 </div>
                 <div class="dcp-actions">
                   ${(FINANCE_EXT_FLAGS.siteDetailShortcut && canViewFinance()) ? `
@@ -5398,7 +6628,7 @@ end $$;`;
         const isSitesActive = isQ ? (state.pcTab === "quote") : (state.pcTab === "sites");
         const bodyAreaEl = pcSiteEl ? document.getElementById(pfx + "BodyArea") : null;
         if (pcSiteEl && existingInput && bodyAreaEl && isSitesActive && pcSiteEl.contains(existingInput) && (document.activeElement === existingInput || state._keepPcSearchFocus)) {
-          bodyAreaEl.innerHTML = `
+          bodyAreaEl.innerHTML = isAsWarrantyView ? renderAsWarrantyDashboardHtml(false) : `
             ${visibleSites.length ? `
               <div class="carousel-wrap-box">
                 <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('${trackId}', -360)" title="이전 현장 보기">‹</button>
@@ -5408,7 +6638,7 @@ end $$;`;
             ${detailHtml}
           `;
           const countSpan = document.getElementById(pfx + "VisibleCount");
-          if (countSpan) countSpan.textContent = `표시 ${visibleSites.length}개`;
+          if (countSpan) countSpan.textContent = isAsWarrantyView ? `완료 ${doneCountAll}개` : `표시 ${visibleSites.length}개`;
           if (existingInput.value !== state.searchQuery) {
             existingInput.value = state.searchQuery;
           }
@@ -5446,21 +6676,24 @@ end $$;`;
           <div class="site-carousel-controls" style="justify-content:space-between;gap:10px;flex-wrap:wrap;">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <div class="pc-est-status-tabs">
-                <button type="button" class="pc-c-status-tab ${!state.showArchivedSites ? "active" : ""}" onclick="if(state.showArchivedSites) toggleArchivedSites()">${scopeProceedLbl} <span class="pc-badge-count">${activeCountAll}</span></button>
-                <button type="button" class="pc-c-status-tab done-tab ${state.showArchivedSites ? "active" : ""}" onclick="if(!state.showArchivedSites) toggleArchivedSites()">✅ 완료·보관 포함 <span class="pc-badge-count-done">${doneCountAll}</span></button>
+                <button type="button" class="pc-c-status-tab ${!isAsWarrantyView && !state.showArchivedSites ? "active" : ""}" onclick="setSitesSubView('list', false)">${scopeProceedLbl} <span class="pc-badge-count">${activeCountAll}</span></button>
+                <button type="button" class="pc-c-status-tab done-tab ${!isAsWarrantyView && state.showArchivedSites ? "active" : ""}" onclick="setSitesSubView('list', true)">✅ 완료·보관 포함 <span class="pc-badge-count-done">${doneCountAll}</span></button>
+                ${!isQ ? `<button type="button" class="pc-c-status-tab as-tab ${isAsWarrantyView ? "active" : ""}" onclick="setSitesSubView('asWarranty')">🛠️ A/S 보증·하자 통계 <span class="pc-badge-count-as">${asPendingCount}</span></button>` : ""}
               </div>
-              <span id="${pfx}VisibleCount" style="font-size:12px;font-weight:700;color:var(--text-muted);">표시 ${visibleSites.length}개</span>
-              <span style="width:1px;height:18px;background:#cbd5e1;display:inline-block;"></span>
-              <div style="display:flex;gap:5px;align-items:center;">
-                ${state.showArchivedSites ? `
-                  <button type="button" class="st-pill ${state.siteSortBy !== "name" ? "active" : ""}" onclick="setSiteSort('recent')">최근완료순</button>
-                  <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
-                ` : `
-                  <button type="button" class="st-pill ${state.siteSortBy === "progress" ? "active" : ""}" onclick="setSiteSort('progress')">진행률순</button>
-                  <button type="button" class="st-pill ${state.siteSortBy === "date" ? "active" : ""}" onclick="setSiteSort('date')">일정순</button>
-                  <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
-                `}
-              </div>
+              <span id="${pfx}VisibleCount" style="font-size:12px;font-weight:700;color:var(--text-muted);">${isAsWarrantyView ? `완료 ${doneCountAll}개` : `표시 ${visibleSites.length}개`}</span>
+              ${isAsWarrantyView ? "" : `
+                <span style="width:1px;height:18px;background:#cbd5e1;display:inline-block;"></span>
+                <div style="display:flex;gap:5px;align-items:center;">
+                  ${state.showArchivedSites ? `
+                    <button type="button" class="st-pill ${state.siteSortBy !== "name" ? "active" : ""}" onclick="setSiteSort('recent')">최근완료순</button>
+                    <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
+                  ` : `
+                    <button type="button" class="st-pill ${state.siteSortBy === "progress" ? "active" : ""}" onclick="setSiteSort('progress')">진행률순</button>
+                    <button type="button" class="st-pill ${state.siteSortBy === "date" ? "active" : ""}" onclick="setSiteSort('date')">일정순</button>
+                    <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')">가나다순</button>
+                  `}
+                </div>
+              `}
             </div>
             <div style="flex:1;display:flex;justify-content:center;min-width:240px;padding:0 12px;">
               <div class="pc-page-search-wrap" style="width:100%;max-width:520px;">
@@ -5475,16 +6708,18 @@ end $$;`;
             </div>
           </div>
           <div id="${pfx}BodyArea">
-            ${visibleSites.length ? `
-              <div class="carousel-wrap-box">
-                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('${trackId}', -360)" title="이전 현장 보기">‹</button>
-                <div class="site-carousel-track" id="${trackId}">${carouselHtml}</div>
-                <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('${trackId}', 360)" title="다음 현장 보기">›</button>
-              </div>` : ""}
-            ${detailHtml}
+            ${isAsWarrantyView ? renderAsWarrantyDashboardHtml(false) : `
+              ${visibleSites.length ? `
+                <div class="carousel-wrap-box">
+                  <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('${trackId}', -360)" title="이전 현장 보기">‹</button>
+                  <div class="site-carousel-track" id="${trackId}">${carouselHtml}</div>
+                  <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('${trackId}', 360)" title="다음 현장 보기">›</button>
+                </div>` : ""}
+              ${detailHtml}
+            `}
           </div>
         `;
-        autoScrollCarouselToActive(trackId, ".site-carousel-card.active");
+        if (!isAsWarrantyView) autoScrollCarouselToActive(trackId, ".site-carousel-card.active");
       }
 
       // ================= [PC 탭 2: To-Do 리스트 (스마트 그룹핑 & 빠른 액션)] =================
@@ -13702,7 +14937,9 @@ end $$;`;
         const slideCls = state._lastCalSlideDir === "next" ? "cal-slide-next" : state._lastCalSlideDir === "prev" ? "cal-slide-prev" : "";
         let calContentHtml = "";
 
-        if (state.mobileCalMode === "week") {
+        if (state.mobileCalMode === "gantt") {
+          calContentHtml = renderWeeklyGanttTimelineHtml(events, true);
+        } else if (state.mobileCalMode === "week") {
           const anchor = new Date(state.selectedDayStr + "T00:00:00");
           const startWeek = new Date(anchor);
           startWeek.setDate(anchor.getDate() - anchor.getDay());
@@ -13855,8 +15092,9 @@ end $$;`;
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
                   <div class="m-cal-view-switch">
-                    <button type="button" class="m-cal-view-btn ${state.mobileCalMode === "month" ? "active" : ""}" onclick="setMobileCalMode('month')">월간</button>
+                    <button type="button" class="m-cal-view-btn ${state.mobileCalMode === "month" ? "active" : ""}" onclick="setMobileCalMode('month')">📅 월간</button>
                     <button type="button" class="m-cal-view-btn ${state.mobileCalMode === "week" ? "active" : ""}" onclick="setMobileCalMode('week')">주간</button>
+                    <button type="button" class="m-cal-view-btn ${state.mobileCalMode === "gantt" ? "active" : ""}" onclick="setMobileCalMode('gantt')">📊 타임라인</button>
                   </div>
                   <button type="button" class="btn-m-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐">📸 캡쳐</button>
                 </div>
@@ -14016,11 +15254,16 @@ end $$;`;
           return compareActiveSites(a, b);
         });
 
+        const isAsWarrantyView = !topExtraHtml && state.sitesSubView === "asWarranty";
+        const asPendingCount = !topExtraHtml ? collectAllAsTaskRecords().filter((r) => (r.isFromAsSheet || r.task.status === "AS") && !r.isCompleted).length : 0;
+
         const toggleBarHtml = (topExtraHtml || "") + `
-          <div style="display:flex;gap:6px;margin-bottom:8px;">
-            <button type="button" class="m-sites-archived-btn" data-archived="false" onclick="setMobileSitesArchived(false)" style="flex:1;padding:8px 8px;border-radius:8px;border:1px solid ${!state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${!state.showArchivedSites ? "#0f766e" : "#fff"};color:${!state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">${state.scope === "single" ? "⚡ 진행 단건" : state.scope === "as" ? "🔧 진행 A/S" : "🏗️ 진행 현장"} ${activeCountAll}</button>
-            <button type="button" class="m-sites-archived-btn" data-archived="true" onclick="setMobileSitesArchived(true)" style="flex:1;padding:8px 8px;border-radius:8px;border:1px solid ${state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${state.showArchivedSites ? "#0f766e" : "#fff"};color:${state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:12px;font-weight:800;cursor:pointer;">✅ 완료 현장 ${doneCountAll}</button>
+          <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+            <button type="button" class="m-sites-archived-btn" data-archived="false" onclick="setMobileSitesSubView('list', false)" style="flex:1;min-width:96px;padding:8px 6px;border-radius:8px;border:1px solid ${!isAsWarrantyView && !state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${!isAsWarrantyView && !state.showArchivedSites ? "#0f766e" : "#fff"};color:${!isAsWarrantyView && !state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:11.5px;font-weight:800;cursor:pointer;">${state.scope === "single" ? "⚡ 진행 단건" : state.scope === "as" ? "🔧 진행 A/S" : "🏗️ 진행 현장"} ${activeCountAll}</button>
+            <button type="button" class="m-sites-archived-btn" data-archived="true" onclick="setMobileSitesSubView('list', true)" style="flex:1;min-width:96px;padding:8px 6px;border-radius:8px;border:1px solid ${!isAsWarrantyView && state.showArchivedSites ? "#0f766e" : "var(--border)"};background:${!isAsWarrantyView && state.showArchivedSites ? "#0f766e" : "#fff"};color:${!isAsWarrantyView && state.showArchivedSites ? "#fff" : "var(--text-sub)"};font-size:11.5px;font-weight:800;cursor:pointer;">✅ 완료 현장 ${doneCountAll}</button>
+            ${!topExtraHtml ? `<button type="button" class="m-sites-archived-btn" data-subview="asWarranty" onclick="setMobileSitesSubView('asWarranty')" style="flex:1;min-width:118px;padding:8px 6px;border-radius:8px;border:1px solid ${isAsWarrantyView ? "#d97706" : "var(--border)"};background:${isAsWarrantyView ? "#d97706" : "#fffbeb"};color:${isAsWarrantyView ? "#fff" : "#b45309"};font-size:11.5px;font-weight:800;cursor:pointer;">🛠️ A/S 보증·하자 ${asPendingCount}</button>` : ""}
           </div>
+          ${isAsWarrantyView ? "" : `
           <div style="display:flex;gap:5px;margin-bottom:10px;justify-content:flex-end;">
             ${state.showArchivedSites ? `
               <button type="button" class="st-pill ${state.siteSortBy !== "name" ? "active" : ""}" onclick="setSiteSort('recent')" style="font-size:11px;padding:3px 9px;">최근완료순</button>
@@ -14030,7 +15273,12 @@ end $$;`;
               <button type="button" class="st-pill ${state.siteSortBy === "date" ? "active" : ""}" onclick="setSiteSort('date')" style="font-size:11px;padding:3px 9px;">일정순</button>
               <button type="button" class="st-pill ${state.siteSortBy === "name" ? "active" : ""}" onclick="setSiteSort('name')" style="font-size:11px;padding:3px 9px;">가나다순</button>
             `}
-          </div>`;
+          </div>`}`;
+
+        if (isAsWarrantyView) {
+          document.getElementById(targetContainerId || "m-page-sites").innerHTML = toggleBarHtml + renderAsWarrantyDashboardHtml(true);
+          return;
+        }
 
         document.getElementById(targetContainerId || "m-page-sites").innerHTML = toggleBarHtml + (visible.map((s) => {
           const info = getSiteInfo(s.siteName) || {};
@@ -14057,8 +15305,11 @@ end $$;`;
           }
           const upcomingMetrics = getSiteUpcomingDateMetrics(s);
           const hasDelayedTasks = (s.tasks || []).some((t) => !isTaskCompleted(t) && isTaskDelayed(t));
+          const warrantyInfo = (isDoneSite && s.scope !== "newSite" && s.scope !== "as")
+            ? computeSiteAsWarranty(s, state.asWarrantyDays || 365)
+            : null;
           const subDateHtml = isDoneSite
-            ? (periodText && !isExpanded ? `<div style="font-size:11px;color:#0f766e;font-weight:700;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(periodText)}</div>` : "")
+            ? ((!isExpanded && (periodText || warrantyInfo)) ? `<div style="font-size:11px;color:#0f766e;font-weight:700;margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${periodText ? `<span>${escHtml(periodText)}</span>` : ""}${warrantyInfo ? renderWarrantyBadgeHtml(warrantyInfo, true) : ""}</div>` : "")
             : (!isExpanded ? (upcomingMetrics.hasUpcoming && upcomingMetrics.nextTask
                 ? `<div style="font-size:11px;color:#0f766e;font-weight:700;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">다음: ${escHtml(upcomingMetrics.ymd)} · ${escHtml(upcomingMetrics.nextTask.taskName)}</div>`
                 : `<div style="font-size:11px;color:${hasDelayedTasks ? "#dc2626" : "#64748b"};font-weight:700;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${hasDelayedTasks ? "⚠️ 예정 공정 없음 (지연만 남음)" : "예정 공정 없음"}</div>`
@@ -14195,7 +15446,7 @@ end $$;`;
                       <span style="width:9px;height:9px;border-radius:50%;background:${escHtml(s.colorHex || "#0f766e")};flex-shrink:0;"></span>
                       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.siteName)}</span>
                     </span>
-                    <span style="font-size:11px;font-weight:800;color:${(s.progressRate || 0) >= 80 ? "#059669" : "#0f766e"};flex-shrink:0;">${s.progressRate || 0}%</span>
+                    <span style="font-size:11px;font-weight:800;color:${(s.progressRate || 0) >= 80 ? "#059669" : "#0f766e"};flex-shrink:0;display:inline-flex;align-items:center;gap:4px;">${(isExpanded && warrantyInfo) ? renderWarrantyBadgeHtml(warrantyInfo, true) : ""}${s.progressRate || 0}%</span>
                   </div>
                   <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
                     담당: ${escHtml(mgrs)} · 남은 ${remainingCnt}건 (${s.completedTasksCount || 0}/${s.totalTasksCount || 0})
@@ -15287,7 +16538,7 @@ end $$;`;
         let tStartX = 0, tStartY = 0, tStartTime = 0, tTracking = false;
         containerEl.addEventListener("touchstart", (e) => {
           if (!e.touches || e.touches.length !== 1) { tTracking = false; return; }
-          if (e.target && e.target.closest("button, a, input, select, textarea, .m-bottom-nav, .m-bottom-btn, .cal-event-pill, .m-cal-pill, .m-cal-week-pill, .cal-day-add-btn")) {
+          if (e.target && e.target.closest("button, a, input, select, textarea, .m-bottom-nav, .m-bottom-btn, .cal-event-pill, .m-cal-pill, .m-cal-week-pill, .cal-day-add-btn, .ws-gantt-wrap, .ws-gantt-bar")) {
             tTracking = false; return;
           }
           tStartX = e.touches[0].clientX;
@@ -15309,7 +16560,7 @@ end $$;`;
         let mDownX = 0, mDownY = 0, mDownTime = 0, mTracking = false;
         containerEl.addEventListener("mousedown", (e) => {
           if (e.button !== 0) return;
-          if (e.target && e.target.closest("button, a, input, select, textarea, .cal-event-pill, .m-cal-pill, .m-cal-week-pill")) {
+          if (e.target && e.target.closest("button, a, input, select, textarea, .cal-event-pill, .m-cal-pill, .m-cal-week-pill, .ws-gantt-wrap, .ws-gantt-bar")) {
             mTracking = false; return;
           }
           mDownX = e.clientX; mDownY = e.clientY; mDownTime = Date.now(); mTracking = true;
@@ -23915,6 +25166,7 @@ end $$;`;
           return;
         }
         state.scope = scope;
+        state.sitesSubView = "list";
         state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
         markAllDirty();
@@ -23933,6 +25185,7 @@ end $$;`;
           return;
         }
         state.scope = scope;
+        state.sitesSubView = "list";
         state.mobileHomeTasksExpanded = false;
         state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
@@ -24000,7 +25253,7 @@ end $$;`;
         window.onGlobalSearch("");
       };
       window.moveCalendarMonth = function (delta) {
-        const isWeek = (state.device === "pc" && state.calViewMode === "week") || (state.device === "mobile" && state.mobileCalMode === "week");
+        const isWeek = (state.device === "pc" && (state.calViewMode === "week" || state.calViewMode === "gantt")) || (state.device === "mobile" && (state.mobileCalMode === "week" || state.mobileCalMode === "gantt"));
         state._lastCalSlideDir = delta > 0 ? "next" : "prev";
         if (isWeek) {
           state.selectedDayStr = addDaysYmd(state.selectedDayStr || getTodayYmd(), delta * 7);
@@ -24017,6 +25270,7 @@ end $$;`;
         markAllDirty(); renderActiveViews();
       };
       window.setMobileSitesArchived = function (archived) {
+        state.sitesSubView = "list";
         state.showArchivedSites = Boolean(archived);
         state.mobileExpandedSiteKeys.clear();
         state.dirtyMobileTabs.sites = true;
@@ -24132,6 +25386,7 @@ end $$;`;
           renderActiveViews();
           return;
         }
+        state.sitesSubView = "list";
         state.selectedSiteKey = siteKey;
         state.siteTaskStatusFilter = "all";
         state.checkedTableTaskIds.clear();
@@ -24164,6 +25419,7 @@ end $$;`;
           renderActiveViews();
           return;
         }
+        state.sitesSubView = "list";
         state.selectedSiteKey = siteKey;
         markAllDirty();
         window.switchMobileTab("sites");
@@ -24200,7 +25456,7 @@ end $$;`;
           window.switchMainTab("calendar");
         }
       };
-      window.toggleArchivedSites = function () { state.showArchivedSites = !state.showArchivedSites; markAllDirty(); renderActiveViews(); };
+      window.toggleArchivedSites = function () { state.sitesSubView = "list"; state.showArchivedSites = !state.showArchivedSites; markAllDirty(); renderActiveViews(); };
       window.setSiteSort = function (sortBy) { state.siteSortBy = sortBy; state.dirtyPcTabs.sites = true; state.dirtyPcTabs.quote = true; state.dirtyMobileTabs.sites = true; state.dirtyMobileTabs.quote = true; renderActiveViews(); };
       window.setSiteTaskFilter = function (f) {
         state.siteTaskStatusFilter = f;
