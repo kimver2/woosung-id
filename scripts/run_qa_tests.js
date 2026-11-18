@@ -2060,10 +2060,18 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   const mobHtmlAst = sandbox.buildSidebarDashboardHtml('mobile');
   const idxRootHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const idxDocsHtml = fs.readFileSync(path.join(__dirname, '..', 'docs', 'index.html'), 'utf8');
-  const v2RootHtml = fs.readFileSync(path.join(__dirname, '..', 'v2.html'), 'utf8');
-  const previewHtml = fs.readFileSync(path.join(__dirname, '..', 'preview_tabs.html'), 'utf8');
-  const v2DocsHtml = fs.readFileSync(path.join(__dirname, '..', 'docs', 'v2.html'), 'utf8');
-  const previewDocsHtml = fs.readFileSync(path.join(__dirname, '..', 'docs', 'preview_tabs.html'), 'utf8');
+  const redirectTargets = [
+    { label: 'v2.html', relPath: 'v2.html' },
+    { label: 'v3.html', relPath: 'v3.html' },
+    { label: 'preview_tabs.html', relPath: 'preview_tabs.html' },
+    { label: 'docs/v2.html', relPath: path.join('docs', 'v2.html') },
+    { label: 'docs/v3.html', relPath: path.join('docs', 'v3.html') },
+    { label: 'docs/preview_tabs.html', relPath: path.join('docs', 'preview_tabs.html') }
+  ];
+  const redirectFiles = redirectTargets.map((item) => ({
+    label: item.label,
+    html: fs.readFileSync(path.join(__dirname, '..', item.relPath), 'utf8')
+  }));
 
   function verifyAllScriptBlocks(htmlStr, label) {
     const regex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
@@ -2089,79 +2097,97 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   verifyAllScriptBlocks(mobHtmlAst, '모바일 대시보드 HTML');
   verifyAllScriptBlocks(idxRootHtml, '루트 index.html');
   verifyAllScriptBlocks(idxDocsHtml, 'docs/index.html');
-  verifyAllScriptBlocks(v2RootHtml, '루트 v2.html');
-  verifyAllScriptBlocks(previewHtml, '루트 preview_tabs.html');
-  verifyAllScriptBlocks(v2DocsHtml, 'docs/v2.html');
-  verifyAllScriptBlocks(previewDocsHtml, 'docs/preview_tabs.html');
 
   assertTest('index.html 과 docs/index.html 파일 100% 동일 동기화 유지 검증', idxRootHtml === idxDocsHtml);
-  assertTest('index.html, docs/index.html, v2.html, docs/v2.html, preview_tabs.html, docs/preview_tabs.html 6개 파일 100% 동일 동기화 검증',
-    idxRootHtml === idxDocsHtml &&
-    idxRootHtml === v2RootHtml &&
-    v2RootHtml === previewHtml &&
-    v2RootHtml === v2DocsHtml &&
-    v2RootHtml === previewDocsHtml
+
+  redirectFiles.forEach(({ label, html }) => {
+    verifyAllScriptBlocks(html, label);
+    const lineCount = html.trim().split(/\r?\n/).length;
+    assertTest(`${label} 경량 ./index.html 리다이렉트 파일 검증`,
+      lineCount <= 25 &&
+      html.length < 1024 &&
+      html.includes("window.location.replace('./index.html' + (window.location.search || '') + (window.location.hash || ''));") &&
+      html.includes('<meta http-equiv="refresh" content="0; url=./index.html">') &&
+      html.includes('<a href="./index.html"') &&
+      !html.includes('data/dashboard_data.js')
+    );
+  });
+
+  const swRootJs = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+  const swDocsJs = fs.readFileSync(path.join(__dirname, '..', 'docs', 'sw.js'), 'utf8');
+  let swSyntaxOk = false;
+  try {
+    new vm.Script(swRootJs);
+    swSyntaxOk = true;
+  } catch (e) {
+    swSyntaxOk = false;
+  }
+  assertTest('sw.js 및 docs/sw.js 100% 동일 동기화, 구문 무결성 및 v2.html 프리캐시 제거 검증',
+    swSyntaxOk &&
+    swRootJs === swDocsJs &&
+    !swRootJs.includes("'ws-dashboard-pwa-v3'") &&
+    swRootJs.includes("'ws-dashboard-pwa-v4'") &&
+    !swRootJs.includes("'./v2.html'") &&
+    swRootJs.includes("'./index.html'")
   );
+
   assertTest('메인 index.html 내 v2 독립 웹앱 구조 및 data/dashboard_data.js 탑재 검증',
     idxRootHtml.includes('src="data/dashboard_data.js"') &&
     idxRootHtml.includes('우성아이디') &&
     !idxRootHtml.includes('<iframe')
   );
-  assertTest('v2.html 내 담당자1 단일 추출 및 공사진행률 현장명 인라인 뱃지 표시 검증',
-    v2RootHtml.includes('extractFirstManager') &&
-    v2RootHtml.includes('extractFirstManager(r.manager')
+  assertTest('index.html 내 담당자1 단일 추출 및 공사진행률 현장명 인라인 뱃지 표시 검증',
+    idxRootHtml.includes('extractFirstManager') &&
+    idxRootHtml.includes('extractFirstManager(r.manager')
   );
-  assertTest('v2.html 내 공사기간 전면 표시 및 현장데이터 자동 매칭 함수 검증',
-    v2RootHtml.includes('getCollectionPeriodInfo') &&
-    v2RootHtml.includes('colStartDate') &&
-    v2RootHtml.includes('colEndDate') &&
-    v2RootHtml.includes('onCollectionPeriodDateChange')
+  assertTest('index.html 내 공사기간 전면 표시 및 현장데이터 자동 매칭 함수 검증',
+    idxRootHtml.includes('getCollectionPeriodInfo') &&
+    idxRootHtml.includes('colStartDate') &&
+    idxRootHtml.includes('colEndDate') &&
+    idxRootHtml.includes('onCollectionPeriodDateChange')
   );
-  assertTest('v2.html 내 연도별·월별 필터 및 1~12월 월별 요약 스트립 검증',
-    v2RootHtml.includes('financeYearFilter') &&
-    v2RootHtml.includes('financeMonthFilter') &&
-    v2RootHtml.includes('renderCollectionMonthStripHtml') &&
-    v2RootHtml.includes('getMonthlyCollectionStats') &&
-    v2RootHtml.includes('setFinanceYearFilter') &&
-    v2RootHtml.includes('setFinanceMonthFilter')
+  assertTest('index.html 내 연도별·월별 필터 및 1~12월 월별 요약 스트립 검증',
+    idxRootHtml.includes('financeYearFilter') &&
+    idxRootHtml.includes('financeMonthFilter') &&
+    idxRootHtml.includes('renderCollectionMonthStripHtml') &&
+    idxRootHtml.includes('getMonthlyCollectionStats') &&
+    idxRootHtml.includes('setFinanceYearFilter') &&
+    idxRootHtml.includes('setFinanceMonthFilter')
   );
-  assertTest('v2.html 내 단계별 수금 (계약·착수·중도·잔금) 한눈에 보기 칩 검증',
-    v2RootHtml.includes('renderCollectionStepsHtml')
+  assertTest('index.html 내 단계별 수금 (계약·착수·중도·잔금) 한눈에 보기 칩 검증',
+    idxRootHtml.includes('renderCollectionStepsHtml')
   );
-  assertTest('v2.html 내 공사완료 미수 ⚠️ 자동 경고 뱃지 및 필터 칩 검증',
-    v2RootHtml.includes('공사완료 미수 ⚠️') &&
-    v2RootHtml.includes('doneUncollected') &&
-    v2RootHtml.includes('isCollectionSiteCompleted')
+  assertTest('index.html 내 공사완료 미수 ⚠️ 자동 경고 뱃지 및 필터 칩 검증',
+    idxRootHtml.includes('공사완료 미수 ⚠️') &&
+    idxRootHtml.includes('doneUncollected') &&
+    idxRootHtml.includes('isCollectionSiteCompleted')
   );
-  assertTest('v2.html, preview_tabs.html, docs/v2.html, docs/preview_tabs.html 4개 파일 100% 동일 동기화 검증',
-    v2RootHtml === previewHtml && v2RootHtml === v2DocsHtml && v2RootHtml === previewDocsHtml
+  assertTest('index.html 내 승격 모달(promoteEstimateModal) 및 함수 탑재 검증',
+    idxRootHtml.includes('id="promoteEstimateModal"') &&
+    idxRootHtml.includes('openPromoteEstimateModal') &&
+    idxRootHtml.includes('isEstimatePromotedToSite') &&
+    idxRootHtml.includes('getDefaultProcessSchedule')
   );
-  assertTest('v2.html 내 승격 모달(promoteEstimateModal) 및 함수 탑재 검증',
-    v2RootHtml.includes('id="promoteEstimateModal"') &&
-    v2RootHtml.includes('openPromoteEstimateModal') &&
-    v2RootHtml.includes('isEstimatePromotedToSite') &&
-    v2RootHtml.includes('getDefaultProcessSchedule')
+  assertTest('index.html 내 재무 권한 제어(canViewFinance) 및 헤더 그리드 레이아웃 검증',
+    idxRootHtml.includes('function canViewFinance()') &&
+    idxRootHtml.includes('function syncFinanceNavVisibility()') &&
+    idxRootHtml.includes('grid-auto-flow: column; grid-auto-columns: 114px;')
   );
-  assertTest('v2.html 내 재무 권한 제어(canViewFinance) 및 헤더 그리드 레이아웃 검증',
-    v2RootHtml.includes('function canViewFinance()') &&
-    v2RootHtml.includes('function syncFinanceNavVisibility()') &&
-    v2RootHtml.includes('grid-auto-flow: column; grid-auto-columns: 114px;')
+  assertTest('index.html 내 직원용 6번째 탭 🤝 거래처(partners) 신설 및 canViewFinance 분기 연동 검증',
+    idxRootHtml.includes('data-tab="partners"') &&
+    idxRootHtml.includes('data-mtab="partners"') &&
+    idxRootHtml.includes('id="page-partners"') &&
+    idxRootHtml.includes('id="m-page-partners"') &&
+    idxRootHtml.includes('renderPcPartnersTab') &&
+    idxRootHtml.includes('renderMobilePartnersTab') &&
+    idxRootHtml.includes('onPartnerTabSearchInput') &&
+    idxRootHtml.includes('clearPartnerTabSearch')
   );
-  assertTest('v2.html 내 직원용 6번째 탭 🤝 거래처(partners) 신설 및 canViewFinance 분기 연동 검증',
-    v2RootHtml.includes('data-tab="partners"') &&
-    v2RootHtml.includes('data-mtab="partners"') &&
-    v2RootHtml.includes('id="page-partners"') &&
-    v2RootHtml.includes('id="m-page-partners"') &&
-    v2RootHtml.includes('renderPcPartnersTab') &&
-    v2RootHtml.includes('renderMobilePartnersTab') &&
-    v2RootHtml.includes('onPartnerTabSearchInput') &&
-    v2RootHtml.includes('clearPartnerTabSearch')
-  );
-  assertTest('v2.html 내 모바일 캘린더 한국시간(Asia/Seoul) 로컬 날짜 연동 및 뒤로가기(popstate) 홈 이동 검증',
-    v2RootHtml.includes('timeZone: "Asia/Seoul"') &&
-    v2RootHtml.includes('wsMobileTab') &&
-    v2RootHtml.includes('state.mobileTab !== "home"') &&
-    v2RootHtml.includes('window.switchMobileTab("home", { skipHistory: true })')
+  assertTest('index.html 내 모바일 캘린더 한국시간(Asia/Seoul) 로컬 날짜 연동 및 뒤로가기(popstate) 홈 이동 검증',
+    idxRootHtml.includes('timeZone: "Asia/Seoul"') &&
+    idxRootHtml.includes('wsMobileTab') &&
+    idxRootHtml.includes('state.mobileTab !== "home"') &&
+    idxRootHtml.includes('window.switchMobileTab("home", { skipHistory: true })')
   );
   assertTest('현장서식.js 내 FINANCE_DB_SPREADSHEET_ID 상수 및 setupFinanceDbAndMigrate 검증',
     code.includes('FINANCE_DB_SPREADSHEET_ID = "1rmH7176tFYRk97qGjdI-ztn6UMnWwyNBNl06wexFOYc"') &&
@@ -2176,14 +2202,14 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     code.includes('action === "saveCollectionRow"') &&
     code.includes('action === "deleteCollectionRow"')
   );
-  assertTest('v2.html 내 Step 2 현장 수금현황 UI, 서브탭 및 수금 상세 모달(collectionModal) 검증',
-    v2RootHtml.includes('id="collectionModal"') &&
-    v2RootHtml.includes('window.openCollectionModal') &&
-    v2RootHtml.includes('window.onSaveCollectionRow') &&
-    v2RootHtml.includes('window.onDeleteCollectionRow') &&
-    v2RootHtml.includes('window.setFinanceSubTab') &&
-    v2RootHtml.includes('ensureFinanceDbDataLoaded') &&
-    v2RootHtml.includes('calcCollectionModalTotals')
+  assertTest('index.html 내 Step 2 현장 수금현황 UI, 서브탭 및 수금 상세 모달(collectionModal) 검증',
+    idxRootHtml.includes('id="collectionModal"') &&
+    idxRootHtml.includes('window.openCollectionModal') &&
+    idxRootHtml.includes('window.onSaveCollectionRow') &&
+    idxRootHtml.includes('window.onDeleteCollectionRow') &&
+    idxRootHtml.includes('window.setFinanceSubTab') &&
+    idxRootHtml.includes('ensureFinanceDbDataLoaded') &&
+    idxRootHtml.includes('calcCollectionModalTotals')
   );
   assertTest('현장서식.js 내 Step 3 재무 DB 비용마감 API 및 라우팅 검증',
     code.includes('function saveExpenseRow(') &&
@@ -2202,32 +2228,32 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     fs.readFileSync('data/dashboard_data.js', 'utf8').includes('saveExpenseBatchRows:') &&
     fs.readFileSync('data/dashboard_data.js', 'utf8') === fs.readFileSync('docs/data/dashboard_data.js', 'utf8')
   );
-  assertTest('v2.html 내 Step 3 비용마감 UI, 고정비/투입업체 모달 및 현장정산상세 모달 검증',
-    v2RootHtml.includes('id="expenseModal"') &&
-    v2RootHtml.includes('id="partnerImportModal"') &&
-    v2RootHtml.includes('id="siteFinanceDetailModal"') &&
-    v2RootHtml.includes('window.openExpenseModal') &&
-    v2RootHtml.includes('window.openPartnerImportModal') &&
-    v2RootHtml.includes('window.openSiteFinanceDetailModal') &&
-    v2RootHtml.includes('window.onQuickPayFullExpense') &&
-    v2RootHtml.includes('window.onLoadFixedExpenses') &&
-    v2RootHtml.includes('getFilteredExpenseList')
+  assertTest('index.html 내 Step 3 비용마감 UI, 고정비/투입업체 모달 및 현장정산상세 모달 검증',
+    idxRootHtml.includes('id="expenseModal"') &&
+    idxRootHtml.includes('id="partnerImportModal"') &&
+    idxRootHtml.includes('id="siteFinanceDetailModal"') &&
+    idxRootHtml.includes('window.openExpenseModal') &&
+    idxRootHtml.includes('window.openPartnerImportModal') &&
+    idxRootHtml.includes('window.openSiteFinanceDetailModal') &&
+    idxRootHtml.includes('window.onQuickPayFullExpense') &&
+    idxRootHtml.includes('window.onLoadFixedExpenses') &&
+    idxRootHtml.includes('getFilteredExpenseList')
   );
-  assertTest('v2.html 내 로그인/로그아웃 시 항상 홈(home) 탭 초기화 및 별칭 함수 검증',
-    v2RootHtml.includes('function resetAllTabsToHome') &&
-    v2RootHtml.includes('window.resetAllTabsToHome = resetAllTabsToHome') &&
-    v2RootHtml.includes('window.logout = window.logoutDashboardAuth') &&
-    v2RootHtml.includes('window.doLogout = window.logoutDashboardAuth') &&
-    v2RootHtml.includes('window.unlockWithMember = function') &&
-    v2RootHtml.includes('window.submitAccessLogin = function') &&
-    v2RootHtml.includes('switchMainTab("home", { keepDevice: true })') &&
-    v2RootHtml.includes('switchMobileTab("home", { skipHistory: true })')
+  assertTest('index.html 내 로그인/로그아웃 시 항상 홈(home) 탭 초기화 및 별칭 함수 검증',
+    idxRootHtml.includes('function resetAllTabsToHome') &&
+    idxRootHtml.includes('window.resetAllTabsToHome = resetAllTabsToHome') &&
+    idxRootHtml.includes('window.logout = window.logoutDashboardAuth') &&
+    idxRootHtml.includes('window.doLogout = window.logoutDashboardAuth') &&
+    idxRootHtml.includes('window.unlockWithMember = function') &&
+    idxRootHtml.includes('window.submitAccessLogin = function') &&
+    idxRootHtml.includes('switchMainTab("home", { keepDevice: true })') &&
+    idxRootHtml.includes('switchMobileTab("home", { skipHistory: true })')
   );
-  assertTest('v2.html 내 PC & 모바일 홈 브리핑 단건·AS 포함 및 뱃지 연동 검증',
-    v2RootHtml.includes('function getHomeScopeBadgeHtml(scope)') &&
-    v2RootHtml.includes('const activeConstructionSites = getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));') &&
-    v2RootHtml.includes('const activeScopeSites = getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));') &&
-    v2RootHtml.includes('getHomeScopeBadgeHtml(effScope)')
+  assertTest('index.html 내 PC & 모바일 홈 브리핑 단건·AS 포함 및 뱃지 연동 검증',
+    idxRootHtml.includes('function getHomeScopeBadgeHtml(scope)') &&
+    idxRootHtml.includes('const activeConstructionSites = getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));') &&
+    idxRootHtml.includes('const activeScopeSites = getAllSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));') &&
+    idxRootHtml.includes('getHomeScopeBadgeHtml(effScope)')
   );
   assertTest('현장서식.js 내 완료현장 이관 엔진(단건 [단건] 접두사 및 AS 동일현장 편입/단독 [AS] 접두사) 검증',
     code.includes('finalDestSiteName =') &&
@@ -2240,27 +2266,27 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     code.includes('action === "normalizeCompletedPrefixes"') &&
     code.includes('normalizeExistingCompletedSheetPrefixesMenu')
   );
-  assertTest('v2.html 내 신규 모달 버튼 스타일 통일(ws-btn), 취소/저장 문구 및 홈 메모 브리핑 전체 노출 검증',
-    v2RootHtml.includes('.ws-btn-primary, .btn-primary') &&
-    v2RootHtml.includes('.ws-btn-secondary, .btn-secondary') &&
-    v2RootHtml.includes('getAllActiveTasksForMemoBriefing()') &&
-    v2RootHtml.includes('renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), false)') &&
-    v2RootHtml.includes('renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), true)')
+  assertTest('index.html 내 신규 모달 버튼 스타일 통일(ws-btn), 취소/저장 문구 및 홈 메모 브리핑 전체 노출 검증',
+    idxRootHtml.includes('.ws-btn-primary, .btn-primary') &&
+    idxRootHtml.includes('.ws-btn-secondary, .btn-secondary') &&
+    idxRootHtml.includes('getAllActiveTasksForMemoBriefing()') &&
+    idxRootHtml.includes('renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), false)') &&
+    idxRootHtml.includes('renderHomeMemoBriefingHtml(getAllActiveTasksForMemoBriefing(), true)')
   );
-  assertTest('v2.html 내 정산월 표시 포맷(formatShortSettleMonth, 26.11, nowrap) 및 화면 노출 검증',
-    v2RootHtml.includes('function formatShortSettleMonth(val)') &&
-    v2RootHtml.includes('window.formatShortSettleMonth = formatShortSettleMonth') &&
-    v2RootHtml.includes('formatShortSettleMonth(e.settleMonth)') &&
-    v2RootHtml.includes('white-space:nowrap;font-weight:700;color:#475569;')
+  assertTest('index.html 내 정산월 표시 포맷(formatShortSettleMonth, 26.11, nowrap) 및 화면 노출 검증',
+    idxRootHtml.includes('function formatShortSettleMonth(val)') &&
+    idxRootHtml.includes('window.formatShortSettleMonth = formatShortSettleMonth') &&
+    idxRootHtml.includes('formatShortSettleMonth(e.settleMonth)') &&
+    idxRootHtml.includes('white-space:nowrap;font-weight:700;color:#475569;')
   );
-  assertTest('v2.html 내 비용/수금 모달 금액 입력칸 천단위 쉼표 포맷 및 숫자 파싱 검증',
-    v2RootHtml.includes('function formatNumberInputWithCommas(inputEl)') &&
-    v2RootHtml.includes('id="expClaimAmount" value="${(Number(rData.claimAmount) || 0).toLocaleString(\'ko-KR\')}"') &&
-    v2RootHtml.includes('id="expPaidAmount" value="${(Number(rData.paidAmount) || 0).toLocaleString(\'ko-KR\')}"') &&
-    v2RootHtml.includes('window.onExpenseAmountInput') &&
-    v2RootHtml.includes('window.setExpenseFullPaid') &&
-    v2RootHtml.includes('window.matchExpenseFullPaid') &&
-    v2RootHtml.includes('replace(/,/g, "")')
+  assertTest('index.html 내 비용/수금 모달 금액 입력칸 천단위 쉼표 포맷 및 숫자 파싱 검증',
+    idxRootHtml.includes('function formatNumberInputWithCommas(inputEl)') &&
+    idxRootHtml.includes('id="expClaimAmount" value="${(Number(rData.claimAmount) || 0).toLocaleString(\'ko-KR\')}"') &&
+    idxRootHtml.includes('id="expPaidAmount" value="${(Number(rData.paidAmount) || 0).toLocaleString(\'ko-KR\')}"') &&
+    idxRootHtml.includes('window.onExpenseAmountInput') &&
+    idxRootHtml.includes('window.setExpenseFullPaid') &&
+    idxRootHtml.includes('window.matchExpenseFullPaid') &&
+    idxRootHtml.includes('replace(/,/g, "")')
   );
   assertTest('현장서식.js 내 parseAmountStringToNumber 금액 파싱 엔진 및 단위 변환(억/만/원) 검증',
     typeof sandbox.parseAmountStringToNumber === 'function' &&
@@ -2279,33 +2305,33 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     code.includes('collectionCreated: collectionCreated') &&
     code.includes('collectionRow: collectionRow')
   );
-  assertTest('v2.html 내 신규견적 승격 모달 재무DB [수금현황] 자동 등록 체크박스(pmModalAutoCollection) 및 캐시 즉시 반영 검증',
-    v2RootHtml.includes('id="pmModalAutoCollection"') &&
-    v2RootHtml.includes('재무DB [수금현황] 시트에도 현장 자동 등록') &&
-    v2RootHtml.includes('autoCreateCollection = autoColCb ? autoColCb.checked : true') &&
-    v2RootHtml.includes('autoCreateCollection: autoCreateCollection') &&
-    v2RootHtml.includes('res.collectionCreated') &&
-    v2RootHtml.includes('state.financeDbData.collection.unshift(res.collectionRow)')
+  assertTest('index.html 내 신규견적 승격 모달 재무DB [수금현황] 자동 등록 체크박스(pmModalAutoCollection) 및 캐시 즉시 반영 검증',
+    idxRootHtml.includes('id="pmModalAutoCollection"') &&
+    idxRootHtml.includes('재무DB [수금현황] 시트에도 현장 자동 등록') &&
+    idxRootHtml.includes('autoCreateCollection = autoColCb ? autoColCb.checked : true') &&
+    idxRootHtml.includes('autoCreateCollection: autoCreateCollection') &&
+    idxRootHtml.includes('res.collectionCreated') &&
+    idxRootHtml.includes('state.financeDbData.collection.unshift(res.collectionRow)')
   );
-  assertTest('v2.html 내 Step 4 월간집계 대시보드(buildFinanceMonthlyDashboardHtml, 4대 KPI, 1~12월 손익표, 현장별 마진율) 검증',
-    v2RootHtml.includes('function buildFinanceMonthlyDashboardHtml') &&
-    v2RootHtml.includes('window.buildFinanceMonthlyDashboardHtml = buildFinanceMonthlyDashboardHtml') &&
-    v2RootHtml.includes('window.setMonthlyReportYear = function') &&
-    v2RootHtml.includes('window.setMonthlySiteSort = function') &&
-    v2RootHtml.includes('window.onMonthlySiteSearch = function') &&
-    v2RootHtml.includes('window.isFixedExpenseRow = isFixedExpenseRow') &&
-    v2RootHtml.includes('총 수금액') &&
-    v2RootHtml.includes('총 지출액 (청구마감)') &&
-    v2RootHtml.includes('예상 순이익 & 이익률') &&
-    v2RootHtml.includes('미수금 vs 외상(미지급)') &&
-    v2RootHtml.includes('월별 손익 요약표 (1월 ~ 12월') &&
-    v2RootHtml.includes('현장별 수익성 & 마진율 현황') &&
-    v2RootHtml.includes('window.openSiteFinanceDetailModal')
+  assertTest('index.html 내 Step 4 월간집계 대시보드(buildFinanceMonthlyDashboardHtml, 4대 KPI, 1~12월 손익표, 현장별 마진율) 검증',
+    idxRootHtml.includes('function buildFinanceMonthlyDashboardHtml') &&
+    idxRootHtml.includes('window.buildFinanceMonthlyDashboardHtml = buildFinanceMonthlyDashboardHtml') &&
+    idxRootHtml.includes('window.setMonthlyReportYear = function') &&
+    idxRootHtml.includes('window.setMonthlySiteSort = function') &&
+    idxRootHtml.includes('window.onMonthlySiteSearch = function') &&
+    idxRootHtml.includes('window.isFixedExpenseRow = isFixedExpenseRow') &&
+    idxRootHtml.includes('총 수금액') &&
+    idxRootHtml.includes('총 지출액 (청구마감)') &&
+    idxRootHtml.includes('예상 순이익 & 이익률') &&
+    idxRootHtml.includes('미수금 vs 외상(미지급)') &&
+    idxRootHtml.includes('월별 손익 요약표 (1월 ~ 12월') &&
+    idxRootHtml.includes('현장별 수익성 & 마진율 현황') &&
+    idxRootHtml.includes('window.openSiteFinanceDetailModal')
   );
-  assertTest('v2.html 내 PC 및 모바일 월간집계 탭(financeSubTab === "monthly") 대시보드 렌더링 및 모달 버튼 유지 검증',
-    v2RootHtml.includes('buildFinanceMonthlyDashboardHtml(false)') &&
-    v2RootHtml.includes('buildFinanceMonthlyDashboardHtml(true)') &&
-    v2RootHtml.includes('openMonthlyReportModal()')
+  assertTest('index.html 내 PC 및 모바일 월간집계 탭(financeSubTab === "monthly") 대시보드 렌더링 및 모달 버튼 유지 검증',
+    idxRootHtml.includes('buildFinanceMonthlyDashboardHtml(false)') &&
+    idxRootHtml.includes('buildFinanceMonthlyDashboardHtml(true)') &&
+    idxRootHtml.includes('openMonthlyReportModal()')
   );
   assertTest('현장서식.js 내 고정비 마스터 및 정산월 정규화 API (saveFixedMasterRow, deleteFixedMasterRow, cleanupCorruptedFixedExpenses, normalizeSettleMonth_) 검증',
     code.includes('function saveFixedMasterRow(') &&
@@ -2323,29 +2349,20 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     fs.readFileSync('data/dashboard_data.js', 'utf8').includes('cleanupCorruptedFixedExpenses:') &&
     fs.readFileSync('data/dashboard_data.js', 'utf8') === fs.readFileSync('docs/data/dashboard_data.js', 'utf8')
   );
-  assertTest('v2.html 내 📌 고정비 관리 서브탭(fixed), 고정비 모달(fixedMasterModal), ON/OFF 토글 및 정규화(normalizeMonthStr) 검증',
-    v2RootHtml.includes('subTab === "fixed"') &&
-    v2RootHtml.includes('setFinanceSubTab(\'fixed\')') &&
-    v2RootHtml.includes('id="fixedMasterModal"') &&
-    v2RootHtml.includes('window.openFixedMasterModal') &&
-    v2RootHtml.includes('window.onSaveFixedMasterRow') &&
-    v2RootHtml.includes('window.onDeleteFixedMasterRow') &&
-    v2RootHtml.includes('window.onToggleFixedMasterActive') &&
-    v2RootHtml.includes('window.getFilteredFixedMasterList') &&
-    v2RootHtml.includes('function normalizeMonthStr(m)') &&
-    v2RootHtml.includes('window.onFixedMasterAmountInput')
+  assertTest('index.html 내 📌 고정비 관리 서브탭(fixed), 고정비 모달(fixedMasterModal), ON/OFF 토글 및 정규화(normalizeMonthStr) 검증',
+    idxRootHtml.includes('subTab === "fixed"') &&
+    idxRootHtml.includes('setFinanceSubTab(\'fixed\')') &&
+    idxRootHtml.includes('id="fixedMasterModal"') &&
+    idxRootHtml.includes('window.openFixedMasterModal') &&
+    idxRootHtml.includes('window.onSaveFixedMasterRow') &&
+    idxRootHtml.includes('window.onDeleteFixedMasterRow') &&
+    idxRootHtml.includes('window.onToggleFixedMasterActive') &&
+    idxRootHtml.includes('window.getFilteredFixedMasterList') &&
+    idxRootHtml.includes('function normalizeMonthStr(m)') &&
+    idxRootHtml.includes('window.onFixedMasterAmountInput')
   );
 
   // [관리자 전용 비밀번호(조항만 · admin) 분리 & 공용 비밀번호 분리 런타임 QA]
-  const v3RootHtml = fs.readFileSync(path.join(__dirname, '..', 'v3.html'), 'utf8');
-  const v3DocsHtml = fs.readFileSync(path.join(__dirname, '..', 'docs', 'v3.html'), 'utf8');
-  verifyAllScriptBlocks(v3RootHtml, '루트 v3.html');
-  verifyAllScriptBlocks(v3DocsHtml, 'docs/v3.html');
-  assertTest('미러 HTML 8종(index/v2/preview_tabs/v3 및 docs/*) 100% 동일 동기화 검증',
-    idxRootHtml === v3RootHtml && v3RootHtml === v3DocsHtml &&
-    idxRootHtml === idxDocsHtml && idxRootHtml === v2RootHtml &&
-    v2RootHtml === previewHtml && v2RootHtml === v2DocsHtml && v2RootHtml === previewDocsHtml
-  );
 
   const origPropsService = sandbox.PropertiesService;
   const scriptPropStore = {};

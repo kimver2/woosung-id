@@ -1,9 +1,8 @@
 /* Service Worker for 우성아이디 통합 현장 대시보드 (PWA) */
-const CACHE_NAME = 'ws-dashboard-pwa-v3';
+const CACHE_NAME = 'ws-dashboard-pwa-v4';
 
 const PRECACHE_URLS = [
   './',
-  './v2.html',
   './index.html',
   './manifest.json',
   './data/dashboard_data.js',
@@ -91,10 +90,10 @@ self.addEventListener('fetch', function(event) {
           if (cachedResponse) {
             return cachedResponse;
           }
-          // 캐시 미스 시 네비게이션 요청인 경우 v2.html 또는 index.html 오프라인 폴백
+          // 캐시 미스 시 네비게이션 요청인 경우 index.html 오프라인 폴백
           if (request.mode === 'navigate') {
-            return caches.match('./v2.html').then(function(v2Res) {
-              return v2Res || caches.match('./index.html');
+            return caches.match('./index.html').then(function(idxRes) {
+              return idxRes || caches.match('./');
             });
           }
           return new Response('Network error (offline)', {
