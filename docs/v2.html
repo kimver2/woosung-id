@@ -20653,7 +20653,8 @@ end $$;`;
         if (scopeMode === "task" && !targetTaskName && taskOptions.length > 0) {
           targetTaskName = taskOptions[0];
         }
-        const noticeText = existing.noticeText !== undefined ? String(existing.noticeText) : "";
+        // 모달을 새로 열 때마다 이전 전달사항을 복원하지 않고 항상 빈 칸으로 초기화
+        const noticeText = "";
 
         state._partnerShareDraft = {
           siteName,
