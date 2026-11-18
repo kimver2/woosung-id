@@ -3282,6 +3282,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       ...fnSnippets.slice(23)
     ].join('\n');
     vm.runInContext(fullAuditVmCode, auditVm);
+    auditVm.getTodayYmd = () => '2026-11-18';
 
     // 1) buildAuditDiffDetail 단위 검증
     const d1 = auditVm.buildAuditDiffDetail(
@@ -4974,6 +4975,333 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       '다중 사용자 공유 Tombstone: 2명 동시 편집 삭제 부활 차단(전 도메인)·Realtime/GAS 차단 및 동일 현장명 재등록 허용 검증',
       phase1Ok && phase2Ok && phase3Ok && phase4Ok,
       `p1=[${failedKeys(p1Checks).join(',')}], p2=[${failedKeys(p2Checks).join(',')}], p3=[${failedKeys(p3Checks).join(',')}], rtC=[${failedKeys(rtChecksC).join(',')}], phase4=${phase4Ok}`
+    );
+  })());
+
+  // [유상 A/S 공정 모달 재무 DB 실제 대조(hasPaidAsFinanceRecord) · 백그라운드 선로드 · 배지 및 저장 시 재연동 런타임 QA]
+  pendingAsyncTests.push((async () => {
+    const sliceFromTo = (startMarker, endMarker) => {
+      const s = idxRootHtml.indexOf(startMarker);
+      const e = idxRootHtml.indexOf(endMarker, s > -1 ? s : 0);
+      if (s === -1 || e <= s) throw new Error(`Missing marker in paid AS QA: ${startMarker} .. ${endMarker}`);
+      return idxRootHtml.slice(s, e);
+    };
+
+    const domMap = {
+      taskSheetTitle: { innerHTML: '', textContent: '' },
+      taskSheetBody: { innerHTML: '', textContent: '' },
+      taskSheetFooter: { innerHTML: '', textContent: '' },
+      taskSheetModal: { classList: { contains: () => true, add() {}, remove() {} } },
+      pcCalDetailDrawer: { style: { display: 'none' } }
+    };
+    const saveColCalls = [];
+    const saveExpCalls = [];
+    let getFinCalls = 0;
+    let mockServerFinDb = { collection: [], expense: [], fixedMaster: [] };
+
+    const paidAsVm = vm.createContext({
+      console,
+      Math, Date, Number, String, Array, Object, Set, Map, JSON, RegExp, Promise, encodeURIComponent, decodeURIComponent,
+      requestAnimationFrame: (fn) => { if (typeof fn === 'function') fn(); },
+      localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+      location: { protocol: 'https:', pathname: '/index.html', search: '' },
+      document: {
+        getElementById: (id) => domMap[id] || null,
+        querySelector: () => null,
+        querySelectorAll: () => []
+      },
+      getTodayYmd: () => '2026-11-18',
+      normalizeMonthStr: (m) => m,
+      isPcCalendarDrawerMode: () => false,
+      presentTaskSheet: () => {
+        paidAsVm.renderTaskSheetModal();
+      },
+      openModal: () => {},
+      closeModal: () => {},
+      showToast: () => {},
+      markAllDirty: () => {},
+      renderActiveViews: () => {},
+      renderWsCustomDropdownHtml: () => '<div></div>',
+      buildDatalistHtml: () => '',
+      renderSheetPartnerDropdownHtml: () => '',
+      renderTaskMemoPhotosPreviewHtml: () => '',
+      renderSheetTaskDropdownHtml: () => '',
+      extractDriveIdFromAnyUrl: () => '',
+      formatPartnerPhoneInputValue: (v) => String(v || '').trim(),
+      registerOptimisticCustomPartner: () => {},
+      extractFirstManager: (m, fb) => (m ? String(m).split(',')[0].trim() : fb),
+      snapshotTaskForAudit: (s, t) => ({ siteName: s && s.siteName, taskName: t && t.taskName, asMeta: t && t.asMeta ? JSON.parse(JSON.stringify(t.asMeta)) : null }),
+      getTopSavedAuth: () => ({ user: '조항만' }),
+      applyAuthenticatedUser: () => {},
+      populateAuthMembersDatalist: () => {},
+      isUserAssignedTodo: () => false,
+      state: {
+        user: '조항만',
+        authUser: '조항만',
+        currentUser: '조항만',
+        device: 'pc',
+        pcTab: 'sites',
+        mobileTab: 'sites',
+        scope: 'as',
+        showArchivedSites: false,
+        searchQuery: '',
+        memberFilter: '',
+        checkedSiteKeys: null,
+        financeLoaded: false,
+        financeLoading: false,
+        financeDbData: { collection: [], expense: [], fixedMaster: [] },
+        dirtyPcTabs: { sites: false, calendar: false, finance: false },
+        dirtyMobileTabs: { sites: false, calendar: false, finance: false },
+        dashData: {
+          sites: [{
+            siteKey: 'AS::신대방우성 5동 601호',
+            siteName: '신대방우성 5동 601호',
+            scope: 'as',
+            isArchived: false,
+            isAllCompleted: false,
+            tasks: [
+              {
+                id: 'as_shindae_1',
+                taskId: 'as_shindae_1',
+                taskName: '가구',
+                dateDisplay: '2026.11.18 (수)',
+                startDateStr: '2026-11-18',
+                endDateStr: '2026-11-18',
+                partner: '가구_신대가구',
+                manager: '조항만',
+                status: 'AS',
+                isShared: false,
+                memo: '[유상AS] 가구',
+                scope: 'as',
+                sheetName: 'AS',
+                asMeta: {
+                  billingType: 'paid',
+                  faultType: '고객 과실',
+                  space: '',
+                  symptom: '',
+                  costPayer: '고객 부담',
+                  chargeAmount: 300000,
+                  costAmount: 0,
+                  autoSyncFinance: true,
+                  financeSynced: true
+                }
+              },
+              {
+                id: 'as_shindae_2',
+                taskId: 'as_shindae_2',
+                taskName: '설비',
+                dateDisplay: '2026.11.18 (수)',
+                startDateStr: '2026-11-18',
+                endDateStr: '2026-11-18',
+                partner: '설비_김반장',
+                manager: '조항만',
+                status: 'AS',
+                isShared: false,
+                memo: '[유상AS] 안방 욕실 - 수전 교체',
+                scope: 'as',
+                sheetName: 'AS',
+                asMeta: {
+                  billingType: 'paid',
+                  faultType: '고객 과실',
+                  space: '안방 욕실',
+                  symptom: '수전 교체',
+                  costPayer: '고객 부담',
+                  chargeAmount: 250000,
+                  costAmount: 100000,
+                  autoSyncFinance: true,
+                  financeSynced: true
+                }
+              }
+            ]
+          }],
+          siteInfoMap: {}
+        },
+        settingsData: { members: [{ name: '조항만', role: '대표' }], partners: [], tasks: [] }
+      }
+    });
+    paidAsVm.window = paidAsVm;
+    paidAsVm.global = paidAsVm;
+
+    paidAsVm.WSDataService = {
+      saveDashboardCache: () => {},
+      saveFinanceCache: () => {},
+      saveTask: () => Promise.resolve({ ok: true, success: true }),
+      getFinanceDbData: async () => {
+        getFinCalls++;
+        return Object.assign({ success: true, source: 'supabase' }, JSON.parse(JSON.stringify(mockServerFinDb)));
+      },
+      saveCollectionRow: async (row) => {
+        saveColCalls.push(JSON.parse(JSON.stringify(row)));
+        const saved = Object.assign({}, row, { id: row.id || ('COL-MOCK-' + saveColCalls.length) });
+        return { success: true, id: saved.id, row: saved };
+      },
+      saveExpenseRow: async (row) => {
+        saveExpCalls.push(JSON.parse(JSON.stringify(row)));
+        const saved = Object.assign({}, row, { id: row.id || ('EXP-MOCK-' + saveExpCalls.length) });
+        return { success: true, id: saved.id, row: saved };
+      }
+    };
+
+    const paidAsScript = [
+      sliceFromTo('function escHtml(str)', '// ================= 공유 사이드바 ================='),
+      sliceFromTo('function extractMemoPhotos(memoText)', 'function renderTaskMemoPhotosPreviewHtml(memoText)'),
+      sliceFromTo('function ensureFinanceDbDataLoaded(forceRefresh)', 'function findMatchedSiteInfo(siteName)'),
+      sliceFromTo('function checkScheduleConflict(ctx)', 'function renderTaskSheetModal()'),
+      sliceFromTo('window.openTaskEditModal = function (taskId)', 'window.switchNewRegistrationType = function (targetType)'),
+      sliceFromTo('function renderTaskSheetModal()', 'window.renderTaskSheetModal = renderTaskSheetModal;'),
+      'window.renderTaskSheetModal = renderTaskSheetModal;',
+      sliceFromTo('window.updateTaskAsMeta = function (field, val, shouldRender)', 'window.onTaskSheetSiteChange = function (val)'),
+      sliceFromTo('function getResolvedSheetPartner(ctx)', 'function registerOptimisticCustomPartner('),
+      sliceFromTo('function normalizeFinanceSiteMatchKey(siteName)', '// ================= 모달 2: 삭제 확인 모달 =================')
+    ].join('\n');
+    vm.runInContext(paidAsScript, paidAsVm);
+
+    // Case 1: 정상 연동 상태 (수금현황 extraItems에 실제 내역 존재) -> '✓ 반영됨' 표시 & 저장 시 중복 미등록
+    paidAsVm.state.financeLoaded = true;
+    paidAsVm.state.financeDbData = {
+      collection: [{
+        id: 'COL-601',
+        siteName: '신대방우성 5동 601호',
+        contractAmount: 45000000,
+        changeAmount: 300000,
+        changeDesc: '[유상 AS] 가구',
+        extraItems: [{
+          desc: '[유상 AS] 가구',
+          stage: 'AS 청구',
+          dueDate: '2026-11-18',
+          amount: 300000,
+          method: '계좌이체',
+          proof: '전자세금계산서',
+          paid: false
+        }]
+      }],
+      expense: []
+    };
+    const helperTrueOnExisting = paidAsVm.hasPaidAsFinanceRecord({
+      siteName: '신대방우성 5동 601호',
+      taskName: '가구',
+      startYmd: '2026-11-18',
+      taskId: 'as_shindae_1',
+      asMeta: { chargeAmount: 300000, costAmount: 0 }
+    });
+    // 동일 현장 다른 유상 A/S(설비)는 extraItems에 없으므로 false여야 함
+    const helperFalseOnOtherTaskSameSite = paidAsVm.hasPaidAsFinanceRecord({
+      siteName: '신대방우성 5동 601호',
+      taskName: '설비',
+      startYmd: '2026-11-18',
+      taskId: 'as_shindae_2',
+      asMeta: { space: '안방 욕실', symptom: '수전 교체', chargeAmount: 250000, costAmount: 100000 }
+    });
+    paidAsVm.openTaskEditModal('as_shindae_1');
+    const htmlWhenSynced = domMap.taskSheetBody.innerHTML;
+    paidAsVm.saveTaskSheetModal();
+    await new Promise((r) => setTimeout(r, 10));
+    const case1Ok = Boolean(
+      helperTrueOnExisting === true &&
+      helperFalseOnOtherTaskSameSite === false &&
+      htmlWhenSynced.includes('✓ 반영됨') &&
+      !htmlWhenSynced.includes('⚠️ 재무 미반영') &&
+      saveColCalls.length === 0 &&
+      saveExpCalls.length === 0 &&
+      paidAsVm.state.financeDbData.collection[0].extraItems.length === 1
+    );
+
+    // Case 2: financeLoaded=false (재무·원장 탭 미진입 + stale 로컬 캐시) 상태에서 서버 재무 DB 초기화됨 -> 선로드 후 '⚠️ 재무 미반영 (저장 시 재등록)' 즉시 갱신 & 저장 시 신규 [AS] 수금행 재등록
+    paidAsVm.state.financeLoaded = false;
+    paidAsVm.state.financeLoading = false;
+    // stale 캐시가 있어도 financeLoaded=false면 서버 조회로 검증해야 함
+    mockServerFinDb = { collection: [], expense: [], fixedMaster: [] };
+    paidAsVm.openTaskEditModal('as_shindae_1');
+    const htmlWhilePreloading = domMap.taskSheetBody.innerHTML;
+    await new Promise((r) => setTimeout(r, 20));
+    const htmlAfterPreloadEmpty = domMap.taskSheetBody.innerHTML;
+    paidAsVm.saveTaskSheetModal();
+    await new Promise((r) => setTimeout(r, 20));
+    const colAfterResyncEmpty = paidAsVm.state.financeDbData.collection;
+    paidAsVm.openTaskEditModal('as_shindae_1');
+    const htmlAfterResyncOpen = domMap.taskSheetBody.innerHTML;
+    const case2Ok = Boolean(
+      getFinCalls === 1 &&
+      paidAsVm.state.financeLoaded === true &&
+      htmlWhilePreloading.includes('⏳ 재무 확인 중') &&
+      !htmlWhilePreloading.includes('✓ 반영됨') &&
+      htmlAfterPreloadEmpty.includes('⚠️ 재무 미반영 (저장 시 재등록)') &&
+      !htmlAfterPreloadEmpty.includes('✓ 반영됨') &&
+      saveColCalls.length === 1 &&
+      saveColCalls[0].siteName === '[AS] 신대방우성 5동 601호' &&
+      saveColCalls[0].contractAmount === 300000 &&
+      colAfterResyncEmpty.some((c) => c && c.siteName === '[AS] 신대방우성 5동 601호' && Number(c.contractAmount) === 300000) &&
+      htmlAfterResyncOpen.includes('✓ 반영됨')
+    );
+
+    // Case 3: 본 현장은 수금현황에 존재하지만 extraItems만 삭제됨 + 처리비용(100,000) 있는 건 부분/전체 누락 복구
+    saveColCalls.length = 0;
+    saveExpCalls.length = 0;
+    paidAsVm.state.financeLoaded = true;
+    paidAsVm.state.financeDbData = {
+      collection: [{
+        id: 'COL-601',
+        siteName: '신대방우성 5동 601호',
+        contractAmount: 45000000,
+        changeAmount: 0,
+        changeDesc: '',
+        extraItems: []
+      }],
+      expense: []
+    };
+    paidAsVm.openTaskEditModal('as_shindae_2');
+    const htmlMissingBoth = domMap.taskSheetBody.innerHTML;
+    paidAsVm.saveTaskSheetModal();
+    await new Promise((r) => setTimeout(r, 20));
+    const updatedBaseCol = paidAsVm.state.financeDbData.collection.find((c) => c.id === 'COL-601');
+    // 이후 비용마감 행만 삭제된 상태에서 다시 열기/저장 시 수금은 중복 등록되지 않고 비용마감만 재등록되어야 함
+    saveColCalls.length = 0;
+    saveExpCalls.length = 0;
+    paidAsVm.state.financeDbData.expense = [];
+    paidAsVm.openTaskEditModal('as_shindae_2');
+    const htmlMissingExpOnly = domMap.taskSheetBody.innerHTML;
+    paidAsVm.saveTaskSheetModal();
+    await new Promise((r) => setTimeout(r, 20));
+    const case3Ok = Boolean(
+      htmlMissingBoth.includes('⚠️ 재무 미반영 (저장 시 재등록)') &&
+      updatedBaseCol && Array.isArray(updatedBaseCol.extraItems) &&
+      updatedBaseCol.extraItems.some((it) => it && it.stage === 'AS 청구' && Number(it.amount) === 250000) &&
+      Number(updatedBaseCol.changeAmount) === 250000 &&
+      htmlMissingExpOnly.includes('⚠️ 재무 미반영 (저장 시 재등록)') &&
+      saveColCalls.length === 0 &&
+      saveExpCalls.length === 1 &&
+      saveExpCalls[0].claimAmount === 100000 &&
+      saveExpCalls[0].siteName === '신대방우성 5동 601호'
+    );
+
+    // Case 4: financeLoaded=false 직후 선로드 완료 전 빠른 저장(deferredFinanceSyncJob) 시에도 중복 없이 실제 DB 대조 후 재등록
+    saveColCalls.length = 0;
+    saveExpCalls.length = 0;
+    paidAsVm.state.financeLoaded = false;
+    paidAsVm.state.financeLoading = false;
+    paidAsVm.state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+    mockServerFinDb = { collection: [], expense: [], fixedMaster: [] };
+    paidAsVm.openTaskEditModal('as_shindae_1');
+    // await 없이 즉시 저장 호출
+    paidAsVm.saveTaskSheetModal();
+    await new Promise((r) => setTimeout(r, 30));
+    const case4Ok = Boolean(
+      paidAsVm.state.financeLoaded === true &&
+      saveColCalls.length === 1 &&
+      saveColCalls[0].contractAmount === 300000 &&
+      paidAsVm.hasPaidAsFinanceRecord({
+        siteName: '신대방우성 5동 601호',
+        taskName: '가구',
+        startYmd: '2026-11-18',
+        taskId: 'as_shindae_1',
+        asMeta: { chargeAmount: 300000, costAmount: 0 }
+      }) === true
+    );
+
+    assertTest(
+      '유상 A/S 모달: 실제 재무 DB 대조(hasPaidAsFinanceRecord)·미진입 시 선로드·배지(✓ 반영됨 / ⚠️ 재무 미반영) 및 저장 시 재연동/중복방지 검증',
+      case1Ok && case2Ok && case3Ok && case4Ok,
+      `case1=${case1Ok}, case2=${case2Ok}, case3=${case3Ok}, case4=${case4Ok}`
     );
   })());
 

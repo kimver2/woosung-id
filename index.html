@@ -8180,11 +8180,11 @@ end $$;`;
 
       // ================= [PC 탭 6: 재무·원장 & 현장 수금현황] =================
       function ensureFinanceDbDataLoaded(forceRefresh) {
-        if (state.financeLoading) return;
-        if (!forceRefresh && state.financeLoaded) return;
+        if (state.financeLoading) return state._financeLoadPromise || Promise.resolve(state.financeDbData);
+        if (!forceRefresh && state.financeLoaded) return Promise.resolve(state.financeDbData);
         const now = Date.now();
         if (forceRefresh && state.financeLastFetchedAt && (now - state.financeLastFetchedAt < 1500)) {
-          return;
+          return state._financeLoadPromise || Promise.resolve(state.financeDbData);
         }
         state.financeLoading = true;
         const ds = window.WSDataService;
@@ -8192,9 +8192,9 @@ end $$;`;
         if (!ds || typeof ds.getFinanceDbData !== "function") {
           state.financeLoading = false;
           state.financeLoaded = true;
-          return;
+          return Promise.resolve(state.financeDbData);
         }
-        ds.getFinanceDbData(user).then((res) => {
+        state._financeLoadPromise = Promise.resolve(ds.getFinanceDbData(user)).then((res) => {
           state.financeLoading = false;
           state.financeLoaded = true;
           state.financeLastFetchedAt = Date.now();
@@ -8219,6 +8219,7 @@ end $$;`;
           state.dirtyPcTabs.finance = true;
           state.dirtyMobileTabs.finance = true;
           renderActiveViews();
+          return state.financeDbData;
         }).catch((err) => {
           state.financeLoading = false;
           state.financeLoaded = true;
@@ -8229,7 +8230,11 @@ end $$;`;
           state.dirtyPcTabs.finance = true;
           state.dirtyMobileTabs.finance = true;
           renderActiveViews();
+          return state.financeDbData;
+        }).finally(() => {
+          state._financeLoadPromise = null;
         });
+        return state._financeLoadPromise;
       }
 
       function findMatchedSiteInfo(siteName) {
@@ -18453,6 +18458,16 @@ end $$;`;
         const initialFaultType = normalizeAsFaultReasonLabel(rawAsMeta.faultType || rawAsMeta.faultReason || "") ||
           (resolvedFaultForEdit.source === "memoTag" ? resolvedFaultForEdit.label : "");
         const initialBillingType = rawAsMeta.billingType || (/^\[유상AS(?:·|\])/m.test(String(task.memo || "")) ? "paid" : "free");
+        const hasExistingFinanceIntent = Boolean(
+          rawAsMeta && (
+            rawAsMeta.financeSynced ||
+            (Number(rawAsMeta.chargeAmount) || 0) > 0 ||
+            (Number(rawAsMeta.costAmount) || 0) > 0
+          )
+        );
+        const initialAutoSyncFinance = (rawAsMeta && rawAsMeta.autoSyncFinance !== undefined)
+          ? Boolean(rawAsMeta.autoSyncFinance)
+          : (initialBillingType === "paid" || hasExistingFinanceIntent);
         const mergedAsMeta = Object.assign({
           billingType: initialBillingType,
           faultType: initialFaultType,
@@ -18461,11 +18476,12 @@ end $$;`;
           costPayer: initialBillingType === "paid" ? "고객 부담" : "협력업체 무상재시공",
           chargeAmount: 0,
           costAmount: 0,
-          autoSyncFinance: !!(rawAsMeta && rawAsMeta.autoSyncFinance),
+          autoSyncFinance: initialAutoSyncFinance,
           financeSynced: !!(rawAsMeta && rawAsMeta.financeSynced)
         }, rawAsMeta, {
           billingType: initialBillingType,
-          faultType: initialFaultType
+          faultType: initialFaultType,
+          autoSyncFinance: initialAutoSyncFinance
         });
         const origAsTag = `[${mergedAsMeta.billingType === "paid" ? "유상AS" : "무상AS"}${mergedAsMeta.faultType ? "·" + mergedAsMeta.faultType : ""}]`;
         const origAsBody = [mergedAsMeta.space, mergedAsMeta.symptom].filter(Boolean).join(" - ");
@@ -18857,6 +18873,9 @@ end $$;`;
         const isSingleMode = (!isAsMode && curScope === "single");
         const isSiteMode = (!isAsMode && !isSingleMode && curScope === "site");
         const asMeta = ctx.asMeta || { billingType: "free", faultType: "", space: "", symptom: "", costPayer: "협력업체 무상재시공", chargeAmount: 0, costAmount: 0, clientName: "", autoSyncFinance: true, financeSynced: false };
+        if ((isAsMode || isSingleMode || (isSiteMode && !isEdit)) && !state.financeLoaded && !state.financeLoading && typeof ensureTaskModalFinanceLoaded === "function") {
+          ensureTaskModalFinanceLoaded();
+        }
         const isPaidAs = (asMeta.billingType === "paid");
         const curFaultVal = normalizeAsFaultReasonLabel(asMeta.faultType || asMeta.faultReason || "");
         const faultOptionsList = AS_FAULT_REASON_OPTIONS.slice();
@@ -19125,10 +19144,10 @@ end $$;`;
                 </div>
               </div>
 
-              <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#1e3a8a;background:#eff6ff;padding:7px 10px;border-radius:6px;border:1px solid #bfdbfe;cursor:pointer;">
+              <label style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11.5px;font-weight:700;color:#1e3a8a;background:#eff6ff;padding:7px 10px;border-radius:6px;border:1px solid #bfdbfe;cursor:pointer;">
                 <input type="checkbox" ${asMeta.autoSyncFinance ? "checked" : ""} onchange="window.updateTaskAsMeta('autoSyncFinance', this.checked, false)">
                 <span>💰 저장 시 재무·원장 자동 연동 (유상 청구액 → 수금현황 <b>추가비/신규</b> · 처리 비용 → <b>월별 비용마감</b> 자동 등록)</span>
-                ${asMeta.financeSynced ? `<span style="margin-left:auto;color:#15803d;font-size:11px;">✓ 반영됨</span>` : ""}
+                <span id="taskSheetFinanceSyncBadgeWrap" style="margin-left:auto;display:inline-flex;align-items:center;">${typeof renderTaskFinanceSyncBadgeHtml === "function" ? renderTaskFinanceSyncBadgeHtml(ctx, asMeta, true, false) : (asMeta.financeSynced ? `<span style="color:#15803d;font-size:11px;">✓ 반영됨</span>` : "")}</span>
               </label>
             </div>
           ` : ""}
@@ -19158,10 +19177,10 @@ end $$;`;
                     style="height:32px;font-size:12px;text-align:right;font-weight:700;">
                 </div>
               </div>
-              <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#1e3a8a;background:#eff6ff;padding:7px 10px;border-radius:6px;border:1px solid #bfdbfe;cursor:pointer;">
+              <label style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11.5px;font-weight:700;color:#1e3a8a;background:#eff6ff;padding:7px 10px;border-radius:6px;border:1px solid #bfdbfe;cursor:pointer;">
                 <input type="checkbox" ${asMeta.autoSyncFinance ? "checked" : ""} onchange="window.updateTaskAsMeta('autoSyncFinance', this.checked, false)">
                 <span>💰 저장 시 재무·원장 자동 연동 (계약금액 → <b>수금현황</b> · 외주/자재 원가 → <b>월별 비용마감</b> 자동 등록)</span>
-                ${asMeta.financeSynced ? `<span style="margin-left:auto;color:#15803d;font-size:11px;">✓ 반영됨</span>` : ""}
+                <span id="taskSheetFinanceSyncBadgeWrap" style="margin-left:auto;display:inline-flex;align-items:center;">${typeof renderTaskFinanceSyncBadgeHtml === "function" ? renderTaskFinanceSyncBadgeHtml(ctx, asMeta, false, true) : (asMeta.financeSynced ? `<span style="color:#15803d;font-size:11px;">✓ 반영됨</span>` : "")}</span>
               </label>
             </div>
           ` : ""}
@@ -19232,7 +19251,11 @@ end $$;`;
             ctx.asMeta.billingType = "paid";
           }
         }
-        if (shouldRender) renderTaskSheetModal();
+        if (shouldRender) {
+          renderTaskSheetModal();
+        } else if (typeof refreshTaskSheetFinanceSyncBadge === "function") {
+          refreshTaskSheetFinanceSyncBadge(ctx);
+        }
       };
       window.setSheetField = function (k, v) {
         if (!state.sheetCtx) return;
@@ -20390,8 +20413,428 @@ end $$;`;
         }
       };
 
-      function syncAsTaskToFinance(siteName, taskName, startYmd, partner, manager, asMeta) {
+      function normalizeFinanceSiteMatchKey(siteName) {
+        return String(siteName || "")
+          .replace(/^\[(단건|AS)\]\s*/i, "")
+          .replace(/\s+/g, "")
+          .toLowerCase();
+      }
+
+      function normalizeFinanceTextKey(val) {
+        return String(val || "").replace(/\s+/g, "").toLowerCase();
+      }
+
+      function buildAsTaskFinanceDescriptor(params) {
+        const p = params || {};
+        const am = p.asMeta || {};
+        const rawSite = String(p.siteName || "").trim();
+        const baseName = rawSite.replace(/^\[(단건|AS)\]\s*/i, "").trim();
+        const normKey = normalizeFinanceSiteMatchKey(baseName);
+        const taskNameClean = String(p.taskName || "").trim();
+        const taskUpper = taskNameClean.toUpperCase();
+        const isGenericTaskName = !taskNameClean || taskUpper === "AS" || taskUpper === "A/S" || taskNameClean === "하자보수" || taskNameClean === "기타";
+        const spaceClean = String(am.space || "").trim();
+        const symptomClean = String(am.symptom || "").trim();
+        const descParts = [spaceClean, symptomClean || taskNameClean].filter(Boolean).join(" · ");
+        const expectedAsDesc = `[유상 AS] ${descParts || taskNameClean || "AS 보수"}`;
+        return {
+          baseName,
+          normKey,
+          taskNameClean,
+          isGenericTaskName,
+          spaceClean,
+          symptomClean,
+          descParts,
+          expectedAsDesc,
+          expectedDescNorm: normalizeFinanceTextKey(expectedAsDesc),
+          descPartsNorm: normalizeFinanceTextKey(descParts),
+          symptomNorm: normalizeFinanceTextKey(symptomClean),
+          spaceNorm: normalizeFinanceTextKey(spaceClean),
+          taskNameNorm: normalizeFinanceTextKey(taskNameClean),
+          startYmd: String(p.startYmd || "").trim(),
+          chargeAmt: Number(am.chargeAmount) || 0,
+          costAmt: Number(am.costAmount) || 0,
+          taskId: String(p.taskId || "").trim()
+        };
+      }
+
+      function isFinanceTextMatchingAsDesc(haystack, desc, fallbackAmount, rowAmount, rowDate) {
+        const hayNorm = normalizeFinanceTextKey(haystack);
+        if (!hayNorm) return false;
+        const amtMatch = fallbackAmount > 0 && Number(rowAmount) === fallbackAmount;
+        const dateMatch = Boolean(desc.startYmd && rowDate && String(rowDate).trim() === desc.startYmd);
+        const hasDifferentDateAndAmt = Boolean(
+          desc.startYmd && rowDate && String(rowDate).trim() !== desc.startYmd &&
+          fallbackAmount > 0 && Number(rowAmount) > 0 && Number(rowAmount) !== fallbackAmount
+        );
+        if (desc.expectedDescNorm && hayNorm.includes(desc.expectedDescNorm)) return true;
+        if (desc.descPartsNorm && hayNorm.includes(desc.descPartsNorm)) return true;
+        if (desc.symptomNorm) {
+          return hayNorm.includes(desc.symptomNorm);
+        }
+        if (hasDifferentDateAndAmt) return false;
+        if (desc.spaceNorm && !desc.isGenericTaskName && desc.taskNameNorm) {
+          return hayNorm.includes(desc.spaceNorm) && hayNorm.includes(desc.taskNameNorm);
+        }
+        if (!desc.isGenericTaskName && desc.taskNameNorm) {
+          return hayNorm.includes(desc.taskNameNorm);
+        }
+        if (desc.spaceNorm) {
+          return hayNorm.includes(desc.spaceNorm);
+        }
+        if (amtMatch && (dateMatch || hayNorm.includes("as보수") || hayNorm.includes("원가]as") || hayNorm === "[유상as]as")) {
+          return true;
+        }
+        return false;
+      }
+
+      function normalizeAsFinanceCheckArgs(taskCtxOrSiteName, taskNameOrFin, startYmd, asMeta, taskId, financeData) {
+        if (taskCtxOrSiteName && typeof taskCtxOrSiteName === "object") {
+          const ctx = taskCtxOrSiteName;
+          const resolvedSite = ctx.siteName === "__NEW__" ? (ctx.newSiteName || "") : (ctx.siteName || "");
+          return {
+            params: {
+              siteName: resolvedSite,
+              taskName: ctx.taskName || "",
+              startYmd: ctx.startYmd || ctx.startDateStr || "",
+              asMeta: ctx.asMeta || {},
+              taskId: ctx.taskId || ctx.id || ""
+            },
+            finDb: (taskNameOrFin && typeof taskNameOrFin === "object") ? taskNameOrFin : (state.financeDbData || {})
+          };
+        }
+        return {
+          params: {
+            siteName: taskCtxOrSiteName || "",
+            taskName: taskNameOrFin || "",
+            startYmd: startYmd || "",
+            asMeta: asMeta || {},
+            taskId: taskId || ""
+          },
+          finDb: financeData || state.financeDbData || {}
+        };
+      }
+
+      /**
+       * 실제 state.financeDbData(collection[].extraItems, 신규 [AS] 수금행, expense[])에
+       * 해당 A/S 공정의 유상 청구/원가 내역이 실제로 존재하는지 상세 대조 결과를 반환합니다.
+       */
+      function inspectAsFinanceSyncState(taskCtxOrSiteName, taskNameOrFin, startYmd, asMeta, taskId, financeData) {
+        const { params, finDb } = normalizeAsFinanceCheckArgs(taskCtxOrSiteName, taskNameOrFin, startYmd, asMeta, taskId, financeData);
+        const desc = buildAsTaskFinanceDescriptor(params);
+        const collections = (finDb && Array.isArray(finDb.collection)) ? finDb.collection : [];
+        const expenses = (finDb && Array.isArray(finDb.expense)) ? finDb.expense : [];
+
+        let matchedColRow = null;
+        let matchedExtraItem = null;
+        let matchedExpenseRow = null;
+
+        if (desc.normKey) {
+          const siteCols = collections.filter(c => c && normalizeFinanceSiteMatchKey(c.siteName) === desc.normKey);
+          for (let i = 0; i < siteCols.length; i++) {
+            const col = siteCols[i];
+            if (Array.isArray(col.extraItems)) {
+              const hitItem = col.extraItems.find((it) => {
+                if (!it) return false;
+                if (desc.taskId && it.asTaskId) {
+                  return String(it.asTaskId) === desc.taskId;
+                }
+                const st = String(it.stage || "").trim();
+                const dsText = String(it.desc || "").trim();
+                const isAsItem = st === "AS 청구" || /\[유상\s*AS\]/i.test(dsText) || /AS\s*청구/i.test(st);
+                if (!isAsItem) return false;
+                return isFinanceTextMatchingAsDesc(dsText, desc, desc.chargeAmt, it.amount, it.dueDate);
+              });
+              if (hitItem) {
+                matchedColRow = col;
+                matchedExtraItem = hitItem;
+                break;
+              }
+            }
+
+            if (desc.taskId && col.asTaskId && String(col.asTaskId) === desc.taskId) {
+              matchedColRow = col;
+              break;
+            }
+
+            const isStandaloneAsCol = /^\[AS\]/i.test(String(col.siteName || "").trim())
+              || /\[유상\s*AS\]/i.test(String(col.note || ""))
+              || /\[유상\s*AS\]/i.test(String(col.changeDesc || ""));
+            if (isStandaloneAsCol) {
+              if (desc.taskId && col.asTaskId && String(col.asTaskId) !== desc.taskId) {
+                continue;
+              }
+              const colDescText = `${col.changeDesc || ""} ${col.note || ""}`.trim();
+              const colAmt = Number(col.contractAmount) || Number(col.totalAmount) || 0;
+              const colDate = String(col.period || "").split("~")[0].trim().replace(/\./g, "-");
+              const textMatches = isFinanceTextMatchingAsDesc(colDescText, desc, desc.chargeAmt, colAmt, colDate);
+              const genericStandaloneMatch = /^\[AS\]/i.test(String(col.siteName || "").trim())
+                && !/\[유상\s*AS\]/i.test(colDescText)
+                && desc.chargeAmt > 0
+                && colAmt === desc.chargeAmt;
+              if (textMatches || genericStandaloneMatch) {
+                matchedColRow = col;
+                break;
+              }
+            } else if (!Array.isArray(col.extraItems) && (Number(col.changeAmount) || 0) > 0) {
+              const chgText = String(col.changeDesc || "");
+              if (/\[유상\s*AS\]/i.test(chgText) && isFinanceTextMatchingAsDesc(chgText, desc, desc.chargeAmt, col.changeAmount, "")) {
+                matchedColRow = col;
+                break;
+              }
+            }
+          }
+
+          matchedExpenseRow = expenses.find((e) => {
+            if (!e || normalizeFinanceSiteMatchKey(e.siteName) !== desc.normKey) return false;
+            if (desc.taskId && e.asTaskId) {
+              return String(e.asTaskId) === desc.taskId;
+            }
+            const expCat = String(e.category || "").trim();
+            const expNote = String(e.note || "").trim();
+            const isAsExp = /^\[AS\]/i.test(expCat) || /\[(?:유상|무상)\s*AS\s*원가/i.test(expNote);
+            if (!isAsExp) return false;
+            return isFinanceTextMatchingAsDesc(`${expCat} ${expNote}`, desc, desc.costAmt, e.claimAmount, e.payDate);
+          }) || null;
+        }
+
+        const hasCollection = Boolean(matchedColRow);
+        const hasExpense = Boolean(matchedExpenseRow);
+        const needsCollection = desc.chargeAmt > 0 && !hasCollection;
+        const needsExpense = desc.costAmt > 0 && !hasExpense;
+        const hasAnyAmount = desc.chargeAmt > 0 || desc.costAmt > 0;
+        const allSynced = hasAnyAmount && !needsCollection && !needsExpense;
+        const partialSynced = hasAnyAmount && !allSynced && (
+          (desc.chargeAmt > 0 && hasCollection) || (desc.costAmt > 0 && hasExpense)
+        );
+
+        return {
+          hasCollection,
+          hasExpense,
+          needsCollection,
+          needsExpense,
+          allSynced,
+          partialSynced,
+          hasAnyAmount,
+          matchedColRow,
+          matchedExtraItem,
+          matchedExpenseRow
+        };
+      }
+
+      /**
+       * 유상 A/S 공정의 실제 재무 DB 연동 여부를 반환합니다.
+       */
+      function hasPaidAsFinanceRecord(taskCtxOrSiteName, taskNameOrFin, startYmd, asMeta, taskId, financeData) {
+        return inspectAsFinanceSyncState(taskCtxOrSiteName, taskNameOrFin, startYmd, asMeta, taskId, financeData).allSynced;
+      }
+      window.inspectAsFinanceSyncState = inspectAsFinanceSyncState;
+      window.hasPaidAsFinanceRecord = hasPaidAsFinanceRecord;
+
+      function inspectSingleOrSiteFinanceSyncState(ctx, financeData) {
+        const finDb = financeData || state.financeDbData || {};
+        const am = (ctx && ctx.asMeta) || {};
+        const chargeAmt = Number(am.chargeAmount) || 0;
+        const costAmt = Number(am.costAmount) || 0;
+        const rawSite = ctx && (ctx.siteName === "__NEW__" ? ctx.newSiteName : ctx.siteName);
+        const normKey = normalizeFinanceSiteMatchKey(rawSite);
+        const taskNameClean = String((ctx && ctx.taskName) || "").trim();
+        const taskId = String((ctx && (ctx.taskId || ctx.id)) || "").trim();
+        const collections = Array.isArray(finDb.collection) ? finDb.collection : [];
+        const expenses = Array.isArray(finDb.expense) ? finDb.expense : [];
+
+        const hasCollection = Boolean(
+          chargeAmt > 0 && normKey && collections.some(c => c && normalizeFinanceSiteMatchKey(c.siteName) === normKey)
+        );
+        const hasExpense = Boolean(
+          costAmt > 0 && normKey && expenses.some((e) => {
+            if (!e || normalizeFinanceSiteMatchKey(e.siteName) !== normKey) return false;
+            if (taskId && e.asTaskId) return String(e.asTaskId) === taskId;
+            const cat = String(e.category || "").trim();
+            const note = String(e.note || "").trim();
+            return (taskNameClean && (cat === taskNameClean || note.includes(taskNameClean)))
+              || (/\[(단건|현장)\s*원가\]/.test(note) && Number(e.claimAmount) === costAmt);
+          })
+        );
+        const needsCollection = chargeAmt > 0 && !hasCollection;
+        const needsExpense = costAmt > 0 && !hasExpense;
+        const hasAnyAmount = chargeAmt > 0 || costAmt > 0;
+        const allSynced = hasAnyAmount && !needsCollection && !needsExpense;
+        const partialSynced = hasAnyAmount && !allSynced && (
+          (chargeAmt > 0 && hasCollection) || (costAmt > 0 && hasExpense)
+        );
+        return { hasCollection, hasExpense, needsCollection, needsExpense, hasAnyAmount, allSynced, partialSynced };
+      }
+
+      function refreshTaskSheetFinanceSyncBadge(expectedCtx) {
+        const ctx = state.sheetCtx;
+        if (!ctx || (expectedCtx && ctx !== expectedCtx)) return;
+        const curScope = ctx.scope || "site";
+        const isAsMode = (
+          curScope === "as" ||
+          ctx.status === "AS" ||
+          ctx.origStatus === "AS" ||
+          ctx.sheetName === "AS" ||
+          /^A\/?S$/i.test(String(ctx.taskName || "").trim()) ||
+          Boolean(ctx.hadAsMeta)
+        );
+        const isSingleOrSiteMode = (!isAsMode && (curScope === "single" || (curScope === "site" && ctx.mode !== "edit")));
+        if (!isAsMode && !isSingleOrSiteMode) return;
+
+        const badgeWrap = (typeof document !== "undefined" && document.getElementById)
+          ? document.getElementById("taskSheetFinanceSyncBadgeWrap")
+          : null;
+        if (badgeWrap) {
+          badgeWrap.innerHTML = renderTaskFinanceSyncBadgeHtml(ctx, ctx.asMeta || {}, isAsMode, isSingleOrSiteMode);
+          return;
+        }
+        const modalEl = (typeof document !== "undefined" && document.getElementById)
+          ? document.getElementById("taskSheetModal")
+          : null;
+        const drawerEl = (typeof document !== "undefined" && document.getElementById)
+          ? document.getElementById("pcCalDetailDrawer")
+          : null;
+        const isClosedRealDom = Boolean(
+          modalEl && modalEl.classList && !modalEl.classList.contains("open") &&
+          (!drawerEl || !drawerEl.style || drawerEl.style.display === "none")
+        );
+        if (!isClosedRealDom && typeof renderTaskSheetModal === "function") {
+          renderTaskSheetModal();
+        }
+      }
+
+      function ensureTaskModalFinanceLoaded() {
+        if (state.financeLoaded) return Promise.resolve(state.financeDbData);
+        if (typeof canViewFinance === "function" && !canViewFinance()) {
+          return Promise.resolve(state.financeDbData || null);
+        }
+        const ds = window.WSDataService;
+        if (!ds || typeof ds.getFinanceDbData !== "function") {
+          return Promise.resolve(state.financeDbData || null);
+        }
+        const ctxSnap = state.sheetCtx;
+        const onSettled = (finData) => {
+          refreshTaskSheetFinanceSyncBadge(ctxSnap);
+          return finData;
+        };
+        if (state._financeLoadPromise && typeof state._financeLoadPromise.then === "function") {
+          return state._financeLoadPromise.then(onSettled);
+        }
+        if (typeof ensureFinanceDbDataLoaded === "function") {
+          const p = ensureFinanceDbDataLoaded(false);
+          if (p && typeof p.then === "function") {
+            return p.then(onSettled);
+          }
+        }
+        const user = state.authUser || state.currentUser || state.user || "조항만";
+        state.financeLoading = true;
+        state._financeLoadPromise = Promise.resolve(ds.getFinanceDbData(user)).then((res) => {
+          state.financeLoading = false;
+          state.financeLoaded = true;
+          state.financeLastFetchedAt = Date.now();
+          if (res && res.success) {
+            const rawFin = {
+              collection: Array.isArray(res.collection) ? res.collection : [],
+              expense: Array.isArray(res.expense) ? res.expense : [],
+              fixedMaster: Array.isArray(res.fixedMaster) ? res.fixedMaster : [],
+              updatedAt: res.updatedAt || ""
+            };
+            state.financeDbData = typeof applyDeletedGuardsToFinanceData === "function"
+              ? applyDeletedGuardsToFinanceData(rawFin, { fromGas: res.source !== "supabase" })
+              : rawFin;
+            if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+          } else if (!state.financeDbData) {
+            state.financeDbData = { collection: [], expense: [], fixedMaster: [], updatedAt: "" };
+          }
+          state.dirtyPcTabs.finance = true;
+          state.dirtyMobileTabs.finance = true;
+          return onSettled(state.financeDbData);
+        }).catch(() => {
+          state.financeLoading = false;
+          state.financeLoaded = true;
+          if (!state.financeDbData) {
+            state.financeDbData = { collection: [], expense: [], fixedMaster: [], updatedAt: "" };
+          }
+          return onSettled(state.financeDbData);
+        }).finally(() => {
+          state._financeLoadPromise = null;
+        });
+        return state._financeLoadPromise;
+      }
+
+      function renderTaskFinanceSyncBadgeHtml(ctx, asMeta, isAsMode, isSingleOrSiteMode) {
+        const am = asMeta || {};
+        const chargeAmt = Number(am.chargeAmount) || 0;
+        const costAmt = Number(am.costAmount) || 0;
+        if (chargeAmt <= 0 && costAmt <= 0) return "";
+
+        const canAccessFin = (typeof canViewFinance !== "function") || canViewFinance();
+        if (!canAccessFin) {
+          return am.financeSynced
+            ? `<span style="color:#15803d;background:#dcfce7;border:1px solid #86efac;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap;">✓ 반영됨</span>`
+            : "";
+        }
+
+        const hasRemoteLoader = Boolean(window.WSDataService && typeof window.WSDataService.getFinanceDbData === "function");
+        if (!state.financeLoaded && state.financeLoading && hasRemoteLoader) {
+          return `<span style="color:#64748b;background:#f1f5f9;border:1px solid #cbd5e1;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;">⏳ 재무 확인 중...</span>`;
+        }
+
+        const syncStatus = isAsMode
+          ? inspectAsFinanceSyncState(ctx, state.financeDbData)
+          : (isSingleOrSiteMode ? inspectSingleOrSiteFinanceSyncState(ctx, state.financeDbData) : { allSynced: Boolean(am.financeSynced) });
+
+        if (syncStatus.allSynced) {
+          return `<span style="color:#15803d;background:#dcfce7;border:1px solid #86efac;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap;">✓ 반영됨</span>`;
+        }
+        if (am.financeSynced || syncStatus.partialSynced || (ctx && ctx.mode === "edit")) {
+          const warnLabel = am.autoSyncFinance ? "⚠️ 재무 미반영 (저장 시 재등록)" : "⚠️ 재무 미반영 (자동연동 꺼짐)";
+          return `<span style="color:#c2410c;background:#ffedd5;border:1px solid #fdba74;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap;">${warnLabel}</span>`;
+        }
+        return "";
+      }
+
+      function commitOptimisticFinanceRow(bucketKey, rowPayload, isExistingUpdate, dsMethodName, tempPrefix) {
+        const ds = window.WSDataService;
+        if (!ds || typeof ds[dsMethodName] !== "function") return;
+        const user = state.authUser || state.currentUser || state.user || "조항만";
+        if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
+        if (!Array.isArray(state.financeDbData[bucketKey])) state.financeDbData[bucketKey] = [];
+
+        const req = ds[dsMethodName](rowPayload, user);
+        const list = state.financeDbData[bucketKey];
+        let optimisticId = isExistingUpdate ? String(rowPayload.id || "") : "";
+        if (isExistingUpdate && optimisticId) {
+          const idx = list.findIndex(r => r && r.id === optimisticId);
+          if (idx >= 0) list[idx] = Object.assign({}, list[idx], rowPayload);
+          else list.unshift(Object.assign({}, rowPayload));
+        } else {
+          optimisticId = tempPrefix + Date.now() + "_" + Math.random().toString(36).slice(2, 5);
+          list.unshift(Object.assign({}, rowPayload, { id: optimisticId }));
+        }
+        if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+
+        if (req && typeof req.then === "function") {
+          req.then((res) => {
+            if (!res || !res.success || !state.financeDbData || !Array.isArray(state.financeDbData[bucketKey])) return;
+            const saved = Object.assign({}, rowPayload, res.row || {});
+            const resolvedId = (res.row && res.row.id) || res.id || saved.id || optimisticId;
+            saved.id = resolvedId;
+            if (!isExistingUpdate) {
+              state.financeDbData[bucketKey] = state.financeDbData[bucketKey].filter(r => r && r.id !== optimisticId);
+            }
+            const curList = state.financeDbData[bucketKey];
+            const idx2 = curList.findIndex(r => r && r.id === resolvedId);
+            if (idx2 >= 0) curList[idx2] = Object.assign({}, curList[idx2], saved);
+            else curList.unshift(saved);
+            if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+          }).catch(() => {});
+        }
+      }
+
+      function syncAsTaskToFinance(siteName, taskName, startYmd, partner, manager, asMeta, syncOpts) {
         if (!asMeta || !window.WSDataService) return;
+        const opts = syncOpts || {};
         const chargeAmt = Number(asMeta.chargeAmount) || 0;
         const costAmt = Number(asMeta.costAmount) || 0;
         if (chargeAmt <= 0 && costAmt <= 0) return;
@@ -20399,22 +20842,33 @@ end $$;`;
         const ds = window.WSDataService;
         const user = state.authUser || state.currentUser || state.user || "조항만";
         const baseName = String(siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
-        const normKey = baseName.replace(/\s+/g, "").toLowerCase();
+        const normKey = normalizeFinanceSiteMatchKey(baseName);
         const descParts = [asMeta.space, asMeta.symptom || taskName].filter(Boolean).join(" · ");
         const asDesc = `[유상 AS] ${descParts || taskName || "AS 보수"}`;
+        const taskId = String(opts.taskId || "").trim();
 
         if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
         if (!Array.isArray(state.financeDbData.collection)) state.financeDbData.collection = [];
         if (!Array.isArray(state.financeDbData.expense)) state.financeDbData.expense = [];
 
+        const curMatch = inspectAsFinanceSyncState({
+          siteName,
+          taskName,
+          startYmd,
+          asMeta,
+          taskId
+        }, state.financeDbData);
+        const needCollection = chargeAmt > 0 && !opts.skipCollection && !curMatch.hasCollection;
+        const needExpense = costAmt > 0 && !opts.skipExpense && !curMatch.hasExpense;
+
         // 1) 유상 AS 청구금액 → 수금현황(기존 현장 추가비 또는 신규 AS 수금행) 자동 반영
-        if (chargeAmt > 0 && typeof ds.saveCollectionRow === "function") {
+        if (needCollection && typeof ds.saveCollectionRow === "function") {
           const existingCol = state.financeDbData.collection.find(c =>
-            c && String(c.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase() === normKey
+            c && normalizeFinanceSiteMatchKey(c.siteName) === normKey
           );
           if (existingCol) {
             const extraItems = Array.isArray(existingCol.extraItems) ? existingCol.extraItems.slice() : [];
-            extraItems.push({
+            const newExtraItem = {
               desc: asDesc,
               stage: "AS 청구",
               dueDate: startYmd || getTodayYmd(),
@@ -20422,20 +20876,26 @@ end $$;`;
               method: "계좌이체",
               proof: "전자세금계산서",
               paid: false
-            });
+            };
+            if (taskId) newExtraItem.asTaskId = taskId;
+            extraItems.push(newExtraItem);
             const nextChangeAmt = (Number(existingCol.changeAmount) || 0) + chargeAmt;
             const nextChangeDesc = [existingCol.changeDesc, asDesc].filter(Boolean).join(", ");
+            const nextTotalAmt = (Number(existingCol.contractAmount) || 0) + nextChangeAmt;
+            const nextUncolAmt = nextTotalAmt - (Number(existingCol.collectedAmount) || 0);
             const updatedCol = Object.assign({}, existingCol, {
               changeAmount: nextChangeAmt,
               changeDesc: nextChangeDesc,
+              totalAmount: nextTotalAmt,
+              uncollectedAmount: nextUncolAmt,
               extraItems: extraItems
             });
-            ds.saveCollectionRow(updatedCol, user);
+            commitOptimisticFinanceRow("collection", updatedCol, Boolean(existingCol.id), "saveCollectionRow", "temp_col_");
           } else {
             const newCol = {
               id: "",
               siteName: `[AS] ${baseName}`,
-              clientName: "",
+              clientName: String(asMeta.clientName || "").trim(),
               manager: extractFirstManager(manager, user),
               category: "기타",
               status: "진행중",
@@ -20449,15 +20909,19 @@ end $$;`;
               midPayment2: 0,
               midPayment3: 0,
               finalPayment: 0,
+              totalAmount: chargeAmt,
+              collectedAmount: 0,
+              uncollectedAmount: chargeAmt,
               taxInvoice: "미발행",
               note: asDesc
             };
-            ds.saveCollectionRow(newCol, user);
+            if (taskId) newCol.asTaskId = taskId;
+            commitOptimisticFinanceRow("collection", newCol, false, "saveCollectionRow", "temp_col_");
           }
         }
 
         // 2) 처리 비용(외주/자재 원가) → 월별 비용마감 자동 등록
-        if (costAmt > 0 && typeof ds.saveExpenseRow === "function") {
+        if (needExpense && typeof ds.saveExpenseRow === "function") {
           const settleMonth = (startYmd || getTodayYmd()).slice(0, 7);
           const faultTag = asMeta.faultType ? ` (${asMeta.faultType})` : "";
           const newExp = {
@@ -20475,7 +20939,8 @@ end $$;`;
             payDate: startYmd || getTodayYmd(),
             note: `[${asMeta.billingType === "paid" ? "유상AS" : "무상AS"} 원가${faultTag}] ${descParts}`
           };
-          ds.saveExpenseRow(newExp, user);
+          if (taskId) newExp.asTaskId = taskId;
+          commitOptimisticFinanceRow("expense", newExp, false, "saveExpenseRow", "temp_exp_");
         }
 
         asMeta.financeSynced = true;
@@ -20483,8 +20948,9 @@ end $$;`;
         state.dirtyMobileTabs.finance = true;
       }
 
-      function syncSingleTaskToFinance(siteName, taskName, startYmd, endYmd, partner, manager, asMeta, scopeType) {
+      function syncSingleTaskToFinance(siteName, taskName, startYmd, endYmd, partner, manager, asMeta, scopeType, syncOpts) {
         if (!asMeta || !window.WSDataService) return;
+        const opts = syncOpts || {};
         const chargeAmt = Number(asMeta.chargeAmount) || 0;
         const costAmt = Number(asMeta.costAmount) || 0;
         if (chargeAmt <= 0 && costAmt <= 0) return;
@@ -20493,18 +20959,28 @@ end $$;`;
         const ds = window.WSDataService;
         const user = state.authUser || state.currentUser || state.user || "조항만";
         const baseName = String(siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
-        const normKey = baseName.replace(/\s+/g, "").toLowerCase();
+        const normKey = normalizeFinanceSiteMatchKey(baseName);
         const sFmt = (startYmd || getTodayYmd()).replace(/-/g, ".");
         const eFmt = (endYmd || startYmd || getTodayYmd()).replace(/-/g, ".");
         const periodStr = sFmt === eFmt ? sFmt : `${sFmt} ~ ${eFmt}`;
+        const taskId = String(opts.taskId || "").trim();
 
         if (!state.financeDbData) state.financeDbData = { collection: [], expense: [], fixedMaster: [] };
         if (!Array.isArray(state.financeDbData.collection)) state.financeDbData.collection = [];
         if (!Array.isArray(state.financeDbData.expense)) state.financeDbData.expense = [];
 
-        if (chargeAmt > 0 && typeof ds.saveCollectionRow === "function") {
+        const curMatch = inspectSingleOrSiteFinanceSyncState({
+          siteName,
+          taskName,
+          asMeta,
+          taskId
+        }, state.financeDbData);
+        const needCollection = chargeAmt > 0 && !opts.skipCollection && !curMatch.hasCollection;
+        const needExpense = costAmt > 0 && !opts.skipExpense && !curMatch.hasExpense;
+
+        if (needCollection && typeof ds.saveCollectionRow === "function") {
           const existingCol = state.financeDbData.collection.find(c =>
-            c && String(c.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase() === normKey
+            c && normalizeFinanceSiteMatchKey(c.siteName) === normKey
           );
           if (!existingCol) {
             const newCol = {
@@ -20524,14 +21000,18 @@ end $$;`;
               midPayment2: 0,
               midPayment3: 0,
               finalPayment: 0,
+              totalAmount: chargeAmt,
+              collectedAmount: 0,
+              uncollectedAmount: chargeAmt,
               taxInvoice: "미발행",
               note: isSiteScope ? `[현장] ${taskName || ""}`.trim() : `[단건] ${taskName || ""}`.trim()
             };
-            ds.saveCollectionRow(newCol, user);
+            if (taskId) newCol.asTaskId = taskId;
+            commitOptimisticFinanceRow("collection", newCol, false, "saveCollectionRow", "temp_col_");
           }
         }
 
-        if (costAmt > 0 && typeof ds.saveExpenseRow === "function") {
+        if (needExpense && typeof ds.saveExpenseRow === "function") {
           const settleMonth = (startYmd || getTodayYmd()).slice(0, 7);
           const newExp = {
             id: "",
@@ -20548,7 +21028,8 @@ end $$;`;
             payDate: startYmd || getTodayYmd(),
             note: `[${isSiteScope ? "현장" : "단건"} 원가] ${taskName || ""}`.trim()
           };
-          ds.saveExpenseRow(newExp, user);
+          if (taskId) newExp.asTaskId = taskId;
+          commitOptimisticFinanceRow("expense", newExp, false, "saveExpenseRow", "temp_exp_");
         }
 
         asMeta.financeSynced = true;
@@ -20612,6 +21093,13 @@ end $$;`;
         );
         const isSingleMode = (!isAsMode && ctx.scope === "single");
         const isSiteMode = (!isAsMode && !isSingleMode && ctx.scope === "site");
+        const targetTaskId = ctx.mode === "edit"
+          ? String(ctx.taskId || "")
+          : ("task_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6));
+        const canInspectRemoteFin = ((typeof canViewFinance !== "function") || canViewFinance())
+          && Boolean(window.WSDataService && typeof window.WSDataService.getFinanceDbData === "function");
+        let deferredFinanceSyncJob = null;
+
         if (isAsMode && ctx.asMeta) {
           const am = ctx.asMeta;
           am.faultType = normalizeAsFaultReasonLabel(am.faultType || am.faultReason || "");
@@ -20632,21 +21120,95 @@ end $$;`;
               finalMemo = finalMemo ? `${summaryLine}\n${finalMemo}` : summaryLine;
             }
           }
-          if (am.autoSyncFinance && !am.financeSynced && ((Number(am.chargeAmount) || 0) > 0 || (Number(am.costAmount) || 0) > 0)) {
-            syncAsTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, finalPartner, managerCombined, am);
+          if ((Number(am.chargeAmount) || 0) > 0 || (Number(am.costAmount) || 0) > 0) {
+            if (!state.financeLoaded && canInspectRemoteFin && typeof ensureTaskModalFinanceLoaded === "function") {
+              deferredFinanceSyncJob = {
+                mode: "as",
+                siteName: finalSiteName,
+                taskName: ctx.taskName.trim(),
+                startYmd: ctx.startYmd,
+                endYmd: ctx.isRange ? ctx.endYmd : ctx.startYmd,
+                partner: finalPartner,
+                manager: managerCombined,
+                taskId: targetTaskId
+              };
+            } else if (typeof inspectAsFinanceSyncState === "function") {
+              if (typeof canViewFinance === "function" && !canViewFinance() && !state.financeLoaded) {
+                if (am.autoSyncFinance && !am.financeSynced) {
+                  syncAsTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, finalPartner, managerCombined, am, { taskId: targetTaskId });
+                }
+              } else {
+                const syncStatus = inspectAsFinanceSyncState({
+                  siteName: finalSiteName,
+                  taskName: ctx.taskName.trim(),
+                  startYmd: ctx.startYmd,
+                  asMeta: am,
+                  taskId: targetTaskId
+                }, state.financeDbData);
+                if (am.autoSyncFinance && !syncStatus.allSynced) {
+                  syncAsTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, finalPartner, managerCombined, am, {
+                    taskId: targetTaskId,
+                    skipCollection: !syncStatus.needsCollection,
+                    skipExpense: !syncStatus.needsExpense
+                  });
+                } else {
+                  am.financeSynced = Boolean(syncStatus.allSynced);
+                }
+              }
+            } else if (am.autoSyncFinance && !am.financeSynced) {
+              syncAsTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, finalPartner, managerCombined, am);
+            }
           }
         } else if ((isSingleMode || isSiteMode) && ctx.asMeta) {
           const am = ctx.asMeta;
-          if (am.autoSyncFinance && !am.financeSynced && ((Number(am.chargeAmount) || 0) > 0 || (Number(am.costAmount) || 0) > 0)) {
-            syncSingleTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, ctx.isRange ? ctx.endYmd : ctx.startYmd, finalPartner, managerCombined, am, isSiteMode ? "site" : "single");
+          if ((Number(am.chargeAmount) || 0) > 0 || (Number(am.costAmount) || 0) > 0) {
+            if (!state.financeLoaded && canInspectRemoteFin && typeof ensureTaskModalFinanceLoaded === "function") {
+              deferredFinanceSyncJob = {
+                mode: isSiteMode ? "site" : "single",
+                siteName: finalSiteName,
+                taskName: ctx.taskName.trim(),
+                startYmd: ctx.startYmd,
+                endYmd: ctx.isRange ? ctx.endYmd : ctx.startYmd,
+                partner: finalPartner,
+                manager: managerCombined,
+                taskId: targetTaskId
+              };
+            } else if (typeof inspectSingleOrSiteFinanceSyncState === "function") {
+              if (typeof canViewFinance === "function" && !canViewFinance() && !state.financeLoaded) {
+                if (am.autoSyncFinance && !am.financeSynced) {
+                  syncSingleTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, ctx.isRange ? ctx.endYmd : ctx.startYmd, finalPartner, managerCombined, am, isSiteMode ? "site" : "single", { taskId: targetTaskId });
+                }
+              } else {
+                const syncStatus = inspectSingleOrSiteFinanceSyncState({
+                  siteName: finalSiteName,
+                  taskName: ctx.taskName.trim(),
+                  asMeta: am,
+                  taskId: targetTaskId
+                }, state.financeDbData);
+                if (am.autoSyncFinance && !syncStatus.allSynced) {
+                  syncSingleTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, ctx.isRange ? ctx.endYmd : ctx.startYmd, finalPartner, managerCombined, am, isSiteMode ? "site" : "single", {
+                    taskId: targetTaskId,
+                    skipCollection: !syncStatus.needsCollection,
+                    skipExpense: !syncStatus.needsExpense
+                  });
+                } else {
+                  am.financeSynced = Boolean(syncStatus.allSynced);
+                }
+              }
+            } else if (am.autoSyncFinance && !am.financeSynced) {
+              syncSingleTaskToFinance(finalSiteName, ctx.taskName.trim(), ctx.startYmd, ctx.isRange ? ctx.endYmd : ctx.startYmd, finalPartner, managerCombined, am, isSiteMode ? "site" : "single");
+            }
           }
         }
+
+        let savedTaskRef = null;
 
         const todayYmd = getTodayYmd();
         if (ctx.mode === "edit") {
           const found = findTaskById(ctx.taskId);
           if (!found) return;
           const { site, task } = found;
+          savedTaskRef = task;
           const beforeTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, task) : null;
           const origTaskName = task.taskName || "";
           const origDateStr = task.dateDisplay || task.startDateStr || "";
@@ -20790,7 +21352,7 @@ end $$;`;
               });
             }
           }
-          const newId = "task_" + nowMs + "_" + Math.random().toString(36).slice(2, 6);
+          const newId = targetTaskId || ("task_" + nowMs + "_" + Math.random().toString(36).slice(2, 6));
           const newTask = {
             id: newId, taskId: newId, row: "", taskName: ctx.taskName.trim(),
             dateDisplay: dateDisp, dateMs: new Date(ctx.startYmd + "T00:00:00").getTime(),
@@ -20806,6 +21368,7 @@ end $$;`;
             hasCal: true, scope: ctx.scope, sheetName: targetSheetName, isArchived: false
           };
           site.tasks.push(newTask);
+          savedTaskRef = newTask;
           recalcSiteStats(site);
           const newTaskAuditSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, newTask) : null;
           if (window.WSDataService) {
@@ -20830,6 +21393,51 @@ end $$;`;
           }
 
           showToast("✅ 새 일정이 등록되었습니다.");
+        }
+
+        if (deferredFinanceSyncJob && typeof ensureTaskModalFinanceLoaded === "function") {
+          const job = deferredFinanceSyncJob;
+          const jobAm = ctx.asMeta ? JSON.parse(JSON.stringify(ctx.asMeta)) : null;
+          const jobTaskRef = savedTaskRef;
+          ensureTaskModalFinanceLoaded().then(() => {
+            if (!jobAm) return;
+            const liveTaskId = (jobTaskRef && (jobTaskRef.taskId || jobTaskRef.id)) || job.taskId;
+            const isAsJob = (job.mode === "as");
+            const syncStatus = isAsJob
+              ? inspectAsFinanceSyncState({ siteName: job.siteName, taskName: job.taskName, startYmd: job.startYmd, asMeta: jobAm, taskId: liveTaskId }, state.financeDbData)
+              : inspectSingleOrSiteFinanceSyncState({ siteName: job.siteName, taskName: job.taskName, asMeta: jobAm, taskId: liveTaskId }, state.financeDbData);
+            let metaChanged = false;
+            if (jobAm.autoSyncFinance && !syncStatus.allSynced) {
+              if (isAsJob) {
+                syncAsTaskToFinance(job.siteName, job.taskName, job.startYmd, job.partner, job.manager, jobAm, {
+                  taskId: liveTaskId,
+                  skipCollection: !syncStatus.needsCollection,
+                  skipExpense: !syncStatus.needsExpense
+                });
+              } else {
+                syncSingleTaskToFinance(job.siteName, job.taskName, job.startYmd, job.endYmd, job.partner, job.manager, jobAm, job.mode, {
+                  taskId: liveTaskId,
+                  skipCollection: !syncStatus.needsCollection,
+                  skipExpense: !syncStatus.needsExpense
+                });
+              }
+              metaChanged = true;
+            } else if (jobAm.financeSynced !== Boolean(syncStatus.allSynced)) {
+              jobAm.financeSynced = Boolean(syncStatus.allSynced);
+              metaChanged = true;
+            }
+            if (metaChanged && jobTaskRef && isAsJob) {
+              jobTaskRef.asMeta = Object.assign({}, jobTaskRef.asMeta || {}, jobAm);
+              if (window.WSDataService && typeof window.WSDataService.saveDashboardCache === "function") {
+                window.WSDataService.saveDashboardCache(state.dashData);
+              }
+              if (window.WSSupabaseV3 && typeof window.WSSupabaseV3.isSupabaseActive === "function" && window.WSSupabaseV3.isSupabaseActive() && typeof window.WSSupabaseV3.persistSnapshotQueued === "function") {
+                window.WSSupabaseV3.persistSnapshotQueued("dashboard_main", state.dashData);
+              }
+            }
+            markAllDirty();
+            renderActiveViews();
+          });
         }
 
         window.closeModal("taskSheetModal");
@@ -27400,6 +28008,12 @@ end $$;`;
               }
             } else if (key === "finance_db" && typeof applyDeletedGuardsToFinanceData === "function") {
               applyDeletedGuardsToFinanceData(filteredCopy, filterOpts);
+              if (Array.isArray(filteredCopy.collection)) {
+                filteredCopy.collection = filteredCopy.collection.filter(r => r && !String(r.id || "").startsWith("temp_col_"));
+              }
+              if (Array.isArray(filteredCopy.expense)) {
+                filteredCopy.expense = filteredCopy.expense.filter(e => e && !String(e.id || "").startsWith("temp_exp_"));
+              }
               if (filterOpts.changed) {
                 if (rawPayload && typeof rawPayload === "object") {
                   rawPayload.collection = filteredCopy.collection;
@@ -28892,7 +29506,7 @@ end $$;`;
                 const stageSum = stageKeys.reduce((s, k) => s + (Number(cleanRow[k]) || 0), 0);
                 collected = stageSum + extraPaid;
               }
-              const nextCol = Array.isArray(fb.collection) ? fb.collection.slice() : [];
+              const nextCol = Array.isArray(fb.collection) ? fb.collection.filter(r => r && !String(r.id || "").startsWith("temp_col_")) : [];
               const idx = nextCol.findIndex(r => r && r.id === savedId);
               const existingCreated = idx >= 0 ? (nextCol[idx].createdAtMs || 0) : 0;
               const createdAtMs = isRestore ? Date.now() : (cleanRow.createdAtMs || existingCreated || ((isNewId || idx < 0) ? Date.now() : 0));
