@@ -9014,6 +9014,9 @@ end $$;`;
               <div style="width:38%;text-align:right;font-size:12.5px;line-height:1.8;border:1px solid #cbd5e1;border-radius:8px;padding:14px;">
                 <div style="font-size:15px;font-weight:900;color:#0f172a;">${escHtml(supplier.companyName)} · 대표 ${escHtml(supplier.ceoName)}</div>
                 <div>사업자등록번호: ${escHtml(supplier.bizNo || "-")}</div>
+                ${supplier.email ? `<div>E-MAIL: ${escHtml(supplier.email)}</div>` : ""}
+                ${supplier.tel ? `<div>TEL: ${escHtml(supplier.tel)}</div>` : ""}
+                ${supplier.fax ? `<div>FAX: ${escHtml(supplier.fax)}</div>` : ""}
                 <div>계좌: ${escHtml(supplier.bankInfo || "-")}</div>
               </div>
             </div>
@@ -9142,6 +9145,20 @@ end $$;`;
                 <div>
                   <label style="display:block;font-size:11px;font-weight:700;color:#475569;margin-bottom:2px;">입금계좌</label>
                   <input type="text" class="ws-input" value="${escHtml(supplier.bankInfo)}" onchange="window.updateEstPdfSupplier('bankInfo', this.value)" placeholder="은행 계좌번호 예금주" style="height:28px;font-size:11.5px;padding:0 8px;background:#fff;">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:8px;margin-bottom:8px;">
+                <div>
+                  <label style="display:block;font-size:11px;font-weight:700;color:#475569;margin-bottom:2px;">E-MAIL</label>
+                  <input type="text" class="ws-input" value="${escHtml(supplier.email || "")}" onchange="window.updateEstPdfSupplier('email', this.value)" placeholder="example@naver.com" style="height:28px;font-size:11.5px;padding:0 8px;background:#fff;">
+                </div>
+                <div>
+                  <label style="display:block;font-size:11px;font-weight:700;color:#475569;margin-bottom:2px;">TEL (전화번호)</label>
+                  <input type="text" class="ws-input" value="${escHtml(supplier.tel || "")}" onchange="window.updateEstPdfSupplier('tel', this.value)" placeholder="010-0000-0000" style="height:28px;font-size:11.5px;padding:0 8px;background:#fff;">
+                </div>
+                <div>
+                  <label style="display:block;font-size:11px;font-weight:700;color:#475569;margin-bottom:2px;">FAX (팩스)</label>
+                  <input type="text" class="ws-input" value="${escHtml(supplier.fax || "")}" onchange="window.updateEstPdfSupplier('fax', this.value)" placeholder="02-000-0000" style="height:28px;font-size:11.5px;padding:0 8px;background:#fff;">
                 </div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1.6fr;gap:8px;">
@@ -9318,7 +9335,10 @@ end $$;`;
           bizNo: "",
           ceoName: "조항만",
           address: "",
-          bankInfo: ""
+          bankInfo: "",
+          tel: "",
+          fax: "",
+          email: ""
         }, saved);
       }
 
