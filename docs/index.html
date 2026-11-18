@@ -6687,7 +6687,7 @@ end $$;`;
           const textAmt = isSelected ? "#ffffff" : (hasData ? "#15803d" : "#cbd5e1");
 
           return `
-            <div onclick="window.setFinanceMonthFilter(${m.month})"
+            <div data-month="${m.month}" ${isSelected ? 'data-selected="1"' : ""} onclick="window.setFinanceMonthFilter(${m.month})"
               style="cursor:pointer;padding:${isMobile ? "6px 8px" : "8px 6px"};border-radius:8px;background:${bg};border:1.5px solid ${border};text-align:center;transition:all 0.15s ease;flex:${isMobile ? "0 0 68px" : "1"};min-width:${isMobile ? "68px" : "0"};position:relative;box-shadow:${isSelected ? "0 2px 8px rgba(37,99,235,0.25)" : "none"};"
               title="${m.month}월: ${m.count}건 / 수금 ${formatKrw(m.collected)}${m.uncollected > 0 ? " / 미수 " + formatKrw(m.uncollected) : ""}">
               ${m.hasUncollected ? `
@@ -7102,10 +7102,12 @@ end $$;`;
         const savedScrollLeft = stripEl ? stripEl.scrollLeft : 0;
         const mBody = document.querySelector(".m-app-body");
         const savedBodyTop = mBody ? mBody.scrollTop : 0;
+        state._preserveMonthStripScroll = true;
         state.financeMonthFilter = (state.financeMonthFilter === month) ? 0 : month;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
+        state._preserveMonthStripScroll = false;
         const restore = () => {
           const newStrip = document.getElementById("mFinanceMonthStrip");
           if (newStrip && savedScrollLeft > 0) newStrip.scrollLeft = savedScrollLeft;
@@ -14531,6 +14533,17 @@ end $$;`;
                 if (typeof resetFinanceScrollTop === "function") resetFinanceScrollTop();
               });
             }
+          }
+          if (!state._preserveMonthStripScroll) {
+            const centerSelectedMonth = () => {
+              const strip = document.getElementById("mFinanceMonthStrip");
+              const sel = strip ? strip.querySelector('[data-selected="1"]') : null;
+              if (strip && sel) {
+                strip.scrollLeft = Math.max(0, sel.offsetLeft - Math.round((strip.clientWidth - sel.offsetWidth) / 2));
+              }
+            };
+            centerSelectedMonth();
+            if (typeof requestAnimationFrame === "function") requestAnimationFrame(centerSelectedMonth);
           }
         }
 
