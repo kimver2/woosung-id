@@ -2752,6 +2752,307 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     }
   })());
 
+  // [고객 공유 (Client Share) 비용 노출(showPayment) x 추가금(extraAmount) 4가지 조합 + 재무DB 지연로드 + client.html 런타임 검증]
+  pendingAsyncTests.push((async () => {
+    const shareStartMarker = '// ================= 모달 5: 반장님 작업 안내문 모달 =================';
+    const shareEndMarker = 'window.openPartnerGuideForSite = function';
+    const sIdx = idxRootHtml.indexOf(shareStartMarker);
+    const eIdx = idxRootHtml.indexOf(shareEndMarker);
+    const fnEscHtml = idxRootHtml.match(/function escHtml\([\s\S]*?\n      \}/);
+    const fnEscJs = idxRootHtml.match(/function escJs\([\s\S]*?\n      \}/);
+    const fnParseYmd = idxRootHtml.match(/function parseYmdFromTask\([\s\S]*?\n      \}/);
+    const fnParseEndYmd = idxRootHtml.match(/function parseEndYmdFromTask\([\s\S]*?\n      \}/);
+    const fnIsDone = idxRootHtml.match(/function isTaskCompleted\([\s\S]*?\n      \}/);
+    const fnGetSiteInfo = idxRootHtml.match(/function getSiteInfo\([\s\S]*?\n      \}/);
+    const fnGetColFin = idxRootHtml.match(/function getCollectionRowFinancials\([\s\S]*?\n      \}/);
+    const fnParseExtra = idxRootHtml.match(/function parseExtraAmountFromNote\([\s\S]*?\n      \}/);
+    const fnNormYmd = idxRootHtml.match(/function normalizeDateYmd\([\s\S]*?\n      \}/);
+    const clientScriptMatch = clientRootHtml.match(/<script>([\s\S]*?)<\/script>/);
+
+    assertTest('고객 공유(showPayment × extraAmount) 검증용 핵심 함수 및 client.html 스크립트 추출 검증',
+      sIdx !== -1 && eIdx > sIdx &&
+      Boolean(fnEscHtml && fnEscJs && fnParseYmd && fnParseEndYmd && fnIsDone && fnGetSiteInfo && fnGetColFin && fnParseExtra && fnNormYmd && clientScriptMatch)
+    );
+    if (sIdx === -1 || eIdx <= sIdx || !clientScriptMatch) return;
+
+    const wsStateStore = {};
+    const makeEl = () => ({ innerHTML: '', textContent: '', value: '', style: {}, classList: { add() {}, remove() {} } });
+    const domMap = {
+      syncStatusModalTitle: makeEl(),
+      syncStatusModalCloseBtn: makeEl(),
+      syncStatusModalBody: makeEl(),
+      syncStatusModalFooter: makeEl(),
+      csUrlInput: makeEl()
+    };
+    const mockCard = { style: {} };
+    let financeFetchCount = 0;
+    const deferredColRow = {
+      id: 'COL-EXTRA-1',
+      siteName: '신대방우성 16동 902호',
+      contractAmount: 45000000,
+      changeAmount: 3000000,
+      changeDesc: '주방 타일 및 목공 추가 <script>alert(1)</script>',
+      totalAmount: 48000000,
+      downPayment: 20000000,
+      collectedAmount: 20000000,
+      uncollectedAmount: 28000000,
+      note: '내부메모-비공개'
+    };
+
+    const csVm = vm.createContext({
+      window: {},
+      state: {
+        user: '조항만',
+        authUser: '조항만',
+        currentUser: '조항만',
+        financeLoaded: false,
+        financeDbData: null,
+        dashData: {
+          sites: [{
+            siteKey: 'site::신대방우성 16동 902호',
+            siteName: '신대방우성 16동 902호',
+            scope: 'site',
+            primaryManager: '조항만',
+            tasks: [
+              { id: 't1', taskName: '철거', status: '완료', startDateStr: '2026-11-10', endDateStr: '2026-11-10', dateDisplay: '2026-11-10', manager: '조항만' },
+              { id: 't2', taskName: '목공', status: '진행 중', startDateStr: '2026-11-18', endDateStr: '2026-11-20', dateDisplay: '2026-11-18 ~ 2026-11-20', manager: '조항만' }
+            ]
+          }],
+          siteInfoMap: {
+            '신대방우성 16동 902호': {
+              address: '동작구 여의대방로22 16동 902호',
+              doorPassword: '세대 608436'
+            }
+          }
+        },
+        settingsData: { members: [{ name: '조항만', role: '대표', phone: '010-4491-0112' }] }
+      },
+      document: {
+        getElementById: (id) => domMap[id] || null,
+        querySelector: (sel) => (sel === '#syncStatusModal .ws-modal-card' ? mockCard : null)
+      },
+      location: { href: 'https://kimver2.github.io/woosung-id/index.html' },
+      URL,
+      Promise,
+      setTimeout,
+      clearTimeout,
+      canViewFinance: () => true,
+      getAllSites: () => csVm.state.dashData.sites,
+      getSiteDateMetrics: () => ({ earliest: '2026-11-10', latest: '2026-11-20' }),
+      getUniqueSiteManagers: () => ['조항만'],
+      filterRegisteredManagers: (arr) => arr,
+      lookupMemberPhone: (n) => (n === '조항만' ? '010-4491-0112' : ''),
+      copyText: () => {},
+      showToast: () => {},
+      openModal: () => {},
+      closeModal: () => {},
+      COL_STAGE_DEFS: [
+        { key: 'downPayment', label: '계약금' },
+        { key: 'finalPayment', label: '잔금' }
+      ]
+    });
+    csVm.window = csVm;
+    csVm.window.WSDataService = {
+      saveDashboardCache: () => {},
+      saveFinanceCache: () => {},
+      getFinanceDbData: async () => {
+        financeFetchCount++;
+        return { success: true, collection: [JSON.parse(JSON.stringify(deferredColRow))], expense: [], fixedMaster: [] };
+      }
+    };
+    csVm.window.WSSupabaseV3 = {
+      isSupabaseActive: () => true,
+      persistSnapshot: async (key, payload) => {
+        wsStateStore[key] = JSON.parse(JSON.stringify(payload));
+        return 'mut_cs';
+      }
+    };
+
+    const shareBlockCode = idxRootHtml.slice(sIdx, eIdx);
+    const csBootstrap = [
+      fnEscHtml[0], fnEscJs[0], fnParseYmd[0], fnParseEndYmd[0], fnIsDone[0], fnGetSiteInfo[0],
+      fnGetColFin[0], fnParseExtra[0], fnNormYmd[0],
+      shareBlockCode,
+      'this.buildClientSharePayload = buildClientSharePayload;',
+      'this.extractCollectionExtraForShare = extractCollectionExtraForShare;',
+      'this.getClientShareConfig = getClientShareConfig;'
+    ].join('\n');
+    vm.runInContext(csBootstrap, csVm);
+
+    const renderClientForPayload = async (tokenKey, payload) => {
+      wsStateStore['client_share::' + tokenKey] = JSON.parse(JSON.stringify(payload));
+      const cDom = {
+        shareBrandSub: { textContent: '' },
+        loadingStatusMsg: { textContent: '' },
+        clientShareRoot: { innerHTML: '' },
+        clientShareFooter: { textContent: '' },
+        clientToast: { textContent: '', classList: { add() {}, remove() {} } }
+      };
+      const cVm = vm.createContext({
+        document: {
+          title: '',
+          getElementById: (id) => cDom[id] || null,
+          createElement: () => ({ style: {}, setAttribute() {}, select() {} }),
+          execCommand: () => true,
+          body: { appendChild() {}, removeChild() {} }
+        },
+        window: { isSecureContext: true },
+        navigator: { clipboard: { writeText: async () => {} } },
+        location: { search: '?token=' + encodeURIComponent(tokenKey) },
+        URLSearchParams,
+        console,
+        setTimeout,
+        clearTimeout,
+        fetch: async (url) => {
+          const m = String(url).match(/key=eq\.([^&]+)/);
+          const k = m ? decodeURIComponent(m[1]) : '';
+          const found = wsStateStore[k];
+          return {
+            ok: true,
+            status: 200,
+            json: async () => (found ? [{ payload: JSON.parse(JSON.stringify(found)), updated_at: found.updatedAt || '' }] : [])
+          };
+        }
+      });
+      vm.runInContext(clientScriptMatch[1], cVm);
+      await new Promise((r) => setTimeout(r, 10));
+      return cDom.clientShareRoot.innerHTML;
+    };
+
+    // 조합 1: showPayment=true & extraAmount > 0 (초기 미로드 상태에서 saveClientShareModal 호출 시 재무DB 자동 보완 포함)
+    csVm.openClientShareModal('신대방우성 16동 902호');
+    await new Promise((r) => setTimeout(r, 15));
+    const tokCs = csVm.state._clientShareDraft.token;
+    await csVm.saveClientShareModal(true);
+    const payloadTrueExtra = wsStateStore['client_share::' + tokCs];
+    const payloadTrueExtraStr = JSON.stringify(payloadTrueExtra);
+    const htmlTrueExtra = await renderClientForPayload('c1_true_extra', payloadTrueExtra);
+
+    // 조합 2: showPayment=false & extraAmount > 0 (모든 금액·추가금·사유 완전 비노출)
+    csVm.state._clientShareDraft.showPayment = false;
+    await csVm.saveClientShareModal(true);
+    const payloadFalseExtra = wsStateStore['client_share::' + tokCs];
+    const payloadFalseExtraStr = JSON.stringify(payloadFalseExtra);
+    const htmlFalseExtra = await renderClientForPayload('c2_false_extra', payloadFalseExtra);
+    // 방어 검증: 혹시 showPayment=false에 payment 객체가 남아있어도 client.html에서 미노출
+    const craftedFalsePayload = JSON.parse(JSON.stringify(payloadTrueExtra));
+    craftedFalsePayload.showPayment = false;
+    const htmlCraftedFalse = await renderClientForPayload('c2b_crafted_false', craftedFalsePayload);
+
+    // 조합 3: showPayment=true & extraAmount === 0 (불필요한 추가금 행 미노출)
+    csVm.state.financeDbData = {
+      collection: [{
+        id: 'COL-ZERO-1',
+        siteName: '신대방우성 16동 902호',
+        contractAmount: 45000000,
+        changeAmount: 0,
+        changeDesc: '',
+        totalAmount: 45000000,
+        downPayment: 20000000,
+        collectedAmount: 20000000,
+        uncollectedAmount: 25000000
+      }]
+    };
+    csVm.state._clientShareDraft.showPayment = true;
+    await csVm.saveClientShareModal(true);
+    const payloadTrueZero = wsStateStore['client_share::' + tokCs];
+    const htmlTrueZero = await renderClientForPayload('c3_true_zero', payloadTrueZero);
+
+    // 조합 4: showPayment=false & extraAmount === 0
+    csVm.state._clientShareDraft.showPayment = false;
+    await csVm.saveClientShareModal(true);
+    const payloadFalseZero = wsStateStore['client_share::' + tokCs];
+    const htmlFalseZero = await renderClientForPayload('c4_false_zero', payloadFalseZero);
+
+    // 추가금 사유 없음 / note [추가공사:N] / syncActiveClientShareForSite 갱신 검증
+    csVm.state.financeDbData = {
+      collection: [{
+        id: 'COL-NOTE-1',
+        siteName: '신대방우성 16동 902호',
+        contractAmount: 40000000,
+        changeAmount: 0,
+        totalAmount: 42500000,
+        note: '내부확인완료 [추가공사:2500000]'
+      }]
+    };
+    csVm.state._clientShareDraft.showPayment = true;
+    await csVm.saveClientShareModal(true);
+    const payloadNoteExtra = wsStateStore['client_share::' + tokCs];
+    const htmlNoteExtra = await renderClientForPayload('c5_note_no_reason', payloadNoteExtra);
+
+    // syncActiveClientShareForSite가 siteInfoMap 저장 후 즉시 최신 extraAmount를 반영하는지 검증
+    csVm.state.financeDbData.collection[0] = {
+      id: 'COL-SYNC-1',
+      siteName: '신대방우성 16동 902호',
+      contractAmount: 50000000,
+      changeAmount: 4000000,
+      changeDesc: '거실 간접등 증설',
+      totalAmount: 54000000,
+      downPayment: 10000000
+    };
+    csVm.syncActiveClientShareForSite('신대방우성 16동 902호');
+    const syncedPayload = wsStateStore['client_share::' + tokCs];
+
+    assertTest('고객 공유 showPayment(true/false) × extraAmount(>0/0) 4가지 조합 · 재무DB 지연로드 · 사유 XSS 이스케이프 · syncActiveClientShare 검증',
+      financeFetchCount >= 1 &&
+      Boolean(wsStateStore['dashboard_main'] && wsStateStore['dashboard_main'].siteInfoMap['신대방우성 16동 902호'].clientShare) &&
+      // 조합 1: true & >0
+      payloadTrueExtra.showPayment === true &&
+      payloadTrueExtra.payment &&
+      payloadTrueExtra.payment.contractAmount === 45000000 &&
+      payloadTrueExtra.payment.extraAmount === 3000000 &&
+      payloadTrueExtra.payment.total === 48000000 &&
+      payloadTrueExtra.payment.extraReason.includes('주방 타일 및 목공 추가') &&
+      !payloadTrueExtraStr.includes('내부메모-비공개') &&
+      htmlTrueExtra.includes('최초 계약금액') &&
+      htmlTrueExtra.includes('45,000,000원') &&
+      htmlTrueExtra.includes('+ 추가 공사금') &&
+      htmlTrueExtra.includes('+3,000,000원') &&
+      htmlTrueExtra.includes('주방 타일 및 목공 추가') &&
+      htmlTrueExtra.includes('&lt;script&gt;alert(1)&lt;/script&gt;') &&
+      !htmlTrueExtra.includes('<script>alert(1)</script>') &&
+      htmlTrueExtra.includes('총 계약금액') &&
+      htmlTrueExtra.includes('48,000,000원') &&
+      // 조합 2: false & >0
+      payloadFalseExtra.showPayment === false &&
+      payloadFalseExtra.payment === null &&
+      !payloadFalseExtraStr.includes('45000000') &&
+      !payloadFalseExtraStr.includes('3000000') &&
+      !payloadFalseExtraStr.includes('48000000') &&
+      !payloadFalseExtraStr.includes('주방 타일 및 목공 추가') &&
+      !htmlFalseExtra.includes('공사 대금 납부 현황') &&
+      !htmlFalseExtra.includes('추가 공사금') &&
+      !htmlFalseExtra.includes('48,000,000원') &&
+      !htmlCraftedFalse.includes('공사 대금 납부 현황') &&
+      !htmlCraftedFalse.includes('추가 공사금') &&
+      // 조합 3: true & 0
+      payloadTrueZero.showPayment === true &&
+      payloadTrueZero.payment &&
+      payloadTrueZero.payment.extraAmount === 0 &&
+      payloadTrueZero.payment.total === 45000000 &&
+      htmlTrueZero.includes('공사 대금 납부 현황') &&
+      htmlTrueZero.includes('45,000,000원') &&
+      !htmlTrueZero.includes('최초 계약금액') &&
+      !htmlTrueZero.includes('추가 공사금') &&
+      !htmlTrueZero.includes('pay-breakdown') &&
+      // 조합 4: false & 0
+      payloadFalseZero.showPayment === false &&
+      payloadFalseZero.payment === null &&
+      !htmlFalseZero.includes('공사 대금 납부 현황') &&
+      !htmlFalseZero.includes('45,000,000원') &&
+      // 추가 케이스: note 태그 파싱(내부메모 비노출) + 사유 없음 + syncActiveClientShareForSite
+      payloadNoteExtra.payment.extraAmount === 2500000 &&
+      payloadNoteExtra.payment.extraReason === '' &&
+      htmlNoteExtra.includes('+2,500,000원') &&
+      !htmlNoteExtra.includes('내부확인완료') &&
+      !htmlNoteExtra.includes('사유:') &&
+      syncedPayload.payment &&
+      syncedPayload.payment.extraAmount === 4000000 &&
+      syncedPayload.payment.extraReason === '거실 간접등 증설' &&
+      syncedPayload.payment.total === 54000000
+    );
+  })());
+
   // [Audit Log 변경 전/후 Diff (buildAuditDiffDetail) 및 전 도메인 수정·렌더링·검색 런타임 QA]
   pendingAsyncTests.push((async () => {
     const extractBlock = (startMarker, endMarker) => {

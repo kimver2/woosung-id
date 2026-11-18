@@ -20206,10 +20206,106 @@ end $$;`;
         return Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-6);
       }
 
+      function getClientShareConfig(siteName) {
+        if (!siteName) return null;
+        const infoMap = (state.dashData && state.dashData.siteInfoMap) || {};
+        const directMap = infoMap[siteName] || getSiteInfo(siteName) || null;
+        const legacyMap = (state.dashData && state.dashData.siteInfos) || {};
+        const directLegacy = legacyMap[siteName] || null;
+        const csMap = directMap && directMap.clientShare ? directMap.clientShare : null;
+        const csLegacy = directLegacy && directLegacy.clientShare ? directLegacy.clientShare : null;
+        if (csMap && csLegacy) {
+          return String(csLegacy.updatedAt || "") > String(csMap.updatedAt || "") ? csLegacy : csMap;
+        }
+        return csMap || csLegacy || null;
+      }
+
+      async function ensureClientShareFinanceLoaded() {
+        if (state.financeLoaded && state.financeDbData && Array.isArray(state.financeDbData.collection)) {
+          return state.financeDbData;
+        }
+        if (typeof canViewFinance === "function" && !canViewFinance()) {
+          return state.financeDbData || null;
+        }
+        const ds = window.WSDataService;
+        if (!ds || typeof ds.getFinanceDbData !== "function") {
+          return state.financeDbData || null;
+        }
+        if (state._clientShareFinancePromise) {
+          return state._clientShareFinancePromise;
+        }
+        const user = state.authUser || state.currentUser || state.user || "조항만";
+        state._clientShareFinancePromise = Promise.race([
+          Promise.resolve(ds.getFinanceDbData(user)).then((res) => {
+            if (res && res.success) {
+              state.financeDbData = {
+                collection: Array.isArray(res.collection) ? res.collection : [],
+                expense: Array.isArray(res.expense) ? res.expense : [],
+                fixedMaster: Array.isArray(res.fixedMaster) ? res.fixedMaster : [],
+                updatedAt: res.updatedAt || ""
+              };
+              state.financeLoaded = true;
+              state.financeLastFetchedAt = Date.now();
+              if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+            }
+            return state.financeDbData || null;
+          }).catch(() => state.financeDbData || null),
+          new Promise((resolve) => setTimeout(() => resolve(state.financeDbData || null), 4000))
+        ]).finally(() => {
+          state._clientShareFinancePromise = null;
+        });
+        return state._clientShareFinancePromise;
+      }
+
+      function extractCollectionExtraForShare(colRow) {
+        const fin = typeof getCollectionRowFinancials === "function"
+          ? getCollectionRowFinancials(colRow)
+          : { total: Number(colRow && colRow.totalAmount) || 0, collected: Number(colRow && colRow.collectedAmount) || 0, uncollected: Number(colRow && colRow.uncollectedAmount) || 0 };
+        const rawExtraItems = Array.isArray(colRow && colRow.extraItems) ? colRow.extraItems : [];
+        const itemsExtraSum = rawExtraItems.reduce((sum, it) => sum + (Number(it && it.amount) || 0), 0);
+        const noteExtra = typeof parseExtraAmountFromNote === "function" ? (parseExtraAmountFromNote(colRow && colRow.note) || 0) : 0;
+        const chgAmt = Number(colRow && colRow.changeAmount) || 0;
+        const expAmt = Number(colRow && colRow.extraAmount) || 0;
+        const rawExtraAmt = chgAmt || expAmt || noteExtra || itemsExtraSum || 0;
+        const extraAmount = rawExtraAmt > 0 ? rawExtraAmt : 0;
+
+        const rawContract = Number(colRow && colRow.contractAmount) || 0;
+        const total = fin.total > 0 ? fin.total : Math.max(0, rawContract + rawExtraAmt);
+        const contractAmount = rawContract > 0
+          ? rawContract
+          : (extraAmount > 0 ? Math.max(0, total - extraAmount) : total);
+        const hasExplicitUncol = colRow && colRow.uncollectedAmount !== undefined && colRow.uncollectedAmount !== null && colRow.uncollectedAmount !== "";
+        const uncollected = hasExplicitUncol ? fin.uncollected : Math.max(total - fin.collected, 0);
+
+        let extraReason = "";
+        if (extraAmount > 0 && colRow) {
+          const itemDescs = rawExtraItems
+            .filter((it) => it && (Number(it.amount) || 0) > 0 && String(it.desc || "").trim())
+            .map((it) => String(it.desc).trim())
+            .join(", ");
+          extraReason = String(
+            colRow.changeDesc ||
+            colRow.extraReason ||
+            colRow.reason ||
+            colRow.extraMemo ||
+            itemDescs ||
+            colRow.memo ||
+            ""
+          ).trim();
+        }
+        return {
+          total,
+          contractAmount,
+          extraAmount,
+          extraReason,
+          collected: fin.collected,
+          uncollected
+        };
+      }
+
       function buildClientSharePayload(siteName, cfg) {
         const site = getAllSites().find((s) => s && s.siteName === siteName && (s.scope || "site") !== "newSite") || getAllSites().find((s) => s && s.siteName === siteName);
-        const info = getSiteInfo(siteName) || {};
-        const shareCfg = cfg || info.clientShare || {};
+        const shareCfg = cfg || getClientShareConfig(siteName) || {};
         const tasksRaw = (site && Array.isArray(site.tasks)) ? site.tasks : [];
         const metrics = site ? getSiteDateMetrics(site) : { earliest: "", latest: "" };
         const periodText = metrics.earliest ? (metrics.latest && metrics.latest !== metrics.earliest ? `${metrics.earliest} ~ ${metrics.latest}` : metrics.earliest) : "";
@@ -20237,43 +20333,49 @@ end $$;`;
         if (showPayment && state.financeDbData && Array.isArray(state.financeDbData.collection)) {
           const normName = (n) => String(n || "").replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase();
           const targetNorm = normName(siteName);
-          const colRow = state.financeDbData.collection.find((c) => c && c.siteName && normName(c.siteName) === targetNorm);
+          const colList = state.financeDbData.collection;
+          const colRow = colList.find((c) => c && c.siteName === siteName)
+            || colList.find((c) => c && c.siteName && normName(c.siteName) === targetNorm);
           if (colRow) {
-            const fin = getCollectionRowFinancials(colRow);
+            const finShare = extractCollectionExtraForShare(colRow);
             const stages = [];
             const sMeta = (colRow.stageMeta && typeof colRow.stageMeta === "object") ? colRow.stageMeta : {};
             let hasUnpaidScheduled = false;
-            COL_STAGE_DEFS.forEach((st) => {
+            (Array.isArray(COL_STAGE_DEFS) ? COL_STAGE_DEFS : []).forEach((st) => {
               const amount = Number(colRow[st.key]) || 0;
               const meta = sMeta[st.key] || {};
               const dueYmd = normalizeDateYmd(meta.dueDate || meta.date || "");
               const paidYmd = normalizeDateYmd(meta.paidDate || "");
               if (amount > 0) {
                 stages.push({ label: st.label, amount, paid: true, date: paidYmd || dueYmd || "" });
-              } else if (dueYmd && fin.uncollected > 0) {
-                const contractBase = Number(colRow.contractAmount) || fin.total || 0;
+              } else if (dueYmd && finShare.uncollected > 0) {
+                const contractBase = finShare.contractAmount || finShare.total || 0;
                 const schedAmt = (Number(meta.pct) || 0) > 0 && contractBase > 0
                   ? Math.round((contractBase * Number(meta.pct)) / 100)
-                  : (st.key === "finalPayment" ? fin.uncollected : 0);
+                  : (st.key === "finalPayment" ? finShare.uncollected : 0);
                 if (schedAmt > 0) {
                   hasUnpaidScheduled = true;
                   stages.push({ label: st.label, amount: schedAmt, paid: false, date: dueYmd });
                 }
               }
             });
-            if (fin.uncollected > 0 && !hasUnpaidScheduled) {
+            if (finShare.uncollected > 0 && !hasUnpaidScheduled) {
               const fallbackDue = normalizeDateYmd(colRow.nextDueDate || "") || (metrics.latest || "");
-              stages.push({ label: "남은 잔금", amount: fin.uncollected, paid: false, date: fallbackDue });
+              stages.push({ label: "남은 잔금", amount: finShare.uncollected, paid: false, date: fallbackDue });
             }
             payment = {
-              total: fin.total,
-              collected: fin.collected,
-              uncollected: fin.uncollected,
+              total: finShare.total,
+              contractAmount: finShare.contractAmount,
+              extraAmount: finShare.extraAmount,
+              extraReason: finShare.extraReason,
+              collected: finShare.collected,
+              uncollected: finShare.uncollected,
               stages
             };
           }
         }
 
+        const info = getSiteInfo(siteName) || {};
         const { contacts, managerText, phone: managerPhone } = getClientShareManagerContact(siteName);
         return {
           enabled: shareCfg.enabled !== false,
@@ -20296,10 +20398,21 @@ end $$;`;
 
       window.syncActiveClientShareForSite = function (siteName) {
         if (!siteName || !window.WSSupabaseV3 || typeof window.WSSupabaseV3.persistSnapshot !== "function") return;
-        const info = getSiteInfo(siteName);
-        if (!info || !info.clientShare || !info.clientShare.enabled || !info.clientShare.token) return;
-        const payload = buildClientSharePayload(siteName, info.clientShare);
-        Promise.resolve(window.WSSupabaseV3.persistSnapshot("client_share::" + info.clientShare.token, payload)).catch(() => {});
+        const cs = getClientShareConfig(siteName);
+        if (!cs || !cs.enabled || !cs.token) return;
+        const needFinanceSync = cs.showPayment !== false
+          && !state.financeLoaded
+          && (typeof canViewFinance !== "function" || canViewFinance())
+          && window.WSDataService && typeof window.WSDataService.getFinanceDbData === "function";
+        if (needFinanceSync) {
+          ensureClientShareFinanceLoaded().then(() => {
+            const payload = buildClientSharePayload(siteName, cs);
+            return window.WSSupabaseV3.persistSnapshot("client_share::" + cs.token, payload);
+          }).catch(() => {});
+          return;
+        }
+        const payload = buildClientSharePayload(siteName, cs);
+        Promise.resolve(window.WSSupabaseV3.persistSnapshot("client_share::" + cs.token, payload)).catch(() => {});
       };
 
       window.openClientShareModal = function (siteName) {
@@ -20309,8 +20422,7 @@ end $$;`;
         const fEl = document.getElementById("syncStatusModalFooter");
         if (!tEl || !bEl || !fEl) return;
 
-        const info = getSiteInfo(siteName) || {};
-        const existing = info.clientShare || {};
+        const existing = getClientShareConfig(siteName) || {};
         const token = existing.token || generateClientShareToken();
         const enabled = existing.token ? (existing.enabled !== false) : true;
         const showPayment = existing.showPayment !== false;
@@ -20323,6 +20435,9 @@ end $$;`;
           ? DEFAULT_CLIENT_SHARE_NOTICE
           : existing.noticeText;
         state._clientShareDraft = { siteName, token, enabled, showPayment, noticeText };
+        if (showPayment && !state.financeLoaded && (typeof canViewFinance !== "function" || canViewFinance())) {
+          ensureClientShareFinanceLoaded().catch(() => {});
+        }
 
         tEl.textContent = `🔗 [${siteName}] 고객용 진행 현황 공유`;
         if (cEl) cEl.style.display = "inline-flex";
@@ -20345,11 +20460,12 @@ end $$;`;
                 </label>
               </div>
 
-              <div style="display:flex;gap:14px;flex-wrap:wrap;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">
+              <div style="display:flex;flex-direction:column;gap:4px;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">
                 <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#1e293b;cursor:pointer;">
                   <input type="checkbox" id="csPayChk" ${d.showPayment ? "checked" : ""} onchange="state._clientShareDraft.showPayment = this.checked;" style="width:16px;height:16px;accent-color:#2563eb;">
                   💰 수금 진행 현황 함께 표시
                 </label>
+                <div style="font-size:11px;color:#64748b;padding-left:22px;">켜면 계약금액·추가공사금(있는 경우)·입금/잔금 현황이 고객 화면에 함께 표시됩니다.</div>
               </div>
 
               <div class="fg" style="margin:0;">
@@ -20437,9 +20553,9 @@ end $$;`;
         const d = state._clientShareDraft;
         if (!d || !d.siteName) return;
         if (!state.dashData) state.dashData = {};
-        if (!state.dashData.siteInfos) state.dashData.siteInfos = {};
-        const prev = state.dashData.siteInfos[d.siteName] || {};
-        const prevShare = prev.clientShare || null;
+        if (!state.dashData.siteInfoMap) state.dashData.siteInfoMap = {};
+        const baseInfo = state.dashData.siteInfoMap[d.siteName] || getSiteInfo(d.siteName) || {};
+        const prevShare = getClientShareConfig(d.siteName) || null;
         const clientShare = {
           token: d.token,
           enabled: !!d.enabled,
@@ -20447,7 +20563,22 @@ end $$;`;
           noticeText: String(d.noticeText || ""),
           updatedAt: new Date().toISOString()
         };
-        state.dashData.siteInfos[d.siteName] = { ...prev, clientShare };
+        if (clientShare.showPayment && !state.financeLoaded && (typeof canViewFinance !== "function" || canViewFinance())) {
+          await ensureClientShareFinanceLoaded();
+        }
+        state.dashData.siteInfoMap[d.siteName] = Object.assign({
+          address: "",
+          doorPassword: "",
+          officePhone: "",
+          memo: "",
+          driveUrl: "",
+          consentDone: false,
+          elevatorCoverDone: false,
+          officeNoticeDone: false
+        }, baseInfo, { clientShare });
+        if (state.dashData.siteInfos && state.dashData.siteInfos[d.siteName]) {
+          state.dashData.siteInfos[d.siteName] = Object.assign({}, state.dashData.siteInfos[d.siteName], { clientShare });
+        }
         const payload = buildClientSharePayload(d.siteName, clientShare);
         if (!silent && typeof window.recordAuditLog === "function") {
           const shareSpecs = [
@@ -20465,7 +20596,9 @@ end $$;`;
         }
         try {
           if (window.WSSupabaseV3 && typeof window.WSSupabaseV3.persistSnapshot === "function") {
-            await window.WSSupabaseV3.persistSnapshot("dash_main", state.dashData);
+            if (typeof window.WSSupabaseV3.isSupabaseActive !== "function" || window.WSSupabaseV3.isSupabaseActive()) {
+              await window.WSSupabaseV3.persistSnapshot("dashboard_main", state.dashData, { skipShareSync: true });
+            }
             await window.WSSupabaseV3.persistSnapshot("client_share::" + d.token, payload);
           }
           if (!silent) showToast(d.enabled ? "✅ 고객 공유 링크가 저장 및 최신 반영되었습니다." : "🔒 고객 공유 링크가 비활성화되었습니다.");
@@ -20512,18 +20645,25 @@ end $$;`;
 
       function mergePreservedShareConfigs(targetDash, prevDash) {
         if (!targetDash || typeof targetDash !== "object" || !prevDash || typeof prevDash !== "object") return targetDash;
-        if (prevDash.siteInfoMap && typeof prevDash.siteInfoMap === "object") {
+        const mergeShareKey = (sn, prevEntry, shareKey) => {
+          if (!prevEntry || !prevEntry[shareKey]) return;
           if (!targetDash.siteInfoMap || typeof targetDash.siteInfoMap !== "object") targetDash.siteInfoMap = {};
+          const curEntry = targetDash.siteInfoMap[sn] || {};
+          const curUpd = curEntry[shareKey] && curEntry[shareKey].updatedAt ? String(curEntry[shareKey].updatedAt) : "";
+          const prevUpd = prevEntry[shareKey].updatedAt ? String(prevEntry[shareKey].updatedAt) : "";
+          if (!curEntry[shareKey] || prevUpd > curUpd) {
+            targetDash.siteInfoMap[sn] = Object.assign({}, curEntry, { [shareKey]: prevEntry[shareKey] });
+          }
+        };
+        if (prevDash.siteInfoMap && typeof prevDash.siteInfoMap === "object") {
           Object.keys(prevDash.siteInfoMap).forEach((sn) => {
-            const prevEntry = prevDash.siteInfoMap[sn];
-            if (prevEntry && prevEntry.partnerShare) {
-              const curEntry = targetDash.siteInfoMap[sn] || {};
-              const curUpd = curEntry.partnerShare && curEntry.partnerShare.updatedAt ? String(curEntry.partnerShare.updatedAt) : "";
-              const prevUpd = prevEntry.partnerShare.updatedAt ? String(prevEntry.partnerShare.updatedAt) : "";
-              if (!curEntry.partnerShare || prevUpd > curUpd) {
-                targetDash.siteInfoMap[sn] = Object.assign({}, curEntry, { partnerShare: prevEntry.partnerShare });
-              }
-            }
+            mergeShareKey(sn, prevDash.siteInfoMap[sn], "partnerShare");
+            mergeShareKey(sn, prevDash.siteInfoMap[sn], "clientShare");
+          });
+        }
+        if (prevDash.siteInfos && typeof prevDash.siteInfos === "object") {
+          Object.keys(prevDash.siteInfos).forEach((sn) => {
+            mergeShareKey(sn, prevDash.siteInfos[sn], "clientShare");
           });
         }
         return targetDash;
@@ -25059,11 +25199,21 @@ end $$;`;
           const t0 = performance.now();
           await upsertRows("ws_state_store", [row], "key");
           if (!(opts && opts.skipShareSync)) {
-            if ((key === "dash_main" || key === "finance_main") && typeof window.syncActiveClientShareForSite === "function" && state.dashData && state.dashData.siteInfos) {
-              Object.keys(state.dashData.siteInfos).forEach((sn) => {
-                const cs = state.dashData.siteInfos[sn] && state.dashData.siteInfos[sn].clientShare;
-                if (cs && cs.enabled && cs.token) window.syncActiveClientShareForSite(sn);
-              });
+            if ((key === "dashboard_main" || key === "dash_main" || key === "finance_db" || key === "finance_main") && typeof window.syncActiveClientShareForSite === "function" && state.dashData) {
+              const clientShareSites = new Set();
+              if (state.dashData.siteInfoMap && typeof state.dashData.siteInfoMap === "object") {
+                Object.keys(state.dashData.siteInfoMap).forEach((sn) => {
+                  const cs = state.dashData.siteInfoMap[sn] && state.dashData.siteInfoMap[sn].clientShare;
+                  if (cs && cs.enabled && cs.token) clientShareSites.add(sn);
+                });
+              }
+              if (state.dashData.siteInfos && typeof state.dashData.siteInfos === "object") {
+                Object.keys(state.dashData.siteInfos).forEach((sn) => {
+                  const cs = state.dashData.siteInfos[sn] && state.dashData.siteInfos[sn].clientShare;
+                  if (cs && cs.enabled && cs.token) clientShareSites.add(sn);
+                });
+              }
+              clientShareSites.forEach((sn) => window.syncActiveClientShareForSite(sn));
             }
             if (key === "dashboard_main" && typeof window.syncActivePartnerShareForSite === "function" && state.dashData && state.dashData.siteInfoMap) {
               Object.keys(state.dashData.siteInfoMap).forEach((sn) => {
@@ -26259,6 +26409,8 @@ end $$;`;
               if (idx >= 0) nextCol[idx] = Object.assign({}, nextCol[idx], saved);
               else nextCol.unshift(saved);
               const nextFb = Object.assign({}, fb, { collection: nextCol, updatedAt: new Date().toISOString() });
+              state.financeDbData = nextFb;
+              if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(nextFb);
               await persistDomainSnapshot("finance_db", nextFb);
               await upsertRows("ws_finance_store", [{ record_key: "collection::" + savedId, category: "collection", payload: saved, updated_at: new Date().toISOString() }], "record_key");
               return { success: true, row: saved, id: savedId, source: "supabase" };
@@ -26280,6 +26432,8 @@ end $$;`;
                 collection: [...newOnes, ...(fb.collection || [])],
                 updatedAt: new Date().toISOString()
               });
+              state.financeDbData = nextFb;
+              if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(nextFb);
               await persistDomainSnapshot("finance_db", nextFb);
               if (newOnes.length > 0) {
                 await upsertRows("ws_finance_store", newOnes.map(r => ({ record_key: "collection::" + r.id, category: "collection", payload: r, updated_at: new Date().toISOString() })), "record_key");
@@ -26297,6 +26451,8 @@ end $$;`;
                 collection: (fb.collection || []).filter(r => r && r.id !== id),
                 updatedAt: new Date().toISOString()
               });
+              state.financeDbData = nextFb;
+              if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(nextFb);
               await persistDomainSnapshot("finance_db", nextFb);
               await deleteRowsByIds("ws_finance_store", "record_key", ["collection::" + id]);
               return { success: true, source: "supabase" };
