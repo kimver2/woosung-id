@@ -2335,6 +2335,122 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     v2RootHtml.includes('function normalizeMonthStr(m)') &&
     v2RootHtml.includes('window.onFixedMasterAmountInput')
   );
+
+  // [관리자 전용 비밀번호(조항만 · admin) 분리 & 공용 비밀번호 분리 런타임 QA]
+  const v3RootHtml = fs.readFileSync(path.join(__dirname, '..', 'v3.html'), 'utf8');
+  const v3DocsHtml = fs.readFileSync(path.join(__dirname, '..', 'docs', 'v3.html'), 'utf8');
+  verifyAllScriptBlocks(v3RootHtml, '루트 v3.html');
+  verifyAllScriptBlocks(v3DocsHtml, 'docs/v3.html');
+  assertTest('미러 HTML 8종(index/v2/preview_tabs/v3 및 docs/*) 100% 동일 동기화 검증',
+    idxRootHtml === v3RootHtml && v3RootHtml === v3DocsHtml &&
+    idxRootHtml === idxDocsHtml && idxRootHtml === v2RootHtml &&
+    v2RootHtml === previewHtml && v2RootHtml === v2DocsHtml && v2RootHtml === previewDocsHtml
+  );
+
+  const origPropsService = sandbox.PropertiesService;
+  const scriptPropStore = {};
+  sandbox.PropertiesService = Object.assign({}, origPropsService, {
+    getScriptProperties: () => ({
+      getProperty: (k) => (Object.prototype.hasOwnProperty.call(scriptPropStore, k) ? scriptPropStore[k] : ''),
+      setProperty: (k, v) => { scriptPropStore[k] = String(v); },
+      deleteProperty: (k) => { delete scriptPropStore[k]; }
+    })
+  });
+  try {
+    const unauthRes = sandbox.changeAdminPasswordFromWeb('5678', '송지은');
+    const shortRes = sandbox.changeAdminPasswordFromWeb('123', '조항만');
+    const setAdmRes = sandbox.changeAdminPasswordFromWeb('5678', '조항만');
+    const ceoAdmOk = sandbox.verifyDashboardAccessPinFromWeb('5678', '조항만');
+    const ceoSharedBlocked = sandbox.verifyDashboardAccessPinFromWeb('0112', '조항만');
+    const admNewOk = sandbox.verifyDashboardAccessPinFromWeb('5678', 'admin');
+    const admUpperOk = sandbox.verifyDashboardAccessPinFromWeb('5678', 'ADMIN');
+    const admOldFallbackBlocked = sandbox.verifyDashboardAccessPinFromWeb('007077', 'admin');
+    const admSharedBlocked = sandbox.verifyDashboardAccessPinFromWeb('0112', 'admin');
+    const staffSharedOk = sandbox.verifyDashboardAccessPinFromWeb('0112', '김종혁');
+    const staffAdmBlocked = sandbox.verifyDashboardAccessPinFromWeb('5678', '김종혁');
+    const tokensAfterAdm = sandbox.getValidDashboardAuthTokens();
+    const chgSharedRes = sandbox.changeSharedPasswordFromWeb('2468', '조항만');
+    const staffNewSharedOk = sandbox.verifyDashboardAccessPinFromWeb('2468', '김종혁');
+    const ceoStillAdmOk = sandbox.verifyDashboardAccessPinFromWeb('5678', '조항만');
+    const ceoNewSharedBlocked = sandbox.verifyDashboardAccessPinFromWeb('2468', '조항만');
+
+    assertTest('현장서식.js 내 관리자 전용 비밀번호(changeAdminPasswordFromWeb) 권한·길이 검증 및 조항만/admin 분리 인증 런타임 검증',
+      typeof sandbox.getDashboardAdminPin === 'function' &&
+      typeof sandbox.changeAdminPasswordFromWeb === 'function' &&
+      unauthRes.success === false &&
+      shortRes.success === false &&
+      setAdmRes.success === true &&
+      sandbox.getDashboardAdminPin() === '5678' &&
+      ceoAdmOk.success === true && ceoAdmOk.usedAdminPin === true &&
+      ceoSharedBlocked.success === false &&
+      admNewOk.success === true && admNewOk.isAdmin === true && admNewOk.usedAdminPin === true &&
+      admUpperOk.success === true &&
+      admOldFallbackBlocked.success === false &&
+      admSharedBlocked.success === false &&
+      staffSharedOk.success === true && staffSharedOk.usedAdminPin === false &&
+      staffAdmBlocked.success === false &&
+      tokensAfterAdm.indexOf(sandbox.computeDashboardUserToken('조항만', '5678')) !== -1 &&
+      tokensAfterAdm.indexOf(sandbox.computeDashboardUserToken('admin', '5678')) !== -1 &&
+      tokensAfterAdm.indexOf(sandbox.computeDashboardUserToken('조항만', '0112')) === -1 &&
+      tokensAfterAdm.indexOf(sandbox.computeDashboardUserToken('admin', '007077')) === -1 &&
+      chgSharedRes.success === true &&
+      chgSharedRes.adminPinConfigured === true &&
+      chgSharedRes.token === sandbox.computeDashboardUserToken('조항만', '5678') &&
+      sandbox.getDashboardAdminPin() === '5678' &&
+      staffNewSharedOk.success === true &&
+      ceoStillAdmOk.success === true &&
+      ceoNewSharedBlocked.success === false &&
+      code.includes('action === "changeAdminPassword"')
+    );
+  } finally {
+    sandbox.PropertiesService = origPropsService;
+  }
+
+  // index.html 클라이언트 verifyUserPinAgainstValues 런타임 분기 검증 (초기 폴백 + 관리자 비밀번호 설정 후 분리)
+  {
+    const tokMatch = idxRootHtml.match(/function computeDashboardUserToken\([\s\S]*?\n      \}/);
+    const verifyMatch = idxRootHtml.match(/function verifyUserPinAgainstValues\([\s\S]*?\n      \}/);
+    const clientAuthVm = vm.createContext({
+      DEFAULT_PIN_FALLBACK: '0112',
+      ADMIN_USER_FALLBACK: 'admin',
+      ADMIN_PIN_FALLBACK: '007077'
+    });
+    if (tokMatch && verifyMatch) {
+      vm.runInContext(tokMatch[0] + '\n' + verifyMatch[0], clientAuthVm);
+    }
+    const members = ['조항만', '송지은', '전예린', '한송이'];
+    const initCeo = clientAuthVm.verifyUserPinAgainstValues && clientAuthVm.verifyUserPinAgainstValues('조항만', '0112', '0112', '', members);
+    const initAdm = clientAuthVm.verifyUserPinAgainstValues && clientAuthVm.verifyUserPinAgainstValues('admin', '007077', '0112', '', members);
+    const initAdmSharedFail = clientAuthVm.verifyUserPinAgainstValues && clientAuthVm.verifyUserPinAgainstValues('admin', '0112', '0112', '', members);
+    const sepCeoOk = clientAuthVm.verifyUserPinAgainstValues && clientAuthVm.verifyUserPinAgainstValues('조항만', '9876', '0112', '9876', members);
+    const sepCeoOldFail = clientAuthVm.verifyUserPinAgainstValues && clientAuthVm.verifyUserPinAgainstValues('조항만', '0112', '0112', '9876', members);
+    const sepAdmOk = clientAuthVm.verifyUserPinAgainstValues && clientAuthVm.verifyUserPinAgainstValues('admin', '9876', '0112', '9876', members);
+    const sepAdmOldFail = clientAuthVm.verifyUserPinAgainstValues && clientAuthVm.verifyUserPinAgainstValues('admin', '007077', '0112', '9876', members);
+    const sepStaffOk = clientAuthVm.verifyUserPinAgainstValues && clientAuthVm.verifyUserPinAgainstValues('송지은', '0112', '0112', '9876', members);
+    const sepStaffAdmFail = clientAuthVm.verifyUserPinAgainstValues && clientAuthVm.verifyUserPinAgainstValues('송지은', '9876', '0112', '9876', members);
+    const sepStrangerFail = clientAuthVm.verifyUserPinAgainstValues && clientAuthVm.verifyUserPinAgainstValues('외부인', '0112', '0112', '9876', members);
+
+    assertTest('index.html 클라이언트 관리자 비밀번호 UI, Audit Log 마스킹 연동 및 로그인 분기 런타임 검증',
+      Boolean(tokMatch && verifyMatch) &&
+      idxRootHtml.includes('id="newAdminPinInput"') &&
+      idxRootHtml.includes('id="newAdminPinConfirmInput"') &&
+      idxRootHtml.includes('id="btnToggleAdminPinVis"') &&
+      idxRootHtml.includes('id="btnSubmitAdminPin"') &&
+      idxRootHtml.includes('관리자 비밀번호 변경') &&
+      idxRootHtml.includes('saveAdminPin') &&
+      fs.readFileSync('data/dashboard_data.js', 'utf8').includes('changeAdminPassword:') &&
+      initCeo && initCeo.success === true &&
+      initAdm && initAdm.success === true &&
+      initAdmSharedFail && initAdmSharedFail.success === false &&
+      sepCeoOk && sepCeoOk.success === true && sepCeoOk.usedAdminPin === true &&
+      sepCeoOldFail && sepCeoOldFail.success === false &&
+      sepAdmOk && sepAdmOk.success === true && sepAdmOk.usedAdminPin === true &&
+      sepAdmOldFail && sepAdmOldFail.success === false &&
+      sepStaffOk && sepStaffOk.success === true && sepStaffOk.usedAdminPin === false &&
+      sepStaffAdmFail && sepStaffAdmFail.success === false &&
+      sepStrangerFail && sepStrangerFail.success === false
+    );
+  }
 }
 if (isVerbose) {
   rawConsoleLog('\n========================================================');

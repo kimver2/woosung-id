@@ -22792,6 +22792,18 @@ end $$;`;
                   <button type="button" class="btn-act-blue" id="btnSubmitSharedPin" onclick="submitChangeSharedPassword()" style="height:34px;white-space:nowrap;">비밀번호 변경</button>
                 </div>
               </div>
+              <div style="background:#f8fafc;padding:14px;border-radius:10px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:220px;">
+                  <div style="font-weight:800;font-size:13.5px;color:#0f172a;">🛡️ 관리자 비밀번호 변경</div>
+                  <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">조항만 및 admin 계정 로그인 시에만 적용되는 관리자 전용 비밀번호를 변경합니다.</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <input type="password" id="newAdminPinInput" class="ws-input" placeholder="새 관리자 비밀번호 (4자리 이상)" autocomplete="new-password" style="width:190px;height:34px;font-size:12.5px;" onkeydown="if(event.key==='Enter')submitChangeAdminPassword()">
+                  <input type="password" id="newAdminPinConfirmInput" class="ws-input" placeholder="비밀번호 확인" autocomplete="new-password" style="width:140px;height:34px;font-size:12.5px;" onkeydown="if(event.key==='Enter')submitChangeAdminPassword()">
+                  <button type="button" class="btn-tool-tag" id="btnToggleAdminPinVis" onclick="toggleAdminPinVisibility()" style="height:34px;padding:0 10px;white-space:nowrap;">👁️ 보기</button>
+                  <button type="button" class="btn-act-blue" id="btnSubmitAdminPin" onclick="submitChangeAdminPassword()" style="height:34px;white-space:nowrap;">관리자 비밀번호 변경</button>
+                </div>
+              </div>
               ` : ""}
             </div>`;
         }
@@ -22843,28 +22855,36 @@ end $$;`;
           });
         }
       };
-      window.toggleSharedPinVisibility = function () {
-        const inp1 = document.getElementById("newSharedPinInput");
-        const inp2 = document.getElementById("newSharedPinConfirmInput");
-        const btn = document.getElementById("btnToggleSharedPinVis");
+      function togglePinInputsVisibility(input1Id, input2Id, btnId) {
+        const inp1 = document.getElementById(input1Id);
+        const inp2 = document.getElementById(input2Id);
+        const btn = document.getElementById(btnId);
         if (!inp1) return;
         const isPw = inp1.type === "password";
         inp1.type = isPw ? "text" : "password";
         if (inp2) inp2.type = isPw ? "text" : "password";
         if (btn) btn.textContent = isPw ? "🙈 숨기기" : "👁️ 보기";
+      }
+      window.toggleSharedPinVisibility = function () {
+        togglePinInputsVisibility("newSharedPinInput", "newSharedPinConfirmInput", "btnToggleSharedPinVis");
       };
-      window.submitChangeSharedPassword = async function () {
+      window.toggleAdminPinVisibility = function () {
+        togglePinInputsVisibility("newAdminPinInput", "newAdminPinConfirmInput", "btnToggleAdminPinVis");
+      };
+      async function submitPasswordChangeConfig(cfg) {
+        const isAdminMode = cfg.mode === "admin";
+        const label = isAdminMode ? "관리자 비밀번호" : "공용 비밀번호";
         if (!canManageSharedPassword()) {
-          return showToast("⚠️ 공용 비밀번호 변경 권한이 없습니다. (조항만 · admin 전용)");
+          return showToast(`⚠️ ${label} 변경 권한이 없습니다. (조항만 · admin 전용)`);
         }
-        const inp1 = document.getElementById("newSharedPinInput");
-        const inp2 = document.getElementById("newSharedPinConfirmInput");
-        const btn = document.getElementById("btnSubmitSharedPin");
+        const inp1 = document.getElementById(cfg.inputId);
+        const inp2 = document.getElementById(cfg.confirmId);
+        const btn = document.getElementById(cfg.btnId);
         const newPin = inp1 ? inp1.value.trim() : "";
         const confirmPin = inp2 ? inp2.value.trim() : "";
         if (!newPin || newPin.length < 4) {
           if (inp1) inp1.focus();
-          return showToast("⚠️ 새 공용 비밀번호는 최소 4자리 이상 입력해 주세요.");
+          return showToast(`⚠️ 새 ${label}는 최소 4자리 이상 입력해 주세요.`);
         }
         if (newPin !== confirmPin) {
           if (inp2) inp2.focus();
@@ -22873,19 +22893,36 @@ end $$;`;
         if (btn && btn.disabled) return;
         if (btn) { btn.disabled = true; btn.textContent = "변경 중..."; }
         const reqUser = getActualAuthUser() || state.authUser || state.currentUser || "조항만";
+        let wasPersistent = true;
+        try {
+          if (!localStorage.getItem(AUTH_COOKIE_NAME) && sessionStorage.getItem(AUTH_COOKIE_NAME)) {
+            wasPersistent = false;
+          }
+        } catch (_) {}
+
         try {
           let res = null;
+          let sbAdminConfigured = false;
           if (window.WSSupabaseV3 && window.WSSupabaseV3.isConfigured()) {
             try {
-              await window.WSSupabaseV3.saveAuthPin(newPin, reqUser);
-              res = { success: true, pin: newPin, message: "공용 비밀번호가 Supabase에 저장되었습니다." };
+              const sbSave = isAdminMode
+                ? await window.WSSupabaseV3.saveAdminPin(newPin, reqUser)
+                : await window.WSSupabaseV3.saveAuthPin(newPin, reqUser);
+              sbAdminConfigured = isAdminMode || Boolean(sbSave && sbSave.adminPinConfigured);
+              res = {
+                success: true,
+                pin: newPin,
+                adminPinConfigured: sbAdminConfigured,
+                message: `${label}가 Supabase에 저장되었습니다.`
+              };
             } catch (eSbPin) {
               console.warn("Supabase auth_config 저장 경고:", eSbPin);
             }
           }
+          const gasAction = isAdminMode ? "changeAdminPassword" : "changeSharedPassword";
           if (location.protocol.startsWith("http")) {
             try {
-              const url = `${GAS_AUTH_API_URL}?action=changeSharedPassword&newPin=${encodeURIComponent(newPin)}&authUser=${encodeURIComponent(reqUser)}&_t=${Date.now()}`;
+              const url = `${GAS_AUTH_API_URL}?action=${gasAction}&newPin=${encodeURIComponent(newPin)}&authUser=${encodeURIComponent(reqUser)}&_t=${Date.now()}`;
               const resp = await fetch(url, { method: "GET", redirect: "follow" });
               if (resp.ok) {
                 const gasRes = await resp.json();
@@ -22895,28 +22932,71 @@ end $$;`;
             } catch (eGasPin) {
               if (!res) throw eGasPin;
             }
-          } else if (!res && window.WSDataService && typeof window.WSDataService.changeSharedPassword === "function") {
-            res = await window.WSDataService.changeSharedPassword(newPin, reqUser);
+          } else if (!res && window.WSDataService && typeof window.WSDataService[gasAction] === "function") {
+            res = await window.WSDataService[gasAction](newPin, reqUser);
+            if (res && res.ok && res.success === undefined) res.success = true;
           } else if (!res) {
             res = { success: true, pin: newPin };
           }
           if (res && res.success) {
-            try { localStorage.setItem("ws_dashboard_custom_pin_v2", newPin); } catch (e) {}
-            if (String(reqUser).toLowerCase() !== "admin") {
-              const newTok = res.token || computeDashboardUserToken(reqUser, newPin);
-              saveTopAuthData(newTok, reqUser, true);
+            const storageKey = isAdminMode ? ADMIN_PIN_STORAGE_KEY : SHARED_PIN_STORAGE_KEY;
+            try { localStorage.setItem(storageKey, newPin); } catch (e) {}
+            const reqLower = String(reqUser || "").replace(/\s+/g, "").trim().toLowerCase();
+            if (isAdminMode) {
+              if (reqLower === "조항만" || reqLower === "admin" || reqLower === "chohangman") {
+                const tokenUser = reqLower === "admin" ? ADMIN_USER_FALLBACK : reqUser;
+                const newTok = res.token || computeDashboardUserToken(tokenUser, newPin);
+                saveTopAuthData(newTok, tokenUser, wasPersistent);
+              }
+            } else {
+              let hasAdminPin = Boolean(res.adminPinConfigured || sbAdminConfigured);
+              if (!hasAdminPin) {
+                try { hasAdminPin = Boolean(localStorage.getItem(ADMIN_PIN_STORAGE_KEY)); } catch (_) {}
+              }
+              if (reqLower !== "admin" && !hasAdminPin) {
+                const newTok = res.token || computeDashboardUserToken(reqUser, newPin);
+                saveTopAuthData(newTok, reqUser, wasPersistent);
+              }
+            }
+            if (typeof window.recordAuditLog === "function") {
+              window.recordAuditLog(
+                "시스템",
+                isAdminMode ? "관리자 비밀번호 변경" : "공용 비밀번호 변경",
+                isAdminMode ? "조항만 · admin" : "전사 공용",
+                isAdminMode
+                  ? "관리자 전용 비밀번호 변경 완료 (비밀번호 비공개)"
+                  : "대시보드 공용 비밀번호 변경 완료 (비밀번호 비공개)"
+              );
             }
             if (inp1) inp1.value = "";
             if (inp2) inp2.value = "";
-            showToast("✅ " + (res.message || "공용 비밀번호가 성공적으로 변경되었습니다."));
+            showToast("✅ " + (res.message || `${label}가 성공적으로 변경되었습니다.`));
           } else {
             showToast("⚠️ " + ((res && res.error) || "비밀번호 변경에 실패했습니다."));
           }
         } catch (err) {
           showToast("⚠️ 통신 오류: " + (err.message || String(err)));
         } finally {
-          if (btn) { btn.disabled = false; btn.textContent = "비밀번호 변경"; }
+          if (btn) { btn.disabled = false; btn.textContent = cfg.btnLabel; }
         }
+      }
+      window.submitChangeSharedPassword = function () {
+        return submitPasswordChangeConfig({
+          mode: "shared",
+          inputId: "newSharedPinInput",
+          confirmId: "newSharedPinConfirmInput",
+          btnId: "btnSubmitSharedPin",
+          btnLabel: "비밀번호 변경"
+        });
+      };
+      window.submitChangeAdminPassword = function () {
+        return submitPasswordChangeConfig({
+          mode: "admin",
+          inputId: "newAdminPinInput",
+          confirmId: "newAdminPinConfirmInput",
+          btnId: "btnSubmitAdminPin",
+          btnLabel: "관리자 비밀번호 변경"
+        });
       };
       window.addSettingItem = function (kind) {
         const s = state.settingsData;
@@ -23562,8 +23642,8 @@ end $$;`;
               state.dirtyMobileTabs.finance = true;
               renderActiveViews();
               label = "재무 DB";
-            } else if (key === "auth_config" && data.sharedPin) {
-              try { localStorage.setItem("ws_dashboard_custom_pin_v2", String(data.sharedPin)); } catch (_) {}
+            } else if (key === "auth_config" && data) {
+              syncAuthConfigLocalCache(data);
             } else if (key === "audit_logs" && Array.isArray(data.list)) {
               const mergedAudit = mergeAuditLogLists(getLocalAuditLogs(), data.list, AUDIT_MAX_LOGS);
               saveLocalAuditLogs(mergedAudit);
@@ -23724,8 +23804,8 @@ end $$;`;
           if (byKey.finance_db && ds && ds.saveFinanceCache) {
             ds.saveFinanceCache(byKey.finance_db);
           }
-          if (byKey.auth_config && byKey.auth_config.sharedPin) {
-            try { localStorage.setItem("ws_dashboard_custom_pin_v2", String(byKey.auth_config.sharedPin)); } catch (_) {}
+          if (byKey.auth_config) {
+            syncAuthConfigLocalCache(byKey.auth_config);
           }
           if (byKey.audit_logs && Array.isArray(byKey.audit_logs.list)) {
             const mergedAudit = mergeAuditLogLists(getLocalAuditLogs(), byKey.audit_logs.list, AUDIT_MAX_LOGS);
@@ -23799,49 +23879,82 @@ end $$;`;
 
         async function verifyPinFast(user, pin) {
           if (!isSupabaseActive()) return null;
-          const valName = String(user || "").trim();
+          const valName = String(user || "").replace(/\s+/g, "").trim();
           const valPin = String(pin || "").trim();
-          if (valName.toLowerCase() === ADMIN_USER_FALLBACK && valPin === ADMIN_PIN_FALLBACK) {
-            return { success: true, user: ADMIN_USER_FALLBACK, isAdmin: true, token: computeDashboardUserToken(ADMIN_USER_FALLBACK, ADMIN_PIN_FALLBACK), source: "supabase" };
-          }
+          const lowerCompact = valName.toLowerCase();
+          const isAdminAccount = lowerCompact === ADMIN_USER_FALLBACK || lowerCompact === "조항만";
           try {
             const rows = await selectStateRows(["auth_config", "settings_main"]);
             const authRow = rows.find(r => r.key === "auth_config");
             const settingsRow = rows.find(r => r.key === "settings_main");
-            if (!authRow || !authRow.payload || !authRow.payload.sharedPin) {
+            const authPayload = (authRow && authRow.payload && typeof authRow.payload === "object") ? authRow.payload : null;
+            if (!authPayload) {
               return null; // Supabase에 auth_config가 아직 없으면 GAS로 폴백
             }
-            const sharedPin = String(authRow.payload.sharedPin).trim();
-            try { localStorage.setItem("ws_dashboard_custom_pin_v2", sharedPin); } catch (_) {}
+            const sharedPin = String(authPayload.sharedPin || "").trim();
+            const adminPin = String(authPayload.adminPin || "").trim();
+            syncAuthConfigLocalCache(authPayload);
+            if (!sharedPin && (!isAdminAccount || !adminPin)) {
+              return null;
+            }
             let members = getMembersList();
             if (settingsRow && settingsRow.payload && Array.isArray(settingsRow.payload.members)) {
               members = Array.from(new Set([...members, ...settingsRow.payload.members.map(m => m && m.name).filter(Boolean)]));
             }
-            const matchedMember = members.find(m => m.toLowerCase() === valName.toLowerCase());
-            if (!matchedMember) {
-              return { success: false, error: "등록되지 않은 사용자입니다. (구성원 설정 확인)", source: "supabase" };
-            }
-            if (valPin === sharedPin) {
-              return { success: true, user: matchedMember, isAdmin: false, token: computeDashboardUserToken(matchedMember, valPin), source: "supabase" };
-            }
-            return { success: false, error: "비밀번호(PIN)가 일치하지 않습니다.", source: "supabase" };
+            const verified = verifyUserPinAgainstValues(valName, valPin, sharedPin || DEFAULT_PIN_FALLBACK, adminPin, members);
+            return Object.assign({}, verified, { source: "supabase" });
           } catch (e) {
             return null;
           }
         }
 
-        async function saveAuthPin(newPin, updatedBy) {
-          if (!isConfigured()) return;
+        async function saveAuthConfigField(fieldName, newPin, updatedBy) {
+          if (!isConfigured()) return null;
           const cleanPin = String(newPin || "").trim();
-          if (!cleanPin) return;
-          try { localStorage.setItem("ws_dashboard_custom_pin_v2", cleanPin); } catch (_) {}
-          return enqueueKeyWrite("auth_config", () =>
-            persistDomainSnapshot("auth_config", {
-              sharedPin: cleanPin,
+          if (!cleanPin) return null;
+          const isAdminField = fieldName === "adminPin";
+          const storageKey = isAdminField ? ADMIN_PIN_STORAGE_KEY : SHARED_PIN_STORAGE_KEY;
+          try { localStorage.setItem(storageKey, cleanPin); } catch (_) {}
+          return enqueueKeyWrite("auth_config", async () => {
+            const rows = await selectStateRows(["auth_config"]);
+            const prevPayload = (rows && rows[0] && rows[0].payload && typeof rows[0].payload === "object")
+              ? rows[0].payload
+              : {};
+            let fallbackShared = DEFAULT_PIN_FALLBACK;
+            let fallbackAdmin = "";
+            try {
+              fallbackShared = localStorage.getItem(SHARED_PIN_STORAGE_KEY) || DEFAULT_PIN_FALLBACK;
+              fallbackAdmin = localStorage.getItem(ADMIN_PIN_STORAGE_KEY) || "";
+            } catch (_) {}
+            const nextPayload = Object.assign({}, prevPayload, {
+              sharedPin: String(prevPayload.sharedPin || fallbackShared || DEFAULT_PIN_FALLBACK).trim(),
               updatedAt: new Date().toISOString(),
               updatedBy: updatedBy || getActorName()
-            })
-          );
+            });
+            if (isAdminField) {
+              nextPayload.adminPin = cleanPin;
+              nextPayload.adminUpdatedAt = new Date().toISOString();
+            } else {
+              nextPayload.sharedPin = cleanPin;
+              if (!nextPayload.adminPin && fallbackAdmin) {
+                nextPayload.adminPin = fallbackAdmin;
+              }
+            }
+            await persistDomainSnapshot("auth_config", nextPayload);
+            return {
+              success: true,
+              sharedPin: nextPayload.sharedPin,
+              adminPinConfigured: Boolean(String(nextPayload.adminPin || "").trim())
+            };
+          });
+        }
+
+        function saveAuthPin(newPin, updatedBy) {
+          return saveAuthConfigField("sharedPin", newPin, updatedBy);
+        }
+
+        function saveAdminPin(newPin, updatedBy) {
+          return saveAuthConfigField("adminPin", newPin, updatedBy);
         }
 
         function appendLog(msg) {
@@ -23917,17 +24030,23 @@ end $$;`;
             appendLog("ℹ 재무 DB(finance_db)는 대표/관리자(조항만 · admin) 계정 로그인 시 이관할 수 있습니다.");
           }
 
-          // 공용 PIN 설정이 있으면 auth_config도 시딩 (기존 없을 때만)
+          // 공용/관리자 PIN 설정이 있으면 auth_config도 시딩 (기존 없을 때만)
           try {
             const existingAuth = await selectStateRows(["auth_config"]);
             if (!existingAuth || existingAuth.length === 0) {
               let fallbackPin = DEFAULT_PIN_FALLBACK;
-              try { fallbackPin = localStorage.getItem("ws_dashboard_custom_pin_v2") || DEFAULT_PIN_FALLBACK; } catch (_) {}
-              await persistDomainSnapshot("auth_config", {
+              let fallbackAdminPin = "";
+              try {
+                fallbackPin = localStorage.getItem(SHARED_PIN_STORAGE_KEY) || DEFAULT_PIN_FALLBACK;
+                fallbackAdminPin = localStorage.getItem(ADMIN_PIN_STORAGE_KEY) || "";
+              } catch (_) {}
+              const seedAuth = {
                 sharedPin: fallbackPin,
                 updatedAt: new Date().toISOString(),
                 updatedBy: authU
-              });
+              };
+              if (fallbackAdminPin) seedAuth.adminPin = fallbackAdminPin;
+              await persistDomainSnapshot("auth_config", seedAuth);
             }
           } catch (_) {}
 
@@ -24697,6 +24816,7 @@ end $$;`;
           syncLiveFromSupabase,
           verifyPinFast,
           saveAuthPin,
+          saveAdminPin,
           migrateFromGasToSupabase,
           startRealtime,
           stopRealtime,
@@ -25991,9 +26111,79 @@ end $$;`;
       const AUTH_USER_COOKIE = "ws_dashboard_auth_user_v2";
       const AUTH_LOCKOUT_UNTIL_KEY = "ws_pin_lock_until_v1";
       const AUTH_LOCKOUT_FAIL_KEY = "ws_pin_fail_count_v1";
+      const SHARED_PIN_STORAGE_KEY = "ws_dashboard_custom_pin_v2";
+      const ADMIN_PIN_STORAGE_KEY = "ws_dashboard_custom_admin_pin_v2";
       const DEFAULT_PIN_FALLBACK = "0112";
       const ADMIN_USER_FALLBACK = "admin";
       const ADMIN_PIN_FALLBACK = "007077";
+
+      function syncAuthConfigLocalCache(authPayload) {
+        if (!authPayload || typeof authPayload !== "object") return;
+        const sharedPin = String(authPayload.sharedPin || "").trim();
+        const adminPin = String(authPayload.adminPin || "").trim();
+        if (sharedPin) {
+          try { localStorage.setItem(SHARED_PIN_STORAGE_KEY, sharedPin); } catch (_) {}
+        }
+        if (adminPin) {
+          try { localStorage.setItem(ADMIN_PIN_STORAGE_KEY, adminPin); } catch (_) {}
+        } else if (Object.prototype.hasOwnProperty.call(authPayload, "adminPin") || sharedPin) {
+          try { localStorage.removeItem(ADMIN_PIN_STORAGE_KEY); } catch (_) {}
+        }
+      }
+
+      function verifyUserPinAgainstValues(userName, pin, sharedPin, adminPin, members) {
+        const compactName = String(userName || "").replace(/\s+/g, "").trim();
+        const lowerCompact = compactName.toLowerCase();
+        const valPin = String(pin || "").trim();
+        const cleanShared = String(sharedPin || DEFAULT_PIN_FALLBACK).trim();
+        const cleanAdmin = String(adminPin || "").trim();
+
+        if (lowerCompact === ADMIN_USER_FALLBACK) {
+          const expectedAdminPin = cleanAdmin || ADMIN_PIN_FALLBACK;
+          if (valPin && valPin === expectedAdminPin) {
+            return {
+              success: true,
+              user: ADMIN_USER_FALLBACK,
+              isAdmin: true,
+              usedAdminPin: Boolean(cleanAdmin),
+              adminPinConfigured: Boolean(cleanAdmin),
+              token: computeDashboardUserToken(ADMIN_USER_FALLBACK, expectedAdminPin)
+            };
+          }
+          return { success: false, error: "비밀번호(PIN)가 일치하지 않습니다." };
+        }
+
+        const memberList = Array.isArray(members) ? members : [];
+        const matchedMember = memberList.find((m) => String(m || "").replace(/\s+/g, "").toLowerCase() === lowerCompact);
+        if (!matchedMember) {
+          return { success: false, error: "등록되지 않은 사용자입니다. (구성원 설정 확인)" };
+        }
+        if (lowerCompact === "조항만") {
+          const expectedCeoPin = cleanAdmin || cleanShared;
+          if (valPin && valPin === expectedCeoPin) {
+            return {
+              success: true,
+              user: matchedMember,
+              isAdmin: false,
+              usedAdminPin: Boolean(cleanAdmin),
+              adminPinConfigured: Boolean(cleanAdmin),
+              token: computeDashboardUserToken(matchedMember, expectedCeoPin)
+            };
+          }
+          return { success: false, error: "비밀번호(PIN)가 일치하지 않습니다." };
+        }
+        if (valPin && valPin === cleanShared) {
+          return {
+            success: true,
+            user: matchedMember,
+            isAdmin: false,
+            usedAdminPin: false,
+            adminPinConfigured: Boolean(cleanAdmin),
+            token: computeDashboardUserToken(matchedMember, cleanShared)
+          };
+        }
+        return { success: false, error: "비밀번호(PIN)가 일치하지 않습니다." };
+      }
 
       function getTopSavedCookie(name) {
         try {
@@ -26139,7 +26329,7 @@ end $$;`;
           if (errEl) errEl.textContent = lockState.msg;
           return;
         }
-        const valName = String((nameEl && nameEl.value) || "").trim();
+        const valName = String((nameEl && nameEl.value) || "").replace(/\s+/g, "").trim();
         const valPin = String((pinEl && pinEl.value) || "").trim();
         if (!valName) { if (errEl) errEl.textContent = "등록된 이름을 입력해 주세요."; if (nameEl) nameEl.focus(); return; }
         if (!valPin) { if (errEl) errEl.textContent = "비밀번호(PIN)를 입력해 주세요."; if (pinEl) pinEl.focus(); return; }
@@ -26161,8 +26351,12 @@ end $$;`;
             const resp = await fetch(url, { method: "GET", redirect: "follow" });
             if (resp.ok) {
               data = await resp.json();
-              if (data && data.success && !data.isAdmin && window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive()) {
-                window.WSSupabaseV3.saveAuthPin(valPin, data.user || valName).catch(() => {});
+              if (data && data.success && window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive()) {
+                if (data.usedAdminPin) {
+                  window.WSSupabaseV3.saveAdminPin(valPin, data.user || valName).catch(() => {});
+                } else if (!data.isAdmin) {
+                  window.WSSupabaseV3.saveAuthPin(valPin, data.user || valName).catch(() => {});
+                }
               }
             }
           } catch (e) {
@@ -26172,19 +26366,12 @@ end $$;`;
         // 로컬 file:// 환경 또는 오프라인 fallback 검증 (동일 토큰 공식 적용)
         if (!data) {
           let customFallbackPin = DEFAULT_PIN_FALLBACK;
-          try { customFallbackPin = localStorage.getItem("ws_dashboard_custom_pin_v2") || DEFAULT_PIN_FALLBACK; } catch (e) {}
-          const isAdmin = valName.toLowerCase() === ADMIN_USER_FALLBACK && valPin === ADMIN_PIN_FALLBACK;
-          const members = getMembersList();
-          const matchedMember = members.find((m) => m.toLowerCase() === valName.toLowerCase());
-          if (isAdmin) {
-            data = { success: true, user: ADMIN_USER_FALLBACK, isAdmin: true, token: computeDashboardUserToken(ADMIN_USER_FALLBACK, ADMIN_PIN_FALLBACK) };
-          } else if (matchedMember && valPin === customFallbackPin) {
-            data = { success: true, user: matchedMember, isAdmin: false, token: computeDashboardUserToken(matchedMember, valPin) };
-          } else if (!matchedMember) {
-            data = { success: false, error: "등록되지 않은 사용자입니다. (시트 환경설정 멤버 확인)" };
-          } else {
-            data = { success: false, error: "비밀번호(PIN)가 일치하지 않습니다." };
-          }
+          let customAdminPin = "";
+          try {
+            customFallbackPin = localStorage.getItem(SHARED_PIN_STORAGE_KEY) || DEFAULT_PIN_FALLBACK;
+            customAdminPin = localStorage.getItem(ADMIN_PIN_STORAGE_KEY) || "";
+          } catch (e) {}
+          data = verifyUserPinAgainstValues(valName, valPin, customFallbackPin, customAdminPin, getMembersList());
         }
 
         if (data && data.success && data.token) {

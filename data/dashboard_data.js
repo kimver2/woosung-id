@@ -336,6 +336,10 @@
       return this.callGasApi("changeSharedPassword", { newPin: newPin, authUser: authUser });
     },
 
+    changeAdminPassword: function (newPin, authUser) {
+      return this.callGasApi("changeAdminPassword", { newPin: newPin, authUser: authUser });
+    },
+
     callGasPost: function (action, payload) {
       if (typeof fetch !== "function" || typeof location === "undefined" || !String(location.protocol || "").startsWith("http")) {
         return Promise.resolve({ success: true, offline: true });

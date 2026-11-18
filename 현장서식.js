@@ -9954,8 +9954,8 @@ function saveAllSettingsBatchFromWeb(batchPayload) {
 }
 
 /**
- * [대시보드 보안 잠금] 공용 비밀번호 조회 (기본값: "0112") 및 히든 관리자 계정 ("admin" / "007077")
- * - 스프레드시트 상단 메뉴(현장 관리 ➔ 시스템 점검 & 가이드 ➔ 대시보드 공용 접속 비밀번호 확인/변경)에서만 변경 가능
+ * [대시보드 보안 잠금] 공용 비밀번호 조회 (기본값: "0112") 및 관리자 전용 비밀번호 ("조항만" · "admin" 전용, 미설정 시 초기 폴백 유지)
+ * - 공용/관리자 비밀번호는 웹 대시보드 설정(조항만 · admin 전용) 또는 스프레드시트 상단 메뉴에서 변경 가능
  */
 var DEFAULT_DASHBOARD_ACCESS_PIN = "0112";
 var HIDDEN_ADMIN_AUTH_USER = "admin";
@@ -9972,6 +9972,24 @@ function getDashboardAccessPin() {
     }
   } catch (ePin) {}
   return DEFAULT_DASHBOARD_ACCESS_PIN;
+}
+
+function getDashboardAdminPin() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    if (props && typeof props.getProperty === "function") {
+      var saved = props.getProperty("DASHBOARD_ADMIN_PIN");
+      if (saved !== null && saved !== undefined && String(saved).trim() !== "") {
+        return String(saved).trim();
+      }
+    }
+  } catch (eAdminPin) {}
+  return "";
+}
+
+function isAdminAuthUser_(userStr) {
+  var clean = String(userStr || "").replace(/\s+/g, "").trim().toLowerCase();
+  return clean === "조항만" || clean === HIDDEN_ADMIN_AUTH_USER || clean === "chohangman";
 }
 
 /**
@@ -10050,46 +10068,84 @@ function computeDashboardUserToken(userStr, pinStr) {
 }
 
 /**
- * [대시보드 보안 잠금] 현재 유효한 모든 구성원 토큰 + 히든 관리자(admin/007077) 토큰 목록 반환
+ * [대시보드 보안 잠금] 현재 유효한 모든 구성원 토큰 + 관리자(조항만 · admin) 토큰 목록 반환
  */
 function getValidDashboardAuthTokens(ss) {
   var currentPin = getDashboardAccessPin();
-  var tokens = [computeDashboardUserToken(HIDDEN_ADMIN_AUTH_USER, HIDDEN_ADMIN_AUTH_PIN)];
+  var adminPin = getDashboardAdminPin();
+  var effectiveAdminPin = adminPin || HIDDEN_ADMIN_AUTH_PIN;
+  var tokens = [computeDashboardUserToken(HIDDEN_ADMIN_AUTH_USER, effectiveAdminPin)];
   var memberList = getAllRegisteredMemberNamesForAuth(ss);
   for (var i = 0; i < memberList.length; i++) {
-    var tok = computeDashboardUserToken(memberList[i], currentPin);
+    var mName = memberList[i];
+    var cleanM = String(mName || "").replace(/\s+/g, "").trim();
+    var pinForMember = (cleanM === "조항만" && adminPin) ? adminPin : currentPin;
+    var tok = computeDashboardUserToken(mName, pinForMember);
     if (tokens.indexOf(tok) === -1) tokens.push(tok);
   }
   return tokens;
 }
 
 /**
- * [대시보드 보안 잠금] 클라이언트에서 입력한 구성원 이름 + 비밀번호 검증 (히든 계정 admin / 007077 지원)
+ * [대시보드 보안 잠금] 클라이언트에서 입력한 구성원 이름 + 비밀번호 검증
+ * - 조항만 / admin: 관리자 비밀번호(미설정 초기 상태 시 조항만=공용PIN, admin=007077 폴백)로 검증
+ * - 일반 구성원: 공용 비밀번호로 검증
  */
 function verifyDashboardAccessPinFromWeb(inputPin, inputUser) {
   var cleanInputPin = String(inputPin || "").trim();
   var currentPin = getDashboardAccessPin();
+  var adminPin = getDashboardAdminPin();
   if (arguments.length >= 2 && inputUser !== undefined) {
     var cleanUser = String(inputUser || "").replace(/\s+/g, "").trim();
     if (!cleanUser) {
       return { success: false, error: "구성원 이름을 입력해 주세요." };
     }
-    if (cleanUser.toLowerCase() === HIDDEN_ADMIN_AUTH_USER && cleanInputPin === HIDDEN_ADMIN_AUTH_PIN) {
+    if (cleanUser.toLowerCase() === HIDDEN_ADMIN_AUTH_USER) {
+      var expectedAdminPin = adminPin || HIDDEN_ADMIN_AUTH_PIN;
+      if (cleanInputPin && cleanInputPin === expectedAdminPin) {
+        return {
+          success: true,
+          user: HIDDEN_ADMIN_AUTH_USER,
+          isAdmin: true,
+          usedAdminPin: !!adminPin,
+          adminPinConfigured: !!adminPin,
+          token: computeDashboardUserToken(HIDDEN_ADMIN_AUTH_USER, expectedAdminPin)
+        };
+      }
       return {
-        success: true,
-        user: HIDDEN_ADMIN_AUTH_USER,
-        isAdmin: true,
-        token: computeDashboardUserToken(HIDDEN_ADMIN_AUTH_USER, HIDDEN_ADMIN_AUTH_PIN)
+        success: false,
+        error: "등록된 구성원 이름이 아니거나 비밀번호가 일치하지 않습니다."
       };
     }
     var validMembers = getAllRegisteredMemberNamesForAuth();
-    if (validMembers.indexOf(cleanUser) !== -1 && cleanInputPin && cleanInputPin === currentPin) {
-      return {
-        success: true,
-        user: cleanUser,
-        isAdmin: false,
-        token: computeDashboardUserToken(cleanUser, currentPin)
-      };
+    if (validMembers.indexOf(cleanUser) !== -1) {
+      if (cleanUser === "조항만") {
+        var expectedCeoPin = adminPin || currentPin;
+        if (cleanInputPin && cleanInputPin === expectedCeoPin) {
+          return {
+            success: true,
+            user: cleanUser,
+            isAdmin: false,
+            usedAdminPin: !!adminPin,
+            adminPinConfigured: !!adminPin,
+            token: computeDashboardUserToken(cleanUser, expectedCeoPin)
+          };
+        }
+        return {
+          success: false,
+          error: "등록된 구성원 이름이 아니거나 비밀번호가 일치하지 않습니다."
+        };
+      }
+      if (cleanInputPin && cleanInputPin === currentPin) {
+        return {
+          success: true,
+          user: cleanUser,
+          isAdmin: false,
+          usedAdminPin: false,
+          adminPinConfigured: !!adminPin,
+          token: computeDashboardUserToken(cleanUser, currentPin)
+        };
+      }
     }
     return {
       success: false,
@@ -10109,15 +10165,15 @@ function verifyDashboardAccessPinFromWeb(inputPin, inputUser) {
 }
 
 /**
- * [대시보드 보안 잠금] 공용 비밀번호 변경 (조항만 · admin 전용)
- * - Google Apps Script PropertiesService 영구 저장 및 전체 서버 캐시 무효화
+ * [대시보드 보안 잠금] 공용/관리자 비밀번호 PropertiesService 저장 공통 헬퍼 (조항만 · admin 전용)
  */
-function changeSharedPasswordFromWeb(newPin, requestingUser) {
-  var cleanUser = String(requestingUser || "").replace(/\s+/g, "").trim().toLowerCase();
-  if (cleanUser !== "조항만" && cleanUser !== "admin") {
+function updateDashboardPinProperty_(propKey, newPin, requestingUser, mode) {
+  var isAdminMode = mode === "admin";
+  var label = isAdminMode ? "관리자 비밀번호" : "공용 비밀번호";
+  if (!isAdminAuthUser_(requestingUser)) {
     return {
       success: false,
-      error: "공용 비밀번호 변경 권한이 없습니다. (조항만 · admin 전용)"
+      error: label + " 변경 권한이 없습니다. (조항만 · admin 전용)"
     };
   }
   var cleanNew = String(newPin || "").trim();
@@ -10132,25 +10188,35 @@ function changeSharedPasswordFromWeb(newPin, requestingUser) {
     if (lock && typeof lock.tryLock === "function") {
       try { lock.tryLock(5000); } catch (eLk1) {}
     }
-    var props = PropertiesService.getScriptProperties();
-    if (props && typeof props.setProperty === "function") {
-      props.setProperty("DASHBOARD_ACCESS_PIN", cleanNew);
-    }
-    if (lock && typeof lock.releaseLock === "function") {
-      try { lock.releaseLock(); } catch (eLk2) {}
+    try {
+      var props = PropertiesService.getScriptProperties();
+      if (props && typeof props.setProperty === "function") {
+        props.setProperty(propKey, cleanNew);
+      }
+    } finally {
+      if (lock && typeof lock.releaseLock === "function") {
+        try { lock.releaseLock(); } catch (eLk2) {}
+      }
     }
     invalidateDashboardServerCache();
 
+    var cleanUser = String(requestingUser || "").replace(/\s+/g, "").trim().toLowerCase();
+    var adminPin = getDashboardAdminPin();
     var tokenUser = cleanUser === "admin" ? HIDDEN_ADMIN_AUTH_USER : "조항만";
-    var tokenPin = cleanUser === "admin" ? HIDDEN_ADMIN_AUTH_PIN : cleanNew;
+    var tokenPin = isAdminMode
+      ? cleanNew
+      : (cleanUser === "admin" ? (adminPin || HIDDEN_ADMIN_AUTH_PIN) : (adminPin || cleanNew));
     var newToken = computeDashboardUserToken(tokenUser, tokenPin);
 
     return {
       success: true,
       pin: cleanNew,
+      adminPinConfigured: !!adminPin,
       token: newToken,
       user: tokenUser,
-      message: "대시보드 공용 접속 비밀번호가 성공적으로 변경되었습니다. (모든 기기 동기화 적용)"
+      message: isAdminMode
+        ? "관리자 전용 비밀번호(조항만 · admin)가 성공적으로 변경되었습니다. (모든 기기 동기화 적용)"
+        : "대시보드 공용 접속 비밀번호가 성공적으로 변경되었습니다. (모든 기기 동기화 적용)"
     };
   } catch (err) {
     return {
@@ -10161,10 +10227,30 @@ function changeSharedPasswordFromWeb(newPin, requestingUser) {
 }
 
 /**
+ * [대시보드 보안 잠금] 공용 비밀번호 변경 (조항만 · admin 전용)
+ * - Google Apps Script PropertiesService 영구 저장 및 전체 서버 캐시 무효화
+ */
+function changeSharedPasswordFromWeb(newPin, requestingUser) {
+  return updateDashboardPinProperty_("DASHBOARD_ACCESS_PIN", newPin, requestingUser, "shared");
+}
+
+/**
+ * [대시보드 보안 잠금] 관리자 전용 비밀번호 변경 (조항만 · admin 로그인 전용)
+ * - Google Apps Script PropertiesService 영구 저장 및 전체 서버 캐시 무효화
+ */
+function changeAdminPasswordFromWeb(newPin, requestingUser) {
+  return updateDashboardPinProperty_("DASHBOARD_ADMIN_PIN", newPin, requestingUser, "admin");
+}
+
+/**
  * [대시보드 보안 잠금] 관리자 공용 비밀번호 변경 (스프레드시트 전용)
  */
 function updateDashboardAccessPinFromWeb(newPin) {
   return changeSharedPasswordFromWeb(newPin, "admin");
+}
+
+function updateDashboardAdminPinFromWeb(newPin) {
+  return changeAdminPasswordFromWeb(newPin, "admin");
 }
 
 /**
@@ -13333,6 +13419,10 @@ function doGet(e) {
   if (action === "changeSharedPassword" || action === "updateDashboardPin") {
     var cPinRes = changeSharedPasswordFromWeb(p.newPin || p.pin || "", p.authUser || p.user || "");
     return ContentService.createTextOutput(JSON.stringify(cPinRes)).setMimeType(ContentService.MimeType.JSON);
+  }
+  if (action === "changeAdminPassword" || action === "updateDashboardAdminPin") {
+    var aPinRes = changeAdminPasswordFromWeb(p.newPin || p.pin || "", p.authUser || p.user || "");
+    return ContentService.createTextOutput(JSON.stringify(aPinRes)).setMimeType(ContentService.MimeType.JSON);
   }
 
   // 0-0-0-Repair) 현장 아코디언 그룹 무결성 즉시 복구 요청 (action=repairSiteGroups)
@@ -19747,6 +19837,7 @@ function buildSidebarDashboardHtml(mode, preAuthToken, preAuthUser) {
   html += '    else if (action === "deleteMember") runner.deleteMemberItemFromWeb(params.row, params.name);\n';
   html += '    else if (action === "reorderMember") runner.reorderMemberItemFromWeb(params.row, params.direction);\n';
   html += '    else if (action === "changeSharedPassword") runner.changeSharedPasswordFromWeb(params.newPin, params.authUser || params.user);\n';
+  html += '    else if (action === "changeAdminPassword") runner.changeAdminPasswordFromWeb(params.newPin, params.authUser || params.user);\n';
   html += '  } else {\n';
   html += '    var apiUrl = (typeof SCRIPT_URL !== "undefined" ? SCRIPT_URL : (window.location.href.split("?")[0]));\n';
   html += '    var qs = "?action=" + encodeURIComponent(action);\n';
