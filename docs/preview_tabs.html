@@ -11116,16 +11116,47 @@ end $$;`;
 
       window.setMonthlySiteSort = function(sortKey) {
         state.monthlySiteSort = sortKey;
+        state.monthlySitePage = 1;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
       };
 
       window.onMonthlySiteSearch = function(query) {
+        const activeId = document.activeElement ? document.activeElement.id : "";
         state.monthlySiteSearch = query;
+        state.monthlySitePage = 1;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
+        if (activeId === "monthlySiteSearchInput") {
+          const el = document.getElementById("monthlySiteSearchInput");
+          if (el) {
+            el.focus();
+            const len = el.value.length;
+            try { el.setSelectionRange(len, len); } catch (_) {}
+          }
+        }
+      };
+
+      window.setMonthlySitePage = function(page) {
+        const scSelectors = [".standard-page-view", ".m-app-body", ".pc-main"];
+        const saved = scSelectors.map((sel) => {
+          const el = document.querySelector(sel);
+          return [sel, el ? el.scrollTop : 0];
+        });
+        state.monthlySitePage = Math.max(1, Number(page) || 1);
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
+        renderActiveViews();
+        const restore = () => {
+          saved.forEach(([sel, top]) => {
+            const el = document.querySelector(sel);
+            if (el && top > 0) el.scrollTop = top;
+          });
+        };
+        restore();
+        requestAnimationFrame(restore);
       };
 
       function buildFinanceMonthlyDashboardHtml(isMobile) {
@@ -11522,8 +11553,38 @@ end $$;`;
           </div>
 
           <!-- 4. 현장별 수익성 & 마진율 현황 -->
+          ${(() => {
+            const pageSize = 10;
+            const totalPages = Math.max(1, Math.ceil(displaySites.length / pageSize));
+            const curPage = Math.max(1, Math.min(totalPages, Number(state.monthlySitePage) || 1));
+            const pagedSites = displaySites.slice((curPage - 1) * pageSize, curPage * pageSize);
+            let pagerHtml = "";
+            if (totalPages > 1) {
+              const winSize = 10;
+              let startPage = Math.max(1, curPage - Math.floor(winSize / 2));
+              let endPage = Math.min(totalPages, startPage + winSize - 1);
+              if (endPage - startPage + 1 < winSize) startPage = Math.max(1, endPage - winSize + 1);
+              const btnBase = "min-width:30px;height:28px;padding:0 7px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;";
+              const navBtn = (lbl, target, disabled, title) => `<button type="button" ${disabled ? "disabled" : ""} onclick="window.setMonthlySitePage(${target})" title="${title}" style="${btnBase}border:1px solid #cbd5e1;background:${disabled ? "#f8fafc" : "#ffffff"};color:${disabled ? "#cbd5e1" : "#334155"};${disabled ? "cursor:default;" : ""}">${lbl}</button>`;
+              let numBtns = "";
+              for (let p = startPage; p <= endPage; p++) {
+                const isAct = p === curPage;
+                numBtns += `<button type="button" onclick="window.setMonthlySitePage(${p})" style="${btnBase}border:1px solid ${isAct ? "#2563eb" : "#cbd5e1"};background:${isAct ? "#2563eb" : "#ffffff"};color:${isAct ? "#ffffff" : "#334155"};">${p}</button>`;
+              }
+              pagerHtml = `
+                <div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;margin:10px 0;">
+                  ${navBtn("«", 1, curPage <= 1, "첫 페이지")}
+                  ${navBtn("‹", curPage - 1, curPage <= 1, "이전 페이지")}
+                  ${numBtns}
+                  ${navBtn("›", curPage + 1, curPage >= totalPages, "다음 페이지")}
+                  ${navBtn("»", totalPages, curPage >= totalPages, "마지막 페이지")}
+                  <span style="font-size:11.5px;color:#64748b;font-weight:700;margin-left:6px;">${(curPage - 1) * pageSize + 1}~${Math.min(curPage * pageSize, displaySites.length)} / ${displaySites.length}개</span>
+                </div>
+              `;
+            }
+            return `
           <div class="standard-card" style="padding:${isMobile ? "12px" : "18px 20px"};background:#ffffff;">
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:10px;">
               <div>
                 <h3 style="font-size:${isMobile ? "14px" : "16px"};font-weight:800;color:#1e293b;margin:0;">
                   🏢 현장별 수익성 & 마진율 현황 (${displaySites.length}개 현장)
@@ -11533,7 +11594,7 @@ end $$;`;
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <input type="text" placeholder="🔍 현장명 검색..." value="${escHtml(state.monthlySiteSearch || "")}" oninput="window.onMonthlySiteSearch(this.value)" class="sheet-filter-select" style="min-width:${isMobile ? "140px" : "180px"};height:34px;padding:0 12px;font-size:12.5px;border-radius:8px;">
+                <input type="text" id="monthlySiteSearchInput" placeholder="🔍 현장명 검색..." value="${escHtml(state.monthlySiteSearch || "")}" oninput="window.onMonthlySiteSearch(this.value)" class="sheet-filter-select" style="min-width:${isMobile ? "140px" : "180px"};height:34px;padding:0 12px;font-size:12.5px;border-radius:8px;">
                 <select class="sheet-filter-select" style="height:34px;padding:0 10px;font-size:12.5px;border-radius:8px;" onchange="window.setMonthlySiteSort(this.value)">
                   <option value="marginDesc" ${sortKey === "marginDesc" ? "selected" : ""}>마진율 높은순</option>
                   <option value="marginAsc" ${sortKey === "marginAsc" ? "selected" : ""}>마진율 낮은순</option>
@@ -11544,6 +11605,7 @@ end $$;`;
                 </select>
               </div>
             </div>
+            ${pagerHtml}
             <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
               <table class="finance-table" style="width:100%;min-width:760px;border-collapse:collapse;font-size:12.5px;">
                 <thead>
@@ -11559,9 +11621,9 @@ end $$;`;
                   </tr>
                 </thead>
                 <tbody>
-                  ${displaySites.length === 0 ? `
+                  ${pagedSites.length === 0 ? `
                     <tr><td colspan="8" style="padding:32px 16px;text-align:center;color:#64748b;font-size:13px;">해당 조건의 현장 정산 데이터가 없습니다.</td></tr>
-                  ` : displaySites.map(s => {
+                  ` : pagedSites.map(s => {
                     const profitColor = s.netProfit > 0 ? "#16a34a" : (s.netProfit < 0 ? "#dc2626" : "#64748b");
                     let marginBadgeBg = "#f1f5f9";
                     let marginBadgeColor = "#475569";
@@ -11614,7 +11676,9 @@ end $$;`;
                 </tbody>
               </table>
             </div>
-          </div>
+            ${pagerHtml}
+          </div>`;
+          })()}
         `;
       }
 
