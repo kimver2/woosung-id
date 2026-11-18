@@ -2451,7 +2451,308 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       sepStrangerFail && sepStrangerFail.success === false
     );
   }
-}
+
+  // [반장 공유 (Partner Share) 미러 동기화 · AST · 금액 제외 · 일정 토글 · 안내문 복사 · client.html 런타임 검증]
+  const clientRootHtml = fs.readFileSync(path.join(__dirname, '..', 'client.html'), 'utf8');
+  const clientDocsHtml = fs.readFileSync(path.join(__dirname, '..', 'docs', 'client.html'), 'utf8');
+  verifyAllScriptBlocks(clientRootHtml, '루트 client.html');
+  verifyAllScriptBlocks(clientDocsHtml, 'docs/client.html');
+  assertTest('client.html 및 docs/client.html 100% 동일 동기화 및 PC/모바일/작업창 반장 공유 버튼 배치 검증',
+    clientRootHtml === clientDocsHtml &&
+    idxRootHtml.includes('window.openPartnerShareModal(') &&
+    idxRootHtml.includes('👷 반장 공유')
+  );
+
+  const pendingAsyncTests = [];
+  pendingAsyncTests.push((async () => {
+    const shareStartMarker = '// ================= 모달 5: 반장님 작업 안내문 모달 =================';
+    const shareEndMarker = 'window.openPartnerGuideForSite = function';
+    const sIdx = idxRootHtml.indexOf(shareStartMarker);
+    const eIdx = idxRootHtml.indexOf(shareEndMarker);
+    const fnEscHtml = idxRootHtml.match(/function escHtml\([\s\S]*?\n      \}/);
+    const fnEscJs = idxRootHtml.match(/function escJs\([\s\S]*?\n      \}/);
+    const fnParseYmd = idxRootHtml.match(/function parseYmdFromTask\([\s\S]*?\n      \}/);
+    const fnParseEndYmd = idxRootHtml.match(/function parseEndYmdFromTask\([\s\S]*?\n      \}/);
+    const fnIsDone = idxRootHtml.match(/function isTaskCompleted\([\s\S]*?\n      \}/);
+    const fnGetSiteInfo = idxRootHtml.match(/function getSiteInfo\([\s\S]*?\n      \}/);
+
+    assertTest('index.html 내 반장 공유 핵심 함수 블록 추출 가능 여부 검증',
+      sIdx !== -1 && eIdx > sIdx && Boolean(fnEscHtml && fnEscJs && fnParseYmd && fnParseEndYmd && fnIsDone && fnGetSiteInfo)
+    );
+    if (sIdx === -1 || eIdx <= sIdx) return;
+
+    const wsStateStore = {};
+    const copiedTexts = [];
+    const toasts = [];
+    const makeEl = () => ({ innerHTML: '', textContent: '', value: '', style: {}, classList: { add() {}, remove() {} } });
+    const domMap = {
+      syncStatusModalTitle: makeEl(),
+      syncStatusModalCloseBtn: makeEl(),
+      syncStatusModalBody: makeEl(),
+      syncStatusModalFooter: makeEl(),
+      psUrlInput: makeEl()
+    };
+    const mockCard = { style: {} };
+
+    const indexShareVm = vm.createContext({
+      window: {},
+      state: {
+        user: '송지은',
+        dashData: {
+          sites: [{
+            siteKey: 'site::신대방우성 16동 902호',
+            siteName: '신대방우성 16동 902호',
+            scope: 'site',
+            primaryManager: '송지은',
+            tasks: [
+              { id: 't1', taskName: '철거', status: '완료', startDateStr: '2026-11-10', endDateStr: '2026-11-10', dateDisplay: '2026-11-10', manager: '송지은', partner: '철거_이수현 반장', memo: '철거 폐기물 반출' },
+              { id: 't2', taskName: '전기', status: '진행 중', startDateStr: '2026-11-18', endDateStr: '2026-11-19', dateDisplay: '2026-11-18 ~ 2026-11-19', manager: '송지은', partner: '전기_최성필 반장', memo: '분전반 확인', asMeta: { space: '거실', symptom: '조명 배선', chargeAmount: 770000, costAmount: 420000 } },
+              { id: 't3', taskName: '목공', status: '예정', startDateStr: '2026-11-22', endDateStr: '2026-11-23', dateDisplay: '2026-11-22 ~ 2026-11-23', manager: '송지은', partner: '목공_박동연 반장', memo: '천장 평탄화' }
+            ]
+          }],
+          siteInfoMap: {
+            '신대방우성 16동 902호': {
+              address: '동작구 여의대방로22 16동 902호',
+              doorPassword: '공동 #*1212종 / 세대 608436',
+              officePhone: '02-812-0000',
+              memo: '사다리차 금지, 엘리베이터 보양 필수',
+              driveUrl: 'https://drive.google.com/example'
+            }
+          }
+        },
+        financeDbData: {
+          collection: [{
+            id: 'COL-1',
+            siteName: '신대방우성 16동 902호',
+            contractAmount: 45000000,
+            totalAmount: 48000000,
+            collectedAmount: 20000000,
+            uncollectedAmount: 28000000
+          }]
+        },
+        settingsData: {
+          members: [
+            { name: '송지은', role: '디자이너', phone: '010-1111-2222' },
+            { name: '차정률', role: '현장소장', phone: '010-8734-8586' }
+          ]
+        }
+      },
+      document: {
+        getElementById: (id) => domMap[id] || null,
+        querySelector: (sel) => (sel === '#syncStatusModal .ws-modal-card' ? mockCard : null)
+      },
+      location: { href: 'https://kimver2.github.io/woosung-id/index.html' },
+      URL,
+      getAllSites: () => indexShareVm.state.dashData.sites,
+      getSiteDateMetrics: function () { return { earliest: '2026-11-10', latest: '2026-11-23' }; },
+      getUniqueSiteManagers: function () { return ['송지은']; },
+      filterRegisteredManagers: function (arr) { return arr; },
+      lookupMemberPhone: function (n) { return n === '송지은' ? '010-1111-2222' : (n === '차정률' ? '010-8734-8586' : ''); },
+      copyText: function (txt) { copiedTexts.push(String(txt)); },
+      showToast: function (msg) { toasts.push(String(msg)); },
+      openModal: function () {},
+      closeModal: function () {},
+      COL_STAGE_DEFS: []
+    });
+    indexShareVm.window = indexShareVm;
+    indexShareVm.window.WSDataService = { saveDashboardCache: () => {} };
+    indexShareVm.window.WSSupabaseV3 = {
+      isSupabaseActive: () => true,
+      persistSnapshot: async (key, payload) => {
+        wsStateStore[key] = JSON.parse(JSON.stringify(payload));
+        return 'mut_test';
+      }
+    };
+
+    const shareBlockCode = idxRootHtml.slice(sIdx, eIdx);
+    const bootstrapCode = [
+      fnEscHtml[0], fnEscJs[0], fnParseYmd[0], fnParseEndYmd[0], fnIsDone[0], fnGetSiteInfo[0],
+      shareBlockCode,
+      'this.buildPartnerSharePayload = buildPartnerSharePayload;',
+      'this.buildPartnerShareGuideText = buildPartnerShareGuideText;',
+      'this.getPartnerShareUrl = getPartnerShareUrl;'
+    ].join('\n');
+    vm.runInContext(bootstrapCode, indexShareVm);
+
+    // 1) 모달 최초 오픈 (전체 일정 기본값) + 직접 입력 문구 저장 + 금액 완전 제외 검증
+    indexShareVm.openPartnerShareModal('신대방우성 16동 902호', { siteKey: 'site::신대방우성 16동 902호' });
+    await Promise.resolve();
+    const initialBodyHtml = domMap.syncStatusModalBody.innerHTML;
+    const tok1 = indexShareVm.state._partnerShareDraft.token;
+    indexShareVm.state._partnerShareDraft.noticeText = '오전 9시 이전 소음 작업 금지';
+    await indexShareVm.savePartnerShareModal(false);
+
+    const payloadAll = wsStateStore['partner_share::' + tok1];
+    const payloadAllStr = JSON.stringify(payloadAll);
+    indexShareVm.copyPartnerShareGuideText();
+    const copiedGuideAll = copiedTexts[copiedTexts.length - 1] || '';
+
+    assertTest('반장 공유 전체 일정 모달/페이로드 금액 완전 제외 및 직접 입력·안내문 복사 검증',
+      Boolean(payloadAll) &&
+      payloadAll.shareType === 'partner' &&
+      payloadAll.scopeMode === 'all' &&
+      payloadAll.tasks.length === 3 &&
+      payloadAll.noticeText === '오전 9시 이전 소음 작업 금지' &&
+      !initialBodyHtml.includes('수금') &&
+      !initialBodyHtml.includes('계약금액') &&
+      !payloadAllStr.includes('45000000') &&
+      !payloadAllStr.includes('48000000') &&
+      !payloadAllStr.includes('20000000') &&
+      !payloadAllStr.includes('28000000') &&
+      !payloadAllStr.includes('770000') &&
+      !payloadAllStr.includes('420000') &&
+      !Object.prototype.hasOwnProperty.call(payloadAll, 'payment') &&
+      !Object.prototype.hasOwnProperty.call(payloadAll, 'showPayment') &&
+      copiedGuideAll.includes('신대방우성 16동 902호') &&
+      copiedGuideAll.includes('동작구 여의대방로22 16동 902호') &&
+      copiedGuideAll.includes('공동 #*1212종 / 세대 608436') &&
+      copiedGuideAll.includes('02-812-0000') &&
+      copiedGuideAll.includes('사다리차 금지') &&
+      copiedGuideAll.includes('오전 9시 이전 소음 작업 금지') &&
+      Boolean(wsStateStore['dashboard_main'] && wsStateStore['dashboard_main'].siteInfoMap['신대방우성 16동 902호'].partnerShare)
+    );
+
+    // 2) 일정 범위 토글 (전체 일정 -> 해당 공종만: 전기) + 드롭다운 렌더링 + 필터링 검증
+    indexShareVm.setPartnerShareScopeMode('task');
+    const taskModeBodyHtml = domMap.syncStatusModalBody.innerHTML;
+    indexShareVm.setPartnerShareTargetTask('전기');
+    await indexShareVm.savePartnerShareModal(false);
+    const payloadTask = wsStateStore['partner_share::' + tok1];
+    const urlTask = indexShareVm.getPartnerShareUrl(tok1);
+
+    assertTest('반장 공유 일정 범위 토글(해당 공종만) 드롭다운 노출 및 해당 공종 필터링 검증',
+      taskModeBodyHtml.includes('id="psTargetTaskSelect"') &&
+      taskModeBodyHtml.includes('<option value="전기"') &&
+      urlTask.includes('client.html?mode=partner&token=' + encodeURIComponent(tok1)) &&
+      payloadTask.scopeMode === 'task' &&
+      payloadTask.targetTaskName === '전기' &&
+      payloadTask.tasks.length === 1 &&
+      payloadTask.tasks[0].taskName === '전기' &&
+      payloadTask.totalTasksCount === 1 &&
+      payloadTask.completedTasksCount === 0 &&
+      payloadTask.guideText.includes('■ 공종: 전기') &&
+      !payloadTask.guideText.includes('철거') &&
+      !payloadTask.guideText.includes('목공')
+    );
+
+    // 3) 링크 재발급 시 기존 토큰 비활성화 및 신규 토큰 저장 검증
+    indexShareVm.regeneratePartnerShareToken();
+    const tok2 = indexShareVm.state._partnerShareDraft.token;
+    await indexShareVm.savePartnerShareModal(false);
+    assertTest('반장 공유 링크 재발급 시 기존 토큰 만료 처리 및 신규 토큰 발급 검증',
+      tok2 !== tok1 &&
+      wsStateStore['partner_share::' + tok1] && wsStateStore['partner_share::' + tok1].enabled === false &&
+      wsStateStore['partner_share::' + tok2] && wsStateStore['partner_share::' + tok2].enabled === true
+    );
+
+    // 4) client.html 반장 공유(mode=partner) 및 고객 공유(mode!=partner) 격리 런타임 검증
+    const clientScriptMatch = clientRootHtml.match(/<script>([\s\S]*?)<\/script>/);
+    assertTest('client.html 내장 스크립트 추출 가능 여부 검증', Boolean(clientScriptMatch));
+    if (clientScriptMatch) {
+      // 악의적/잔여 payment 필드가 있더라도 반장 공유 뷰에서는 금액이 절대 렌더링되지 않는지 검증
+      wsStateStore['partner_share::' + tok2].payment = {
+        total: 99000000,
+        collected: 10000000,
+        uncollected: 89000000,
+        stages: [{ label: '계약금', amount: 10000000, paid: true }]
+      };
+
+      const runClientPage = async (searchStr) => {
+        const fetchedKeys = [];
+        const pageCopied = [];
+        const cDom = {
+          shareBrandSub: { textContent: '' },
+          loadingStatusMsg: { textContent: '' },
+          clientShareRoot: { innerHTML: '' },
+          clientShareFooter: { textContent: '' },
+          clientToast: { textContent: '', classList: { add() {}, remove() {} } }
+        };
+        const cVm = vm.createContext({
+          document: {
+            title: '',
+            getElementById: (id) => cDom[id] || null,
+            createElement: () => ({ style: {}, setAttribute() {}, select() {} }),
+            execCommand: () => true,
+            body: { appendChild() {}, removeChild() {} }
+          },
+          window: { isSecureContext: true },
+          navigator: {
+            clipboard: {
+              writeText: async (t) => { pageCopied.push(String(t)); }
+            }
+          },
+          location: { search: searchStr },
+          URLSearchParams,
+          console,
+          setTimeout,
+          clearTimeout,
+          fetch: async (url) => {
+            const m = String(url).match(/key=eq\.([^&]+)/);
+            const k = m ? decodeURIComponent(m[1]) : '';
+            fetchedKeys.push(k);
+            const found = wsStateStore[k];
+            return {
+              ok: true,
+              status: 200,
+              json: async () => (found ? [{ payload: JSON.parse(JSON.stringify(found)), updated_at: found.updatedAt || '' }] : [])
+            };
+          }
+        });
+        vm.runInContext(clientScriptMatch[1], cVm);
+        await new Promise((r) => setTimeout(r, 10));
+        return { cVm, cDom, fetchedKeys, pageCopied };
+      };
+
+      const partnerRes = await runClientPage('?mode=partner&token=' + encodeURIComponent(tok2));
+      await partnerRes.cVm.copyPartnerGuideText();
+      const pHtml = partnerRes.cDom.clientShareRoot.innerHTML;
+
+      // 고객 모드(?token=tok2)로 반장 토큰 접근 시 격리 거부 검증 + 정상 고객 공유 무결성 비회귀 검증
+      wsStateStore['client_share::leak_test'] = JSON.parse(JSON.stringify(wsStateStore['partner_share::' + tok2]));
+      const clientRejectRes = await runClientPage('?token=leak_test');
+      wsStateStore['client_share::cust_ok'] = {
+        enabled: true,
+        siteName: '신대방우성 16동 902호',
+        address: '동작구 여의대방로22 16동 902호',
+        manager: '송지은',
+        managerPhone: '010-1111-2222',
+        managerContacts: [{ name: '송지은', phone: '010-1111-2222' }],
+        noticeText: '고객 안내 문구',
+        showPayment: true,
+        payment: { total: 48000000, collected: 20000000, uncollected: 28000000, stages: [{ label: '계약금', amount: 20000000, paid: true }] },
+        progressRate: 33,
+        totalTasksCount: 3,
+        completedTasksCount: 1,
+        tasks: [{ taskName: '철거', status: '완료', date: '2026-11-10', endDate: '' }, { taskName: '전기', status: '진행', date: '2026-11-18', endDate: '' }],
+        updatedAt: '2026-11-18T00:00:00.000Z'
+      };
+      const clientOkRes = await runClientPage('?token=cust_ok');
+
+      assertTest('client.html?mode=partner 런타임 렌더링(공종 필터, 상단 지시사항, 비번/안내문 복사, 금액 완전 제외 및 고객모드 격리·비회귀) 검증',
+        partnerRes.fetchedKeys[0] === ('partner_share::' + tok2) &&
+        partnerRes.cDom.shareBrandSub.textContent.includes('반장님') &&
+        pHtml.includes('전기 공종만 표시') &&
+        pHtml.includes('오전 9시 이전 소음 작업 금지') &&
+        pHtml.includes('공동 #*1212종 / 세대 608436') &&
+        pHtml.includes('copyPartnerGuideText()') &&
+        !pHtml.includes('철거') &&
+        !pHtml.includes('목공') &&
+        !pHtml.includes('99,000,000') &&
+        !pHtml.includes('공사 대금') &&
+        !pHtml.includes('총 계약금액') &&
+        partnerRes.pageCopied.length === 1 &&
+        partnerRes.pageCopied[0].includes('공동 #*1212종 / 세대 608436') &&
+        clientRejectRes.fetchedKeys[0] === 'client_share::leak_test' &&
+        clientRejectRes.cDom.clientShareRoot.innerHTML.includes('유효하지 않은 고객 공유 링크입니다') &&
+        clientOkRes.fetchedKeys[0] === 'client_share::cust_ok' &&
+        clientOkRes.cDom.clientShareRoot.innerHTML.includes('공사 대금 납부 현황') &&
+        clientOkRes.cDom.clientShareRoot.innerHTML.includes('48,000,000원') &&
+        !clientOkRes.cDom.clientShareRoot.innerHTML.includes('608436')
+      );
+    }
+  })());
+
+Promise.all(pendingAsyncTests).then(() => {
 if (isVerbose) {
   rawConsoleLog('\n========================================================');
   rawConsoleLog(`📊 [QA 검증 최종 결과]: 총 ${passCount + failCount}개 항목 중 ${passCount}개 통과, ${failCount}개 실패`);
@@ -2463,4 +2764,9 @@ if (failCount > 0) {
   process.exit(1);
 } else {
   rawConsoleLog(`✅ [QA] ${passCount} / ${passCount + failCount} PASS (JS AST · 미러 동기화 · 런타임 정상)`);
+}
+  }).catch((err) => {
+    rawConsoleLog('❌ [QA] 비동기 테스트 예외:', err);
+    process.exit(1);
+  });
 }

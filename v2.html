@@ -6538,6 +6538,7 @@ end $$;`;
                   <button type="button" class="btn-tool-tag" onclick="openSiteFileUploadModal('${escJs(selectedSite.siteName)}')">📤 파일 업로드</button>
                   <button type="button" class="btn-tool-tag" onclick="openPartnerGuideForSite('${escJs(selectedSite.siteKey)}')">📋 안내문 확인</button>
                   <button type="button" class="btn-tool-tag" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-weight:700;" onclick="window.openClientShareModal('${escJs(selectedSite.siteName)}')">🔗 고객 공유</button>
+                  <button type="button" class="btn-tool-tag" style="background:#fffbeb;color:#b45309;border-color:#fde68a;font-weight:700;" onclick="window.openPartnerShareModal('${escJs(selectedSite.siteName)}', { siteKey: '${escJs(selectedSite.siteKey)}' })">👷 반장 공유</button>
                   <button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(selectedSite.siteName)}')">✏️ 현장정보 수정</button>
                 </div>
               </div>
@@ -11214,6 +11215,7 @@ end $$;`;
                   <tr><td style="${tdStyle}"><b>📤 파일 업로드</b></td><td style="${tdStyle}">현장 사진·도면·서류 파일을 드라이브로 업로드합니다.</td></tr>
                   <tr><td style="${tdStyle}"><b>📋 안내문 확인</b></td><td style="${tdStyle}">현장 주소, 출입 비번, 주차/특이사항, 선택 공정을 조합해 협력업체 반장님에게 카톡으로 보낼 안내문을 생성·복사합니다.</td></tr>
                   <tr><td style="${tdStyle}"><b>🔗 고객 공유</b></td><td style="${tdStyle}">고객 전용 읽기 링크(월간 캘린더, 진행률, 수금 현황, 담당자 연락처 포함 · <b>원가/협력업체 연락처/비번 자동 제외</b>)를 발급하고 카톡 안내문을 복사합니다.</td></tr>
+                  <tr><td style="${tdStyle}"><b>👷 반장 공유</b></td><td style="${tdStyle}">협력업체/반장님 전용 링크(전체 일정 또는 선택한 공종만 필터링, 직접 입력 작업 지시사항, 주소·도어락 비번·안내문 텍스트 복사 · <b>금액 정보 완전 제외</b>)를 발급합니다.</td></tr>
                   <tr><td style="${tdStyle}"><b>✏️ 현장정보 수정</b></td><td style="${tdStyle}">현장 주소, 도어락/공동현관 비번, 관리사무소 연락처, 특이사항/주차, 드라이브 링크, 착공 필수 체크를 수정합니다. (주소·비번은 카드에서 클릭 한 번으로 복사 가능)</td></tr>
                 </tbody>
               </table>
@@ -15350,6 +15352,7 @@ end $$;`;
                   <button type="button" class="btn-tool-tag" style="background:#f0fdfa;color:#0f766e;border-color:#99f6e4;font-weight:700;" onclick="window.openEstimatePdfModal('${escJs(s.siteKey || s.siteName)}')">📄 견적서</button>
                   <button type="button" class="btn-tool-tag" onclick="openPartnerGuideForSite('${escJs(s.siteKey)}')">📋 안내문 확인</button>
                   <button type="button" class="btn-tool-tag" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-weight:700;" onclick="window.openClientShareModal('${escJs(s.siteName)}')">🔗 고객 공유</button>
+                  <button type="button" class="btn-tool-tag" style="background:#fffbeb;color:#b45309;border-color:#fde68a;font-weight:700;" onclick="window.openPartnerShareModal('${escJs(s.siteName)}', { siteKey: '${escJs(s.siteKey)}' })">👷 반장 공유</button>
                   <button type="button" class="btn-tool-tag" onclick="focusSiteOnCalendar('${escJs(s.siteKey)}', true)">📅 캘린더 보기</button>
                   <button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(s.siteName)}')">✏️ 정보 수정</button>
                   <button type="button" class="btn-tool-tag" onclick="openSiteFileUploadModal('${escJs(s.siteName)}')">📤 파일 업로드</button>
@@ -17161,10 +17164,11 @@ end $$;`;
             <div class="site-quick-banner">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
                 <strong>📍 ${escHtml(info.address || "현장 주소 미등록")}</strong>
-                <div style="display:flex;gap:4px;">
+                <div style="display:flex;gap:4px;flex-wrap:wrap;">
                   ${info.address ? `<button type="button" class="btn-tool-tag" onclick="copyText('${escJs(info.address)}')">주소복사</button>` : ""}
                   ${info.doorPassword ? `<button type="button" class="btn-tool-tag" onclick="copyText('${escJs(info.doorPassword)}')">🔑 비번복사</button>` : ""}
                   <button type="button" class="btn-tool-tag" onclick="openPartnerGuideSingle()">📋 반장님 안내문</button>
+                  <button type="button" class="btn-tool-tag" style="background:#fffbeb;color:#b45309;border-color:#fde68a;font-weight:700;" onclick="window.openPartnerShareModal('${escJs(ctx.siteName)}', { siteKey: '${escJs(ctx.siteKey || "")}', defaultTaskName: '${escJs(ctx.taskName || "")}' })">👷 반장 공유</button>
                 </div>
               </div>
               <div style="color:var(--text-sub);">🔑 비번: <strong>${escHtml(info.doorPassword || "-")}</strong> · 📝 ${escHtml(info.memo || "특이사항 없음")}</div>
@@ -20040,6 +20044,482 @@ end $$;`;
             await window.WSSupabaseV3.persistSnapshot("client_share::" + d.token, payload);
           }
           if (!silent) showToast(d.enabled ? "✅ 고객 공유 링크가 저장 및 최신 반영되었습니다." : "🔒 고객 공유 링크가 비활성화되었습니다.");
+        } catch (err) {
+          if (!silent) showToast("⚠️ 저장 중 오류가 발생했습니다: " + (err && err.message ? err.message : err));
+        }
+      };
+
+      function findSiteForPartnerShare(siteName, siteKey) {
+        const all = getAllSites();
+        if (siteKey) {
+          const byKey = all.find((s) => s && s.siteKey === siteKey);
+          if (byKey) return byKey;
+        }
+        return all.find((s) => s && s.siteName === siteName && (s.scope || "site") !== "newSite")
+          || all.find((s) => s && s.siteName === siteName)
+          || null;
+      }
+
+      function getPartnerShareTaskNames(site) {
+        const tasks = (site && Array.isArray(site.tasks)) ? site.tasks.slice() : [];
+        tasks.sort((a, b) => String(parseYmdFromTask(a) || "9999-99-99").localeCompare(String(parseYmdFromTask(b) || "9999-99-99")));
+        const seen = new Set();
+        const names = [];
+        tasks.forEach((t) => {
+          const n = String((t && t.taskName) || "").trim();
+          if (n && !seen.has(n)) {
+            seen.add(n);
+            names.push(n);
+          }
+        });
+        return names;
+      }
+
+      function getPartnerShareUrl(token) {
+        const cleanToken = String(token || "").trim();
+        if (!cleanToken) return "";
+        try {
+          return new URL("./client.html?mode=partner&token=" + encodeURIComponent(cleanToken), location.href).href;
+        } catch (e) {
+          return "./client.html?mode=partner&token=" + encodeURIComponent(cleanToken);
+        }
+      }
+
+      function mergePreservedShareConfigs(targetDash, prevDash) {
+        if (!targetDash || typeof targetDash !== "object" || !prevDash || typeof prevDash !== "object") return targetDash;
+        if (prevDash.siteInfoMap && typeof prevDash.siteInfoMap === "object") {
+          if (!targetDash.siteInfoMap || typeof targetDash.siteInfoMap !== "object") targetDash.siteInfoMap = {};
+          Object.keys(prevDash.siteInfoMap).forEach((sn) => {
+            const prevEntry = prevDash.siteInfoMap[sn];
+            if (prevEntry && prevEntry.partnerShare) {
+              const curEntry = targetDash.siteInfoMap[sn] || {};
+              const curUpd = curEntry.partnerShare && curEntry.partnerShare.updatedAt ? String(curEntry.partnerShare.updatedAt) : "";
+              const prevUpd = prevEntry.partnerShare.updatedAt ? String(prevEntry.partnerShare.updatedAt) : "";
+              if (!curEntry.partnerShare || prevUpd > curUpd) {
+                targetDash.siteInfoMap[sn] = Object.assign({}, curEntry, { partnerShare: prevEntry.partnerShare });
+              }
+            }
+          });
+        }
+        return targetDash;
+      }
+
+      function buildPartnerShareGuideText(siteName, cfg) {
+        const shareCfg = cfg || {};
+        const site = findSiteForPartnerShare(siteName, shareCfg.siteKey) || { siteName, tasks: [] };
+        const info = (state.dashData && state.dashData.siteInfoMap && state.dashData.siteInfoMap[siteName]) || getSiteInfo(siteName) || {};
+        const scopeMode = shareCfg.scopeMode === "task" ? "task" : "all";
+        const targetTaskName = String(shareCfg.targetTaskName || "").trim();
+        const customNotice = String(shareCfg.noticeText || "").trim();
+        const tasksRaw = Array.isArray(site.tasks) ? site.tasks.slice() : [];
+        tasksRaw.sort((a, b) => String(parseYmdFromTask(a) || "9999-99-99").localeCompare(String(parseYmdFromTask(b) || "9999-99-99")));
+
+        if (scopeMode === "task" && targetTaskName) {
+          const matched = tasksRaw.filter((t) => String((t && t.taskName) || "").trim() === targetTaskName);
+          if (matched.length === 1) {
+            let baseText = buildGuideTextForTask(site, matched[0]);
+            if (customNotice) {
+              const marker = "※ 현장 진입 및 작업 전 특이사항을 반드시 확인해 주세요.";
+              const noticeBlock = `📌 작업 지시사항:\n${customNotice}\n━━━━━━━━━━━━━━━━━━\n`;
+              if (baseText.includes(marker)) {
+                baseText = baseText.replace(marker, noticeBlock + marker);
+              } else {
+                baseText += "\n" + noticeBlock + marker;
+              }
+            }
+            return baseText;
+          }
+        }
+
+        const suptList = getSiteSuperintendentList();
+        const suptNames = new Set(suptList.map((sp) => sp.name));
+        const relevantTasks = (scopeMode === "task" && targetTaskName)
+          ? tasksRaw.filter((t) => String((t && t.taskName) || "").trim() === targetTaskName)
+          : tasksRaw;
+
+        let designerName = "";
+        for (let i = 0; i < relevantTasks.length; i++) {
+          const t = relevantTasks[i];
+          if (t && t.manager1) { designerName = String(t.manager1).trim(); break; }
+          if (t && t.manager) {
+            const parts = String(t.manager).split(/[,/]/).map((s) => s.trim()).filter(Boolean);
+            const nonSupt = parts.find((p) => !suptNames.has(p));
+            if (nonSupt || parts[0]) { designerName = nonSupt || parts[0]; break; }
+          }
+        }
+        if (!designerName) {
+          const siteMgr = site.primaryManager || site.manager || site.defaultManager || "";
+          if (siteMgr) {
+            const parts = String(siteMgr).split(/[,/]/).map((s) => s.trim()).filter(Boolean);
+            const nonSupt = parts.find((p) => !suptNames.has(p));
+            designerName = nonSupt || parts[0] || "";
+          }
+        }
+        const designerPhone = designerName ? lookupMemberPhone(designerName) : "";
+        const designerDisplay = designerName ? (designerName + (designerPhone ? " | " + designerPhone : "")) : "미지정";
+        const superintendentDisplay = getSiteSuperintendentDisplay(siteName, relevantTasks[0] || null);
+
+        const ymds = relevantTasks.flatMap((t) => {
+          const d = parseYmdFromTask(t);
+          const ed = d ? parseEndYmdFromTask(t, d) : "";
+          return [d, ed].filter(Boolean);
+        }).sort();
+        const periodDisplay = ymds.length
+          ? (ymds[0] !== ymds[ymds.length - 1] ? `${ymds[0]} ~ ${ymds[ymds.length - 1]}` : ymds[0])
+          : "-";
+
+        const lines = [
+          `[우성아이디 현장 작업 안내]`,
+          `━━━━━━━━━━━━━━━━━━`,
+          `■ 현장명: ${siteName}`,
+          scopeMode === "task" && targetTaskName
+            ? `■ 공종: ${targetTaskName}${relevantTasks.length > 1 ? ` (${relevantTasks.length}건)` : ""}`
+            : `■ 공종: 전체 공정 일정 (${relevantTasks.length}건)`,
+          `■ 작업일자: ${periodDisplay}`,
+          `■ 담당 디자이너 : ${designerDisplay}`
+        ];
+        if (superintendentDisplay) lines.push(`■ 현장 소장 : ${superintendentDisplay}`);
+        lines.push(`━━━━━━━━━━━━━━━━━━`);
+        lines.push(`📍 현장 주소: ${info.address || "(주소 미등록 - 담당자 문의)"}`);
+        lines.push(`🔑 도어락 비번: ${info.doorPassword || "(비밀번호 미등록 - 담당자 문의)"}`);
+        if (info.officePhone) lines.push(`📞 관리사무소: ${info.officePhone}`);
+        const taskMemos = Array.from(new Set(relevantTasks.map((t) => String((t && t.memo) || "").trim()).filter(Boolean)));
+        const combinedMemo = [String(info.memo || "").trim(), ...taskMemos].filter(Boolean).join(" / ");
+        if (combinedMemo) lines.push(`⚠️ 특이사항 / 주차: ${combinedMemo}`);
+        if (customNotice) {
+          lines.push(`━━━━━━━━━━━━━━━━━━`);
+          lines.push(`📌 작업 지시사항:\n${customNotice}`);
+        }
+        if (scopeMode === "all") {
+          const activeList = relevantTasks.filter((t) => !isTaskCompleted(t)).slice(0, 8);
+          if (activeList.length) {
+            lines.push(`━━━━━━━━━━━━━━━━━━`);
+            lines.push(`🗓️ 예정·진행 일정 요약:`);
+            activeList.forEach((t) => {
+              const d = parseYmdFromTask(t) || t.dateDisplay || "일정 미정";
+              lines.push(`· ${d} | ${t.taskName || "공정"}`);
+            });
+          }
+        }
+        lines.push(`━━━━━━━━━━━━━━━━━━`);
+        lines.push(`※ 현장 진입 및 작업 전 특이사항을 반드시 확인해 주세요.`);
+        return lines.join("\n");
+      }
+
+      function buildPartnerSharePayload(siteName, cfg) {
+        const shareCfg = cfg || {};
+        const site = findSiteForPartnerShare(siteName, shareCfg.siteKey);
+        const info = (state.dashData && state.dashData.siteInfoMap && state.dashData.siteInfoMap[siteName]) || getSiteInfo(siteName) || {};
+        const tasksRaw = (site && Array.isArray(site.tasks)) ? site.tasks : [];
+        const scopeMode = shareCfg.scopeMode === "task" ? "task" : "all";
+        const targetTaskName = String(shareCfg.targetTaskName || "").trim();
+
+        const allNormalizedTasks = tasksRaw
+          .map((t) => {
+            const d = parseYmdFromTask(t) || "";
+            const ed = d ? parseEndYmdFromTask(t, d) : "";
+            const asSpace = t.asMeta && t.asMeta.space ? String(t.asMeta.space).trim() : "";
+            const asSymptom = t.asMeta && t.asMeta.symptom ? String(t.asMeta.symptom).trim() : "";
+            const memoParts = [String(t.memo || "").trim()];
+            if (asSpace || asSymptom) {
+              memoParts.push([asSpace ? `위치: ${asSpace}` : "", asSymptom ? `증상: ${asSymptom}` : ""].filter(Boolean).join(" / "));
+            }
+            return {
+              taskName: String(t.taskName || "공정"),
+              status: isTaskCompleted(t) ? "완료" : (String(t.status || "").includes("진행") ? "진행" : "예정"),
+              date: d,
+              endDate: ed && ed !== d ? ed : "",
+              dateDisplay: String(t.dateDisplay || ""),
+              partner: String(t.partner || ""),
+              manager: String(t.manager || ""),
+              memo: memoParts.filter(Boolean).join(" · ")
+            };
+          })
+          .sort((a, b) => String(a.date || "9999-99-99").localeCompare(String(b.date || "9999-99-99")));
+
+        const filteredTasks = (scopeMode === "task" && targetTaskName)
+          ? allNormalizedTasks.filter((t) => String(t.taskName || "").trim() === targetTaskName)
+          : allNormalizedTasks;
+
+        const datedList = (filteredTasks.length ? filteredTasks : allNormalizedTasks)
+          .flatMap((t) => [t.date, t.endDate].filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(String(x || ""))))
+          .sort();
+        const periodText = datedList.length
+          ? (datedList[0] !== datedList[datedList.length - 1] ? `${datedList[0]} ~ ${datedList[datedList.length - 1]}` : datedList[0])
+          : "";
+
+        const totalTasksCount = filteredTasks.length;
+        const completedTasksCount = filteredTasks.filter((t) => t.status === "완료").length;
+        const progressRate = totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0;
+
+        const { contacts, managerText, phone: managerPhone } = getClientShareManagerContact(siteName);
+        const superintendentDisplay = getSiteSuperintendentDisplay(siteName, null);
+        const guideText = buildPartnerShareGuideText(siteName, {
+          siteKey: shareCfg.siteKey || (site && site.siteKey) || "",
+          scopeMode,
+          targetTaskName,
+          noticeText: shareCfg.noticeText || ""
+        });
+
+        return {
+          shareType: "partner",
+          enabled: shareCfg.enabled !== false,
+          siteName: String(siteName || ""),
+          scopeMode,
+          targetTaskName: scopeMode === "task" ? targetTaskName : "",
+          address: String(info.address || ""),
+          doorPassword: String(info.doorPassword || ""),
+          officePhone: String(info.officePhone || ""),
+          siteMemo: String(info.memo || ""),
+          manager: managerText,
+          managerPhone: String(managerPhone || ""),
+          managerContacts: contacts,
+          superintendent: superintendentDisplay,
+          periodText,
+          noticeText: String(shareCfg.noticeText || ""),
+          guideText,
+          progressRate,
+          totalTasksCount,
+          completedTasksCount,
+          allTasksCount: allNormalizedTasks.length,
+          tasks: filteredTasks,
+          updatedAt: new Date().toISOString()
+        };
+      }
+
+      window.syncActivePartnerShareForSite = function (siteName) {
+        if (!siteName || !window.WSSupabaseV3 || typeof window.WSSupabaseV3.persistSnapshot !== "function") return;
+        const info = (state.dashData && state.dashData.siteInfoMap && state.dashData.siteInfoMap[siteName]) || getSiteInfo(siteName);
+        if (!info || !info.partnerShare || !info.partnerShare.enabled || !info.partnerShare.token) return;
+        const payload = buildPartnerSharePayload(siteName, info.partnerShare);
+        Promise.resolve(window.WSSupabaseV3.persistSnapshot("partner_share::" + info.partnerShare.token, payload)).catch(() => {});
+      };
+
+      window.openPartnerShareModal = function (siteName, opts) {
+        opts = opts || {};
+        const tEl = document.getElementById("syncStatusModalTitle");
+        const cEl = document.getElementById("syncStatusModalCloseBtn");
+        const bEl = document.getElementById("syncStatusModalBody");
+        const fEl = document.getElementById("syncStatusModalFooter");
+        if (!tEl || !bEl || !fEl) return;
+
+        const site = findSiteForPartnerShare(siteName, opts.siteKey);
+        const taskOptions = getPartnerShareTaskNames(site);
+        const info = (state.dashData && state.dashData.siteInfoMap && state.dashData.siteInfoMap[siteName]) || getSiteInfo(siteName) || {};
+        const existing = info.partnerShare || {};
+        const token = existing.token || generateClientShareToken();
+        const enabled = existing.token ? (existing.enabled !== false) : true;
+
+        const requestedTask = String(opts.defaultTaskName || "").trim();
+        let scopeMode = existing.scopeMode === "task" ? "task" : "all";
+        let targetTaskName = String(existing.targetTaskName || "").trim();
+        if (requestedTask) {
+          scopeMode = "task";
+          targetTaskName = requestedTask;
+        }
+        if (targetTaskName && !taskOptions.includes(targetTaskName)) {
+          taskOptions.unshift(targetTaskName);
+        }
+        if (scopeMode === "task" && !targetTaskName && taskOptions.length > 0) {
+          targetTaskName = taskOptions[0];
+        }
+        const noticeText = existing.noticeText !== undefined ? String(existing.noticeText) : "";
+
+        state._partnerShareDraft = {
+          siteName,
+          siteKey: opts.siteKey || (site && site.siteKey) || existing.siteKey || "",
+          token,
+          prevToken: existing.token || "",
+          enabled,
+          scopeMode,
+          targetTaskName,
+          noticeText,
+          taskOptions
+        };
+
+        tEl.textContent = `👷 [${siteName}] 반장님 · 협력업체 공유`;
+        if (cEl) cEl.style.display = "inline-flex";
+        const modalCard = document.querySelector("#syncStatusModal .ws-modal-card");
+        if (modalCard) modalCard.style.maxWidth = "640px";
+
+        const renderBody = () => {
+          const d = state._partnerShareDraft;
+          const shareUrl = getPartnerShareUrl(d.token);
+          const taskOptsHtml = d.taskOptions.length
+            ? d.taskOptions.map((tn) => `<option value="${escHtml(tn)}" ${d.targetTaskName === tn ? "selected" : ""}>${escHtml(tn)}</option>`).join("")
+            : `<option value="">(등록된 공종 없음)</option>`;
+          bEl.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:12px;text-align:left;">
+              <div style="display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">
+                <div>
+                  <div style="font-size:13px;font-weight:800;color:#0f172a;">반장님 공유 링크 활성화</div>
+                  <div style="font-size:11.5px;color:#64748b;">끄면 기존 링크 접속 시 만료 안내가 표시됩니다.</div>
+                </div>
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;color:${d.enabled ? "#15803d" : "#64748b"};cursor:pointer;">
+                  <input type="checkbox" id="psEnabledChk" ${d.enabled ? "checked" : ""} onchange="state._partnerShareDraft.enabled = this.checked; if(typeof state._renderPartnerShareModalBody==='function') state._renderPartnerShareModalBody();" style="width:17px;height:17px;accent-color:#16a34a;">
+                  ${d.enabled ? "공유 ON" : "공유 OFF"}
+                </label>
+              </div>
+
+              <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                  <span style="font-size:12.5px;font-weight:800;color:#0f172a;">📅 일정 범위 설정</span>
+                  <div class="seg-row" style="gap:6px;flex:0 0 auto;">
+                    <button type="button" id="psScopeAllBtn" class="seg-btn ${d.scopeMode !== "task" ? "active" : ""}" onclick="window.setPartnerShareScopeMode('all')" style="flex:0 0 auto;padding:5px 12px;font-size:12px;">전체 일정</button>
+                    <button type="button" id="psScopeTaskBtn" class="seg-btn ${d.scopeMode === "task" ? "active-amber" : ""}" onclick="window.setPartnerShareScopeMode('task')" style="flex:0 0 auto;padding:5px 12px;font-size:12px;">해당 공종만</button>
+                  </div>
+                </div>
+                ${d.scopeMode === "task" ? `
+                  <div class="fg" style="margin:0;">
+                    <label>공유할 공종 선택</label>
+                    <select class="ws-select" id="psTargetTaskSelect" onchange="window.setPartnerShareTargetTask(this.value)">
+                      ${taskOptsHtml}
+                    </select>
+                  </div>
+                ` : `<div style="font-size:11.5px;color:#64748b;">이 현장의 전체 공정 일정과 월간 캘린더를 반장님께 공유합니다.</div>`}
+              </div>
+
+              <div class="fg" style="margin:0;">
+                <label>📝 반장님 전달 특이사항 · 작업 지시사항 <span style="font-weight:500;color:#64748b;">(공유 페이지 상단 노출)</span></label>
+                <textarea class="ws-textarea" id="psNoticeInput" rows="3" oninput="state._partnerShareDraft.noticeText = this.value;" placeholder="예: 1층 보양 확인 후 양중 진행, 도면 변경사항 카톡 참고 바랍니다.">${escHtml(d.noticeText)}</textarea>
+              </div>
+
+              <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+                  <span style="font-size:12px;font-weight:800;color:#92400e;">👷 반장님 전용 링크 (비번·주소 포함 / 금액 정보 완전 제외)</span>
+                  <button type="button" class="btn-tool-tag" onclick="window.regeneratePartnerShareToken()" style="font-size:11px;padding:2px 8px;">🔄 링크 재발급</button>
+                </div>
+                <input type="text" class="ws-input" id="psUrlInput" readonly value="${escHtml(shareUrl)}" onclick="this.select()" style="background:#ffffff;font-size:12px;color:#78350f;font-weight:600;">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+                  <button type="button" class="btn-tool-tag" onclick="window.savePartnerShareModal(true).then(() => copyText(document.getElementById('psUrlInput').value))" style="background:#ffffff;border-color:#fcd34d;color:#b45309;font-weight:800;">📋 링크 복사</button>
+                  <button type="button" class="btn-tool-tag" onclick="window.savePartnerShareModal(true).then(() => window.copyPartnerShareGuideText())" style="background:#ffffff;border-color:#cbd5e1;color:#0f172a;font-weight:800;">📋 안내문 텍스트 복사</button>
+                  <button type="button" class="btn-tool-tag" onclick="window.savePartnerShareModal(true).then(() => window.copyPartnerShareKakao())" style="background:#fef08a;border-color:#facc15;color:#713f12;font-weight:800;">💬 카톡 공유 문구</button>
+                  <button type="button" class="btn-tool-tag" onclick="window.previewPartnerShare()" style="background:#ffffff;font-weight:700;">🔗 미리보기 ↗</button>
+                </div>
+              </div>
+            </div>
+          `;
+        };
+        state._renderPartnerShareModalBody = renderBody;
+        renderBody();
+
+        fEl.innerHTML = `
+          <button type="button" class="btn-act-white" onclick="closeModal('syncStatusModal')">닫기</button>
+          <button type="button" class="btn-act-blue" onclick="window.savePartnerShareModal()">💾 저장 및 최신 현황 반영</button>
+        `;
+        openModal("syncStatusModal");
+        if (!existing.token) {
+          window.savePartnerShareModal(true);
+        }
+      };
+
+      window.setPartnerShareScopeMode = function (mode) {
+        if (!state._partnerShareDraft) return;
+        const d = state._partnerShareDraft;
+        d.scopeMode = mode === "task" ? "task" : "all";
+        if (d.scopeMode === "task" && !d.targetTaskName && d.taskOptions && d.taskOptions.length) {
+          d.targetTaskName = d.taskOptions[0];
+        }
+        if (typeof state._renderPartnerShareModalBody === "function") state._renderPartnerShareModalBody();
+      };
+
+      window.setPartnerShareTargetTask = function (taskName) {
+        if (!state._partnerShareDraft) return;
+        state._partnerShareDraft.targetTaskName = String(taskName || "").trim();
+      };
+
+      window.regeneratePartnerShareToken = function () {
+        if (!state._partnerShareDraft) return;
+        state._partnerShareDraft.token = generateClientShareToken();
+        if (typeof state._renderPartnerShareModalBody === "function") state._renderPartnerShareModalBody();
+        showToast("🔄 새 반장님 공유 링크가 생성되었습니다. 저장 버튼을 눌러 반영하세요.");
+      };
+
+      window.copyPartnerShareGuideText = function () {
+        if (!state._partnerShareDraft) return;
+        const d = state._partnerShareDraft;
+        const text = buildPartnerShareGuideText(d.siteName, d);
+        copyText(text);
+      };
+
+      window.copyPartnerShareKakao = function () {
+        if (!state._partnerShareDraft) return;
+        const d = state._partnerShareDraft;
+        const url = getPartnerShareUrl(d.token);
+        const info = (state.dashData && state.dashData.siteInfoMap && state.dashData.siteInfoMap[d.siteName]) || getSiteInfo(d.siteName) || {};
+        const scopeLabel = (d.scopeMode === "task" && d.targetTaskName) ? `[${d.targetTaskName} 공종]` : "[전체 공정 일정]";
+        const contactLines = formatClientShareContactLines(d.siteName);
+        const parts = [
+          `[우성아이디] ${d.siteName} ${scopeLabel} 작업 안내`,
+          ``,
+          `안녕하세요, 우성아이디입니다.`,
+          `현장 작업 일정, 주소, 도어락 비밀번호 및 전달사항을 아래 링크에서 확인해 주세요.`,
+          ``,
+          `👉 ${url}`,
+          info.address ? `📍 주소: ${info.address}` : "",
+          info.doorPassword ? `🔑 비번: ${info.doorPassword}` : "",
+          d.noticeText && d.noticeText.trim() ? `📌 지시사항: ${d.noticeText.trim()}` : "",
+          contactLines || ""
+        ].filter((line, idx, arr) => line !== "" || (idx > 0 && arr[idx - 1] !== ""));
+        copyText(parts.join("\n"));
+      };
+
+      window.previewPartnerShare = async function () {
+        if (!state._partnerShareDraft) return;
+        const url = getPartnerShareUrl(state._partnerShareDraft.token);
+        const win = window.open("", "_blank", "noopener,noreferrer");
+        await window.savePartnerShareModal(true);
+        if (win) win.location.href = url;
+        else window.open(url, "_blank", "noopener,noreferrer");
+      };
+
+      window.savePartnerShareModal = async function (silent) {
+        const d = state._partnerShareDraft;
+        if (!d || !d.siteName) return;
+        if (!state.dashData) state.dashData = {};
+        if (!state.dashData.siteInfoMap) state.dashData.siteInfoMap = {};
+        const baseInfo = state.dashData.siteInfoMap[d.siteName] || getSiteInfo(d.siteName) || {};
+        const partnerShare = {
+          token: d.token,
+          enabled: !!d.enabled,
+          scopeMode: d.scopeMode === "task" ? "task" : "all",
+          targetTaskName: d.scopeMode === "task" ? String(d.targetTaskName || "").trim() : "",
+          noticeText: String(d.noticeText || ""),
+          siteKey: d.siteKey || "",
+          updatedAt: new Date().toISOString()
+        };
+        state.dashData.siteInfoMap[d.siteName] = Object.assign({
+          address: "",
+          doorPassword: "",
+          officePhone: "",
+          memo: "",
+          driveUrl: "",
+          consentDone: false,
+          elevatorCoverDone: false,
+          officeNoticeDone: false
+        }, baseInfo, { partnerShare });
+
+        const payload = buildPartnerSharePayload(d.siteName, Object.assign({}, partnerShare, { siteKey: d.siteKey }));
+        if (window.WSDataService && typeof window.WSDataService.saveDashboardCache === "function") {
+          window.WSDataService.saveDashboardCache(state.dashData);
+        }
+        try {
+          if (window.WSSupabaseV3 && typeof window.WSSupabaseV3.persistSnapshot === "function") {
+            if (typeof window.WSSupabaseV3.isSupabaseActive === "function" && window.WSSupabaseV3.isSupabaseActive()) {
+              await window.WSSupabaseV3.persistSnapshot("dashboard_main", state.dashData, { skipShareSync: true });
+            }
+            if (d.prevToken && d.prevToken !== d.token) {
+              await window.WSSupabaseV3.persistSnapshot("partner_share::" + d.prevToken, {
+                shareType: "partner",
+                enabled: false,
+                siteName: String(d.siteName || ""),
+                revokedAt: new Date().toISOString()
+              });
+            }
+            await window.WSSupabaseV3.persistSnapshot("partner_share::" + d.token, payload);
+            d.prevToken = d.token;
+          }
+          if (!silent) showToast(d.enabled ? "✅ 반장님 공유 링크가 저장 및 최신 반영되었습니다." : "🔒 반장님 공유 링크가 비활성화되었습니다.");
         } catch (err) {
           if (!silent) showToast("⚠️ 저장 중 오류가 발생했습니다: " + (err && err.message ? err.message : err));
         }
@@ -23388,7 +23868,7 @@ end $$;`;
           return Array.from(byKey.values());
         }
 
-        async function persistDomainSnapshot(key, rawPayload) {
+        async function persistDomainSnapshot(key, rawPayload, opts) {
           const mutId = `${SESSION_CLIENT_ID}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
           markLocalMutId(mutId);
           const payload = Object.assign({}, rawPayload || {}, {
@@ -23403,11 +23883,19 @@ end $$;`;
           };
           const t0 = performance.now();
           await upsertRows("ws_state_store", [row], "key");
-          if ((key === "dash_main" || key === "finance_main") && typeof window.syncActiveClientShareForSite === "function" && state.dashData && state.dashData.siteInfos) {
-            Object.keys(state.dashData.siteInfos).forEach((sn) => {
-              const cs = state.dashData.siteInfos[sn] && state.dashData.siteInfos[sn].clientShare;
-              if (cs && cs.enabled && cs.token) window.syncActiveClientShareForSite(sn);
-            });
+          if (!(opts && opts.skipShareSync)) {
+            if ((key === "dash_main" || key === "finance_main") && typeof window.syncActiveClientShareForSite === "function" && state.dashData && state.dashData.siteInfos) {
+              Object.keys(state.dashData.siteInfos).forEach((sn) => {
+                const cs = state.dashData.siteInfos[sn] && state.dashData.siteInfos[sn].clientShare;
+                if (cs && cs.enabled && cs.token) window.syncActiveClientShareForSite(sn);
+              });
+            }
+            if (key === "dashboard_main" && typeof window.syncActivePartnerShareForSite === "function" && state.dashData && state.dashData.siteInfoMap) {
+              Object.keys(state.dashData.siteInfoMap).forEach((sn) => {
+                const ps = state.dashData.siteInfoMap[sn] && state.dashData.siteInfoMap[sn].partnerShare;
+                if (ps && ps.enabled && ps.token) window.syncActivePartnerShareForSite(sn);
+              });
+            }
           }
           lastLatencyMs = Math.round(performance.now() - t0);
           state.syncSource = "supabase";
@@ -24020,6 +24508,7 @@ end $$;`;
           if (!dashData || !Array.isArray(dashData.sites)) {
             throw new Error("이관할 현장/공정 데이터가 없습니다.");
           }
+          mergePreservedShareConfigs(dashData, state.dashData);
 
           appendLog("3/5 ws_state_store 도메인 스냅샷 저장 중...");
           await persistDomainSnapshot("dashboard_main", dashData);
@@ -25881,6 +26370,7 @@ end $$;`;
                 }
               });
             }
+            mergePreservedShareConfigs(cleanDash, state.dashData);
             state.dashData = cleanDash;
             if (window.WSDataService && typeof window.WSDataService.saveDashboardCache === "function") {
               window.WSDataService.saveDashboardCache(state.dashData);

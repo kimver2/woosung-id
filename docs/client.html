@@ -375,6 +375,123 @@
       cursor: pointer;
     }
     .more-btn:hover { background: #f1f5f9; }
+    .hero-card.partner-mode { border-top-color: #d97706; }
+    .scope-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .scope-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 9px;
+      border-radius: 999px;
+    }
+    .scope-pill.all { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+    .scope-pill.task { background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; }
+    .partner-notice-box {
+      background: #fffbeb;
+      border: 1.5px solid #fcd34d;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+    .partner-notice-title {
+      font-size: 12.5px;
+      font-weight: 800;
+      color: #92400e;
+      margin-bottom: 5px;
+    }
+    .partner-notice-body {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #78350f;
+      font-weight: 600;
+      white-space: pre-line;
+    }
+    .access-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .access-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 11px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 12.5px;
+    }
+    .access-val {
+      font-weight: 700;
+      color: #0f172a;
+      word-break: break-word;
+    }
+    .access-pw {
+      font-weight: 800;
+      color: #0f766e;
+    }
+    .copy-pill-btn {
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #334155;
+      font-size: 11.5px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 7px;
+      cursor: pointer;
+      white-space: nowrap;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .copy-pill-btn:hover { background: #f1f5f9; }
+    .copy-pill-btn.primary {
+      background: #fffbeb;
+      border-color: #f59e0b;
+      color: #b45309;
+    }
+    .copy-pill-btn.primary:hover { background: #fef3c7; }
+    .task-memo {
+      font-size: 11.5px;
+      color: #475569;
+      font-weight: 600;
+      margin-top: 3px;
+      line-height: 1.4;
+    }
+    .client-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%) translateY(16px);
+      background: #0f172a;
+      color: #ffffff;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 12.5px;
+      font-weight: 700;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.25);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 9999;
+      max-width: 90vw;
+      text-align: center;
+    }
+    .client-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
     @media (max-width: 520px) {
       .pay-summary { grid-template-columns: 1fr; }
       .site-title { font-size: 18px; }
@@ -390,7 +507,7 @@
         <img src="./icon-192.png" alt="우성아이디">
         <div>
           <div class="brand-title">우성아이디</div>
-          <div class="brand-sub">실시간 현장 진행 현황</div>
+          <div class="brand-sub" id="shareBrandSub">실시간 현장 진행 현황</div>
         </div>
       </div>
       <button type="button" class="refresh-btn" onclick="loadClientShare()">🔄 새로고침</button>
@@ -399,24 +516,82 @@
     <div id="clientShareRoot">
       <div class="card empty-card">
         <div style="font-size:28px;margin-bottom:8px;">⏳</div>
-        <div style="font-size:14px;font-weight:700;color:#475569;">현장 진행 현황을 불러오는 중입니다...</div>
+        <div id="loadingStatusMsg" style="font-size:14px;font-weight:700;color:#475569;">현장 진행 현황을 불러오는 중입니다...</div>
       </div>
     </div>
 
     <div class="footer" id="clientShareFooter">© 우성아이디 인테리어</div>
   </div>
+  <div id="clientToast" class="client-toast" role="status" aria-live="polite"></div>
 
   <script>
     const SUPABASE_URL = "https://uyqvguzglviqegxmxqyn.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_f8JwxMgpgs6AVSEumSIV2g_KlK6o9GA";
     const clientViewState = {
+      mode: "client",
       payload: null,
       updatedAt: "",
       calYear: new Date().getFullYear(),
       calMonth: new Date().getMonth() + 1,
       selectedYmd: "",
-      showAllTasks: false
+      showAllTasks: false,
+      showDoneTasks: false
     };
+    let toastTimer = null;
+
+    function isPartnerRequest() {
+      try {
+        const params = new URLSearchParams(location.search);
+        return (params.get("mode") || "").trim().toLowerCase() === "partner";
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function applyShareChrome(isPartner) {
+      document.title = isPartner ? "우성아이디 — 반장님 현장 작업 현황" : "우성아이디 — 고객 현장 진행 현황";
+      const subEl = document.getElementById("shareBrandSub");
+      if (subEl) subEl.textContent = isPartner ? "반장님 전용 현장 · 작업 안내" : "실시간 현장 진행 현황";
+      const loadEl = document.getElementById("loadingStatusMsg");
+      if (loadEl) loadEl.textContent = isPartner ? "반장님 작업 일정을 불러오는 중입니다..." : "현장 진행 현황을 불러오는 중입니다...";
+    }
+
+    function showShareToast(msg) {
+      const el = document.getElementById("clientToast");
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        el.classList.remove("show");
+      }, 2400);
+    }
+
+    async function copyShareText(text, successMsg) {
+      const val = String(text || "");
+      if (!val) return;
+      let copied = false;
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(val);
+          copied = true;
+        } catch (_) {}
+      }
+      if (!copied) {
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = val;
+          ta.setAttribute("readonly", "");
+          ta.style.position = "fixed";
+          ta.style.left = "-9999px";
+          document.body.appendChild(ta);
+          ta.select();
+          copied = document.execCommand("copy");
+          document.body.removeChild(ta);
+        } catch (_) {}
+      }
+      showShareToast(copied ? (successMsg || "📋 클립보드에 복사되었습니다.") : "⚠️ 복사에 실패했습니다. 직접 선택해 복사해 주세요.");
+    }
 
     function esc(s) {
       return String(s == null ? "" : s)
@@ -454,15 +629,88 @@
       `;
     }
 
+    function getVisiblePartnerTasks(p) {
+      const tasks = (p && Array.isArray(p.tasks)) ? p.tasks : [];
+      const scopeMode = p && p.scopeMode === "task" ? "task" : "all";
+      const target = String((p && p.targetTaskName) || "").trim();
+      if (scopeMode === "task" && target) {
+        return tasks.filter((t) => t && String(t.taskName || "").trim() === target);
+      }
+      return tasks;
+    }
+
+    function buildFallbackPartnerGuideText(p) {
+      const tasks = getVisiblePartnerTasks(p);
+      const isTaskScope = p && p.scopeMode === "task" && String(p.targetTaskName || "").trim();
+      const scopeLabel = isTaskScope ? String(p.targetTaskName).trim() : `전체 공정 일정 (${tasks.length}건)`;
+      const designerLine = p.manager ? `${p.manager}${p.managerPhone ? " | " + p.managerPhone : ""}` : "미지정";
+      const lines = [
+        `[우성아이디 현장 작업 안내]`,
+        `━━━━━━━━━━━━━━━━━━`,
+        `■ 현장명: ${p.siteName || ""}`,
+        `■ 공종: ${scopeLabel}`,
+        `■ 작업일자: ${p.periodText || "-"}`,
+        `■ 담당 디자이너 : ${designerLine}`
+      ];
+      if (p.superintendent) lines.push(`■ 현장 소장 : ${p.superintendent}`);
+      lines.push(`━━━━━━━━━━━━━━━━━━`);
+      lines.push(`📍 현장 주소: ${p.address || "(주소 미등록 - 담당자 문의)"}`);
+      lines.push(`🔑 도어락 비번: ${p.doorPassword || "(비밀번호 미등록 - 담당자 문의)"}`);
+      if (p.officePhone) lines.push(`📞 관리사무소: ${p.officePhone}`);
+      if (p.siteMemo) lines.push(`⚠️ 특이사항 / 주차: ${p.siteMemo}`);
+      if (p.noticeText && String(p.noticeText).trim()) {
+        lines.push(`━━━━━━━━━━━━━━━━━━`);
+        lines.push(`📌 작업 지시사항:\n${String(p.noticeText).trim()}`);
+      }
+      lines.push(`━━━━━━━━━━━━━━━━━━`);
+      lines.push(`※ 현장 진입 및 작업 전 특이사항을 반드시 확인해 주세요.`);
+      return lines.join("\n");
+    }
+
+    function copyPartnerGuideText() {
+      const p = clientViewState.payload;
+      if (!p) return;
+      const text = String(p.guideText || "").trim() || buildFallbackPartnerGuideText(p);
+      copyShareText(text, "📋 반장님 작업 안내문이 복사되었습니다!");
+    }
+
+    function copyPartnerField(fieldKey, label) {
+      const p = clientViewState.payload;
+      if (!p || !p[fieldKey]) return;
+      copyShareText(String(p[fieldKey]), `📋 ${label || "정보"}가 복사되었습니다.`);
+    }
+
+    function formatSuperintendentHtml(raw) {
+      const str = String(raw || "").trim();
+      if (!str) return "";
+      const escaped = esc(str);
+      return escaped.replace(/(0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4})/g, (m) => {
+        const cleanTel = m.replace(/[^0-9+]/g, "");
+        return `<a href="tel:${cleanTel}">${m}</a>`;
+      });
+    }
+
+    function rerenderActiveShareView() {
+      if (!clientViewState.payload) return;
+      if (clientViewState.mode === "partner") {
+        renderPartnerShareView(clientViewState.payload, clientViewState.updatedAt);
+      } else {
+        renderShareView(clientViewState.payload, clientViewState.updatedAt);
+      }
+    }
+
     async function loadClientShare() {
       const params = new URLSearchParams(location.search);
       const token = (params.get("token") || "").trim();
+      const isPartnerReq = isPartnerRequest();
+      clientViewState.mode = isPartnerReq ? "partner" : "client";
+      applyShareChrome(isPartnerReq);
       if (!token) {
         renderError("🔗", "유효하지 않은 공유 링크입니다.", "전달받으신 링크 주소를 다시 확인해 주세요.");
         return;
       }
       try {
-        const key = "client_share::" + token;
+        const key = (isPartnerReq ? "partner_share::" : "client_share::") + token;
         const url = `${SUPABASE_URL}/rest/v1/ws_state_store?key=eq.${encodeURIComponent(key)}&select=payload,updated_at`;
         const res = await fetch(url, {
           headers: {
@@ -479,14 +727,23 @@
           renderError("🔒", "공유가 종료되었거나 만료된 링크입니다.", "현장 담당자에게 최신 공유 링크를 요청해 주세요.");
           return;
         }
+        if (isPartnerReq && p.shareType !== "partner") {
+          renderError("🔗", "유효하지 않은 반장님 공유 링크입니다.", "전달받으신 링크 주소를 다시 확인해 주세요.");
+          return;
+        }
+        if (!isPartnerReq && p.shareType === "partner") {
+          renderError("🔗", "유효하지 않은 고객 공유 링크입니다.", "전달받으신 링크 주소를 다시 확인해 주세요.");
+          return;
+        }
         clientViewState.payload = p;
         clientViewState.updatedAt = row.updated_at || p.updatedAt || "";
         clientViewState.showAllTasks = false;
+        clientViewState.showDoneTasks = false;
         clientViewState.selectedYmd = "";
         const now = new Date();
         const curYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-        const tasks = Array.isArray(p.tasks) ? p.tasks : [];
-        const hasCurMonthTask = tasks.some((t) => String(t.date || "").startsWith(curYm));
+        const tasks = isPartnerReq ? getVisiblePartnerTasks(p) : (Array.isArray(p.tasks) ? p.tasks : []);
+        const hasCurMonthTask = tasks.some((t) => String(t.date || "").startsWith(curYm) || String(t.endDate || "").startsWith(curYm));
         if (hasCurMonthTask || !tasks.length) {
           clientViewState.calYear = now.getFullYear();
           clientViewState.calMonth = now.getMonth() + 1;
@@ -498,7 +755,7 @@
             clientViewState.calMonth = Number(target.slice(5, 7));
           }
         }
-        renderShareView(p, clientViewState.updatedAt);
+        rerenderActiveShareView();
       } catch (err) {
         console.error(err);
         renderError("⚠️", "현장 정보를 불러오지 못했습니다.", "잠시 후 다시 새로고침을 눌러 주세요.");
@@ -513,7 +770,7 @@
       clientViewState.calYear = y;
       clientViewState.calMonth = m;
       clientViewState.selectedYmd = "";
-      if (clientViewState.payload) renderShareView(clientViewState.payload, clientViewState.updatedAt);
+      rerenderActiveShareView();
     }
 
     function goClientCalToday() {
@@ -521,17 +778,22 @@
       clientViewState.calYear = now.getFullYear();
       clientViewState.calMonth = now.getMonth() + 1;
       clientViewState.selectedYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-      if (clientViewState.payload) renderShareView(clientViewState.payload, clientViewState.updatedAt);
+      rerenderActiveShareView();
     }
 
     function selectClientCalDay(ymd) {
       clientViewState.selectedYmd = (clientViewState.selectedYmd === ymd) ? "" : ymd;
-      if (clientViewState.payload) renderShareView(clientViewState.payload, clientViewState.updatedAt);
+      rerenderActiveShareView();
     }
 
     function toggleClientShowAllTasks() {
       clientViewState.showAllTasks = !clientViewState.showAllTasks;
-      if (clientViewState.payload) renderShareView(clientViewState.payload, clientViewState.updatedAt);
+      rerenderActiveShareView();
+    }
+
+    function togglePartnerDoneTasks() {
+      clientViewState.showDoneTasks = !clientViewState.showDoneTasks;
+      rerenderActiveShareView();
     }
 
     function expandClientCalendarMap(tasks, todayYmd) {
@@ -606,7 +868,10 @@
               const isProg = !isDone && ((t.date && t.endDate && t.date <= todayYmd && t.endDate >= todayYmd) || t.date === todayYmd || String(t.status || "").includes("진행"));
               const badgeCls = isDone ? "badge-done" : (isProg ? "badge-prog" : "badge-plan");
               const badgeTxt = isDone ? "✅ 완료" : (isProg ? "🔨 진행 중" : "예정");
-              return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px dashed #cbd5e1;font-size:12px;"><span style="font-weight:700;color:#1e293b;">${esc(t.taskName)}</span><span class="badge ${badgeCls}">${badgeTxt}</span></div>`;
+              const extraPartnerInfo = (clientViewState.mode === "partner" && (t.partner || t.memo))
+                ? `<div style="font-size:11px;color:#475569;margin-top:2px;">${[t.partner ? `👷 ${esc(t.partner)}` : "", t.memo ? `📝 ${esc(t.memo)}` : ""].filter(Boolean).join(" · ")}</div>`
+                : "";
+              return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-top:1px dashed #cbd5e1;font-size:12px;"><div style="min-width:0;"><span style="font-weight:700;color:#1e293b;">${esc(t.taskName)}</span>${extraPartnerInfo}</div><span class="badge ${badgeCls}">${badgeTxt}</span></div>`;
             }).join("") : `<div style="font-size:12px;color:#64748b;">해당 날짜에 등록된 공정이 없습니다.</div>`}
           </div>`;
       }
@@ -757,6 +1022,181 @@
           </div>
           <div class="task-list">${taskListHtml}</div>
           ${moreTasksBtnHtml}
+        </div>
+      `;
+
+      const upd = fmtUpdated(updatedAt);
+      document.getElementById("clientShareFooter").textContent = `© 우성아이디 인테리어${upd ? " · 최종 업데이트: " + upd : ""}`;
+    }
+
+    function renderPartnerShareView(p, updatedAt) {
+      const isTaskScope = p.scopeMode === "task" && Boolean(String(p.targetTaskName || "").trim());
+      const targetName = String(p.targetTaskName || "").trim();
+      const tasks = getVisiblePartnerTasks(p);
+      const totalCnt = tasks.length;
+      const doneCnt = tasks.filter((t) => t.status === "완료").length;
+      const remainCnt = Math.max(0, totalCnt - doneCnt);
+      const pct = totalCnt > 0 ? Math.round((doneCnt / totalCnt) * 100) : 0;
+      const todayYmd = (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      })();
+
+      const mgrContactsHtml = (Array.isArray(p.managerContacts) && p.managerContacts.length)
+        ? p.managerContacts.map((c) => `<span>👤 ${esc(c.name)}${c.phone ? ` | <a href="tel:${esc(String(c.phone).replace(/[^0-9+]/g, ""))}">${esc(c.phone)}</a>` : ""}</span>`).join("")
+        : (p.manager ? `<span>👤 담당자: ${esc(p.manager)}${p.managerPhone ? ` | <a href="tel:${esc(String(p.managerPhone).replace(/[^0-9+]/g, ""))}">${esc(p.managerPhone)}</a>` : ""}</span>` : "");
+
+      const suptHtml = p.superintendent ? `<span>👷 현장소장: ${formatSuperintendentHtml(p.superintendent)}</span>` : "";
+
+      const noticeTrimmed = String(p.noticeText || "").trim();
+      const noticeCardHtml = noticeTrimmed ? `
+        <div class="partner-notice-box">
+          <div class="partner-notice-title">📌 전달사항 · 작업 지시사항</div>
+          <div class="partner-notice-body">${esc(noticeTrimmed)}</div>
+        </div>
+      ` : "";
+
+      const accessCardHtml = `
+        <div class="card">
+          <div class="sec-title">
+            <span>🔑 현장 출입 · 작업 안내</span>
+            <button type="button" class="copy-pill-btn primary" onclick="copyPartnerGuideText()">📋 안내문 텍스트 복사</button>
+          </div>
+          <div class="access-list">
+            <div class="access-row">
+              <div style="min-width:0;">
+                <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:2px;">📍 현장 주소</div>
+                <div class="access-val">${esc(p.address || "미등록 (담당자 문의)")}</div>
+              </div>
+              ${p.address ? `
+                <div style="display:flex;gap:5px;flex-shrink:0;">
+                  <button type="button" class="copy-pill-btn" onclick="copyPartnerField('address', '현장 주소')">복사</button>
+                  <a class="copy-pill-btn" href="https://map.naver.com/p/search/${encodeURIComponent(p.address)}" target="_blank" rel="noopener noreferrer">지도 ↗</a>
+                </div>
+              ` : ""}
+            </div>
+            <div class="access-row">
+              <div style="min-width:0;">
+                <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:2px;">🔑 공동현관 · 세대 도어락 비밀번호</div>
+                <div class="access-val access-pw">${esc(p.doorPassword || "미등록 (담당자 문의)")}</div>
+              </div>
+              ${p.doorPassword ? `<button type="button" class="copy-pill-btn" onclick="copyPartnerField('doorPassword', '도어락 비밀번호')">복사</button>` : ""}
+            </div>
+            ${p.officePhone ? `
+              <div class="access-row">
+                <div style="min-width:0;">
+                  <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:2px;">📞 관리사무소</div>
+                  <div class="access-val">${esc(p.officePhone)}</div>
+                </div>
+                <a class="copy-pill-btn" href="tel:${esc(String(p.officePhone).replace(/[^0-9+]/g, ""))}">전화</a>
+              </div>
+            ` : ""}
+            <div class="access-row">
+              <div style="min-width:0;">
+                <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:2px;">⚠️ 현장 특이사항 · 주차 안내</div>
+                <div class="access-val" style="font-weight:600;color:#334155;white-space:pre-line;">${esc(p.siteMemo || "특이사항 없음")}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const calHtml = buildClientCalendarCardHtml(tasks, todayYmd);
+
+      const renderPartnerTaskRow = (t) => {
+        const isDone = t.status === "완료";
+        const isToday = !isDone && ((t.date && t.endDate && t.date <= todayYmd && t.endDate >= todayYmd) || t.date === todayYmd || String(t.status || "").includes("진행"));
+        const badgeCls = isDone ? "badge-done" : (isToday ? "badge-prog" : "badge-plan");
+        const badgeTxt = isDone ? "✅ 완료" : (isToday ? "🔨 진행 중" : "예정");
+        const dateStr = (t.date && t.endDate && t.endDate !== t.date) ? `${t.date} ~ ${t.endDate}` : (t.date || t.dateDisplay || "일정 조율 중");
+        return `
+          <div class="task-row ${isDone ? "is-done" : (isToday ? "is-today" : "")}">
+            <div style="min-width:0;">
+              <div class="task-name">${esc(t.taskName)}</div>
+              <div class="task-date">📅 ${esc(dateStr)}${t.partner ? ` · 👷 ${esc(t.partner)}` : ""}</div>
+              ${t.memo ? `<div class="task-memo">📝 ${esc(t.memo)}</div>` : ""}
+            </div>
+            <span class="badge ${badgeCls}">${badgeTxt}</span>
+          </div>
+        `;
+      };
+
+      const remainTasks = tasks.filter((t) => t.status !== "완료");
+      const doneTasks = tasks.filter((t) => t.status === "완료");
+      const visibleRemain = clientViewState.showAllTasks ? remainTasks : remainTasks.slice(0, 5);
+      const hiddenRemainCount = Math.max(0, remainTasks.length - visibleRemain.length);
+
+      let scheduleBodyHtml = "";
+      if (isTaskScope) {
+        scheduleBodyHtml = tasks.length
+          ? tasks.map(renderPartnerTaskRow).join("")
+          : `<div style="font-size:13px;color:#64748b;font-weight:700;text-align:center;padding:16px 0;">선택된 공종(${esc(targetName)})의 등록된 일정이 없습니다.</div>`;
+      } else {
+        const remainHtml = visibleRemain.length
+          ? visibleRemain.map(renderPartnerTaskRow).join("")
+          : `<div style="font-size:13px;color:#15803d;font-weight:700;text-align:center;padding:16px 0;">모든 공정이 완료되었습니다. 🎉</div>`;
+        const moreRemainBtn = remainTasks.length > 5 ? `
+          <button type="button" class="more-btn" onclick="toggleClientShowAllTasks()">
+            ${clientViewState.showAllTasks ? "▲ 5개만 보기 (접기)" : `▼ 나머지 ${hiddenRemainCount}개 일정 더보기 (남은 ${remainTasks.length}건)`}
+          </button>
+        ` : "";
+        const doneToggleHtml = doneTasks.length ? `
+          <button type="button" class="more-btn" style="margin-top:8px;" onclick="togglePartnerDoneTasks()">
+            ${clientViewState.showDoneTasks ? `▲ 완료된 작업 접기 (${doneTasks.length}건)` : `▼ 완료된 작업 ${doneTasks.length}건 보기`}
+          </button>
+          ${clientViewState.showDoneTasks ? `<div class="task-list" style="margin-top:8px;">${doneTasks.map(renderPartnerTaskRow).join("")}</div>` : ""}
+        ` : "";
+        scheduleBodyHtml = remainHtml + moreRemainBtn + doneToggleHtml;
+      }
+
+      document.getElementById("clientShareRoot").innerHTML = `
+        <div class="card hero-card partner-mode">
+          <div class="scope-row">
+            <span class="scope-pill ${isTaskScope ? "task" : "all"}">${isTaskScope ? `🔧 ${esc(targetName)} 공종만 표시` : "👷 전체 공정 일정 공유"}</span>
+          </div>
+          <h1 class="site-title">${esc(p.siteName || "현장 작업 안내")}</h1>
+          <div class="meta-row">
+            ${mgrContactsHtml}
+            ${suptHtml}
+            ${p.periodText ? `<span>🗓️ 작업기간: ${esc(p.periodText)}</span>` : ""}
+            ${p.address ? `<span>📍 ${esc(p.address)} <a href="https://map.naver.com/p/search/${encodeURIComponent(p.address)}" target="_blank" rel="noopener noreferrer">지도 ↗</a></span>` : ""}
+          </div>
+          <div class="prog-wrap">
+            <div class="prog-head">
+              <span>${isTaskScope ? `${esc(targetName)} 공정 진행률` : "전체 공정 진행률"}</span>
+              <span style="font-size:15px;">${pct}% (${doneCnt}/${totalCnt}건 완료)</span>
+            </div>
+            <div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:#d97706;"></div></div>
+          </div>
+        </div>
+
+        ${noticeCardHtml}
+
+        ${accessCardHtml}
+
+        <div class="kpi-grid">
+          <div class="kpi-box">
+            <div class="kpi-lbl">${isTaskScope ? `${esc(targetName)} 공정` : "전체 공정"}</div>
+            <div class="kpi-val">${totalCnt}건</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-lbl">완료 공정</div>
+            <div class="kpi-val" style="color:#15803d;">${doneCnt}건</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-lbl">진행 · 예정</div>
+            <div class="kpi-val" style="color:#b45309;">${remainCnt}건</div>
+          </div>
+        </div>
+
+        ${calHtml}
+
+        <div class="card">
+          <div class="sec-title">
+            <span>${isTaskScope ? `🛠️ ${esc(targetName)} 작업 일정` : "🛠️ 남은 작업 일정"}</span>
+            <span style="font-size:12px;color:#64748b;font-weight:800;">완료 ${doneCnt}/${totalCnt}</span>
+          </div>
+          <div class="task-list">${scheduleBodyHtml}</div>
         </div>
       `;
 
