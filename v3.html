@@ -12767,8 +12767,8 @@ end $$;`;
           if (!includeCompleted && isDone) return;
           const sc = s.scope || "site";
           const base = normBase(s.siteName);
-          const alreadyExists = existingBaseSet.has(base);
-          const mergesIntoSite = !alreadyExists && sc === "as" && activeBaseInList.has(base);
+          if (existingBaseSet.has(base)) return;
+          const mergesIntoSite = sc === "as" && activeBaseInList.has(base);
 
           // 공사기간 자동 계산
           const ymds = [];
@@ -12793,9 +12793,8 @@ end $$;`;
             manager: mgr,
             period,
             isDone,
-            alreadyExists,
             mergesIntoSite,
-            defaultChecked: !alreadyExists && !mergesIntoSite
+            defaultChecked: !mergesIntoSite
           });
         });
 
@@ -12811,7 +12810,7 @@ end $$;`;
           </div>
           <div style="max-height:360px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;text-align:left;">
             ${rows.map((r, i) => `
-              <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;${r.alreadyExists || r.mergesIntoSite ? "background:#f8fafc;opacity:0.75;" : "background:#fff;"}">
+              <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;${r.mergesIntoSite ? "background:#f8fafc;opacity:0.75;" : "background:#fff;"}">
                 <div style="display:flex;align-items:center;gap:8px;min-width:0;">
                   <input type="checkbox" class="col-import-cb" data-idx="${i}" ${r.defaultChecked ? "checked" : ""} style="width:15px;height:15px;accent-color:#2563eb;flex-shrink:0;">
                   <span style="font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:4px;background:${r.scope === "as" ? "#fef3c7" : (r.scope === "single" ? "#e0f2fe" : "#eff6ff")};color:${r.scope === "as" ? "#d97706" : (r.scope === "single" ? "#0284c7" : "#1d4ed8")};flex-shrink:0;">${escHtml(r.category)}</span>
@@ -12819,13 +12818,13 @@ end $$;`;
                     <div style="font-size:12.5px;font-weight:800;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                       ${escHtml(r.siteName)}
                       ${r.isDone ? `<span style="font-size:10px;color:#059669;margin-left:4px;">[완료]</span>` : ""}
-                      ${r.alreadyExists ? `<span style="font-size:10px;color:#64748b;margin-left:4px;">· 이미 등록됨</span>` : (r.mergesIntoSite ? `<span style="font-size:10px;color:#d97706;margin-left:4px;">· 기존 현장에 통합됨</span>` : "")}
+                      ${r.mergesIntoSite ? `<span style="font-size:10px;color:#d97706;margin-left:4px;">· 기존 현장에 통합됨</span>` : ""}
                     </div>
                     <div style="font-size:11px;color:#64748b;">담당: ${escHtml(r.manager || "미지정")} · 기간: ${escHtml(r.period || "미정")}</div>
                   </div>
                 </div>
               </label>
-            `).join("") || `<div style="padding:28px;text-align:center;color:#94a3b8;font-size:12.5px;">불러올 수 있는 현장이 없습니다.</div>`}
+            `).join("") || `<div style="padding:28px;text-align:center;color:#64748b;font-size:12.5px;font-weight:600;">✅ 불러올 수 있는 미등록 현장이 없습니다. (모두 수금현황에 등록됨)</div>`}
           </div>`;
         fEl.innerHTML = `
           <button type="button" class="btn-act-white" onclick="closeModal('syncStatusModal')">취소</button>
