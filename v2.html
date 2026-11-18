@@ -3156,6 +3156,12 @@ end $$;`;
         guideCtx: null,
         reportCtx: { year: _initCalYear, month: _initCalMonth, tab: "partner", scope: "all", query: "" },
         settingsTab: "partners",
+        auditFilterDomain: "all",
+        auditSearchQuery: "",
+        auditDisplayLimit: 100,
+        auditSyncLoading: false,
+        auditLastSyncedAt: "",
+        auditSyncError: "",
         uploadFiles: []
       };
 
@@ -20568,8 +20574,392 @@ end $$;`;
       };
       window.setReportField = function (k, v) { state.reportCtx[k] = v; renderMonthlyReportModal(); };
 
+      // ================= 변경이력(Audit Log) 공통 저장·병합·UI 헬퍼 =================
+      const AUDIT_STORAGE_KEY = "ws_audit_logs_v1";
+      const AUDIT_MAX_LOGS = 300;
+      const AUDIT_DOMAIN_CHIPS = [
+        ["all", "전체"],
+        ["신규견적", "신규견적"],
+        ["공정", "현장·공정"],
+        ["현장", "현장"],
+        ["재무", "재무·원장"],
+        ["To-Do", "To-Do"]
+      ];
+      let _auditRefreshPromise = null;
+
+      function normalizeAuditLogList(raw) {
+        if (!Array.isArray(raw)) return [];
+        return raw.filter((item) => item && typeof item === "object");
+      }
+
+      function mergeAuditLogLists(localList, remoteList, maxCount) {
+        const limit = Number(maxCount) > 0 ? Number(maxCount) : AUDIT_MAX_LOGS;
+        const byKey = new Map();
+        const ingest = (arr) => {
+          normalizeAuditLogList(arr).forEach((item, idx) => {
+            const idKey = item.id
+              ? String(item.id)
+              : `legacy_${item.at || ""}_${item.domain || ""}_${item.action || ""}_${item.target || ""}_${idx}`;
+            if (!byKey.has(idKey)) {
+              byKey.set(idKey, item);
+            } else {
+              const prev = byKey.get(idKey);
+              if (prev && !prev.snapshot && item.snapshot) {
+                byKey.set(idKey, item);
+              }
+            }
+          });
+        };
+        ingest(remoteList);
+        ingest(localList);
+
+        const merged = Array.from(byKey.values());
+        merged.sort((a, b) => {
+          const ta = a && a.at ? Date.parse(a.at) : 0;
+          const tb = b && b.at ? Date.parse(b.at) : 0;
+          const va = Number.isFinite(ta) ? ta : 0;
+          const vb = Number.isFinite(tb) ? tb : 0;
+          if (vb !== va) return vb - va;
+          return String((b && b.id) || "").localeCompare(String((a && a.id) || ""));
+        });
+        return merged.slice(0, limit);
+      }
+
+      function getLocalAuditLogs() {
+        try {
+          const raw = localStorage.getItem(AUDIT_STORAGE_KEY) || "[]";
+          return mergeAuditLogLists(JSON.parse(raw), [], AUDIT_MAX_LOGS);
+        } catch (_) {
+          return [];
+        }
+      }
+
+      function saveLocalAuditLogs(logs) {
+        const clean = mergeAuditLogLists(logs, [], AUDIT_MAX_LOGS);
+        try {
+          localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(clean));
+          return clean;
+        } catch (_) {
+          try {
+            const slim = clean.map((item, idx) => (idx < 60 || !item.snapshot) ? item : Object.assign({}, item, { snapshot: null }));
+            localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(slim));
+            return slim;
+          } catch (_) {
+            try {
+              const shorter = clean.slice(0, 120);
+              localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(shorter));
+              return shorter;
+            } catch (_) {}
+          }
+        }
+        return clean;
+      }
+
+      function getAuditDomainMeta(domain) {
+        const d = String(domain || "시스템").trim();
+        if (d === "신규견적") return { key: "신규견적", label: "신규견적", bg: "#eef2ff", fg: "#4338ca", border: "#c7d2fe" };
+        if (d === "공정" || d === "현장·공정") return { key: "공정", label: "현장·공정", bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe" };
+        if (d === "현장") return { key: "현장", label: "현장", bg: "#f0fdfa", fg: "#0f766e", border: "#99f6e4" };
+        if (d === "재무" || d === "재무·원장") return { key: "재무", label: "재무·원장", bg: "#fffbeb", fg: "#b45309", border: "#fde68a" };
+        if (d === "To-Do") return { key: "To-Do", label: "To-Do", bg: "#ecfdf5", fg: "#047857", border: "#a7f3d0" };
+        return { key: d || "시스템", label: d || "시스템", bg: "#f1f5f9", fg: "#475569", border: "#cbd5e1" };
+      }
+
+      function getAuditActionMeta(action) {
+        const a = String(action || "수정").trim();
+        if (a.includes("삭제")) return { bg: "#fef2f2", fg: "#dc2626", border: "#fecaca" };
+        if (a.includes("복원")) return { bg: "#f5f3ff", fg: "#6d28d9", border: "#ddd6fe" };
+        if (a.includes("완료")) return { bg: "#ecfdf5", fg: "#059669", border: "#a7f3d0" };
+        if (a.includes("등록") || a.includes("추가") || a.includes("불러오기")) return { bg: "#f0fdf4", fg: "#15803d", border: "#bbf7d0" };
+        return { bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe" };
+      }
+
+      function formatAuditTime(isoStr) {
+        if (!isoStr) return { short: "-", full: "-" };
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime())) return { short: String(isoStr), full: String(isoStr) };
+        try {
+          const short = d.toLocaleString("ko-KR", {
+            timeZone: "Asia/Seoul",
+            year: "2-digit",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false
+          });
+          const full = d.toLocaleString("ko-KR", {
+            timeZone: "Asia/Seoul",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false
+          });
+          return { short, full };
+        } catch (_) {
+          const fallback = String(isoStr).slice(0, 16).replace("T", " ");
+          return { short: fallback, full: String(isoStr) };
+        }
+      }
+
+      function matchesAuditDomain(logDomain, filterDomain) {
+        if (!filterDomain || filterDomain === "all") return true;
+        const d = String(logDomain || "").trim();
+        if (filterDomain === "공정") return d === "공정" || d === "현장·공정";
+        if (filterDomain === "재무") return d === "재무" || d === "재무·원장";
+        return d === filterDomain;
+      }
+
+      function filterAuditLogsList(logs, filterDomain, searchQuery) {
+        const list = normalizeAuditLogList(logs);
+        const dom = filterDomain || "all";
+        const q = String(searchQuery || "").trim().toLowerCase();
+        const qWords = q ? q.split(/\s+/).filter(Boolean) : [];
+        return list.filter((l) => {
+          if (!matchesAuditDomain(l.domain, dom)) return false;
+          if (qWords.length > 0) {
+            const dm = getAuditDomainMeta(l.domain);
+            const hay = [l.target, l.detail, l.user, l.action, l.domain, dm.label].filter(Boolean).join(" ").toLowerCase();
+            if (!qWords.every((w) => hay.includes(w))) return false;
+          }
+          return true;
+        });
+      }
+
+      function buildAuditDomainChipsHtml(allLogs, activeDom) {
+        const dom = activeDom || "all";
+        return AUDIT_DOMAIN_CHIPS.map(([k, lbl]) => {
+          const cnt = k === "all" ? allLogs.length : allLogs.filter((l) => matchesAuditDomain(l.domain, k)).length;
+          return `<button type="button" class="btn-sub-chip ${dom === k ? "active" : ""}" style="padding:4px 10px;font-size:11.5px;" onclick="setAuditFilterDomain('${k}')">${lbl} <span style="opacity:0.8;font-size:10.5px;">(${cnt})</span></button>`;
+        }).join("");
+      }
+
+      function getAuditSyncStatusText() {
+        const sb = window.WSSupabaseV3;
+        const sbActive = Boolean(sb && typeof sb.isSupabaseActive === "function" && sb.isSupabaseActive());
+        if (state.auditSyncLoading) return "🔄 Supabase에서 최신 이력 불러오는 중...";
+        if (state.auditSyncError) return `⚠️ 원격 조회 실패 (${state.auditSyncError})`;
+        if (sbActive) {
+          return state.auditLastSyncedAt
+            ? `⚡ Supabase 다중 기기 병합 완료 (${state.auditLastSyncedAt})`
+            : "⚡ Supabase 실시간 연동";
+        }
+        return "💾 로컬 저장소 모드 (최대 300건)";
+      }
+
+      function buildAuditSummaryBarHtml(allLogs, filteredLogs, shownCount) {
+        const dom = state.auditFilterDomain || "all";
+        const q = String(state.auditSearchQuery || "").trim();
+        const hasFilter = dom !== "all" || Boolean(q);
+        const domLabelObj = AUDIT_DOMAIN_CHIPS.find(([k]) => k === dom);
+        const domLabel = domLabelObj ? domLabelObj[1] : dom;
+        return `
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-weight:700;color:#1e293b;">표시 ${shownCount}건 / 검색결과 ${filteredLogs.length}건 <span style="font-weight:500;color:#64748b;">(전체 ${allLogs.length}건 · 최대 ${AUDIT_MAX_LOGS}건 병합 보관)</span></span>
+            ${dom !== "all" ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">구분: ${escHtml(domLabel)} <span onclick="setAuditFilterDomain('all')" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+            ${q ? `<span class="m-pill-chip" style="font-size:11px;background:#fff;">검색: "${escHtml(q)}" <span onclick="clearAuditSearch()" style="cursor:pointer;margin-left:3px;font-weight:900;">✕</span></span>` : ""}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span id="stAuditSyncStatusBadge" style="font-size:11px;font-weight:700;color:${state.auditSyncError ? "#dc2626" : (state.auditSyncLoading ? "#1d4ed8" : "#047857")};">${escHtml(getAuditSyncStatusText())}</span>
+            ${hasFilter ? `<button type="button" onclick="resetAuditFilters()" style="border:none;background:#dbeafe;color:#1e40af;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;cursor:pointer;white-space:nowrap;">전체 해제</button>` : ""}
+          </div>`;
+      }
+
+      function buildAuditTimelineListHtml(allLogs, filteredLogs) {
+        const limit = Number(state.auditDisplayLimit) > 0 ? Number(state.auditDisplayLimit) : 100;
+        const visible = filteredLogs.slice(0, limit);
+        if (visible.length === 0) {
+          if (allLogs.length === 0) {
+            return `<div style="padding:36px 16px;text-align:center;color:#94a3b8;font-size:12.5px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;">기록된 변경 이력이 아직 없습니다.<br><span style="font-size:11.5px;">공정·현장·신규견적·재무·To-Do 등록/수정/삭제 시 자동으로 기록되며 Supabase와 병합 동기화됩니다.</span></div>`;
+          }
+          return `<div style="padding:36px 16px;text-align:center;color:#94a3b8;font-size:12.5px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;">선택한 조건 또는 검색어에 일치하는 변경 이력이 없습니다.<div style="margin-top:10px;"><button type="button" class="btn-act-white" onclick="resetAuditFilters()">필터 초기화</button></div></div>`;
+        }
+        const cardsHtml = visible.map((l) => {
+          const dm = getAuditDomainMeta(l.domain);
+          const am = getAuditActionMeta(l.action);
+          const ts = formatAuditTime(l.at);
+          const canRestore = Boolean(l.id && l.snapshot && l.snapshot.beforeData);
+          const safeId = escHtml(escJs(l.id || ""));
+          return `
+            <div style="padding:10px 12px;border-radius:9px;border:1px solid #e2e8f0;background:#ffffff;box-shadow:0 1px 2px rgba(15,23,42,0.03);">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;">
+                  <span style="display:inline-flex;align-items:center;padding:2px 7px;border-radius:5px;font-size:11px;font-weight:800;background:${dm.bg};color:${dm.fg};border:1px solid ${dm.border};white-space:nowrap;">${escHtml(dm.label)}</span>
+                  <span style="display:inline-flex;align-items:center;padding:2px 7px;border-radius:5px;font-size:11px;font-weight:800;background:${am.bg};color:${am.fg};border:1px solid ${am.border};white-space:nowrap;">${escHtml(l.action || "수정")}</span>
+                  <strong style="color:#0f172a;font-size:12.5px;word-break:break-word;">${escHtml(l.target || "-")}</strong>
+                </div>
+                <div style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <span style="font-size:11.5px;font-weight:700;color:#475569;white-space:nowrap;">👤 ${escHtml(l.user || "사용자")}</span>
+                  <span style="font-size:11px;color:#64748b;white-space:nowrap;" title="${escHtml(ts.full)}">🕒 ${escHtml(ts.short)}</span>
+                  ${canRestore ? `<button type="button" class="btn-sub-xs" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-weight:700;padding:2px 8px;" onclick="window.restoreAuditLogSnapshot('${safeId}')">↩️ 복원</button>` : ""}
+                </div>
+              </div>
+              ${l.detail ? `<div style="font-size:11.5px;color:#475569;margin-top:5px;padding-left:2px;line-height:1.45;word-break:break-word;">${escHtml(l.detail)}</div>` : ""}
+            </div>`;
+        }).join("");
+        const moreBtn = filteredLogs.length > limit
+          ? `<div style="text-align:center;padding:6px 0;"><button type="button" class="btn-act-white" onclick="loadMoreAuditLogs()">+ 이전 이력 더 보기 (${filteredLogs.length - limit}건 남음)</button></div>`
+          : "";
+        return cardsHtml + moreBtn;
+      }
+
+      function updateAuditSyncIndicators() {
+        const btn = document.getElementById("stAuditRefreshBtn");
+        if (btn) {
+          btn.disabled = Boolean(state.auditSyncLoading);
+          btn.textContent = state.auditSyncLoading ? "⏳ 불러오는 중..." : "🔄 새로고침";
+        }
+        const footBtn = document.getElementById("stAuditRefreshFooterBtn");
+        if (footBtn) {
+          footBtn.disabled = Boolean(state.auditSyncLoading);
+          footBtn.textContent = state.auditSyncLoading ? "⏳ 불러오는 중..." : "🔄 최신 이력 불러오기";
+        }
+        const badge = document.getElementById("stAuditSyncStatusBadge");
+        if (badge) {
+          badge.textContent = getAuditSyncStatusText();
+          badge.style.color = state.auditSyncError ? "#dc2626" : (state.auditSyncLoading ? "#1d4ed8" : "#047857");
+        }
+      }
+
+      function updateAuditTimelinePartial() {
+        const allLogs = getLocalAuditLogs();
+        const dom = state.auditFilterDomain || "all";
+        const filtered = filterAuditLogsList(allLogs, dom, state.auditSearchQuery);
+        const limit = Number(state.auditDisplayLimit) > 0 ? Number(state.auditDisplayLimit) : 100;
+        const shownCount = Math.min(filtered.length, limit);
+
+        const tabBadge = document.getElementById("stAuditTabBadge");
+        if (tabBadge) tabBadge.textContent = `(${allLogs.length})`;
+
+        const chipsRow = document.getElementById("stAuditDomainChipsRow");
+        if (chipsRow) chipsRow.innerHTML = buildAuditDomainChipsHtml(allLogs, dom);
+
+        const sumBar = document.getElementById("stAuditSummaryBar");
+        if (sumBar) sumBar.innerHTML = buildAuditSummaryBarHtml(allLogs, filtered, shownCount);
+
+        const listEl = document.getElementById("stAuditTimelineList");
+        if (listEl) listEl.innerHTML = buildAuditTimelineListHtml(allLogs, filtered);
+
+        const clearBtn = document.getElementById("stAuditSearchClearBtn");
+        if (clearBtn) clearBtn.style.display = state.auditSearchQuery ? "inline-block" : "none";
+
+        updateAuditSyncIndicators();
+      }
+
+      window.mergeAuditLogLists = mergeAuditLogLists;
+      window.getLocalAuditLogs = getLocalAuditLogs;
+      window.saveLocalAuditLogs = saveLocalAuditLogs;
+      window.filterAuditLogsList = filterAuditLogsList;
+
+      window.refreshAuditTimelineViewIfOpen = function () {
+        const allLogs = getLocalAuditLogs();
+        const tabBadge = document.getElementById("stAuditTabBadge");
+        if (tabBadge) tabBadge.textContent = `(${allLogs.length})`;
+        const modalEl = document.getElementById("settingsModal");
+        if (!modalEl || !modalEl.classList.contains("open") || state.settingsTab !== "audit") return;
+        updateAuditTimelinePartial();
+      };
+
+      window.refreshAuditLogsFromSupabase = function (opts) {
+        const options = opts || {};
+        const isManual = Boolean(options.manual);
+        if (_auditRefreshPromise) return _auditRefreshPromise;
+
+        const sb = window.WSSupabaseV3;
+        if (!sb || typeof sb.isSupabaseActive !== "function" || !sb.isSupabaseActive() || typeof sb.pullAuditLogs !== "function") {
+          state.auditSyncLoading = false;
+          state.auditSyncError = "";
+          if (isManual) {
+            showToast(`ℹ️ 현재 로컬 변경 이력 ${getLocalAuditLogs().length}건이 표시되고 있습니다.`);
+          }
+          window.refreshAuditTimelineViewIfOpen();
+          return Promise.resolve({ ok: false, reason: "inactive", list: getLocalAuditLogs() });
+        }
+
+        state.auditSyncLoading = true;
+        state.auditSyncError = "";
+        updateAuditSyncIndicators();
+
+        _auditRefreshPromise = Promise.resolve(sb.pullAuditLogs())
+          .then((res) => {
+            state.auditSyncLoading = false;
+            _auditRefreshPromise = null;
+            if (res && res.ok) {
+              const now = new Date();
+              state.auditLastSyncedAt = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+              state.auditSyncError = "";
+              window.refreshAuditTimelineViewIfOpen();
+              if (isManual) {
+                showToast(`✅ 최신 변경 이력을 불러왔습니다. (총 ${(res.list || []).length}건)`);
+              }
+            } else {
+              window.refreshAuditTimelineViewIfOpen();
+            }
+            return res;
+          })
+          .catch((err) => {
+            state.auditSyncLoading = false;
+            _auditRefreshPromise = null;
+            state.auditSyncError = (err && err.message) ? err.message : String(err || "조회 오류");
+            window.refreshAuditTimelineViewIfOpen();
+            if (isManual) {
+              showToast("⚠️ 최신 이력 조회 오류: " + state.auditSyncError);
+            }
+            return { ok: false, error: state.auditSyncError, list: getLocalAuditLogs() };
+          });
+
+        return _auditRefreshPromise;
+      };
+
+      window.switchSettingsAuditTab = function (filterDomain) {
+        state.settingsTab = "audit";
+        if (typeof filterDomain === "string" && filterDomain) {
+          state.auditFilterDomain = filterDomain;
+        }
+        state.auditDisplayLimit = 100;
+        renderSettingsModal();
+        window.refreshAuditLogsFromSupabase({ silent: true });
+      };
+
+      window.setAuditFilterDomain = function (domain) {
+        state.auditFilterDomain = domain || "all";
+        state.auditDisplayLimit = 100;
+        updateAuditTimelinePartial();
+      };
+
+      window.onAuditSearchInput = function (val) {
+        state.auditSearchQuery = String(val || "");
+        state.auditDisplayLimit = 100;
+        updateAuditTimelinePartial();
+      };
+
+      window.clearAuditSearch = function () {
+        state.auditSearchQuery = "";
+        state.auditDisplayLimit = 100;
+        const inp = document.getElementById("stAuditSearchInput");
+        if (inp) { inp.value = ""; inp.focus(); }
+        updateAuditTimelinePartial();
+      };
+
+      window.resetAuditFilters = function () {
+        state.auditFilterDomain = "all";
+        state.auditSearchQuery = "";
+        state.auditDisplayLimit = 100;
+        const inp = document.getElementById("stAuditSearchInput");
+        if (inp) inp.value = "";
+        updateAuditTimelinePartial();
+      };
+
+      window.loadMoreAuditLogs = function () {
+        state.auditDisplayLimit = (Number(state.auditDisplayLimit) || 100) + 100;
+        updateAuditTimelinePartial();
+      };
+
       // ================= 모달 9: 마스터 설정 관리 모달 =================
-      window.openSettingsModal = function () {
+      window.openSettingsModal = function (opts) {
         if (!state.settingsData && window.WSDataService) state.settingsData = window.WSDataService.getInitialSettingsData();
         state.partnerSearchQuery = "";
         state.partnerBizFilter = "";
@@ -20578,8 +20968,16 @@ end $$;`;
         state.partnerStatusFilter = "";
         state.showPartnerForm = false;
         state.editingPartnerIndex = null;
+        if (!(opts && opts.preserveAuditFilters)) {
+          state.auditFilterDomain = "all";
+          state.auditSearchQuery = "";
+          state.auditDisplayLimit = 100;
+        }
         renderSettingsModal();
         openModal("settingsModal");
+        if (state.settingsTab === "audit") {
+          window.refreshAuditLogsFromSupabase({ silent: true });
+        }
       };
 
       window.openPartnerForm = function (idx) {
@@ -21061,6 +21459,35 @@ end $$;`;
                 </tbody>
               </table>
             </div>`;
+        } else if (tab === "audit") {
+          const allAuditLogs = getLocalAuditLogs();
+          const activeDom = state.auditFilterDomain || "all";
+          const filteredAuditLogs = filterAuditLogsList(allAuditLogs, activeDom, state.auditSearchQuery);
+          const limit = Number(state.auditDisplayLimit) > 0 ? Number(state.auditDisplayLimit) : 100;
+          const shownCount = Math.min(filteredAuditLogs.length, limit);
+          contentHtml = `
+            <div style="background:#f8fafc;padding:10px 12px;border-radius:8px;border:1px solid var(--border);display:flex;flex-direction:column;gap:8px;margin-bottom:8px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <div style="position:relative;display:flex;align-items:center;flex:1;min-width:220px;">
+                  <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;color:#64748b;pointer-events:none;">🔍</span>
+                  <input id="stAuditSearchInput" class="ws-input" style="height:32px;font-size:12.5px;padding:4px 30px 4px 28px;box-sizing:border-box;width:100%;" placeholder="현장명, 작업내용, 작성자, 액션 검색..." value="${escHtml(state.auditSearchQuery || "")}" oninput="onAuditSearchInput(this.value)">
+                  <button type="button" id="stAuditSearchClearBtn" onclick="clearAuditSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:transparent;color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer;padding:2px 4px;display:${state.auditSearchQuery ? "inline-block" : "none"};" title="검색어 지우기">✕</button>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                  <button type="button" id="stAuditRefreshBtn" class="btn-act-blue" style="height:32px;padding:0 12px;font-size:12px;white-space:nowrap;" onclick="refreshAuditLogsFromSupabase({ manual: true })" ${state.auditSyncLoading ? "disabled" : ""}>${state.auditSyncLoading ? "⏳ 불러오는 중..." : "🔄 새로고침"}</button>
+                  <button type="button" class="btn-act-white" style="height:32px;padding:0 10px;font-size:12px;white-space:nowrap;" onclick="resetAuditFilters()">초기화</button>
+                </div>
+              </div>
+              <div id="stAuditDomainChipsRow" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                ${buildAuditDomainChipsHtml(allAuditLogs, activeDom)}
+              </div>
+            </div>
+            <div id="stAuditSummaryBar" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:6px 10px;margin-bottom:8px;font-size:11.5px;">
+              ${buildAuditSummaryBarHtml(allAuditLogs, filteredAuditLogs, shownCount)}
+            </div>
+            <div id="stAuditTimelineList" class="visible-scrollbar" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding-right:4px;">
+              ${buildAuditTimelineListHtml(allAuditLogs, filteredAuditLogs)}
+            </div>`;
         } else {
           const sbStatusMeta = window.WSSupabaseV3 ? window.WSSupabaseV3.getStatusInfo() : { text: "🟡 설정 대기중", engineMode: "supabase", configured: false };
           contentHtml = `
@@ -21083,7 +21510,7 @@ end $$;`;
                   <div style="font-weight:800;font-size:13.5px;color:#0f172a;">📜 변경이력(Audit Log) 조회</div>
                   <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">현장·공정·재무·To-Do의 최근 수정 및 삭제 내역(작성자·시각)을 타임라인으로 확인합니다.</div>
                 </div>
-                <button type="button" class="btn-act-blue" onclick="closeModal('settingsModal'); openAuditLogModal();">이력 보기</button>
+                <button type="button" class="btn-act-blue" onclick="switchSettingsAuditTab('all');">이력 보기</button>
               </div>
 
               <div style="background:#f8fafc;padding:14px;border-radius:10px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;">
@@ -21118,12 +21545,14 @@ end $$;`;
             </div>`;
         }
 
+        const auditTotalCount = getLocalAuditLogs().length;
         document.getElementById("settingsModalBody").innerHTML = `
           <div class="seg-row">
             <button type="button" class="seg-btn ${tab === "partners" ? "active" : ""}" onclick="state.settingsTab='partners'; renderSettingsModal_safe()">🤝 거래처 (${(s.partners || []).length})</button>
             <button type="button" class="seg-btn ${tab === "tasks" ? "active" : ""}" onclick="state.settingsTab='tasks'; renderSettingsModal_safe()">🏷️ 공종 (${(s.tasks || []).length})</button>
             <button type="button" class="seg-btn ${tab === "members" ? "active" : ""}" onclick="state.settingsTab='members'; renderSettingsModal_safe()">👥 구성원 (${(s.members || []).length})</button>
             <button type="button" class="seg-btn ${tab === "tools" ? "active" : ""}" onclick="state.settingsTab='tools'; renderSettingsModal_safe()">🛠️ 데이터 관리</button>
+            <button type="button" class="seg-btn ${tab === "audit" ? "active" : ""}" onclick="switchSettingsAuditTab()">📜 변경 이력 <span id="stAuditTabBadge" style="font-weight:700;opacity:0.85;">(${auditTotalCount})</span></button>
           </div>
           ${contentHtml}
         `;
@@ -21131,7 +21560,9 @@ end $$;`;
           <button type="button" class="btn-act-white" onclick="closeModal('settingsModal')">닫기</button>
           <div style="display:flex;gap:6px;align-items:center;">
             ${tab === "partners" ? `<button type="button" class="btn-act-blue" style="background:#2563eb;color:#fff;" onclick="openPartnerForm(-1)">➕ 거래처 추가</button>` : ""}
-            <button type="button" class="btn-act-blue" onclick="saveSettingsModalAll()">💾 설정 일괄 저장</button>
+            ${tab === "audit"
+              ? `<button type="button" id="stAuditRefreshFooterBtn" class="btn-act-blue" onclick="refreshAuditLogsFromSupabase({ manual: true })" ${state.auditSyncLoading ? "disabled" : ""}>${state.auditSyncLoading ? "⏳ 불러오는 중..." : "🔄 최신 이력 불러오기"}</button>`
+              : `<button type="button" class="btn-act-blue" onclick="saveSettingsModalAll()">💾 설정 일괄 저장</button>`}
           </div>
         `;
       }
@@ -21655,6 +22086,65 @@ end $$;`;
           return mutId;
         }
 
+        async function fetchAuditLogsFromSupabase() {
+          const rows = await selectStateRows(["audit_logs"]);
+          const row = Array.isArray(rows) ? rows.find(r => r && r.key === "audit_logs") : null;
+          if (!row || !row.payload) {
+            return { exists: false, list: [], updatedAt: "" };
+          }
+          const list = Array.isArray(row.payload.list) ? row.payload.list.filter(x => x && typeof x === "object") : [];
+          return {
+            exists: true,
+            list,
+            updatedAt: row.updated_at || row.payload.updatedAt || ""
+          };
+        }
+
+        async function syncAndSaveAuditLogs(newEntries) {
+          if (!isSupabaseActive()) return null;
+          return enqueueKeyWrite("audit_logs", async () => {
+            let remoteList = [];
+            try {
+              const remote = await fetchAuditLogsFromSupabase();
+              remoteList = remote.list || [];
+            } catch (err) {
+              console.warn("[Supabase AuditLog] 원격 이력 조회 실패로 덮어쓰기 방지 저장 보류:", err);
+              return null;
+            }
+            const localNow = getLocalAuditLogs();
+            const extra = Array.isArray(newEntries) ? newEntries : (newEntries ? [newEntries] : []);
+            const merged = mergeAuditLogLists([...extra, ...localNow], remoteList, AUDIT_MAX_LOGS);
+            saveLocalAuditLogs(merged);
+            await persistDomainSnapshot("audit_logs", {
+              list: merged,
+              updatedAt: new Date().toISOString()
+            });
+            const now = new Date();
+            state.auditLastSyncedAt = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+            if (typeof window.refreshAuditTimelineViewIfOpen === "function") {
+              window.refreshAuditTimelineViewIfOpen();
+            }
+            return merged;
+          });
+        }
+
+        async function pullAuditLogsFromSupabase() {
+          if (!isSupabaseActive()) {
+            return { ok: false, reason: "inactive", list: getLocalAuditLogs() };
+          }
+          const remote = await fetchAuditLogsFromSupabase();
+          const localNow = getLocalAuditLogs();
+          const merged = mergeAuditLogLists(localNow, remote.list || [], AUDIT_MAX_LOGS);
+          saveLocalAuditLogs(merged);
+          return {
+            ok: true,
+            list: merged,
+            remoteCount: (remote.list || []).length,
+            mergedCount: merged.length,
+            updatedAt: remote.updatedAt || ""
+          };
+        }
+
         async function syncNormalizedForSite(siteName, dashData, singleTaskId) {
           const d = dashData || state.dashData;
           if (!d) return;
@@ -21823,6 +22313,14 @@ end $$;`;
               label = "재무 DB";
             } else if (key === "auth_config" && data.sharedPin) {
               try { localStorage.setItem("ws_dashboard_custom_pin_v2", String(data.sharedPin)); } catch (_) {}
+            } else if (key === "audit_logs" && Array.isArray(data.list)) {
+              const mergedAudit = mergeAuditLogLists(getLocalAuditLogs(), data.list, AUDIT_MAX_LOGS);
+              saveLocalAuditLogs(mergedAudit);
+              const nowAud = new Date();
+              state.auditLastSyncedAt = `${String(nowAud.getHours()).padStart(2, "0")}:${String(nowAud.getMinutes()).padStart(2, "0")}:${String(nowAud.getSeconds()).padStart(2, "0")}`;
+              if (typeof window.refreshAuditTimelineViewIfOpen === "function") {
+                window.refreshAuditTimelineViewIfOpen();
+              }
             }
 
             updatePerfBadgeText();
@@ -21948,7 +22446,7 @@ end $$;`;
           const opts = (typeof optsOrCb === "object" && optsOrCb !== null) ? optsOrCb : {};
           const cb = (typeof optsOrCb === "function") ? optsOrCb : onUpdated;
           const t0 = performance.now();
-          const keys = ["dashboard_main", "todo_main", "settings_main", "auth_config"];
+          const keys = ["dashboard_main", "todo_main", "settings_main", "auth_config", "audit_logs"];
           if (opts.syncFinance) keys.push("finance_db");
 
           const rows = await selectStateRows(keys);
@@ -21977,6 +22475,13 @@ end $$;`;
           }
           if (byKey.auth_config && byKey.auth_config.sharedPin) {
             try { localStorage.setItem("ws_dashboard_custom_pin_v2", String(byKey.auth_config.sharedPin)); } catch (_) {}
+          }
+          if (byKey.audit_logs && Array.isArray(byKey.audit_logs.list)) {
+            const mergedAudit = mergeAuditLogLists(getLocalAuditLogs(), byKey.audit_logs.list, AUDIT_MAX_LOGS);
+            saveLocalAuditLogs(mergedAudit);
+            if (typeof window.refreshAuditTimelineViewIfOpen === "function") {
+              window.refreshAuditTimelineViewIfOpen();
+            }
           }
 
           const now = new Date();
@@ -22930,6 +23435,10 @@ end $$;`;
           isConfigured,
           isSupabaseActive,
           persistSnapshot: persistDomainSnapshot,
+          fetchAuditLogs: fetchAuditLogsFromSupabase,
+          pullAuditLogs: pullAuditLogsFromSupabase,
+          syncAuditLogs: syncAndSaveAuditLogs,
+          mergeAuditLogs: mergeAuditLogLists,
           getDualWriteEnabled,
           getStatusInfo,
           updateHeaderBadges,
@@ -24609,38 +25118,43 @@ end $$;`;
       });
 
       // ================= [1-2 변경이력(Audit Log) & 1-4 통합 검색(Ctrl+K)] =================
-      const AUDIT_STORAGE_KEY = "ws_audit_logs_v1";
       window.recordAuditLog = function (domain, action, targetName, detail, snapshotObj) {
         try {
-          let logs = [];
-          try { logs = JSON.parse(localStorage.getItem(AUDIT_STORAGE_KEY) || "[]"); } catch (_) {}
-          if (!Array.isArray(logs)) logs = [];
-          logs.unshift({
+          const actor = getActualAuthUser() || state.authUser || state.currentUser || state.user || "사용자";
+          const entry = {
             id: "AUD_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
             at: new Date().toISOString(),
-            user: state.user || state.authUser || "사용자",
+            user: actor,
             domain: String(domain || "시스템"),
             action: String(action || "수정"),
             target: String(targetName || ""),
             detail: String(detail || ""),
             snapshot: snapshotObj || null
-          });
-          if (logs.length > 250) logs = logs.slice(0, 250);
-          localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(logs));
-          if (window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive && window.WSSupabaseV3.isSupabaseActive() && window.WSSupabaseV3.persistSnapshot) {
-            Promise.resolve(window.WSSupabaseV3.persistSnapshot("audit_logs", { list: logs })).catch(() => {});
+          };
+          const logs = saveLocalAuditLogs([entry, ...getLocalAuditLogs()]);
+          if (typeof window.refreshAuditTimelineViewIfOpen === "function") {
+            window.refreshAuditTimelineViewIfOpen();
+          }
+          if (window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive && window.WSSupabaseV3.isSupabaseActive()) {
+            if (typeof window.WSSupabaseV3.syncAuditLogs === "function") {
+              Promise.resolve(window.WSSupabaseV3.syncAuditLogs([entry])).catch(() => {});
+            } else if (window.WSSupabaseV3.persistSnapshot) {
+              Promise.resolve(window.WSSupabaseV3.persistSnapshot("audit_logs", { list: logs })).catch(() => {});
+            }
           }
         } catch (_) {}
       };
 
       window.restoreAuditLogSnapshot = function (logId) {
-        let logs = [];
-        try { logs = JSON.parse(localStorage.getItem(AUDIT_STORAGE_KEY) || "[]"); } catch (_) {}
+        const logs = getLocalAuditLogs();
         const entry = Array.isArray(logs) ? logs.find(l => l && l.id === logId) : null;
         if (!entry || !entry.snapshot || !entry.snapshot.beforeData) {
           return showToast("ℹ️ 이 변경 이력에는 복원 가능한 스냅샷이 없습니다.");
         }
         const snap = entry.snapshot;
+        if ((snap.type === "collection" || snap.type === "expense") && typeof canViewFinance === "function" && !canViewFinance()) {
+          return showToast("🔒 재무 데이터 복원 권한이 없습니다.");
+        }
         const before = JSON.parse(JSON.stringify(snap.beforeData));
         if (!confirm(`[${entry.domain}] '${entry.target || "-"}' 항목을 이 변경 직전 상태로 복원하시겠습니까?`)) return;
 
@@ -24712,45 +25226,26 @@ end $$;`;
       };
 
       window.openAuditLogModal = function (filterDomain) {
-        const tEl = document.getElementById("syncStatusModalTitle");
-        const cEl = document.getElementById("syncStatusModalCloseBtn");
-        const bEl = document.getElementById("syncStatusModalBody");
-        const fEl = document.getElementById("syncStatusModalFooter");
-        if (!tEl || !bEl || !fEl) return;
-        let logs = [];
-        try { logs = JSON.parse(localStorage.getItem(AUDIT_STORAGE_KEY) || "[]"); } catch (_) {}
-        if (!Array.isArray(logs)) logs = [];
-        const dom = filterDomain || "all";
-        const filtered = dom === "all" ? logs : logs.filter((l) => l && l.domain === dom);
-        tEl.textContent = "📜 변경이력(Audit Log) 타임라인 · 1클릭 복원";
-        if (cEl) cEl.style.display = "inline-flex";
-        const modalCard = document.querySelector("#syncStatusModal .ws-modal-card");
-        if (modalCard) modalCard.style.maxWidth = "820px";
-        bEl.innerHTML = `
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-            ${[["all", "전체"], ["신규견적", "신규견적"], ["공정", "현장·공정"], ["현장", "현장"], ["재무", "재무·원장"], ["To-Do", "To-Do"]].map(([k, lbl]) => `
-              <button type="button" class="btn-sub-chip ${dom === k ? "active" : ""}" style="padding:3px 9px;font-size:11.5px;" onclick="openAuditLogModal('${k}')">${lbl}</button>
-            `).join("")}
-          </div>
-          <div style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;text-align:left;" class="visible-scrollbar">
-            ${filtered.slice(0, 100).map((l) => {
-              const dt = l.at ? new Date(l.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-              const canRestore = Boolean(l.id && l.snapshot && l.snapshot.beforeData);
-              return `
-                <div style="padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafc;font-size:12px;">
-                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-                    <span><strong style="color:#1e3a8a;">[${escHtml(l.domain)}]</strong> <strong>${escHtml(l.target || "-")}</strong> · <span style="color:#059669;font-weight:700;">${escHtml(l.action)}</span></span>
-                    <div style="display:inline-flex;align-items:center;gap:8px;">
-                      <span style="font-size:11px;color:#64748b;white-space:nowrap;">👤 ${escHtml(l.user)} · ${escHtml(dt)}</span>
-                      ${canRestore ? `<button type="button" class="btn-sub-xs" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-weight:700;padding:2px 8px;" onclick="window.restoreAuditLogSnapshot('${escJs(l.id)}')">↩️ 복원</button>` : ""}
-                    </div>
-                  </div>
-                  ${l.detail ? `<div style="font-size:11px;color:#475569;margin-top:2px;">${escHtml(l.detail)}</div>` : ""}
-                </div>`;
-            }).join("") || `<div style="padding:28px;text-align:center;color:#94a3b8;font-size:12.5px;">기록된 변경이력이 아직 없습니다.</div>`}
-          </div>`;
-        fEl.innerHTML = `<button type="button" class="ws-btn ws-btn-primary" onclick="closeModal('syncStatusModal')">닫기</button>`;
-        openModal("syncStatusModal");
+        if (!state.settingsData && window.WSDataService) state.settingsData = window.WSDataService.getInitialSettingsData();
+        state.settingsTab = "audit";
+        if (typeof filterDomain === "string" && filterDomain) {
+          state.auditFilterDomain = filterDomain;
+        } else if (!state.auditFilterDomain) {
+          state.auditFilterDomain = "all";
+        }
+        state.auditDisplayLimit = 100;
+        if (typeof window.closeModal === "function") {
+          const syncEl = document.getElementById("syncStatusModal");
+          if (syncEl && syncEl.classList.contains("open")) window.closeModal("syncStatusModal");
+        }
+        renderSettingsModal();
+        const settingsEl = document.getElementById("settingsModal");
+        if (settingsEl && !settingsEl.classList.contains("open")) {
+          openModal("settingsModal");
+        }
+        if (typeof window.refreshAuditLogsFromSupabase === "function") {
+          window.refreshAuditLogsFromSupabase({ silent: true });
+        }
       };
 
       window.openGlobalSearchModal = function () {
