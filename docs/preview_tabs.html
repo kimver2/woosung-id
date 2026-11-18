@@ -5709,6 +5709,21 @@ end $$;`;
 
             ${activeAsSectionHtml}
 
+            <div id="${domPrefix}WsAsPartnerCard" class="ws-as-subcard">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+                <div>
+                  <strong style="font-size:13.5px;color:#0f172a;">🏢 협력업체(시공팀)별 A/S 건수 &amp; 귀책사유 현황</strong>
+                  <div style="font-size:11px;color:#64748b;margin-top:2px;font-weight:600;">
+                    업체 행을 클릭하면 해당 업체의 A/S 상세 내역 및 귀책사유별 필터를 바로 확인할 수 있습니다.
+                  </div>
+                </div>
+                <span class="ws-as-chip compact muted">누적 A/S ${model.totalAsCount}건 · 협력업체 ${model.partnerStats.length}개사</span>
+              </div>
+              ${faultOverviewHtml}
+              ${partnerListHtml}
+              ${partnerDetailHtml}
+            </div>
+
             <div class="ws-as-two-col">
               <div class="ws-as-subcard">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
@@ -5742,21 +5757,6 @@ end $$;`;
                   </div>
                 </div>
               </div>
-            </div>
-
-            <div id="${domPrefix}WsAsPartnerCard" class="ws-as-subcard">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
-                <div>
-                  <strong style="font-size:13.5px;color:#0f172a;">🏢 협력업체(시공팀)별 A/S 건수 &amp; 귀책사유 현황</strong>
-                  <div style="font-size:11px;color:#64748b;margin-top:2px;font-weight:600;">
-                    업체 행을 클릭하면 해당 업체의 A/S 상세 내역 및 귀책사유별 필터를 바로 확인할 수 있습니다.
-                  </div>
-                </div>
-                <span class="ws-as-chip compact muted">누적 A/S ${model.totalAsCount}건 · 협력업체 ${model.partnerStats.length}개사</span>
-              </div>
-              ${faultOverviewHtml}
-              ${partnerListHtml}
-              ${partnerDetailHtml}
             </div>
           </div>`;
       }
