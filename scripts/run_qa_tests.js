@@ -3476,6 +3476,349 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     );
   })());
 
+  // [수금 현장 수정 모달 & 수금 집계 미입금(paid=false) 받음=0원 / 남음=총도급액 / 수금률=0% 런타임 QA]
+  pendingAsyncTests.push((async () => {
+    const colHelperStart = idxRootHtml.indexOf('function isCollectionStagePaid(r, stageKey)');
+    const colHelperEnd = idxRootHtml.indexOf('function getCollectionYears(list)');
+    const colModalStart = idxRootHtml.indexOf('const COL_STAGE_DEFS = [');
+    const colModalEnd = idxRootHtml.indexOf('// ================= 비용마감 (Step 3) 헬퍼 및 모달 함수 =================');
+    const fnFmtShort = idxRootHtml.match(/function formatShortAmount\([\s\S]*?\n      \}/);
+    const fnFmtKrw = idxRootHtml.match(/function formatKrw\([\s\S]*?\n      \}/);
+    const fnFmtNumComma = idxRootHtml.match(/function formatNumberInputWithCommas\([\s\S]*?\n      \}/);
+    const fnFmtSignedComma = idxRootHtml.match(/function formatSignedNumberInputWithCommas\([\s\S]*?\n      \}/);
+    const fnParseExtra = idxRootHtml.match(/function parseExtraAmountFromNote\([\s\S]*?\n      \}/);
+    const fnStripExtra = idxRootHtml.match(/function stripExtraAmountFromNote\([\s\S]*?\n      \}/);
+    const fnBuildExtra = idxRootHtml.match(/function buildCollectionNoteWithExtra\([\s\S]*?\n      \}/);
+    const fnEscHtml = idxRootHtml.match(/function escHtml\([\s\S]*?\n      \}/);
+    const fnEscJs = idxRootHtml.match(/function escJs\([\s\S]*?\n      \}/);
+    const fnNormYmd = idxRootHtml.match(/function normalizeDateYmd\([\s\S]*?\n      \}/);
+    const shareStartMarker = '// ================= 모달 5: 반장님 작업 안내문 모달 =================';
+    const shareEndMarker = 'window.openPartnerGuideForSite = function';
+    const shareS = idxRootHtml.indexOf(shareStartMarker);
+    const shareE = idxRootHtml.indexOf(shareEndMarker);
+
+    const canExtractCol = (
+      colHelperStart !== -1 && colHelperEnd > colHelperStart &&
+      colModalStart !== -1 && colModalEnd > colModalStart &&
+      shareS !== -1 && shareE > shareS &&
+      Boolean(fnFmtShort && fnFmtKrw && fnFmtNumComma && fnFmtSignedComma && fnParseExtra && fnStripExtra && fnBuildExtra && fnEscHtml && fnEscJs && fnNormYmd)
+    );
+    assertTest('수금 모달 및 집계 런타임 검증용 코드 블록 추출 검증', canExtractCol);
+    if (!canExtractCol) return;
+
+    const makeDomNode = (val = '') => ({ value: val, textContent: '', innerHTML: '', style: {}, checked: false, disabled: false, focus() {} });
+    let domMap = {};
+    const copiedGuides = [];
+    const syncDomFromHtml = (html, preserveIds = []) => {
+      const idMatches = String(html || '').matchAll(/id="([^"]+)"/g);
+      for (const m of idMatches) {
+        const id = m[1];
+        if (!preserveIds.includes(id) || !domMap[id]) {
+          const valMatch = html.slice(Math.max(0, m.index - 20), m.index + 260).match(/id="[^"]+"[^>]*?value="([^"]*)"/);
+          domMap[id] = makeDomNode(valMatch ? valMatch[1] : '');
+        }
+      }
+    };
+
+    const colTestRow = {
+      id: 'COL-TEST-UNPAID',
+      siteName: '재무 테스트',
+      clientName: '홍길동',
+      manager: '조항만',
+      category: '전체공사',
+      status: '진행중',
+      period: '2026.11.01 ~ 2026.11.30',
+      contractAmount: 138000000,
+      changeAmount: 50000000,
+      changeDesc: '추가 공정',
+      totalAmount: 188000000,
+      downPayment: 13800000,
+      startPayment: 55200000,
+      midPayment1: 41400000,
+      midPayment2: 0,
+      midPayment3: 0,
+      finalPayment: 27600000,
+      // 이전 버그로 저장됐던 오염 값 시뮬레이션
+      collectedAmount: 138000000,
+      uncollectedAmount: 50000000,
+      percentMode: true,
+      vatMode: 'incl',
+      stageMeta: {
+        downPayment: { paid: false, pct: 10 },
+        startPayment: { paid: false, pct: 40 },
+        midPayment1: { paid: false, pct: 30 },
+        midPayment2: { paid: false, pct: 0 },
+        midPayment3: { paid: false, pct: 0 },
+        finalPayment: { paid: false, pct: 20 }
+      },
+      extraItems: [],
+      taxInvoice: '미발행',
+      note: ''
+    };
+    const legacyPaidRow = {
+      id: 'COL-LEGACY-PAID',
+      siteName: '기존정상현장',
+      contractAmount: 45000000,
+      changeAmount: 3000000,
+      totalAmount: 48000000,
+      downPayment: 20000000,
+      collectedAmount: 20000000,
+      uncollectedAmount: 28000000
+    };
+
+    const colVm = vm.createContext({
+      window: {},
+      console,
+      state: {
+        user: '조항만',
+        authUser: '조항만',
+        currentUser: '조항만',
+        dirtyPcTabs: {},
+        dirtyMobileTabs: {},
+        dashData: {
+          sites: [
+            { siteName: '재무 테스트', scope: 'site', primaryManager: '조항만', tasks: [] },
+            { siteName: '기존정상현장', scope: 'site', primaryManager: '조항만', tasks: [] }
+          ],
+          siteInfoMap: {}
+        },
+        financeDbData: {
+          collection: [JSON.parse(JSON.stringify(colTestRow)), JSON.parse(JSON.stringify(legacyPaidRow))],
+          expense: [],
+          fixedMaster: []
+        }
+      },
+      FINANCE_EXT_FLAGS: { extraContractAmount: true, taxProofBadge: true },
+      document: {
+        getElementById: (id) => {
+          if (!domMap[id]) return null;
+          return domMap[id];
+        }
+      },
+      findMatchedSiteInfo: () => null,
+      getCollectionPeriodInfo: () => ({ periodDisplay: '2026.11.01 ~ 2026.11.30', startYmd: '2026-11-01', endYmd: '2026-11-30', year: '2026', month: 11 }),
+      getAllSites: () => colVm.state.dashData.sites,
+      getSiteInfo: () => ({}),
+      getSiteDateMetrics: () => ({ earliest: '2026-11-01', latest: '2026-11-30' }),
+      getUniqueSiteManagers: () => ['조항만'],
+      filterRegisteredManagers: (arr) => arr,
+      lookupMemberPhone: () => '010-0000-0000',
+      parseYmdFromTask: () => '',
+      parseEndYmdFromTask: () => '',
+      isTaskCompleted: () => false,
+      getSupplierBizInfo: () => ({ companyName: '우성아이디', bankInfo: '국민 123' }),
+      copyText: (txt) => { copiedGuides.push(String(txt)); },
+      showToast: () => {},
+      openModal: () => {},
+      closeModal: () => {},
+      renderActiveViews: () => {},
+      alert: (m) => { throw new Error('Unexpected alert: ' + m); }
+    });
+    colVm.window = colVm;
+    colVm.window.WSDataService = {
+      saveFinanceCache: () => {},
+      saveCollectionRow: async (row) => {
+        const cAmt = Number(row.contractAmount) || 0;
+        const chgAmt = Number(row.changeAmount) || 0;
+        const totalAmt = cAmt + chgAmt;
+        const keys = ['downPayment', 'startPayment', 'midPayment1', 'midPayment2', 'midPayment3', 'finalPayment'];
+        const sMeta = row.stageMeta || {};
+        const stagePaid = keys.reduce((s, k) => s + (sMeta[k] && sMeta[k].paid === true ? (Number(row[k]) || 0) : 0), 0);
+        const extraPaid = (Array.isArray(row.extraItems) ? row.extraItems : []).reduce((s, it) => s + (it && it.paid === true ? (Number(it.amount) || 0) : 0), 0);
+        const collected = stagePaid + extraPaid;
+        const saved = Object.assign({}, row, {
+          id: row.id || 'COL-NEW-1',
+          totalAmount: totalAmt,
+          collectedAmount: collected,
+          uncollectedAmount: totalAmt - collected
+        });
+        return { success: true, id: saved.id, row: saved };
+      }
+    };
+
+    const colScript = [
+      fnEscHtml[0], fnEscJs[0], fnFmtShort[0], fnFmtKrw[0], fnFmtNumComma[0], fnFmtSignedComma[0],
+      fnParseExtra[0], fnStripExtra[0], fnBuildExtra[0], fnNormYmd[0],
+      idxRootHtml.slice(colHelperStart, colHelperEnd),
+      idxRootHtml.slice(colModalStart, colModalEnd),
+      idxRootHtml.slice(shareS, shareE),
+      'this.COL_STAGE_DEFS = COL_STAGE_DEFS;',
+      'this.buildClientSharePayload = buildClientSharePayload;',
+      'this.extractCollectionExtraForShare = extractCollectionExtraForShare;'
+    ].join('\n');
+    vm.runInContext(colScript, colVm);
+
+    // stage input DOM 동기화 래퍼
+    const origRenderStages = colVm.renderCollectionStageRows;
+    colVm.renderCollectionStageRows = function () {
+      origRenderStages();
+      syncDomFromHtml(domMap.colStageScheduleBody.innerHTML);
+    };
+    const origRenderExtra = colVm.renderCollectionExtraItemsTable;
+    colVm.renderCollectionExtraItemsTable = function () {
+      origRenderExtra();
+    };
+
+    const resetModalDom = () => {
+      domMap = {
+        collectionModalTitle: makeDomNode(),
+        collectionModalBody: makeDomNode(),
+        collectionModalFooter: makeDomNode(),
+        colStageScheduleBody: makeDomNode(),
+        colExtraItemsBody: makeDomNode(),
+        colSiteName: makeDomNode(),
+        colClientName: makeDomNode(),
+        colManager: makeDomNode('조항만'),
+        colCategory: makeDomNode('전체공사'),
+        colStatus: makeDomNode('진행중'),
+        colPeriod: makeDomNode(),
+        colContractAmount: makeDomNode(),
+        colChangeAmount: makeDomNode(),
+        colChangeDesc: makeDomNode(),
+        colTaxInvoice: makeDomNode('미발행'),
+        colNote: makeDomNode(),
+        colContractSupplyDisplay: makeDomNode(),
+        colContractVatDisplay: makeDomNode(),
+        colTotalAmountDisplay: makeDomNode(),
+        colCollectedDisplay: makeDomNode(),
+        colUncollectedDisplay: makeDomNode(),
+        colRateDisplay: makeDomNode(),
+        colRateBar: makeDomNode()
+      };
+    };
+
+    // 1) 재현 케이스: 모든 입금 미체크 + 오염된 collectedAmount=138,000,000 존재 시에도 모달/집계/칩/고객공유 모두 0원
+    resetModalDom();
+    colVm.openCollectionModal('COL-TEST-UNPAID');
+    syncDomFromHtml(domMap.collectionModalBody.innerHTML, ['colStageScheduleBody', 'colExtraItemsBody', 'colTotalAmountDisplay', 'colCollectedDisplay', 'colUncollectedDisplay', 'colRateDisplay', 'colRateBar', 'colContractSupplyDisplay', 'colContractVatDisplay']);
+    // openCollectionModal 내부에서 HTML 세팅 후 stage inputs가 생겼으므로 값 재바인딩
+    domMap.colContractAmount.value = '138,000,000';
+    domMap.colChangeAmount.value = '50,000,000';
+    domMap.colDownPayment = makeDomNode('13,800,000');
+    domMap.colStartPayment = makeDomNode('55,200,000');
+    domMap.colMidPayment1 = makeDomNode('41,400,000');
+    domMap.colMidPayment2 = makeDomNode('');
+    domMap.colMidPayment3 = makeDomNode('');
+    domMap.colFinalPayment = makeDomNode('27,600,000');
+    colVm.calcCollectionModalTotals();
+
+    const unpaidFin = colVm.getCollectionRowFinancials(colTestRow);
+    const unpaidStepsHtml = colVm.renderCollectionStepsHtml(colTestRow);
+    const unpaidShare = colVm.buildClientSharePayload('재무 테스트', { enabled: true, showPayment: true });
+    colVm.copyCollectionPaymentGuide();
+    const unpaidGuide = copiedGuides[copiedGuides.length - 1] || '';
+
+    assertTest('재무 테스트 미입금(paid=false) 시 모달(받음 0원/남음 188,000,000원/0%) · 집계 · 단계칩 · 고객공유 · 안내문구 일관성 검증',
+      domMap.colTotalAmountDisplay.textContent === '188,000,000원' &&
+      domMap.colCollectedDisplay.textContent === '0원' &&
+      domMap.colUncollectedDisplay.textContent === '188,000,000원' &&
+      domMap.colRateDisplay.textContent === '0%' &&
+      unpaidFin.total === 188000000 &&
+      unpaidFin.collected === 0 &&
+      unpaidFin.uncollected === 188000000 &&
+      unpaidFin.rate === 0 &&
+      !unpaidStepsHtml.includes('#dcfce7') &&
+      unpaidStepsHtml.includes('미입금') &&
+      unpaidShare.payment &&
+      unpaidShare.payment.collected === 0 &&
+      unpaidShare.payment.uncollected === 188000000 &&
+      unpaidShare.payment.stages.length > 0 &&
+      unpaidShare.payment.stages.every((st) => st.paid === false) &&
+      unpaidGuide.includes('기 입금액: 0원') &&
+      unpaidGuide.includes('잔여 미수금: 188,000,000원') &&
+      !unpaidGuide.includes('[입금완료]')
+    );
+
+    // 2) 일부 단계 입금 체크 시 해당 금액만 받음으로 합산, 추가비 입금 체크 시 추가비 포함 합산 검증
+    colVm.toggleCollectionStagePaid('downPayment'); // +13,800,000
+    const afterDownCollected = domMap.colCollectedDisplay.textContent;
+    const afterDownUncollected = domMap.colUncollectedDisplay.textContent;
+    const afterDownRate = domMap.colRateDisplay.textContent;
+
+    colVm.addCollectionExtraItem();
+    colVm.updateCollectionExtraItem(0, 'amount', '50,000,000');
+    colVm.updateCollectionExtraItem(0, 'paid'); // +50,000,000
+    const afterExtraCollected = domMap.colCollectedDisplay.textContent;
+    const afterExtraUncollected = domMap.colUncollectedDisplay.textContent;
+    const afterExtraRate = domMap.colRateDisplay.textContent;
+
+    domMap.colSiteName.value = '재무 테스트';
+    colVm.onSaveCollectionRow('COL-TEST-UNPAID');
+    await Promise.resolve();
+    const savedRowAfterPartial = colVm.state.financeDbData.collection.find((c) => c.id === 'COL-TEST-UNPAID');
+    const savedFinAfterPartial = colVm.getCollectionRowFinancials(savedRowAfterPartial);
+
+    // 3) 신규 등록 후 % 입력만 하고 입금 미체크 상태 저장 시 0원 유지 & 기존 정상(legacy) 현장 하위호환 검증
+    resetModalDom();
+    colVm.openCollectionModal(null);
+    domMap.colSiteName.value = '신규스케줄현장';
+    domMap.colContractAmount.value = '138,000,000';
+    domMap.colChangeAmount.value = '50,000,000';
+    colVm.toggleCollectionPercentMode(true);
+    colVm.onCollectionStagePercentInput('downPayment', '10');
+    colVm.onCollectionStagePercentInput('startPayment', '40');
+    colVm.onCollectionStagePercentInput('midPayment1', '30');
+    colVm.onCollectionStagePercentInput('finalPayment', '20');
+    const newUnpaidCollected = domMap.colCollectedDisplay.textContent;
+    const newUnpaidRemain = domMap.colUncollectedDisplay.textContent;
+    const newUnpaidRate = domMap.colRateDisplay.textContent;
+    colVm.onSaveCollectionRow('');
+    await Promise.resolve();
+    const savedNewRow = colVm.state.financeDbData.collection.find((c) => c.siteName === '신규스케줄현장');
+    const savedNewFin = colVm.getCollectionRowFinancials(savedNewRow);
+
+    const legacyFin = colVm.getCollectionRowFinancials(legacyPaidRow);
+    resetModalDom();
+    colVm.openCollectionModal('COL-LEGACY-PAID');
+    domMap.colContractAmount.value = '45,000,000';
+    domMap.colChangeAmount.value = '3,000,000';
+    domMap.colDownPayment = makeDomNode('20,000,000');
+    colVm.calcCollectionModalTotals();
+
+    // 4) GAS saveCollectionRow 서버 함수 미입금 stageMeta 보존 검증
+    const writtenColRows = [];
+    const origOpenById = sandbox.SpreadsheetApp.openById;
+    sandbox.SpreadsheetApp.openById = () => ({
+      getSheetByName: () => ({
+        getLastRow: () => 1,
+        getRange: () => ({
+          getValues: () => [],
+          setValues: (vals) => { writtenColRows.push(vals[0]); },
+          setNumberFormat: () => {}
+        })
+      })
+    });
+    const gasColSaveRes = sandbox.saveCollectionRow({
+      authUser: '조항만',
+      row: colTestRow
+    });
+    sandbox.SpreadsheetApp.openById = origOpenById;
+
+    assertTest('수금 모달 부분 입금/추가비 입금 합산, 신규 % 입력 미체크 저장(0원), 레거시 호환 및 GAS saveCollectionRow 검증',
+      afterDownCollected === '13,800,000원' &&
+      afterDownUncollected === '174,200,000원' &&
+      afterDownRate === '7%' &&
+      afterExtraCollected === '63,800,000원' &&
+      afterExtraUncollected === '124,200,000원' &&
+      afterExtraRate === '34%' &&
+      savedFinAfterPartial.collected === 63800000 &&
+      savedFinAfterPartial.uncollected === 124200000 &&
+      newUnpaidCollected === '0원' &&
+      newUnpaidRemain === '188,000,000원' &&
+      newUnpaidRate === '0%' &&
+      savedNewFin.collected === 0 &&
+      savedNewFin.uncollected === 188000000 &&
+      savedNewRow.stageMeta.downPayment.paid === false &&
+      legacyFin.collected === 20000000 &&
+      legacyFin.uncollected === 28000000 &&
+      domMap.colCollectedDisplay.textContent === '20,000,000원' &&
+      gasColSaveRes.success === true &&
+      gasColSaveRes.row.collectedAmount === 0 &&
+      gasColSaveRes.row.uncollectedAmount === 188000000 &&
+      writtenColRows[0] && writtenColRows[0][18] === 188000000
+    );
+  })());
+
 Promise.all(pendingAsyncTests).then(() => {
 if (isVerbose) {
   rawConsoleLog('\n========================================================');

@@ -11744,8 +11744,12 @@ function getFinanceDbData(p) {
         var midPayment2 = Number(r[15]) || 0;
         var midPayment3 = Number(r[16]) || 0;
         var finalPayment = Number(r[17]) || 0;
-        var collected = downPayment + startPayment + midPayment1 + midPayment2 + midPayment3 + finalPayment;
-        var uncollectedAmount = (r[18] !== "" && r[18] !== null && r[18] !== undefined) ? Number(r[18]) : (totalAmount - collected);
+        var stageSum = downPayment + startPayment + midPayment1 + midPayment2 + midPayment3 + finalPayment;
+        var hasSheetUncol = (r[18] !== "" && r[18] !== null && r[18] !== undefined && !isNaN(Number(r[18])));
+        var uncollectedAmount = hasSheetUncol ? Number(r[18]) : (totalAmount - stageSum);
+        var collected = (hasSheetUncol && (totalAmount > 0 || uncollectedAmount !== 0))
+          ? (totalAmount - uncollectedAmount)
+          : stageSum;
 
         return {
           id: String(r[0] || "").trim(),
@@ -11920,7 +11924,26 @@ function saveCollectionRow(p) {
     var midPayment2 = Number(rowData.midPayment2) || 0;
     var midPayment3 = Number(rowData.midPayment3) || 0;
     var finalPayment = Number(rowData.finalPayment) || 0;
-    var collected = downPayment + startPayment + midPayment1 + midPayment2 + midPayment3 + finalPayment;
+    var stageKeys = ["downPayment", "startPayment", "midPayment1", "midPayment2", "midPayment3", "finalPayment"];
+    var sMeta = (rowData.stageMeta && typeof rowData.stageMeta === "object") ? rowData.stageMeta : null;
+    var hasExplicitPaid = Boolean(sMeta && stageKeys.some(function (k) {
+      return sMeta[k] && sMeta[k].paid !== undefined && sMeta[k].paid !== null;
+    }));
+    var extraItemsList = Array.isArray(rowData.extraItems) ? rowData.extraItems : [];
+    var extraPaid = extraItemsList.reduce(function (s, it) {
+      return s + (it && it.paid === true ? (Number(it.amount) || 0) : 0);
+    }, 0);
+    var collected = 0;
+    if (hasExplicitPaid) {
+      var stagePaid = stageKeys.reduce(function (s, k) {
+        return s + (sMeta[k] && sMeta[k].paid === true ? (Number(rowData[k]) || 0) : 0);
+      }, 0);
+      collected = stagePaid + extraPaid;
+    } else if (rowData.collectedAmount !== undefined && rowData.collectedAmount !== null && rowData.collectedAmount !== "" && !isNaN(Number(rowData.collectedAmount))) {
+      collected = Number(rowData.collectedAmount) || 0;
+    } else {
+      collected = downPayment + startPayment + midPayment1 + midPayment2 + midPayment3 + finalPayment + extraPaid;
+    }
     var uncollectedAmount = totalAmount - collected;
 
     var progressRate = (rowData.progressRate !== undefined && rowData.progressRate !== null && rowData.progressRate !== "")
@@ -11980,7 +12003,11 @@ function saveCollectionRow(p) {
       collectedAmount: collected,
       uncollectedAmount: uncollectedAmount,
       taxInvoice: String(rowData.taxInvoice || "미발행").trim(),
-      note: String(rowData.note || "").trim()
+      note: String(rowData.note || "").trim(),
+      vatMode: rowData.vatMode === "excl" ? "excl" : "incl",
+      percentMode: Boolean(rowData.percentMode),
+      stageMeta: sMeta || {},
+      extraItems: extraItemsList
     };
 
     return {
