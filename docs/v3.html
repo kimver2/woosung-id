@@ -8692,7 +8692,7 @@ end $$;`;
       window.updateCollectionExtraItem = function(idx, field, val) {
         if (!window._colModalState || !window._colModalState.extraItems[idx]) return;
         const item = window._colModalState.extraItems[idx];
-        if (field === "amount") {
+        if (field === "amount" || field === "amountInput") {
           const n = Number(String(val || "").replace(/,/g, "").trim());
           item.amount = isNaN(n) ? 0 : n;
         } else if (field === "paid") {
@@ -8710,13 +8710,17 @@ end $$;`;
       function syncExtraItemsToChangeFields() {
         if (!window._colModalState) return;
         const items = window._colModalState.extraItems || [];
-        if (items.length === 0) return;
-        const sumAmt = items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
         const chgEl = document.getElementById("colChangeAmount");
-        if (chgEl) chgEl.value = sumAmt ? sumAmt.toLocaleString("ko-KR") : "0";
-        const descStr = items.map(it => it.desc).filter(Boolean).join(", ");
         const descEl = document.getElementById("colChangeDesc");
-        if (descEl && descStr) descEl.value = descStr;
+        if (items.length === 0) {
+          if (chgEl) chgEl.value = "0";
+          if (descEl) descEl.value = "";
+          return;
+        }
+        const sumAmt = items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+        if (chgEl) chgEl.value = sumAmt ? sumAmt.toLocaleString("ko-KR") : "0";
+        const descStr = items.map(it => (it && it.desc ? String(it.desc).trim() : "")).filter(Boolean).join(", ");
+        if (descEl) descEl.value = descStr;
       }
 
       window.renderCollectionExtraItemsTable = function() {
@@ -8751,6 +8755,7 @@ end $$;`;
               </td>
               <td style="padding:5px 4px;">
                 <input type="text" inputmode="numeric" value="${amt ? amt.toLocaleString('ko-KR') : ''}" placeholder="0 (-감액)"
+                  oninput="window.updateCollectionExtraItem(${idx},'amountInput',this.value)"
                   onchange="window.updateCollectionExtraItem(${idx},'amount',this.value)"
                   style="width:96px;height:28px;padding:0 6px;border-radius:5px;border:1px solid #cbd5e1;font-size:11.5px;font-weight:700;text-align:right;color:${amt < 0 ? "#dc2626" : "#0f172a"};" />
               </td>
@@ -9021,6 +9026,23 @@ end $$;`;
           }
         });
 
+        const rawExtraItems = Array.isArray(rData.extraItems) ? JSON.parse(JSON.stringify(rData.extraItems)) : [];
+        const legacyChangeAmt = (rData.changeAmount !== undefined && rData.changeAmount !== null && rData.changeAmount !== "")
+          ? (Number(rData.changeAmount) || 0)
+          : (parseExtraAmountFromNote(rData.note) || 0);
+        const legacyChangeDesc = String(rData.changeDesc || "").trim();
+        if (rawExtraItems.length === 0 && legacyChangeAmt !== 0) {
+          rawExtraItems.push({
+            desc: legacyChangeDesc,
+            stage: "잔금과 함께",
+            dueDate: "",
+            amount: legacyChangeAmt,
+            method: "계좌이체",
+            proof: "전자세금계산서",
+            paid: false
+          });
+        }
+
         window._colModalState = {
           vatMode: rData.vatMode === "excl" ? "excl" : "incl",
           percentMode: !!rData.percentMode,
@@ -9033,7 +9055,7 @@ end $$;`;
             midPayment3: Number(rData.midPayment3) || 0,
             finalPayment: Number(rData.finalPayment) || 0
           },
-          extraItems: Array.isArray(rData.extraItems) ? JSON.parse(JSON.stringify(rData.extraItems)) : []
+          extraItems: rawExtraItems
         };
         const isIncl = window._colModalState.vatMode === "incl";
 
@@ -9126,14 +9148,14 @@ end $$;`;
               <div style="display:flex;flex-direction:column;gap:8px;justify-content:space-between;">
                 <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:8px;">
                   <div>
-                    <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">추가공사 (증감액)</label>
-                    <input type="text" inputmode="numeric" id="colChangeAmount" value="${(rData.changeAmount !== undefined && rData.changeAmount !== null && rData.changeAmount !== '') ? Number(rData.changeAmount).toLocaleString('ko-KR') : (parseExtraAmountFromNote(rData.note) ? Number(parseExtraAmountFromNote(rData.note)).toLocaleString('ko-KR') : '')}" placeholder="0" oninput="window.onCollectionAmountInput(this, true)"
-                      style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;font-weight:700;text-align:right;background:#fff;" />
+                    <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">추가공사 (증감액) <span style="font-weight:500;color:#64748b;">· 하단 자동합산</span></label>
+                    <input type="text" inputmode="numeric" id="colChangeAmount" value="${rawExtraItems.length > 0 ? (rawExtraItems.reduce((s, it) => s + (Number(it.amount) || 0), 0)).toLocaleString('ko-KR') : '0'}" placeholder="0" readonly title="하단 추가비 내역에서 자동 합산됩니다."
+                      style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12.5px;font-weight:700;text-align:right;background:#f1f5f9;color:#475569;cursor:not-allowed;" />
                   </div>
                   <div>
-                    <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">증감 사유</label>
-                    <input type="text" id="colChangeDesc" value="${escHtml(rData.changeDesc)}" placeholder="공정 추가 등"
-                      style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;background:#fff;" />
+                    <label style="display:block;font-size:11px;font-weight:700;margin-bottom:3px;color:#475569;">증감 사유 <span style="font-weight:500;color:#64748b;">· 하단 자동동기화</span></label>
+                    <input type="text" id="colChangeDesc" value="${escHtml(rawExtraItems.map(it => (it && it.desc ? String(it.desc).trim() : "")).filter(Boolean).join(", "))}" placeholder="하단 추가비 추가 시 자동 반영" readonly title="하단 추가비 내역에서 자동 동기화됩니다."
+                      style="width:100%;height:32px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;background:#f1f5f9;color:#475569;cursor:not-allowed;" />
                   </div>
                 </div>
                 <!-- 총 도급액 요약 박스 -->
@@ -9249,6 +9271,7 @@ end $$;`;
 
         renderCollectionStageRows();
         renderCollectionExtraItemsTable();
+        syncExtraItemsToChangeFields();
 
         const footEl = document.getElementById("collectionModalFooter");
         if (footEl) {
