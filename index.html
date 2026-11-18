@@ -2619,6 +2619,7 @@
     }
     .ws-gantt-bar:last-of-type { margin-bottom: 0; }
     .ws-gantt-bar:hover { transform: translateY(-1px); filter: brightness(0.97); }
+    .ws-gantt-bar.start { background: #e0e7ff; color: #3730a3; border-color: #c7d2fe; }
     .ws-gantt-bar.wood { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
     .ws-gantt-bar.elec { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
     .ws-gantt-bar.paint { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
@@ -3999,18 +4000,64 @@ end $$;`;
           state.todoMemberFilter = "all";
         }
       }
+      const STANDARD_REQUIRED_TASKS = [
+        { name: "착공", taskName: "착공", category: "사전/준비", note: "공사 착공 시작" }
+      ];
+      function ensureStandardTasksInSettings(settingsData) {
+        if (!settingsData || typeof settingsData !== "object") return settingsData;
+        if (!Array.isArray(settingsData.tasks)) settingsData.tasks = [];
+        const hasTask = (target) => settingsData.tasks.some((t) => {
+          if (typeof t === "string") return t.trim() === target;
+          if (t && typeof t === "object") return String(t.name || t.taskName || t.title || t.label || "").trim() === target;
+          return false;
+        });
+        for (let i = STANDARD_REQUIRED_TASKS.length - 1; i >= 0; i--) {
+          const req = STANDARD_REQUIRED_TASKS[i];
+          if (!hasTask(req.name)) {
+            settingsData.tasks.unshift(Object.assign({}, req));
+          }
+        }
+        return settingsData;
+      }
+      function ensureStandardTasksInDashData(dashData) {
+        if (!dashData || typeof dashData !== "object") return dashData;
+        if (Array.isArray(dashData.tasks)) {
+          for (let i = STANDARD_REQUIRED_TASKS.length - 1; i >= 0; i--) {
+            const reqName = STANDARD_REQUIRED_TASKS[i].name;
+            if (!dashData.tasks.some((t) => String(t || "").trim() === reqName)) {
+              dashData.tasks.unshift(reqName);
+            }
+          }
+        }
+        return dashData;
+      }
       function getTasksMasterList() {
         const raw = (state.settingsData && Array.isArray(state.settingsData.tasks) && state.settingsData.tasks.length)
           ? state.settingsData.tasks
           : ((state.dashData && state.dashData.tasks) || []);
-        return raw.map((t) => {
-          if (typeof t === "string") return t.trim();
-          if (t && typeof t === "object") return String(t.name || t.taskName || t.title || t.label || "").trim();
-          return "";
-        }).filter(Boolean);
+        const list = [];
+        const seen = new Set();
+        raw.forEach((t) => {
+          let name = "";
+          if (typeof t === "string") name = t.trim();
+          else if (t && typeof t === "object") name = String(t.name || t.taskName || t.title || t.label || "").trim();
+          if (name && !seen.has(name)) {
+            seen.add(name);
+            list.push(name);
+          }
+        });
+        for (let i = STANDARD_REQUIRED_TASKS.length - 1; i >= 0; i--) {
+          const reqName = STANDARD_REQUIRED_TASKS[i].name;
+          if (!seen.has(reqName)) {
+            seen.add(reqName);
+            list.unshift(reqName);
+          }
+        }
+        return list;
       }
       const getTasksList = getTasksMasterList;
       window.getTasksList = getTasksMasterList;
+      window.ensureStandardTasksInSettings = ensureStandardTasksInSettings;
       function getPartnersMasterList() {
         if (state.settingsData && Array.isArray(state.settingsData.partners) && state.settingsData.partners.length) {
           return state.settingsData.partners.map((p) => p.fullName || (p.category ? p.category + "_" + p.name : p.name));
@@ -4061,6 +4108,31 @@ end $$;`;
           }
         });
         return list;
+      }
+      function isStartConstructionTask(task) {
+        if (!task) return false;
+        const st = String(task.status || "").replace(/\s+/g, "");
+        if (st.indexOf("취소") !== -1 || st.indexOf("제외") !== -1) return false;
+        const tn = String(task.taskName || task.task || "").replace(/\s+/g, "").trim();
+        return tn === "착공" || tn === "공사착공" || tn === "착공일";
+      }
+      function isConsultationOnlyTask(task) {
+        if (!task) return false;
+        const tn = String(task.taskName || task.task || "").replace(/\s+/g, "").trim();
+        if (!tn) return false;
+        return tn === "상담" || tn === "계약상담" || tn === "1차상담" || tn === "2차상담" || tn === "신규상담" || tn === "방문상담" || tn === "전화상담" || tn === "견적상담" || tn === "견적";
+      }
+      function isConsultationOnlySite(site) {
+        if (!site || site.scope === "newSite" || site.scope === "as") return false;
+        const tasks = Array.isArray(site.tasks) ? site.tasks : [];
+        if (tasks.length === 0) return false;
+        const validTasks = tasks.filter((t) => {
+          if (!t) return false;
+          const st = String(t.status || "").replace(/\s+/g, "");
+          return st.indexOf("취소") === -1 && st.indexOf("제외") === -1;
+        });
+        const targetTasks = validTasks.length > 0 ? validTasks : tasks;
+        return targetTasks.length > 0 && targetTasks.every((t) => isConsultationOnlyTask(t));
       }
       function isTaskCompleted(task) {
         if (!task) return true;
@@ -4455,6 +4527,7 @@ end $$;`;
       // ================= 주간 멀티현장 타임라인(간트) & A/S 보증·하자 통계 공통 엔진 =================
       const GANTT_UNASSIGNED_SET = new Set(["", "-", "미등록", "업체 미등록", "미지정", "없음", "미정", "공란", "선택안함", "선택 안 함", "직접입력"]);
       const GANTT_TRADE_CLASS_RULES = [
+        { cls: "start", keywords: ["착공"] },
         { cls: "wood", keywords: ["목공", "도어", "중문", "창호", "샷시", "샤시", "가구", "주방", "싱크", "수납", "몰딩"] },
         { cls: "elec", keywords: ["전기", "조명", "에어컨", "통신", "인덕션"] },
         { cls: "paint", keywords: ["도배", "필름", "도장", "벽지", "탄성", "페인트"] },
@@ -4937,7 +5010,7 @@ end $$;`;
 
       /** 완료현장의 준공일(마지막 공정 날짜 YYYY-MM-DD)을 계산합니다. 날짜가 없으면 빈 문자열을 반환합니다. */
       function getCompletedSiteCompletionYmd(site) {
-        if (!site) return "";
+        if (!site || isConsultationOnlySite(site)) return "";
         const tasks = Array.isArray(site.tasks) ? site.tasks : [];
         const collectDates = (list) => {
           const ymds = [];
@@ -4966,6 +5039,19 @@ end $$;`;
       function computeSiteAsWarranty(site, warrantyDays, todayYmd) {
         const days = Number(warrantyDays) === 730 ? 730 : 365;
         const today = (todayYmd && /^\d{4}-\d{2}-\d{2}$/.test(todayYmd)) ? todayYmd : getTodayYmd();
+        if (isConsultationOnlySite(site)) {
+          return {
+            isConsultationOnly: true,
+            completionYmd: "",
+            completionDisplay: "해당 없음 (상담 단독)",
+            expiryYmd: "",
+            expiryDisplay: "해당 없음 (미착공)",
+            remainingDays: null,
+            statusKey: "consultation_only",
+            badgeText: "상담 완료 (미착공)",
+            badgeClass: "muted"
+          };
+        }
         const completionYmd = getCompletedSiteCompletionYmd(site);
         if (!completionYmd) {
           return {
@@ -5019,7 +5105,9 @@ end $$;`;
 
       function renderWarrantyBadgeHtml(wInfo, compact) {
         if (!wInfo) return "";
-        const tip = `준공일: ${wInfo.completionDisplay} · 만료일: ${wInfo.expiryDisplay}`;
+        const tip = wInfo.isConsultationOnly
+          ? "실공정(착공 등) 없는 상담 단독 완료 현장 — 준공·보증 계산 제외"
+          : `준공일: ${wInfo.completionDisplay} · 만료일: ${wInfo.expiryDisplay}`;
         return `<span class="ws-as-chip ${wInfo.badgeClass}${compact ? " compact" : ""}" title="${escHtml(tip)}">${escHtml(wInfo.badgeText)}</span>`;
       }
 
@@ -5182,6 +5270,7 @@ end $$;`;
         const completedSites = getAllSites()
           .filter((s) => {
             if (!s || s.scope === "newSite" || s.scope === "as") return false;
+            if (isConsultationOnlySite(s)) return false;
             return Boolean(
               s.isAllCompleted ||
               s.isArchived ||
@@ -5766,6 +5855,9 @@ end $$;`;
       window.computeWeeklyGanttModel = computeWeeklyGanttModel;
       window.getCompletedSiteCompletionYmd = getCompletedSiteCompletionYmd;
       window.computeSiteAsWarranty = computeSiteAsWarranty;
+      window.isConsultationOnlySite = isConsultationOnlySite;
+      window.isConsultationOnlyTask = isConsultationOnlyTask;
+      window.isStartConstructionTask = isStartConstructionTask;
       window.classifyAsDefectTrade = classifyAsDefectTrade;
       window.AS_FAULT_REASON_OPTIONS = AS_FAULT_REASON_OPTIONS;
       window.normalizeAsFaultReasonLabel = normalizeAsFaultReasonLabel;
@@ -6299,6 +6391,7 @@ end $$;`;
       }
 
       const DEFAULT_PROMOTE_TEMPLATE_MEMOS = new Set([
+        "공사 착공", "공사 착공 예정",
         "승강기 및 바닥 보양", "철거 및 폐기물 반출", "배관 및 방수", "전기 배선 및 입선",
         "창호 및 샷시 시공", "가벽, 천장, 도어틀 목공", "욕실/주방 타일 시공", "인테리어 필름 시공",
         "전체 도배 시공", "바닥 마루 시공", "맞춤가구 및 싱크대", "조명 기구 및 기구 마감",
@@ -6478,7 +6571,7 @@ end $$;`;
               <div class="hti-mid">
                 <span style="width:8px;height:8px;border-radius:50%;background:${escHtml(site.colorHex || "#2563eb")};flex-shrink:0;"></span>
                 <strong style="font-size:13.5px;color:#0f172a;display:inline-flex;align-items:center;">${getHomeScopeBadgeHtml(effScope)}${escHtml(cleanSiteName)}</strong>
-                <span style="font-size:11px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:2px 7px;border-radius:6px;font-weight:800;">${escHtml(task.taskName)}</span>
+                <span style="font-size:11px;background:${String(task.taskName || "").trim() === "착공" ? "#e0e7ff" : "#eff6ff"};color:${String(task.taskName || "").trim() === "착공" ? "#3730a3" : "#1e40af"};border:1px solid ${String(task.taskName || "").trim() === "착공" ? "#c7d2fe" : "#bfdbfe"};padding:2px 7px;border-radius:6px;font-weight:800;">${escHtml(task.taskName)}</span>
               </div>
               <div class="hti-foot">
                 <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🤝 ${escHtml(task.partner || "업체 미등록")}</span>
@@ -6989,7 +7082,9 @@ end $$;`;
               <td>
                 <span style="display:inline-flex;align-items:center;gap:5px;font-weight:700;color:#1e3a8a;">
                   <span class="cal-sh-box ${t.isShared ? "blue" : "red"}" title="${t.isShared ? "공유됨" : "미공유"}"></span>
-                  ${escHtml(t.taskName)}
+                  ${String(t.taskName || "").trim() === "착공"
+                    ? `<span style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;padding:1px 7px;border-radius:5px;font-weight:800;font-size:11.5px;">${escHtml(t.taskName)}</span>`
+                    : escHtml(t.taskName)}
                 </span>
               </td>
               <td>${escHtml(parseYmdFromTask(t) || t.dateDisplay || "-")}</td>
@@ -7185,10 +7280,10 @@ end $$;`;
                   <div class="dcp-title-wrap">
                     <span style="color:${escHtml(selectedSite.colorHex || "#10b981")};">●</span>
                     <span>${escHtml(selectedSite.siteName)}</span>
-                    ${delayCnt > 0 ? `<span class="dcp-delay-badge">공정지연 ${delayCnt}건 ⚠️</span>` : `<span class="dcp-ok-badge">정상 진행 (${selectedSite.progressRate || 0}%)</span>`}
+                    ${delayCnt > 0 ? `<span class="dcp-delay-badge">공정지연 ${delayCnt}건 ⚠️</span>` : (isSiteCompleted(selectedSite) && isConsultationOnlySite(selectedSite) ? `<span class="dcp-ok-badge" style="background:#f1f5f9;color:#475569;border-color:#cbd5e1;">상담 완료 (미착공)</span>` : `<span class="dcp-ok-badge">정상 진행 (${selectedSite.progressRate || 0}%)</span>`)}
                     ${(isSiteCompleted(selectedSite) && selectedSite.scope !== "newSite" && selectedSite.scope !== "as") ? renderWarrantyBadgeHtml(computeSiteAsWarranty(selectedSite, state.asWarrantyDays || 365), false) : ""}
                   </div>
-                  <div class="dcp-meta-text">담당자: <strong>${escHtml(mgrs)}</strong> &nbsp;•&nbsp; 공정 기간: <strong>${escHtml(periodStr)}</strong>${(isSiteCompleted(selectedSite) && selectedSite.scope !== "newSite" && selectedSite.scope !== "as") ? (() => { const dw = computeSiteAsWarranty(selectedSite, state.asWarrantyDays || 365); return ` &nbsp;•&nbsp; A/S 보증만료: <strong>${escHtml(dw.expiryDisplay)}</strong>`; })() : ""}</div>
+                  <div class="dcp-meta-text">담당자: <strong>${escHtml(mgrs)}</strong> &nbsp;•&nbsp; 공정 기간: <strong>${escHtml(periodStr)}</strong>${(isSiteCompleted(selectedSite) && selectedSite.scope !== "newSite" && selectedSite.scope !== "as") ? (() => { const dw = computeSiteAsWarranty(selectedSite, state.asWarrantyDays || 365); return dw.isConsultationOnly ? ` &nbsp;•&nbsp; A/S 보증: <strong style="color:#64748b;">해당 없음 (상담 단독 · 미착공)</strong>` : ` &nbsp;•&nbsp; A/S 보증만료: <strong>${escHtml(dw.expiryDisplay)}</strong>`; })() : ""}</div>
                 </div>
                 <div class="dcp-actions">
                   ${(FINANCE_EXT_FLAGS.siteDetailShortcut && canViewFinance()) ? `
@@ -8270,18 +8365,59 @@ end $$;`;
         const targetBaseClean = cleanStr(stripPrefix(targetRaw));
         const targetNoMemoClean = cleanStr(stripPrefix(stripNonNumParen(targetRaw)));
         const targetNums = extractNumTokens(targetRaw);
+        const targetIsAs = /^\[(AS|as)\]|\((AS|as)\)/i.test(targetRaw);
+        const targetIsSingle = /^\[(단건|단품)\]|\((단건|단품)\)/i.test(targetRaw);
+
+        function getScopeBonus(site) {
+          const sc = String((site && site.scope) || "site");
+          if (sc === "newSite") return -150;
+          if (targetIsAs) {
+            if (sc === "as") return 40;
+            if (sc === "site") return 20;
+            return 10;
+          }
+          if (targetIsSingle) {
+            if (sc === "single") return 40;
+            if (sc === "site") return 25;
+            return 10;
+          }
+          if (sc === "site") return 40;
+          if (sc === "single") return 30;
+          return 10;
+        }
+
+        let bestSite = null;
+        let bestScore = -Infinity;
+
+        function considerCandidate(s, tierBaseScore) {
+          const score = tierBaseScore + getScopeBonus(s);
+          if (score > bestScore) {
+            bestScore = score;
+            bestSite = s;
+          }
+        }
 
         // 1순위: 정규화 문자열 완전 일치 (접두사 [단건]/[AS], 괄호 메모 정규화 비교)
         for (let i = 0; i < state.dashData.sites.length; i++) {
           const s = state.dashData.sites[i];
           const sRaw = String(s && s.siteName ? s.siteName : "").trim();
           const sClean = cleanStr(sRaw);
-          if (sClean && sClean === targetClean) return s;
+          if (sClean && sClean === targetClean) {
+            considerCandidate(s, 400);
+            continue;
+          }
           const sBaseClean = cleanStr(stripPrefix(sRaw));
-          if (sBaseClean && sBaseClean === targetBaseClean) return s;
+          if (sBaseClean && sBaseClean === targetBaseClean) {
+            considerCandidate(s, 300);
+            continue;
+          }
           const sNoMemoClean = cleanStr(stripPrefix(stripNonNumParen(sRaw)));
-          if (sNoMemoClean && sNoMemoClean === targetNoMemoClean) return s;
+          if (sNoMemoClean && sNoMemoClean === targetNoMemoClean) {
+            considerCandidate(s, 200);
+          }
         }
+
+        if (bestSite && bestScore >= 200) return bestSite;
 
         // 2순위: 부분 일치 (오매칭 방지: 양쪽 모두 숫자/동호수 토큰이 존재하고 100% 일치할 때만 허용)
         if (targetNums.length > 0) {
@@ -8294,12 +8430,12 @@ end $$;`;
             if (!numsMatch) continue;
             const sBaseClean = cleanStr(stripPrefix(sRaw));
             if (sBaseClean.includes(targetBaseClean) || targetBaseClean.includes(sBaseClean)) {
-              return s;
+              considerCandidate(s, 50);
             }
           }
         }
 
-        return null;
+        return bestSite;
       }
 
       function extractFirstManager(mgr, fallback) {
@@ -8625,11 +8761,116 @@ end $$;`;
         `;
       }
 
+      function _normAttrYmdSafe(raw) {
+        if (!raw) return "";
+        const m = String(raw).trim().match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+        if (!m) return "";
+        const y = m[1];
+        const mo = parseInt(m[2], 10);
+        const da = parseInt(m[3], 10);
+        if (mo < 1 || mo > 12 || da < 1 || da > 31) return "";
+        return `${y}-${String(mo).padStart(2, "0")}-${String(da).padStart(2, "0")}`;
+      }
+
+      function getSiteStartTaskYmd(matchedSite) {
+        if (!matchedSite || !Array.isArray(matchedSite.tasks)) return "";
+        if (matchedSite.scope === "newSite") return "";
+        const candidates = [];
+        for (let i = 0; i < matchedSite.tasks.length; i++) {
+          const t = matchedSite.tasks[i];
+          if (!t) continue;
+          const tName = String(t.taskName || "").trim();
+          if (tName !== "착공") continue;
+          const st = String(t.status || "").trim();
+          if (/취소|삭제|제외/.test(st)) continue;
+          const ymd = _normAttrYmdSafe(t.startDateStr)
+            || _normAttrYmdSafe(t.dateDisplay)
+            || _normAttrYmdSafe(t.date)
+            || _normAttrYmdSafe(t.endDateStr);
+          if (ymd) candidates.push(ymd);
+        }
+        if (candidates.length === 0) return "";
+        candidates.sort();
+        return candidates[0];
+      }
+
+      function getCollectionAttributionMonth(row, matchedSite) {
+        const empty = {
+          year: "",
+          month: 0,
+          ymKey: "",
+          shortYm: "",
+          source: "none",
+          startYmd: "",
+          periodDisplay: ""
+        };
+        if (!row) return empty;
+
+        const rowSiteName = String(row.siteName || "").trim();
+        const rowCategory = String(row.category || "").trim();
+        const isExplicitAsRow = /^\[(AS|as)\]|\((AS|as)\)/i.test(rowSiteName) || rowCategory.toUpperCase() === "AS";
+
+        const fallbackInfo = (typeof getCollectionPeriodInfo === "function")
+          ? (getCollectionPeriodInfo(row, matchedSite) || {})
+          : {};
+        const fallbackPeriodDisplay = String(fallbackInfo.periodDisplay || "").trim();
+
+        // 1순위: 매칭 현장(신규견적 및 AS 단독 행 제외)의 '착공' 공종 시작일(startDateStr)
+        const allowStartOverride = matchedSite
+          && matchedSite.scope !== "newSite"
+          && matchedSite.scope !== "as"
+          && !isExplicitAsRow;
+
+        if (allowStartOverride) {
+          const startYmd = getSiteStartTaskYmd(matchedSite);
+          const m = startYmd ? startYmd.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+          if (m) {
+            const year = m[1];
+            const monthNum = parseInt(m[2], 10);
+            return {
+              year,
+              month: monthNum,
+              ymKey: `${year}-${m[2]}`,
+              shortYm: `${year.slice(2)}.${m[2]}`,
+              source: "start_task",
+              startYmd,
+              periodDisplay: fallbackPeriodDisplay || startYmd.replace(/-/g, ".")
+            };
+          }
+        }
+
+        // 2순위(폴백): 수금현황 공사기간(period) 첫 날짜 기준
+        const fbYear = String(fallbackInfo.year || "").trim();
+        const fbMonth = Number(fallbackInfo.month) || 0;
+        if (/^\d{4}$/.test(fbYear) && fbMonth >= 1 && fbMonth <= 12) {
+          const mm = String(fbMonth).padStart(2, "0");
+          return {
+            year: fbYear,
+            month: fbMonth,
+            ymKey: `${fbYear}-${mm}`,
+            shortYm: `${fbYear.slice(2)}.${mm}`,
+            source: "period",
+            startYmd: "",
+            periodDisplay: fallbackPeriodDisplay
+          };
+        }
+
+        return {
+          year: "",
+          month: 0,
+          ymKey: "",
+          shortYm: "",
+          source: "none",
+          startYmd: "",
+          periodDisplay: fallbackPeriodDisplay
+        };
+      }
+
       function getCollectionYears(list) {
         const yearsSet = new Set();
         (list || []).forEach((r) => {
           const matchedSite = findMatchedSiteInfo(r.siteName);
-          const info = getCollectionPeriodInfo(r, matchedSite);
+          const info = getCollectionAttributionMonth(r, matchedSite);
           if (info.year && /^\d{4}$/.test(info.year)) {
             yearsSet.add(parseInt(info.year, 10));
           }
@@ -8656,7 +8897,7 @@ end $$;`;
 
         (list || []).forEach((r) => {
           const matchedSite = findMatchedSiteInfo(r.siteName);
-          const info = getCollectionPeriodInfo(r, matchedSite);
+          const info = getCollectionAttributionMonth(r, matchedSite);
           if (!info.month || info.month < 1 || info.month > 12) return;
           if (selectedYear !== "all") {
             if (selectedYear === "undetermined") {
@@ -8788,7 +9029,7 @@ end $$;`;
             }
           }
 
-          const pInfo = getCollectionPeriodInfo(r, matchedSite);
+          const pInfo = getCollectionAttributionMonth(r, matchedSite);
           if (yearFilter !== "all") {
             if (yearFilter === "undetermined") {
               if (pInfo.year) return false;
@@ -8810,7 +9051,8 @@ end $$;`;
               r.note,
               r.changeDesc,
               r.taxInvoice,
-              pInfo.periodDisplay
+              pInfo.periodDisplay,
+              pInfo.shortYm
             ].filter(Boolean).join(" ").toLowerCase();
             if (!targetStr.includes(q)) return false;
           }
@@ -8822,6 +9064,8 @@ end $$;`;
       window.state = state;
       window.findMatchedSiteInfo = findMatchedSiteInfo;
       window.getCollectionPeriodInfo = getCollectionPeriodInfo;
+      window.getSiteStartTaskYmd = getSiteStartTaskYmd;
+      window.getCollectionAttributionMonth = getCollectionAttributionMonth;
       window.getFilteredCollectionList = getFilteredCollectionList;
       window.renderCollectionStepsHtml = renderCollectionStepsHtml;
       window.getMonthlyCollectionStats = getMonthlyCollectionStats;
@@ -9633,9 +9877,10 @@ end $$;`;
           const sInput = document.getElementById("colStartDate");
           const eInput = document.getElementById("colEndDate");
           const dm = (typeof getSiteDateMetrics === "function") ? getSiteDateMetrics(matched) : null;
-          if (dm && dm.earliest) {
-            const sYmd = dm.earliest;
-            const eYmd = dm.latest || dm.earliest;
+          const startTaskYmd = (typeof getSiteStartTaskYmd === "function") ? getSiteStartTaskYmd(matched) : "";
+          const sYmd = startTaskYmd || (dm && dm.earliest ? dm.earliest : "");
+          if (sYmd) {
+            const eYmd = (dm && dm.latest && dm.latest >= sYmd) ? dm.latest : sYmd;
             if (sInput && (!sInput.value || !periodInput.value)) sInput.value = sYmd;
             if (eInput && (!eInput.value || !periodInput.value)) eInput.value = eYmd;
             if (periodInput && !periodInput.value) {
@@ -12016,7 +12261,7 @@ end $$;`;
         const expList = (fb.expense || []).filter(e => !yr || normalizeMonthStr(e.settleMonth).startsWith(yr));
         const colList = (fb.collection || []).filter(c => {
           if (!yr) return true;
-          const info = getCollectionPeriodInfo(c, findMatchedSiteInfo(c.siteName));
+          const info = getCollectionAttributionMonth(c, findMatchedSiteInfo(c.siteName));
           return info.year === yr;
         });
 
@@ -12775,7 +13020,7 @@ end $$;`;
           if (existingBaseSet.has(base)) return;
           const mergesIntoSite = sc === "as" && activeBaseInList.has(base);
 
-          // 공사기간 자동 계산
+          // 공사기간 자동 계산 ('착공' 공종 시작일 우선)
           const ymds = [];
           (s.tasks || []).forEach(t => {
             const raw = [t.startDateStr, t.endDateStr, t.dateDisplay].filter(Boolean).join(" ");
@@ -12786,7 +13031,10 @@ end $$;`;
             });
           });
           ymds.sort();
-          const period = ymds.length ? (ymds[0] === ymds[ymds.length - 1] ? ymds[0] : `${ymds[0]} ~ ${ymds[ymds.length - 1]}`) : "";
+          const startTaskYmd = getSiteStartTaskYmd(s);
+          const startDot = startTaskYmd ? startTaskYmd.replace(/-/g, ".") : (ymds[0] || "");
+          const endDot = ymds.length ? (ymds[ymds.length - 1] >= startDot ? ymds[ymds.length - 1] : startDot) : startDot;
+          const period = startDot ? (startDot === endDot ? startDot : `${startDot} ~ ${endDot}`) : "";
           const mgr = getUniqueSiteManagers(s.tasks).slice(0, 1)[0] || "";
           const cat = sc === "single" ? "단건" : (sc === "as" ? "AS" : "전체공사");
 
@@ -14039,7 +14287,7 @@ end $$;`;
         const yearsSet = new Set();
         allCollection.forEach(r => {
           const matchedSite = findMatchedSiteInfo(r.siteName);
-          const pInfo = getCollectionPeriodInfo(r, matchedSite);
+          const pInfo = getCollectionAttributionMonth(r, matchedSite);
           if (pInfo && pInfo.year && /^\d{4}$/.test(pInfo.year)) {
             yearsSet.add(pInfo.year);
           }
@@ -14060,7 +14308,7 @@ end $$;`;
         const filteredCol = allCollection.filter(r => {
           if (selectedYear === "all") return true;
           const matchedSite = findMatchedSiteInfo(r.siteName);
-          const pInfo = getCollectionPeriodInfo(r, matchedSite);
+          const pInfo = getCollectionAttributionMonth(r, matchedSite);
           return pInfo && pInfo.year === selectedYear;
         });
 
@@ -14098,7 +14346,7 @@ end $$;`;
         for (let m = 1; m <= 12; m++) {
           const mCols = filteredCol.filter(r => {
             const matchedSite = findMatchedSiteInfo(r.siteName);
-            const pInfo = getCollectionPeriodInfo(r, matchedSite);
+            const pInfo = getCollectionAttributionMonth(r, matchedSite);
             return pInfo && pInfo.month === m;
           });
           const mCollected = mCols.reduce((acc, r) => acc + getCollectionRowFinancials(r).collected, 0);
@@ -14313,7 +14561,7 @@ end $$;`;
                   📅 ${selectedYear === "all" ? "전체 연도" : selectedYear + "년"} 월별 손익 요약표 (1월 ~ 12월)
                 </h3>
                 <div style="font-size:11.5px;color:#64748b;margin-top:2px;">
-                  수금액(현장 기간 기준)과 지출액(변동비+고정비)을 월별로 집계하여 월별 순이익과 마진율을 나타냅니다.
+                  수금액(착공 시작일 우선 · 미지정 시 공사기간 기준)과 지출액(변동비+고정비)을 월별로 집계하여 월별 순이익과 마진율을 나타냅니다.
                 </div>
               </div>
             </div>
@@ -14591,7 +14839,7 @@ end $$;`;
           if (!r) return;
           const fin = getCollectionRowFinancials(r);
           const mSite = findMatchedSiteInfo(r.siteName);
-          const info = getCollectionPeriodInfo(r, mSite);
+          const info = getCollectionAttributionMonth(r, mSite);
           if (fin.uncollected > 0) {
             totalUncollected += fin.uncollected;
             const prog = (mSite && mSite.progressRate !== undefined && mSite.progressRate !== null)
@@ -14650,7 +14898,7 @@ end $$;`;
         allCol.forEach((r) => {
           if (!r || !r.siteName) return;
           const mSite = findMatchedSiteInfo(r.siteName);
-          const info = getCollectionPeriodInfo(r, mSite);
+          const info = getCollectionAttributionMonth(r, mSite);
           if (info.year !== curYear) return;
           const fin = getCollectionRowFinancials(r);
           const sExp = expBySite[normSiteKey(r.siteName)] || 0;
@@ -15683,6 +15931,7 @@ end $$;`;
             : (r.progressRate !== "" && r.progressRate !== null && r.progressRate !== undefined ? Number(r.progressRate) : null);
 
           const pInfo = getCollectionPeriodInfo(r, matchedSite);
+          const attrInfo = getCollectionAttributionMonth(r, matchedSite);
           const fin = getCollectionRowFinancials(r);
           const collected = fin.collected;
           const uncollected = fin.uncollected;
@@ -15719,7 +15968,7 @@ end $$;`;
                   ` : ""}
                   ${isDoneUncollected ? `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:800;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;white-space:nowrap;">⚠️ 공사완료 미수</span>` : ""}
                 </div>
-                ${pInfo.periodDisplay ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;font-weight:600;">📅 ${escHtml(pInfo.periodDisplay)}</div>` : ""}
+                ${(pInfo.periodDisplay || attrInfo.source === "start_task") ? `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);margin-top:2px;font-weight:600;">${pInfo.periodDisplay ? `<span>📅 ${escHtml(pInfo.periodDisplay)}</span>` : ""}${attrInfo.source === "start_task" ? `<span style="padding:1px 5px;border-radius:4px;font-size:10px;font-weight:800;background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;">착공귀속 ${escHtml(attrInfo.shortYm)}</span>` : ""}</div>` : ""}
               </td>
               <td>
                 <span style="font-weight:700;">${escHtml(extractFirstManager(r.manager, "-"))}</span>
@@ -16764,7 +17013,7 @@ end $$;`;
                 <input type="checkbox" ${checked ? "checked" : ""} onclick="event.stopPropagation();" onchange="toggleMobileTaskCheck('${escJs(tid)}', this.checked)" style="width:15px;height:15px;accent-color:var(--site-accent, #0f766e);cursor:pointer;flex-shrink:0;" />
                 <span title="${t.isShared ? "공유됨" : "미공유"}" style="font-size:11px;flex-shrink:0;">${t.isShared ? "🟦" : "🟥"}</span>
                 <span style="font-size:10px;padding:1.5px 5px;border-radius:4px;font-weight:800;background:${isDel ? "#fee2e2" : (isDone ? "#dcfce7" : "#eff6ff")};color:${isDel ? "#dc2626" : (isDone ? "#059669" : "#1d4ed8")};flex-shrink:0;">${isDel ? "지연 ⚠️" : escHtml(t.status || "예정")}</span>
-                <span style="font-size:12.5px;font-weight:800;color:${isDone ? "#64748b" : "#0f172a"};${isDone ? "text-decoration:line-through;" : ""}overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(t.taskName)}</span>
+                <span style="font-size:12.5px;font-weight:800;${String(t.taskName || "").trim() === "착공" ? "padding:1px 6px;border-radius:5px;background:#e0e7ff;color:#3730a3;" : `color:${isDone ? "#64748b" : "#0f172a"};`}${isDone ? "text-decoration:line-through;" : ""}overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(t.taskName)}</span>
                 <span style="font-size:10.5px;color:var(--text-muted);font-weight:700;flex-shrink:0;">${escHtml(ymd || "-")}</span>
               </div>
               <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:4px;padding-left:21px;font-size:11px;color:var(--text-sub);">
@@ -17905,6 +18154,7 @@ end $$;`;
             : (r.progressRate !== "" && r.progressRate !== null && r.progressRate !== undefined ? Number(r.progressRate) : null);
 
           const pInfo = getCollectionPeriodInfo(r, matchedSite);
+          const attrInfo = getCollectionAttributionMonth(r, matchedSite);
           const fin = getCollectionRowFinancials(r);
           const collected = fin.collected;
           const uncollected = fin.uncollected;
@@ -17953,9 +18203,10 @@ end $$;`;
                 </div>
               </div>
 
-              ${pInfo.periodDisplay ? `
-                <div style="font-size:11.5px;font-weight:700;color:#3b82f6;margin-top:6px;display:flex;align-items:center;gap:4px;">
-                  📅 ${escHtml(pInfo.periodDisplay)}
+              ${(pInfo.periodDisplay || attrInfo.source === "start_task") ? `
+                <div style="font-size:11.5px;font-weight:700;color:#3b82f6;margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                  ${pInfo.periodDisplay ? `<span>📅 ${escHtml(pInfo.periodDisplay)}</span>` : ""}
+                  ${attrInfo.source === "start_task" ? `<span style="padding:1px 5px;border-radius:4px;font-size:10px;font-weight:800;background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;">착공귀속 ${escHtml(attrInfo.shortYm)}</span>` : ""}
                 </div>
               ` : ""}
 
@@ -24365,7 +24616,7 @@ end $$;`;
         curPromoteEstimateData = Object.assign({ siteName: siteName }, ed);
 
         const scope = ed.scope || "전체공사";
-        const startDate = ed.expectedDate || getTodayYmd();
+        const startDate = normalizeDateYmd(ed.expectedDate) || getTodayYmd();
         const manager = ed.manager || "조항만";
         const clientName = ed.clientName || "";
         const clientPhone = ed.clientPhone || "";
@@ -24469,7 +24720,7 @@ end $$;`;
           if (addBtn) addBtn.style.display = "none";
           if (clearBtn) clearBtn.style.display = "none";
           if (countBadge) countBadge.innerText = "1개 기본 행";
-          previewBox.innerHTML = '<div style="font-size:12px;color:#64748b;padding:8px 6px;text-align:center;">※ 공정 일정 없이 현장 기본 정보(상담 1행)만 진행 현장에 등록됩니다.</div>';
+          previewBox.innerHTML = '<div style="font-size:12px;color:#64748b;padding:8px 6px;text-align:center;">※ 상세 공정 일정 없이 기본 <strong>착공(예정)</strong> 1행만 진행 현장에 등록됩니다.</div>';
           return;
         }
 
@@ -24479,7 +24730,7 @@ end $$;`;
         const scopeEl = document.getElementById("pmModalScope");
         const scope = scopeEl ? scopeEl.value : "전체공사";
         const dateEl = document.getElementById("pmModalStartDate");
-        const startDate = dateEl ? dateEl.value : getTodayYmd();
+        const startDate = normalizeDateYmd(dateEl ? dateEl.value : "") || getTodayYmd();
         const mgr = curPromoteEstimateData ? curPromoteEstimateData.manager : "조항만";
 
         if (!keepExistingEdits || !Array.isArray(state.promoteEditableTasks)) {
@@ -24491,7 +24742,7 @@ end $$;`;
             state.promoteEditableTasks = [{
               enabled: true,
               taskName: tName,
-              date: String(startDate || getTodayYmd()).replace(/\./g, "-"),
+              date: startDate,
               manager: mgr,
               partner: tPartner,
               status: qt === "as" ? "AS" : "예정",
@@ -24499,10 +24750,25 @@ end $$;`;
               memo: tMemo
             }];
           } else {
-            const baseTasks = getDefaultProcessSchedule(scope, startDate, mgr);
-            state.promoteEditableTasks = baseTasks.map((t) => Object.assign({ enabled: true }, t, {
-              date: String(t.date || startDate).replace(/\./g, "-")
+            const baseTasks = getDefaultProcessSchedule(scope, startDate, mgr) || [];
+            const mappedTasks = baseTasks.map((t) => Object.assign({ enabled: true }, t, {
+              date: normalizeDateYmd(t.date || startDate) || startDate
             }));
+            const hasStart = mappedTasks.some((t) => String(t && t.taskName || "").trim() === "착공");
+            if (!hasStart) {
+              const estMemo = curPromoteEstimateData && curPromoteEstimateData.memo ? String(curPromoteEstimateData.memo).trim() : "";
+              mappedTasks.unshift({
+                enabled: true,
+                taskName: "착공",
+                date: startDate,
+                manager: mgr,
+                partner: "",
+                status: "예정",
+                isShared: true,
+                memo: estMemo ? `착공 예정 (${estMemo})` : "착공 예정"
+              });
+            }
+            state.promoteEditableTasks = mappedTasks;
           }
         }
 
@@ -24595,19 +24861,68 @@ end $$;`;
         const autoCreateCollection = autoColCb ? autoColCb.checked : true;
         const manager = ed.manager || "조항만";
 
+        const qtSubmit = (ed.quoteType === "single" || ed.quoteType === "as") ? ed.quoteType : "site";
+        const resolvedStartDate = normalizeDateYmd(startDate) || normalizeDateYmd(ed.expectedDate) || getTodayYmd();
         const customSelectedTasks = Array.isArray(state.promoteEditableTasks)
           ? state.promoteEditableTasks.filter((t) => t && t.enabled !== false && String(t.taskName || "").trim())
           : null;
-        const computedTasks = generateTasks
-          ? (customSelectedTasks && customSelectedTasks.length > 0 ? customSelectedTasks : getDefaultProcessSchedule(scope, startDate, manager))
-          : [{
-              taskName: "상담", date: startDate, manager: manager, partner: "", status: "예정", isShared: true, memo: ed.memo ? "견적 메모: " + ed.memo : ""
-            }];
+
+        let computedTasks;
+        if (!generateTasks) {
+          computedTasks = [{
+            taskName: qtSubmit === "as" ? (ed.taskName || "AS 보수") : (qtSubmit === "single" ? (ed.taskName || "단건 시공") : "착공"),
+            date: resolvedStartDate,
+            manager: manager,
+            partner: ed.partner || "",
+            status: qtSubmit === "as" ? "AS" : "예정",
+            isShared: true,
+            memo: ed.memo ? "견적 메모: " + ed.memo : "착공 예정"
+          }];
+        } else {
+          const baseList = (customSelectedTasks && customSelectedTasks.length > 0)
+            ? customSelectedTasks.slice()
+            : (getDefaultProcessSchedule(scope, resolvedStartDate, manager) || []).map((t) => Object.assign({ enabled: true }, t));
+          if (qtSubmit === "site") {
+            const hasStartTask = baseList.some((t) => String(t && t.taskName || "").trim() === "착공");
+            const hasOtherActiveTask = baseList.some((t) => {
+              const tName = String(t && t.taskName || "").trim();
+              return tName && tName !== "상담" && !isTaskCompleted(t);
+            });
+            if (!hasStartTask && !hasOtherActiveTask) {
+              baseList.unshift({
+                enabled: true,
+                taskName: "착공",
+                date: resolvedStartDate,
+                manager: manager,
+                partner: "",
+                status: "예정",
+                isShared: true,
+                memo: ed.memo ? `착공 예정 (${ed.memo})` : "착공 예정"
+              });
+            }
+          }
+          computedTasks = baseList;
+        }
+
+        const startTaskObj = computedTasks.find((t) => String(t && t.taskName || "").trim() === "착공" && !/취소|삭제|제외/.test(String(t && t.status || "")));
+        const startTaskDateYmd = normalizeDateYmd((startTaskObj && (startTaskObj.startDateStr || startTaskObj.date)) || "") || resolvedStartDate;
+        const computedYmds = computedTasks
+          .map((t) => normalizeDateYmd((t && (t.startDateStr || t.date)) || ""))
+          .filter(Boolean)
+          .sort();
+        const firstColYmd = startTaskObj ? startTaskDateYmd : (computedYmds[0] || startTaskDateYmd);
+        const lastColYmd = computedYmds.length && computedYmds[computedYmds.length - 1] >= firstColYmd
+          ? computedYmds[computedYmds.length - 1]
+          : firstColYmd;
+        const promotePeriodDot = firstColYmd
+          ? (firstColYmd === lastColYmd ? firstColYmd.replace(/-/g, ".") : `${firstColYmd.replace(/-/g, ".")} ~ ${lastColYmd.replace(/-/g, ".")}`)
+          : "";
 
         const payload = {
           siteName: siteName,
           scope: scope,
-          startDate: startDate,
+          startDate: startTaskDateYmd,
+          period: promotePeriodDot,
           generateTasks: generateTasks,
           autoCreateCollection: autoCreateCollection,
           manager: manager,
@@ -24749,8 +25064,22 @@ end $$;`;
               chargeAmount: Number(ed.contractAmount) || Number(ed.expectedAmount) || 0,
               costAmount: Number(ed.costAmount) || 0
             }, "single");
-          } else if ((Number(ed.contractAmount) || 0) > 0 || (Number(ed.expectedAmount) || 0) > 0) {
-            syncEstimateToFinance(ed);
+          } else {
+            const useSb = Boolean(window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive());
+            const hasColInMem = Boolean(state.financeDbData && Array.isArray(state.financeDbData.collection) && state.financeDbData.collection.some((c) => {
+              if (!c) return false;
+              const ck = String(c.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase();
+              const sk = String(siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase();
+              return ck === sk;
+            }));
+            if (!useSb || state.financeLoaded || hasColInMem) {
+              syncEstimateToFinance(Object.assign({}, ed, {
+                expectedDate: startTaskDateYmd,
+                startDate: startTaskDateYmd,
+                promotePeriod: promotePeriodDot,
+                forceCreateCollection: true
+              }));
+            }
           }
         }
         if (window.WSDataService) {
@@ -24818,7 +25147,7 @@ end $$;`;
       function syncEstimateToFinance(ed) {
         if (!ed || !window.WSDataService) return;
         const amt = Number(ed.contractAmount) || (ed.status === "계약 완료" ? (Number(ed.expectedAmount) || 0) : 0);
-        if (amt <= 0) return;
+        if (amt <= 0 && !ed.forceCreateCollection) return;
         const ds = window.WSDataService;
         if (typeof ds.saveCollectionRow !== "function") return;
         const user = state.authUser || state.currentUser || state.user || "조항만";
@@ -24837,7 +25166,9 @@ end $$;`;
         });
 
         const clientCombined = [ed.clientName, ed.clientPhone].filter(Boolean).join(" / ");
-        const periodStr = (ed.expectedDate || ed.inquiryDate || getTodayYmd()).replace(/-/g, ".");
+        const fallbackDateYmd = normalizeDateYmd(ed.startDate || ed.expectedDate || ed.inquiryDate) || getTodayYmd();
+        const periodStr = String(ed.promotePeriod || "").trim() || fallbackDateYmd.replace(/-/g, ".");
+        const canOptimisticCommit = Boolean(state.financeLoaded || !(window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive()));
 
         if (existingCol) {
           const updatedCol = Object.assign({}, existingCol, {
@@ -24845,9 +25176,14 @@ end $$;`;
             clientName: clientCombined || existingCol.clientName || "",
             manager: extractFirstManager(ed.manager, user),
             category: ed.scope || existingCol.category || "전체공사",
-            contractAmount: amt
+            contractAmount: amt > 0 ? amt : (Number(existingCol.contractAmount) || 0),
+            period: (ed.promotePeriod || !existingCol.period) ? periodStr : existingCol.period
           });
-          ds.saveCollectionRow(updatedCol, user);
+          if (canOptimisticCommit && typeof commitOptimisticFinanceRow === "function") {
+            commitOptimisticFinanceRow("collection", updatedCol, true, "saveCollectionRow", "COL-");
+          } else {
+            ds.saveCollectionRow(updatedCol, user);
+          }
         } else {
           const newCol = {
             id: "",
@@ -24869,7 +25205,11 @@ end $$;`;
             taxInvoice: "미발행",
             note: ed.memo ? `[신규견적 연동] ${ed.memo}` : "[신규견적 연동]"
           };
-          ds.saveCollectionRow(newCol, user);
+          if (canOptimisticCommit && typeof commitOptimisticFinanceRow === "function") {
+            commitOptimisticFinanceRow("collection", newCol, false, "saveCollectionRow", "COL-");
+          } else {
+            ds.saveCollectionRow(newCol, user);
+          }
         }
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
@@ -24925,8 +25265,9 @@ end $$;`;
         getAllSites().forEach((s) => {
           if (!s || (s.scope || "site") === "newSite" || !s.siteName || seenAsNames.has(s.siteName)) return;
           seenAsNames.add(s.siteName);
-          if (isSiteCompleted(s)) completedAsSites.push(s);
-          else activeAsSites.push(s);
+          if (isSiteCompleted(s)) {
+            if (!isConsultationOnlySite(s)) completedAsSites.push(s);
+          } else activeAsSites.push(s);
         });
         activeAsSites.sort(compareActiveSites);
         completedAsSites.sort(compareDoneSites);
@@ -25007,7 +25348,7 @@ end $$;`;
         });
         const getAsOriginCompletionInfo = (siteName, storedDate) => {
           const norm = String(siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
-          const matched = norm ? completedAsSites.find((s) => String(s.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").trim() === norm) : null;
+          const matched = norm ? completedAsSites.find((s) => String(s.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").trim() === norm && !isConsultationOnlySite(s)) : null;
           const ymd = String(storedDate || (matched ? getSiteDateMetrics(matched).latest : "") || "").trim();
           if (!ymd) return null;
           const parts = ymd.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -27124,18 +27465,26 @@ end $$;`;
               <table class="clean-table">
                 <thead><tr><th style="width:50px;text-align:center;">순서</th><th>공종명</th><th style="width:120px;">구분</th><th>비고 / 설명</th><th style="width:110px;text-align:center;">순서/삭제</th></tr></thead>
                 <tbody>
-                  ${(s.tasks || []).map((t, idx) => `
-                    <tr>
+                  ${(s.tasks || []).map((t, idx) => {
+                    const tNm = String(t.name || t.taskName || "").trim();
+                    const isStartRow = tNm === "착공";
+                    const catLabel = String(t.category || "기타").trim();
+                    const catStyle = (isStartRow || catLabel === "사전/준비")
+                      ? "background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;"
+                      : "background:#f1f5f9;color:#475569;";
+                    return `
+                    <tr ${isStartRow ? 'style="background:#f8faff;"' : ""}>
                       <td style="text-align:center;font-size:11.5px;color:#94a3b8;font-weight:700;">${idx + 1}</td>
-                      <td><strong style="color:#0f172a;font-size:13px;">${escHtml(t.name || t.taskName)}</strong></td>
-                      <td><span style="background:#f1f5f9;color:#475569;padding:2px 7px;border-radius:5px;font-weight:700;font-size:11.5px;">${escHtml(t.category || "기타")}</span></td>
+                      <td><strong style="color:${isStartRow ? "#3730a3" : "#0f172a"};font-size:13px;">${escHtml(tNm)}</strong>${isStartRow ? ' <span style="font-size:10px;padding:1px 5px;border-radius:4px;background:#e0e7ff;color:#3730a3;font-weight:800;margin-left:4px;">필수</span>' : ""}</td>
+                      <td><span style="${catStyle}padding:2px 7px;border-radius:5px;font-weight:700;font-size:11.5px;">${escHtml(catLabel)}</span></td>
                       <td style="font-size:12px;color:#64748b;">${escHtml(t.note || "-")}</td>
                       <td style="text-align:center;white-space:nowrap;">
                         <button type="button" class="btn-tool-tag" onclick="moveSettingItem('tasks',${idx},-1)">▲</button>
                         <button type="button" class="btn-tool-tag" onclick="moveSettingItem('tasks',${idx},1)">▼</button>
                         <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="delSettingItem('tasks',${idx})">삭제</button>
                       </td>
-                    </tr>`).join("")}
+                    </tr>`;
+                  }).join("")}
                 </tbody>
               </table>
             </div>`;
@@ -28373,6 +28722,7 @@ end $$;`;
               }
             } else if (key === "dashboard_main" && Array.isArray(data.sites)) {
               state.dashData = applyDeletedGuardsToDashData(data);
+              if (typeof ensureStandardTasksInDashData === "function") ensureStandardTasksInDashData(state.dashData);
               if (window.WSDataService && window.WSDataService.saveDashboardCache) {
                 window.WSDataService.saveDashboardCache(state.dashData);
               }
@@ -28391,6 +28741,8 @@ end $$;`;
               label = "To-Do";
             } else if (key === "settings_main") {
               state.settingsData = typeof applyDeletedGuardsToSettingsData === "function" ? applyDeletedGuardsToSettingsData(data) : data;
+              if (typeof ensureStandardTasksInSettings === "function") ensureStandardTasksInSettings(state.settingsData);
+              if (state.dashData && typeof ensureStandardTasksInDashData === "function") ensureStandardTasksInDashData(state.dashData);
               if (window.WSDataService && window.WSDataService.saveSettingsCache) {
                 window.WSDataService.saveSettingsCache(state.settingsData);
               }
@@ -28573,11 +28925,17 @@ end $$;`;
           if (typeof applyDeletedGuardsToDashData === "function") {
             byKey.dashboard_main = applyDeletedGuardsToDashData(byKey.dashboard_main);
           }
+          if (typeof ensureStandardTasksInDashData === "function") {
+            ensureStandardTasksInDashData(byKey.dashboard_main);
+          }
           if (byKey.todo_main && Array.isArray(byKey.todo_main.list) && typeof applyDeletedGuardsToTodoData === "function") {
             byKey.todo_main = applyDeletedGuardsToTodoData(byKey.todo_main);
           }
           if (byKey.settings_main && typeof applyDeletedGuardsToSettingsData === "function") {
             byKey.settings_main = applyDeletedGuardsToSettingsData(byKey.settings_main);
+          }
+          if (byKey.settings_main && typeof ensureStandardTasksInSettings === "function") {
+            ensureStandardTasksInSettings(byKey.settings_main);
           }
           if (byKey.finance_db && typeof applyDeletedGuardsToFinanceData === "function") {
             byKey.finance_db = applyDeletedGuardsToFinanceData(byKey.finance_db);
@@ -28831,8 +29189,10 @@ end $$;`;
             }
           } catch (_) {}
           if (typeof applyDeletedGuardsToDashData === "function") dashData = applyDeletedGuardsToDashData(dashData, { fromGas: true });
+          if (typeof ensureStandardTasksInDashData === "function") ensureStandardTasksInDashData(dashData);
           if (todoData && typeof applyDeletedGuardsToTodoData === "function") todoData = applyDeletedGuardsToTodoData(todoData, { fromGas: true });
           if (settingsData && typeof applyDeletedGuardsToSettingsData === "function") settingsData = applyDeletedGuardsToSettingsData(settingsData, { fromGas: true });
+          if (settingsData && typeof ensureStandardTasksInSettings === "function") ensureStandardTasksInSettings(settingsData);
           if (financeDb && typeof applyDeletedGuardsToFinanceData === "function") financeDb = applyDeletedGuardsToFinanceData(financeDb, { fromGas: true });
 
           appendLog("3/5 ws_state_store 도메인 스냅샷 저장 중...");
@@ -29270,29 +29630,35 @@ end $$;`;
               let collectionRow = null;
               if (payload && payload.autoCreateCollection && canViewFinance()) {
                 const fb = await ensureFinanceInMemory();
-                const exists = fb.collection.some(c => c && String(c.siteName || "").trim() === String(payload.siteName || "").trim());
+                const _normSiteKey = (v) => String(v || "").replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase();
+                const targetNormKey = _normSiteKey(payload.siteName);
+                const exists = fb.collection.some(c => c && _normSiteKey(c.siteName) === targetNormKey);
                 if (!exists) {
                   const baseAmt = Number(payload.contractAmount) || Number(payload.expectedAmount) || 0;
                   let calcPeriod = String(payload.period || "").trim();
                   if (!calcPeriod && Array.isArray(payload.tasks) && payload.tasks.length > 0) {
                     const ymdList = [];
+                    let startTaskYmdDot = "";
                     payload.tasks.forEach(t => {
                       if (!t) return;
+                      const tNm = String(t.taskName || "").trim();
                       const rawStr = [t.date, t.dateStr, t.startDateStr, t.endDateStr, t.dateDisplay].filter(Boolean).join(" ");
                       const matches = rawStr.match(/\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}/g);
                       if (matches) {
                         matches.forEach(m => {
                           const parts = m.split(/[.\-/]/);
                           if (parts.length === 3) {
-                            ymdList.push(`${parts[0]}.${parts[1].padStart(2, "0")}.${parts[2].padStart(2, "0")}`);
+                            const dotStr = `${parts[0]}.${parts[1].padStart(2, "0")}.${parts[2].padStart(2, "0")}`;
+                            ymdList.push(dotStr);
+                            if (tNm === "착공" && !startTaskYmdDot) startTaskYmdDot = dotStr;
                           }
                         });
                       }
                     });
-                    if (ymdList.length > 0) {
+                    if (startTaskYmdDot || ymdList.length > 0) {
                       ymdList.sort();
-                      const minD = ymdList[0];
-                      const maxD = ymdList[ymdList.length - 1];
+                      const minD = startTaskYmdDot || ymdList[0];
+                      const maxD = ymdList.length ? (ymdList[ymdList.length - 1] >= minD ? ymdList[ymdList.length - 1] : minD) : minD;
                       calcPeriod = (minD === maxD) ? minD : `${minD} ~ ${maxD}`;
                     }
                   }
@@ -29401,6 +29767,9 @@ end $$;`;
           };
 
           ds.saveSettings = function (settingsData) {
+            if (settingsData && typeof ensureStandardTasksInSettings === "function") {
+              ensureStandardTasksInSettings(settingsData);
+            }
             if (!isSupabaseActive()) return orig.saveSettings.call(ds, settingsData);
             if (settingsData) ds.saveSettingsCache(settingsData);
             bgDualWrite("saveSettings", () => orig.saveSettings.call(ds, settingsData));
@@ -29424,6 +29793,9 @@ end $$;`;
                 }
                 if (Array.isArray(settingsData.tasks)) {
                   state.dashData.tasks = settingsData.tasks.map(t => (t && (t.name || t.taskName))).filter(Boolean);
+                }
+                if (typeof ensureStandardTasksInDashData === "function") {
+                  ensureStandardTasksInDashData(state.dashData);
                 }
                 if (Array.isArray(settingsData.partners)) {
                   state.dashData.partners = settingsData.partners.map(p => (p && (p.fullName || p.dropdownVal || (p.biz ? `${p.biz}_${p.name}` : p.name)))).filter(Boolean);
@@ -31049,6 +31421,7 @@ end $$;`;
               });
             }
             mergePreservedShareConfigs(cleanDash, state.dashData);
+            if (typeof ensureStandardTasksInDashData === "function") ensureStandardTasksInDashData(cleanDash);
             state.dashData = cleanDash;
             if (window.WSDataService && typeof window.WSDataService.saveDashboardCache === "function") {
               window.WSDataService.saveDashboardCache(state.dashData);
@@ -31064,6 +31437,7 @@ end $$;`;
           }
           if (settingsData) {
             state.settingsData = typeof applyDeletedGuardsToSettingsData === "function" ? applyDeletedGuardsToSettingsData(settingsData, { fromGas: !useSb }) : settingsData;
+            if (typeof ensureStandardTasksInSettings === "function") ensureStandardTasksInSettings(state.settingsData);
             if (!useSb && window.WSDataService && typeof window.WSDataService.saveSettingsCache === "function") {
               window.WSDataService.saveSettingsCache(state.settingsData);
             }
@@ -31628,6 +32002,7 @@ end $$;`;
       function bootstrap() {
         const ds = window.WSDataService;
         state.dashData = applyDeletedGuardsToDashData(ds ? ds.getInitialDashboardData() : { kpi: {}, scopeCounts: {}, sites: [], siteInfoMap: {}, holidays: {} });
+        if (typeof ensureStandardTasksInDashData === "function") ensureStandardTasksInDashData(state.dashData);
         state.todoData = applyDeletedGuardsToTodoData(ds ? ds.getInitialTodoData() : { list: [] });
         state.financeData = applyDeletedGuardsToFinanceData(ds ? ds.getInitialFinanceData() : { summary: {}, ledger: [] });
         if (state.financeData && Array.isArray(state.financeData.collection)) {
@@ -31635,6 +32010,7 @@ end $$;`;
           state.financeLoaded = false;
         }
         state.settingsData = applyDeletedGuardsToSettingsData(ds ? ds.getInitialSettingsData() : { partners: [], tasks: [], members: [] });
+        if (typeof ensureStandardTasksInSettings === "function") ensureStandardTasksInSettings(state.settingsData);
         try {
           const initSavedAuth = getTopSavedAuth();
           if (initSavedAuth && initSavedAuth.user) {

@@ -3241,6 +3241,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       closeModal: () => {},
       markAllDirty: () => {},
       renderActiveViews: () => {},
+      navigateToSiteDetail: () => {},
       renderSettingsModal: () => {},
       sanitizeUnregisteredMembers: () => {},
       syncUserSelectorOptions: () => {},
@@ -4205,6 +4206,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       closeModal: () => {},
       markAllDirty: () => {},
       renderActiveViews: () => {},
+      navigateToSiteDetail: () => {},
       renderWsCustomDropdownHtml: () => '<div></div>',
       buildDatalistHtml: () => '',
       renderSheetPartnerDropdownHtml: () => '',
@@ -5021,6 +5023,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       showToast: () => {},
       markAllDirty: () => {},
       renderActiveViews: () => {},
+      navigateToSiteDetail: () => {},
       renderWsCustomDropdownHtml: () => '<div></div>',
       buildDatalistHtml: () => '',
       renderSheetPartnerDropdownHtml: () => '',
@@ -5302,6 +5305,323 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       '유상 A/S 모달: 실제 재무 DB 대조(hasPaidAsFinanceRecord)·미진입 시 선로드·배지(✓ 반영됨 / ⚠️ 재무 미반영) 및 저장 시 재연동/중복방지 검증',
       case1Ok && case2Ok && case3Ok && case4Ok,
       `case1=${case1Ok}, case2=${case2Ok}, case3=${case3Ok}, case4=${case4Ok}`
+    );
+  })());
+
+  // [착공 공종 자동 보장 · 견적 승격 착공 기본 포함 · 착공일 재무 귀속 월 · 상담 단독 완료 A/S 보증 제외 통합 런타임 QA]
+  pendingAsyncTests.push((async () => {
+    const sliceFromTo = (startMarker, endMarker) => {
+      const s = idxRootHtml.indexOf(startMarker);
+      const e = idxRootHtml.indexOf(endMarker, s > -1 ? s : 0);
+      if (s === -1 || e <= s) throw new Error(`Missing marker in start-task QA: ${startMarker} .. ${endMarker}`);
+      return idxRootHtml.slice(s, e);
+    };
+
+    // 1. dashboard_data.js 내장 스냅샷 + legacy 캐시 Settings 자동 보강 검증
+    const dashDataJsCode = fs.readFileSync(path.join(__dirname, '..', 'data', 'dashboard_data.js'), 'utf8');
+    const ddStore = { ws_settings_data_v3: JSON.stringify({ tasks: [{ name: '철거', category: '철거/설비' }], partners: [], members: [] }) };
+    const ddVm = vm.createContext({
+      console, Date, Math, Number, String, Array, Object, Set, JSON, Promise,
+      localStorage: {
+        getItem: (k) => (k in ddStore ? ddStore[k] : null),
+        setItem: (k, v) => { ddStore[k] = String(v); },
+        removeItem: (k) => { delete ddStore[k]; }
+      },
+      location: { protocol: 'https:', search: '' },
+      fetch: async () => ({ ok: false, json: async () => ({}) })
+    });
+    ddVm.window = ddVm;
+    ddVm.global = ddVm;
+    vm.runInContext(dashDataJsCode, ddVm);
+    const snapTasks = ddVm.WS_SNAPSHOT_DASHBOARD && ddVm.WS_SNAPSHOT_DASHBOARD.tasks;
+    const initSettingsFromLegacy = ddVm.WSDataService.getInitialSettingsData();
+    const masterGuaranteeOk = Boolean(
+      Array.isArray(snapTasks) && snapTasks[0] === '착공' &&
+      Array.isArray(initSettingsFromLegacy.tasks) &&
+      initSettingsFromLegacy.tasks[0] && (initSettingsFromLegacy.tasks[0].name || initSettingsFromLegacy.tasks[0].taskName) === '착공'
+    );
+
+    // 2. index.html 실제 런타임 슬라이스 구성 (공종 마스터/보증/수금귀속/승격 모달)
+    const domMap = {
+      promoteModalTitleText: { innerText: '' },
+      promoteEstimateModalBody: { innerHTML: '' },
+      promoteEstimateModalFooter: { innerHTML: '' },
+      pmModalScope: { value: '전체공사' },
+      pmModalStartDate: { value: '2027-01-05' },
+      pmModalAutoTasks: { checked: true },
+      pmModalAutoCollection: { checked: true },
+      pmModalConfigRow: { style: {} },
+      pmModalSchedulePreviewBox: { innerHTML: '' },
+      pmModalTaskCountBadge: { innerText: '' },
+      btnAddPromoteTaskRow: { style: {} },
+      btnClearPromoteTaskRows: { style: {} },
+      btnPromoteSubmitInner: { disabled: false, innerText: '' }
+    };
+
+    const savedColCalls = [];
+    const promoteCalls = [];
+    const rtVm = vm.createContext({
+      console, Math, Date, Number, String, Array, Object, Set, Map, JSON, RegExp, Promise,
+      setTimeout: (fn) => { if (typeof fn === 'function') fn(); return 0; },
+      clearTimeout: () => {},
+      localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+      location: { protocol: 'https:', pathname: '/index.html', search: '' },
+      document: {
+        getElementById: (id) => domMap[id] || null,
+        querySelector: () => null,
+        querySelectorAll: () => []
+      },
+      getTodayYmd: () => '2026-11-18',
+      normalizeDateYmd: (v) => {
+        const m = String(v || '').trim().match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+        return m ? `${m[1]}-${String(parseInt(m[2], 10)).padStart(2, '0')}-${String(parseInt(m[3], 10)).padStart(2, '0')}` : '';
+      },
+      normalizeMonthStr: (m) => String(m || '').replace(/\./g, '-').slice(0, 7),
+      formatKrw: (n) => Number(n || 0).toLocaleString('ko-KR') + '원',
+      formatShortNum: (n) => String(Math.round((Number(n) || 0) / 10000)) + '만',
+      parseExtraAmountFromNote: () => 0,
+      isFixedExpenseRow: () => false,
+      getExpenseRowBalance: (e) => (Number(e && e.claimAmount) || 0) - (Number(e && e.paidAmount) || 0),
+      extractFirstManager: (m, fb) => (m ? String(m).split(',')[0].trim() : (fb || '조항만')),
+      matchesQuery: (text, q) => String(text || '').toLowerCase().includes(String(q || '').toLowerCase()),
+      clearDeletedSiteGuardByName: () => 0,
+      isEstimatePromotedToSite: (name) => rtVm.state.dashData.sites.some((s) => s.scope === 'site' && s.siteName === name),
+      formatEstimateAmtStr: (v) => String(v || ''),
+      openModal: () => {},
+      closeModal: () => {},
+      showToast: () => {},
+      markAllDirty: () => {},
+      renderActiveViews: () => {},
+      navigateToSiteDetail: () => {},
+      renderWsCustomDropdownHtml: () => '',
+      filterRegisteredManagers: (m) => (m ? String(m).split(',').map((x) => x.trim()).filter(Boolean) : []),
+      extractStatusNote: (s) => s || '',
+      state: {
+        user: '조항만',
+        authUser: '조항만',
+        currentUser: '조항만',
+        device: 'pc',
+        financeSubTab: 'collection',
+        financeSearch: '',
+        financeStatusFilter: 'all',
+        financeTaxFilter: 'all',
+        financeYearFilter: 'all',
+        financeMonthFilter: 0,
+        financeMonthlyYear: '2027',
+        financeLoaded: true,
+        financeDbData: { collection: [], expense: [], fixedMaster: [] },
+        checkedSiteKeys: new Set(),
+        dirtyPcTabs: { sites: false, calendar: false, finance: false },
+        dirtyMobileTabs: { sites: false, calendar: false, finance: false },
+        settingsData: { members: [{ name: '조항만', role: '대표' }], partners: [], tasks: [{ name: '철거', category: '철거/설비' }] },
+        dashData: {
+          tasks: ['철거', '전기'],
+          sites: [],
+          siteInfoMap: {}
+        }
+      }
+    });
+    rtVm.window = rtVm;
+    rtVm.global = rtVm;
+    rtVm.WSDataService = {
+      saveDashboardCache: () => {},
+      saveFinanceCache: () => {},
+      saveCollectionRow: async (row) => {
+        savedColCalls.push(JSON.parse(JSON.stringify(row)));
+        return { success: true, id: 'COL-RT-' + savedColCalls.length, row: Object.assign({ id: 'COL-RT-' + savedColCalls.length }, row) };
+      },
+      promoteEstimateToSite: async (payload) => {
+        promoteCalls.push(JSON.parse(JSON.stringify(payload)));
+        return { success: true };
+      }
+    };
+
+    const rtSlice = [
+      sliceFromTo('function escHtml(str)', 'function showToast('),
+      sliceFromTo('function sanitizeUnregisteredMembers()', 'window.ensureStandardTasksInSettings ='),
+      'window.ensureStandardTasksInSettings = ensureStandardTasksInSettings;',
+      sliceFromTo('function getAllSites() { return', 'function computeWeeklyGanttModel'),
+      sliceFromTo('function normalizeSiteNameForAsMatch(', 'window.getGanttWeekInfo = getGanttWeekInfo;'),
+      sliceFromTo('function findMatchedSiteInfo(', 'window.setFinanceSubTab ='),
+      sliceFromTo('function isFixedExpenseRow(', 'window.buildFinanceMonthlyDashboardHtml ='),
+      sliceFromTo('function commitOptimisticFinanceRow(', 'function syncAsTaskToFinance('),
+      sliceFromTo('function getDefaultProcessSchedule(', 'window.openEstimateModal =')
+    ].join('\n');
+    vm.runInContext(rtSlice, rtVm);
+
+    // 2-a: ensureStandardTasksInSettings & getGanttTradeStyle
+    rtVm.ensureStandardTasksInSettings(rtVm.state.settingsData);
+    rtVm.ensureStandardTasksInDashData(rtVm.state.dashData);
+    const masterList = rtVm.getTasksMasterList();
+    rtVm.ensureStandardTasksInSettings(rtVm.state.settingsData); // 멱등 중복 방지
+    const startCount = rtVm.state.settingsData.tasks.filter((t) => (t.name || t.taskName) === '착공').length;
+    const req1Ok = Boolean(
+      masterGuaranteeOk &&
+      startCount === 1 &&
+      masterList[0] === '착공' &&
+      rtVm.state.dashData.tasks[0] === '착공' &&
+      rtVm.getGanttTradeStyle('착공') === 'start'
+    );
+
+    // 2-b: 신규 견적 -> 현장 승격 (openPromoteEstimateModal + submitPromoteEstimateModal)
+    rtVm.state.dashData.sites = [{
+      siteKey: 'NEWSITE::승격검증현장',
+      siteName: '승격검증현장',
+      scope: 'newSite',
+      tasks: [{ id: 'est_1', taskName: '1차상담', startDateStr: '2026-11-05', status: '완료', scope: 'newSite' }],
+      estimateData: {
+        siteName: '승격검증현장',
+        quoteType: 'site',
+        scope: '전체공사',
+        expectedDate: '2027-01-05',
+        contractAmount: 60000000,
+        manager: '조항만',
+        status: '계약 완료',
+        memo: '착공 기준 테스트'
+      }
+    }];
+    rtVm.openPromoteEstimateModal('NEWSITE::승격검증현장');
+    const initPromoteTasks = JSON.parse(JSON.stringify(rtVm.state.promoteEditableTasks || []));
+    // updatePromoteSchedulePreview(true) 반복 호출해도 '착공' 중복 추가 없음 확인
+    rtVm.updatePromoteSchedulePreview(true);
+    const afterReRenderStartCnt = rtVm.state.promoteEditableTasks.filter((t) => t.taskName === '착공').length;
+
+    // 승격 실행 -> 진행 현장('!isSiteCompleted') 유지 & 수금현황 착공일 반영
+    domMap.btnPromoteSubmitInner.disabled = false;
+    domMap.pmModalAutoTasks.checked = true;
+    domMap.pmModalAutoCollection.checked = true;
+    rtVm.submitPromoteEstimateModal();
+    await new Promise((r) => setTimeout(r, 15));
+    const promotedSite = rtVm.state.dashData.sites.find((s) => s.scope === 'site' && s.siteName === '승격검증현장');
+    const promotedCol = rtVm.state.financeDbData.collection.find((c) => c.siteName === '승격검증현장');
+
+    // 또한 사용자가 자동공정 OFF(generateTasks=false)로 승격 시에도 '착공(예정)' 1행이 생성되어 완료현장으로 빠지지 않음
+    rtVm.state.dashData.sites.push({
+      siteKey: 'NEWSITE::비자동승격',
+      siteName: '비자동승격',
+      scope: 'newSite',
+      tasks: [],
+      estimateData: { siteName: '비자동승격', quoteType: 'site', expectedDate: '2027-02-10', contractAmount: 10000000, status: '계약 완료' }
+    });
+    rtVm.openPromoteEstimateModal('NEWSITE::비자동승격');
+    domMap.btnPromoteSubmitInner.disabled = false;
+    domMap.pmModalStartDate.value = '2027-02-10';
+    domMap.pmModalAutoTasks.checked = false;
+    rtVm.submitPromoteEstimateModal();
+    await new Promise((r) => setTimeout(r, 15));
+    const promotedNoAuto = rtVm.state.dashData.sites.find((s) => s.scope === 'site' && s.siteName === '비자동승격');
+
+    // 사용자가 '착공'을 빼고 다른 진행중 공정('목공')만 직접 남긴 경우 강제 중복 추가하지 않음 확인
+    rtVm.state.dashData.sites.push({
+      siteKey: 'NEWSITE::커스텀공정현장',
+      siteName: '커스텀공정현장',
+      scope: 'newSite',
+      tasks: [],
+      estimateData: { siteName: '커스텀공정현장', quoteType: 'site', expectedDate: '2027-03-02', status: '계약 완료' }
+    });
+    rtVm.openPromoteEstimateModal('NEWSITE::커스텀공정현장');
+    domMap.btnPromoteSubmitInner.disabled = false;
+    domMap.pmModalStartDate.value = '2027-03-02';
+    domMap.pmModalAutoTasks.checked = true;
+    domMap.pmModalAutoCollection.checked = false;
+    rtVm.state.promoteEditableTasks = [{ enabled: true, taskName: '목공', date: '2027-03-05', status: '예정', manager: '조항만' }];
+    rtVm.submitPromoteEstimateModal();
+    await new Promise((r) => setTimeout(r, 15));
+    const promotedCustom = rtVm.state.dashData.sites.find((s) => s.scope === 'site' && s.siteName === '커스텀공정현장');
+
+    const req2Checks = {
+      initLen: initPromoteTasks.length > 0,
+      initName: initPromoteTasks[0] && initPromoteTasks[0].taskName === '착공',
+      initStatus: initPromoteTasks[0] && initPromoteTasks[0].status === '예정',
+      initEnabled: initPromoteTasks[0] && initPromoteTasks[0].enabled === true,
+      initDate: initPromoteTasks[0] && initPromoteTasks[0].date === '2027-01-05',
+      noDupReRender: afterReRenderStartCnt === 1,
+      promotedHasStart: Boolean(promotedSite && promotedSite.tasks.some((t) => t.taskName === '착공' && t.startDateStr === '2027-01-05' && t.status === '예정')),
+      promotedActive: Boolean(promotedSite && rtVm.isSiteCompleted(promotedSite) === false),
+      promotedColPeriod: Boolean(promotedCol && String(promotedCol.period || '').startsWith('2027.01.05')),
+      noAutoStart: Boolean(promotedNoAuto && promotedNoAuto.tasks.length === 1 && promotedNoAuto.tasks[0].taskName === '착공' && promotedNoAuto.tasks[0].status === '예정'),
+      noAutoActive: Boolean(promotedNoAuto && rtVm.isSiteCompleted(promotedNoAuto) === false),
+      customKept: Boolean(promotedCustom && promotedCustom.tasks.length === 1 && promotedCustom.tasks[0].taskName === '목공')
+    };
+    const req2Ok = Object.keys(req2Checks).every((k) => req2Checks[k]);
+
+    // 2-c: 착공 시작일 기준 재무 귀속 월 (1순위 착공 startDateStr vs 2순위 period 폴백 + AS 단독 제외)
+    // 승격검증현장 수금 row 의 period 를 의도적으로 전년도 '2026.12.20 ~ 2027.02.10'으로 설정해도 착공일 '2027-01-05' -> '27.01' 우선 판별
+    const colStartOverride = { id: 'COL-S1', siteName: '승격검증현장', period: '2026.12.20 ~ 2027.02.10', contractAmount: 60000000, downPayment: 30000000, status: '진행중' };
+    const colPeriodFallback = { id: 'COL-F1', siteName: '착공없는현장', period: '2026.11.08 ~ 2026.11.20', contractAmount: 20000000, downPayment: 20000000, status: '완료' };
+    const colAsFallback = { id: 'COL-AS1', siteName: '[AS] 승격검증현장', category: 'AS', period: '2026.12.28', contractAmount: 500000, downPayment: 500000, status: '완료' };
+    rtVm.state.dashData.sites.push({
+      siteKey: '착공없는현장',
+      siteName: '착공없는현장',
+      scope: 'site',
+      tasks: [{ id: 't_no_start', taskName: '목공', startDateStr: '2027-04-01', endDateStr: '2027-04-02', status: '완료' }]
+    });
+    rtVm.state.financeDbData = {
+      collection: [colStartOverride, colPeriodFallback, colAsFallback],
+      expense: [],
+      fixedMaster: []
+    };
+    const matchedStart = rtVm.findMatchedSiteInfo('승격검증현장');
+    const attrStart = rtVm.getCollectionAttributionMonth(colStartOverride, matchedStart);
+    const attrFallback = rtVm.getCollectionAttributionMonth(colPeriodFallback, rtVm.findMatchedSiteInfo('착공없는현장'));
+    const attrAs = rtVm.getCollectionAttributionMonth(colAsFallback, rtVm.findMatchedSiteInfo('[AS] 승격검증현장'));
+    const stats2027 = rtVm.getMonthlyCollectionStats(rtVm.state.financeDbData.collection, '2027');
+    const stats2026 = rtVm.getMonthlyCollectionStats(rtVm.state.financeDbData.collection, '2026');
+    rtVm.state.financeYearFilter = '2027';
+    rtVm.state.financeMonthFilter = 1;
+    const filtered2027Jan = rtVm.getFilteredCollectionList();
+    rtVm.state.financeMonthlyYear = '2027';
+    const monthlyHtml2027 = rtVm.buildFinanceMonthlyDashboardHtml(false);
+    const req3Ok = Boolean(
+      matchedStart && matchedStart.scope === 'site' &&
+      attrStart.year === '2027' && attrStart.month === 1 && attrStart.ymKey === '2027-01' && attrStart.shortYm === '27.01' && attrStart.source === 'start_task' &&
+      attrFallback.year === '2026' && attrFallback.month === 11 && attrFallback.ymKey === '2026-11' && attrFallback.source === 'period' &&
+      attrAs.year === '2026' && attrAs.month === 12 && attrAs.ymKey === '2026-12' && attrAs.source === 'period' &&
+      stats2027[0].count === 1 && stats2027[0].collected === 30000000 &&
+      stats2026[10].count === 1 && stats2026[11].count === 1 &&
+      filtered2027Jan.length === 1 && filtered2027Jan[0].id === 'COL-S1' &&
+      monthlyHtml2027.includes('30,000,000')
+    );
+
+    // 2-d: 상담 단독 완료 현장 A/S 보증기간 제외 및 실제 준공 현장 유지 검증
+    const consultOnlySite = {
+      siteKey: '파밀리에 신규상담(우성2차 102-1702)',
+      siteName: '파밀리에 신규상담(우성2차 102-1702)',
+      scope: 'site',
+      tasks: [{ id: 'c1', taskName: '상담', dateDisplay: '2026.11.05 (목)', startDateStr: '2026-11-05', endDateStr: '2026-11-05', status: '완료', scope: 'site' }],
+      isAllCompleted: true
+    };
+    const realCompletedSite = {
+      siteKey: '정상준공현장',
+      siteName: '정상준공현장',
+      scope: 'site',
+      tasks: [
+        { id: 'r1', taskName: '착공', startDateStr: '2026-10-01', endDateStr: '2026-10-01', status: '완료', scope: 'site' },
+        { id: 'r2', taskName: '마감', startDateStr: '2026-11-01', endDateStr: '2026-11-01', status: '완료', scope: 'site' }
+      ],
+      isAllCompleted: true
+    };
+    rtVm.state.dashData.sites = [consultOnlySite, realCompletedSite];
+    const consultWInfo = rtVm.computeSiteAsWarranty(consultOnlySite, 365, '2026-11-18');
+    const realWInfo = rtVm.computeSiteAsWarranty(realCompletedSite, 365, '2026-11-18');
+    const asStatsModel = rtVm.buildAsWarrantyAndStatsModel({ sites: rtVm.state.dashData.sites, warrantyDays: 365, todayYmd: '2026-11-18' });
+    const req4Ok = Boolean(
+      rtVm.isConsultationOnlySite(consultOnlySite) === true &&
+      rtVm.isConsultationOnlySite(realCompletedSite) === false &&
+      rtVm.getCompletedSiteCompletionYmd(consultOnlySite) === '' &&
+      rtVm.getCompletedSiteCompletionYmd(realCompletedSite) === '2026-11-01' &&
+      consultWInfo.isConsultationOnly === true &&
+      consultWInfo.statusKey === 'consultation_only' &&
+      consultWInfo.badgeText === '상담 완료 (미착공)' &&
+      realWInfo.statusKey === 'valid' &&
+      asStatsModel.rows.length === 1 &&
+      asStatsModel.rows[0].site.siteName === '정상준공현장'
+    );
+
+    assertTest(
+      '착공 공종 추가·견적 승격 착공 기본 포함·착공일 재무 귀속 월·상담 단독 A/S 보증 제외 통합 런타임 검증',
+      req1Ok && req2Ok && req3Ok && req4Ok,
+      `req1=${req1Ok}, req2=${req2Ok} (${Object.keys(req2Checks).filter((k) => !req2Checks[k]).join(',')}), req3=${req3Ok}, req4=${req4Ok}`
     );
   })());
 

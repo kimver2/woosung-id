@@ -168,8 +168,9 @@ function createTasksSheet(ss) {
   sheet.setRowHeight(1, 38);
   sheet.setFrozenRows(1);
 
-  // 2. 실무 표준 기본 공종 30종 탑재
+  // 2. 실무 표준 기본 공종 31종 탑재 ('착공' 필수 포함)
   var defaultTasks = [
+    ["착공", "사전/준비", "공사 착공 시작"],
     ["철거", "철거/설비", "현장 및 바닥 철거"],
     ["설비", "철거/설비", "배관, 방수, 위생설비"],
     ["누수보수", "철거/설비", "누수 탐지 및 배관 수리"],
@@ -297,7 +298,7 @@ function getAvailableTasks(sheet) {
   // ③ [3순위: 시스템 기본 폴백 공종]
   if (tasks.length === 0) {
     tasks = [
-      "상담", "신고", "관리소신고", "동의서", "실측", "창호실측", "현장실측", "도면/설계",
+      "착공", "상담", "신고", "관리소신고", "동의서", "실측", "창호실측", "현장실측", "도면/설계",
       "보양", "엘리베이터보양", "현관보양", "바닥보양",
       "철거", "마루철거", "욕실철거", "확장철거", "폐기물",
       "설비", "배관", "방수", "미장", "조적", "젠다이", "누수보수",
@@ -314,6 +315,9 @@ function getAvailableTasks(sheet) {
       "준공청소", "입주청소", "청소", "마감",
       "마감점검", "하자보수", "AS"
     ];
+  }
+  if (tasks.indexOf("착공") === -1) {
+    tasks.unshift("착공");
   }
 
   return tasks;
@@ -1683,7 +1687,7 @@ function setupSiteSheetConditionalFormatting(sheet) {
     { keys: ["주방", "싱크대", "가구", "수납가구", "붙박이장", "신발장"], bg: "#fce7f3", font: "#be185d" },
     { keys: ["SMC", "도기", "도기세팅", "욕실세팅", "돔천장"], bg: "#e0f2fe", font: "#0284c7" },
     { keys: ["마감", "잔마감", "코킹", "실리콘", "청소", "준공청소", "입주청소"], bg: "#d1fae5", font: "#047857" },
-    { keys: ["상담", "신고", "실측", "도면", "입주", "현장촬영", "점검", "AS", "S/A"], bg: "#e0e7ff", font: "#3730a3" }
+    { keys: ["착공", "상담", "신고", "실측", "도면", "입주", "현장촬영", "점검", "AS", "S/A"], bg: "#e0e7ff", font: "#3730a3" }
   ];
   taskColorMap.forEach(function(item) {
     item.keys.forEach(function(k) {
@@ -9034,6 +9038,21 @@ function getSettingsManagementData() {
         });
       }
     }
+    var hasStartTaskItem = false;
+    for (var tsIdx = 0; tsIdx < tasks.length; tsIdx++) {
+      if (String(tasks[tsIdx].taskName || "").trim() === "착공") {
+        hasStartTaskItem = true;
+        break;
+      }
+    }
+    if (!hasStartTaskItem) {
+      tasks.unshift({
+        row: 1,
+        taskName: "착공",
+        category: "사전/준비",
+        note: "공사 착공 시작"
+      });
+    }
 
     // 3. 구성원 데이터 수집 (03_구성원)
     var mSheet = findMembersSheet(ss);
@@ -11340,18 +11359,24 @@ function promoteEstimateToSite(data) {
               periodStr = String(data.period).trim();
             } else if (taskList && taskList.length > 0) {
               var validDates = [];
+              var startTaskNormDate = "";
               for (var tIdx = 0; tIdx < taskList.length; tIdx++) {
-                var dRaw = taskList[tIdx].date || taskList[tIdx].dateStr;
+                var dRaw = taskList[tIdx].date || taskList[tIdx].dateStr || taskList[tIdx].startDateStr;
                 if (dRaw) {
                   var dNorm = "";
                   try { dNorm = normalizeDateStringToYYYYMMDD(String(dRaw).trim()); } catch (eD) {}
-                  if (dNorm) validDates.push(dNorm);
+                  if (dNorm) {
+                    validDates.push(dNorm);
+                    if (String(taskList[tIdx].taskName || "").trim() === "착공" && !startTaskNormDate) {
+                      startTaskNormDate = dNorm;
+                    }
+                  }
                 }
               }
-              if (validDates.length > 0) {
+              if (startTaskNormDate || validDates.length > 0) {
                 validDates.sort();
-                var minD = validDates[0];
-                var maxD = validDates[validDates.length - 1];
+                var minD = startTaskNormDate || validDates[0];
+                var maxD = validDates.length ? (validDates[validDates.length - 1] >= minD ? validDates[validDates.length - 1] : minD) : minD;
                 periodStr = (minD === maxD) ? minD : (minD + " ~ " + maxD);
               }
             }
