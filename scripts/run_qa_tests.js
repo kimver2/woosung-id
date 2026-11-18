@@ -5625,6 +5625,309 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     );
   })());
 
+  // [SPA 히스토리 네비게이션(pushState / replaceState / popstate) PC·모바일·모달 통합 런타임 QA]
+  pendingAsyncTests.push((async () => {
+    const marker = '<script src="data/dashboard_data.js"></script>';
+    const markerIdx = idxRootHtml.indexOf(marker);
+    const scriptOpenIdx = idxRootHtml.indexOf('<script>', markerIdx);
+    const scriptCloseIdx = idxRootHtml.lastIndexOf('</script>');
+    const mainScript = idxRootHtml.slice(scriptOpenIdx + '<script>'.length, scriptCloseIdx);
+    const dashDataScript = fs.readFileSync(path.join(__dirname, '..', 'data', 'dashboard_data.js'), 'utf8');
+
+    const createNavVm = (opts = {}) => {
+      const makeClassList = (initial = []) => {
+        const set = new Set(initial);
+        return {
+          add: (...cls) => cls.forEach((c) => set.add(c)),
+          remove: (...cls) => cls.forEach((c) => set.delete(c)),
+          toggle: (c, force) => {
+            if (typeof force === 'boolean') { if (force) set.add(c); else set.delete(c); return force; }
+            if (set.has(c)) { set.delete(c); return false; }
+            set.add(c); return true;
+          },
+          contains: (c) => set.has(c)
+        };
+      };
+      const makeEl = (id, extraClasses = [], attrs = {}) => ({
+        id,
+        classList: makeClassList(extraClasses),
+        style: {},
+        dataset: {},
+        innerHTML: '',
+        innerText: '',
+        textContent: '',
+        value: '',
+        scrollTop: 0,
+        _attrs: Object.assign({}, attrs),
+        getAttribute(k) { return this._attrs[k] ?? null; },
+        setAttribute(k, v) { this._attrs[k] = String(v); },
+        querySelector() { return null; },
+        querySelectorAll() { return []; },
+        addEventListener() {},
+        focus() {},
+        select() {},
+        closest() { return null; }
+      });
+      const modalIds = [
+        'taskSheetModal', 'deleteConfirmModal', 'siteInfoModal', 'siteFileUploadModal',
+        'mobileSiteFilterModal', 'partnerGuideModal', 'todoActionModal', 'estimateEditModal',
+        'promoteEstimateModal', 'monthlyReportModal', 'collectionModal', 'expenseModal',
+        'partnerImportModal', 'syncStatusModal', 'fixedMasterModal', 'siteFinanceDetailModal',
+        'settingsModal', 'captureModal', 'supabaseSetupModal'
+      ];
+      const elements = new Map();
+      modalIds.forEach((id) => elements.set(id, makeEl(id, ['ws-modal-backdrop'])));
+      elements.set('topAccessLockOverlay', makeEl('topAccessLockOverlay', ['ws-auth-overlay']));
+      ['pcViewFrame', 'mobilePhoneFrame', 'btnDevPc', 'btnDevMobile', 'mobileScreenInner', 'mSearchWrap', 'mFilterBar', 'mHeaderAddBtn', 'perfBadge', 'toastBanner', 'pcCalDetailDrawer', 'pcCalDrawerBody', 'pcCalDrawerFooter'].forEach((id) => elements.set(id, makeEl(id)));
+      ['home', 'calendar', 'sites', 'todo', 'quote', 'partners', 'finance'].forEach((t) => {
+        elements.set('page-' + t, makeEl('page-' + t, ['page-container']));
+        elements.set('m-page-' + t, makeEl('m-page-' + t, ['m-page-pane']));
+      });
+      ['pcHomeMain', 'pcCalMain', 'pcSiteMain', 'pcQuoteMain', 'pcTodoMain', 'pcFinanceMain', 'pcPartnersMain',
+       'mHomeMain', 'mCalMain', 'mSitesMain', 'mQuoteMain', 'mTodoMain', 'mobileFinanceMain', 'mPartnersMain',
+       'pcSiteSidebar', 'pcQuoteSidebar', 'pcCalSidebar'].forEach((id) => elements.set(id, makeEl(id)));
+
+      const navTabBtns = ['home', 'calendar', 'sites', 'todo', 'quote', 'partners', 'finance'].map((t) => makeEl('nav_' + t, ['nav-tab-item'], { 'data-tab': t }));
+      const mBottomBtns = ['home', 'calendar', 'sites', 'todo', 'quote', 'partners', 'finance'].map((t) => makeEl('mnav_' + t, ['m-bottom-btn'], { 'data-mtab': t }));
+      const listeners = {};
+      const dispatch = (type, ev = {}) => {
+        for (const fn of (listeners[type] || [])) fn(ev);
+      };
+
+      const historyStack = [{ state: null, url: '/index.html' }];
+      let historyIndex = 0;
+      let pushCount = 0;
+      let replaceCount = 0;
+      let backCallCount = 0;
+      const cloneState = (s) => (s === undefined || s === null ? null : JSON.parse(JSON.stringify(s)));
+      const history = {
+        get state() { return historyStack[historyIndex] ? cloneState(historyStack[historyIndex].state) : null; },
+        get length() { return historyStack.length; },
+        pushState(st, title, url) {
+          pushCount++;
+          historyStack.splice(historyIndex + 1);
+          historyStack.push({ state: cloneState(st), url: url || '/index.html' });
+          historyIndex = historyStack.length - 1;
+        },
+        replaceState(st, title, url) {
+          replaceCount++;
+          historyStack[historyIndex] = { state: cloneState(st), url: url || historyStack[historyIndex].url };
+        },
+        back() {
+          backCallCount++;
+          if (historyIndex > 0) {
+            historyIndex--;
+            dispatch('popstate', { state: history.state });
+          } else {
+            dispatch('popstate', { state: null });
+          }
+        },
+        forward() {
+          if (historyIndex < historyStack.length - 1) {
+            historyIndex++;
+            dispatch('popstate', { state: history.state });
+          }
+        }
+      };
+
+      const storageMap = new Map();
+      if (opts.authed !== false) {
+        storageMap.set('ws_dashboard_auth_token_v2', 'WSAUTH_MOCK');
+        storageMap.set('ws_dashboard_auth_user_v2', '조항만');
+      }
+
+      const document = {
+        body: makeEl('body'),
+        documentElement: makeEl('html'),
+        activeElement: null,
+        cookie: '',
+        getElementById: (id) => elements.get(id) || null,
+        querySelector: (sel) => (sel === '.mobile-screen-inner' ? elements.get('mobileScreenInner') : (sel === '.m-search-wrap' ? elements.get('mSearchWrap') : null)),
+        querySelectorAll: (sel) => {
+          if (sel === '.ws-modal-backdrop.open') return modalIds.map((id) => elements.get(id)).filter((el) => el.classList.contains('open'));
+          if (sel === '.nav-tab-item') return navTabBtns;
+          if (sel === '.page-container') return ['home', 'calendar', 'sites', 'todo', 'quote', 'partners', 'finance'].map((t) => elements.get('page-' + t));
+          if (sel === '.m-bottom-btn') return mBottomBtns;
+          if (sel === '.m-page-pane') return ['home', 'calendar', 'sites', 'todo', 'quote', 'partners', 'finance'].map((t) => elements.get('m-page-' + t));
+          return [];
+        },
+        addEventListener: (type, fn) => {
+          listeners[type] = listeners[type] || [];
+          listeners[type].push(fn);
+        }
+      };
+
+      const sb = {
+        console, Math, Date, Number, String, Array, Object, Set, Map, JSON, RegExp, Promise, Error, TypeError,
+        parseInt, parseFloat, isNaN, encodeURIComponent, decodeURIComponent, URL, URLSearchParams,
+        fetch: () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]), text: () => Promise.resolve('[]') }),
+        setTimeout: () => 0,
+        clearTimeout: () => {},
+        requestAnimationFrame: (fn) => { if (typeof fn === 'function') fn(); return 0; },
+        performance: { now: () => 100 },
+        navigator: { maxTouchPoints: opts.isMobile ? 5 : 0, userAgent: 'node-qa' },
+        innerWidth: opts.isMobile ? 390 : 1280,
+        scrollTo: () => {},
+        confirm: () => { sb._confirmCalled = true; return false; },
+        close: () => {},
+        location: { protocol: 'https:', hostname: 'kimver2.github.io', pathname: '/woosung-id/index.html', search: '', hash: '', href: 'https://kimver2.github.io/woosung-id/index.html' },
+        localStorage: {
+          getItem: (k) => (storageMap.has(k) ? storageMap.get(k) : null),
+          setItem: (k, v) => storageMap.set(k, String(v)),
+          removeItem: (k) => storageMap.delete(k)
+        },
+        sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+        history,
+        document,
+        getComputedStyle: (el) => ({ zIndex: (el && el.style && el.style.zIndex) || '0' }),
+        addEventListener: (type, fn) => {
+          listeners[type] = listeners[type] || [];
+          listeners[type].push(fn);
+        },
+        dispatchEvent: (ev) => dispatch(ev.type, ev)
+      };
+      sb.window = sb;
+      sb.globalThis = sb;
+      vm.createContext(sb);
+      vm.runInContext(dashDataScript, sb);
+      vm.runInContext(mainScript, sb);
+      sb.WSDataService.getInitialDashboardData = () => ({
+        kpi: {},
+        scopeCounts: { site: 2, single: 1, as: 1, newSite: 3 },
+        siteInfoMap: {},
+        holidays: {},
+        sites: [
+          { siteKey: 'SITE_1', siteName: '현장A', scope: 'site', progressRate: 30, tasks: [{ id: 't1', taskName: '철거', startDateStr: '2026-11-18', endDateStr: '2026-11-18', status: '예정', manager: '조항만' }] },
+          { siteKey: 'SITE_2', siteName: '현장B', scope: 'site', progressRate: 50, tasks: [{ id: 't2', taskName: '목공', startDateStr: '2026-11-19', endDateStr: '2026-11-19', status: '진행', manager: '조항만' }] },
+          { siteKey: 'SINGLE_1', siteName: '단건A', scope: 'single', progressRate: 10, tasks: [{ id: 't3', taskName: '필름', startDateStr: '2026-11-20', endDateStr: '2026-11-20', status: '예정', manager: '조항만' }] },
+          { siteKey: 'Q_1', siteName: '견적1', scope: 'newSite', estimateData: { quoteType: 'site', status: '신규 문의', manager: '조항만' }, tasks: [] },
+          { siteKey: 'Q_2', siteName: '견적2_완료', scope: 'newSite', isArchived: true, status: '계약 완료', estimateData: { quoteType: 'site', status: '계약 완료', manager: '조항만' }, tasks: [] },
+          { siteKey: 'Q_3', siteName: '견적3_완료', scope: 'newSite', isArchived: true, status: '계약 완료', estimateData: { quoteType: 'site', status: '계약 완료', manager: '조항만' }, tasks: [] }
+        ]
+      });
+      dispatch('DOMContentLoaded');
+      return { sb, elements, history, dispatch, getMetrics: () => ({ pushCount, replaceCount, backCallCount, index: historyIndex, stackLen: historyStack.length }) };
+    };
+
+    // 1. 잠금 화면 보호 검증
+    const lockVm = createNavVm({ authed: false });
+    const lockInit = lockVm.getMetrics();
+    lockVm.dispatch('popstate', { state: { wsNav: true, snap: { pcTab: 'finance' } } });
+    const lockSafeOk = Boolean(
+      lockInit.pushCount === 0 &&
+      lockInit.replaceCount === 1 &&
+      lockVm.elements.get('topAccessLockOverlay').classList.contains('open') &&
+      lockVm.sb.state.pcTab === 'home'
+    );
+
+    // 2. PC 핵심 이동 경로(홈 -> 현장 목록 -> 특정 현장 -> 재무·원장 > 월별 비용마감 -> 모달 오픈) & 중복 push 방지 & 순차 popstate 복원
+    const pcVm = createNavVm({ authed: true });
+    const pcInit = pcVm.getMetrics();
+    pcVm.sb.switchMainTab('sites');
+    pcVm.sb.switchMainTab('sites'); // 중복 방지
+    const pushAfterSites = pcVm.getMetrics().pushCount;
+    pcVm.sb.openSiteDetail('SITE_2');
+    pcVm.sb.openSiteDetail('SITE_2'); // 중복 방지
+    const pushAfterSite2 = pcVm.getMetrics().pushCount;
+    pcVm.sb.switchMainTab('finance');
+    pcVm.sb.setFinanceSubTab('expense');
+    pcVm.sb.setFinanceSubTab('expense'); // 중복 방지
+    const pushAfterExpense = pcVm.getMetrics().pushCount;
+    pcVm.sb.openModal('expenseModal');
+    pcVm.sb.openModal('expenseModal'); // 중복 방지
+    const pushAfterModal = pcVm.getMetrics().pushCount;
+
+    pcVm.history.back(); // Back 1: 모달 닫힘, 재무>비용마감 유지
+    const b1Ok = !pcVm.elements.get('expenseModal').classList.contains('open') && pcVm.sb.state.pcTab === 'finance' && pcVm.sb.state.financeSubTab === 'expense';
+    pcVm.history.back(); // Back 2: 재무>대시보드
+    const b2Ok = pcVm.sb.state.pcTab === 'finance' && pcVm.sb.state.financeSubTab === 'dashboard';
+    pcVm.history.back(); // Back 3: 현장 목록>SITE_2
+    const b3Ok = pcVm.sb.state.pcTab === 'sites' && pcVm.sb.state.selectedSiteKey === 'SITE_2';
+    pcVm.history.back(); // Back 4: 현장 목록>SITE_1
+    const b4Ok = pcVm.sb.state.pcTab === 'sites' && pcVm.sb.state.selectedSiteKey === 'SITE_1';
+    pcVm.history.back(); // Back 5: 홈
+    const b5Ok = pcVm.sb.state.pcTab === 'home';
+    const noPushOnRestoreOk = pcVm.getMetrics().pushCount === pushAfterModal;
+    pcVm.history.forward();
+    const fwdOk = pcVm.sb.state.pcTab === 'sites' && pcVm.sb.state.selectedSiteKey === 'SITE_1';
+
+    const pcFlowOk = Boolean(
+      pcInit.pushCount === 0 &&
+      pcInit.replaceCount === 1 &&
+      pushAfterSites === 1 &&
+      pushAfterSite2 === 2 &&
+      pushAfterExpense === 4 &&
+      pushAfterModal === 5 &&
+      b1Ok && b2Ok && b3Ok && b4Ok && b5Ok && noPushOnRestoreOk && fwdOk
+    );
+
+    // 3. PC 서브뷰(분류·AS보증·주간타임라인·견적상태·selectQuoteSite) & Back 검증
+    const subVm = createNavVm({ authed: true });
+    subVm.sb.switchMainTab('sites');
+    subVm.sb.onCategoryClicked('single');
+    subVm.sb.setSitesSubView('asWarranty');
+    subVm.sb.switchMainTab('calendar');
+    subVm.sb.setCalViewMode('gantt');
+    subVm.sb.switchMainTab('quote');
+    subVm.sb.setQuoteStatusFilter('done');
+    subVm.sb.selectQuoteSite('Q_3');
+    subVm.history.back();
+    const pcQSelBackOk = subVm.sb.state.selectedQuoteKey === 'Q_2' && subVm.sb.state.quoteStatusFilter === 'done';
+    subVm.history.back();
+    const pcQFilterBackOk = subVm.sb.state.quoteStatusFilter === 'active';
+    subVm.history.back();
+    const pcCalGanttBackOk = subVm.sb.state.pcTab === 'calendar' && subVm.sb.state.calViewMode === 'gantt';
+    subVm.history.back();
+    const pcCalMonthBackOk = subVm.sb.state.calViewMode === 'month';
+    subVm.history.back();
+    const pcAsBackOk = subVm.sb.state.pcTab === 'sites' && subVm.sb.state.sitesSubView === 'asWarranty';
+    subVm.history.back();
+    const pcScopeBackOk = subVm.sb.state.sitesSubView === 'list' && subVm.sb.state.scope === 'single';
+    subVm.history.back();
+    const pcSiteResetOk = subVm.sb.state.scope === 'site' && subVm.sb.state.selectedSiteKey === 'SITE_1';
+    const pcSubViewsOk = Boolean(pcQSelBackOk && pcQFilterBackOk && pcCalGanttBackOk && pcCalMonthBackOk && pcAsBackOk && pcScopeBackOk && pcSiteResetOk);
+
+    // 4. 모바일 전체 경로·스택 모달·프로그래밍적 closeModal 안전성 검증
+    const mobVm = createNavVm({ authed: true, isMobile: true });
+    mobVm.sb.switchMobileTab('sites');
+    mobVm.sb.openSiteDetailMobile('SITE_2');
+    mobVm.sb.setMobileSitesSubView('asWarranty');
+    mobVm.sb.switchMobileTab('calendar');
+    mobVm.sb.setMobileCalMode('gantt');
+    mobVm.sb.switchMobileTab('quote');
+    mobVm.sb.setQuoteStatusFilter('done');
+    mobVm.sb.toggleMobileQuoteCard('Q_2');
+    mobVm.sb.selectQuoteSite('Q_3');
+    mobVm.sb.openModal('siteFinanceDetailModal');
+    mobVm.sb.openModal('expenseModal');
+    mobVm.history.back(); // 최상위 모달만 닫힘
+    const stackModalBackOk = !mobVm.elements.get('expenseModal').classList.contains('open') && mobVm.elements.get('siteFinanceDetailModal').classList.contains('open');
+    const idxBeforeClose = mobVm.getMetrics().index;
+    mobVm.sb.closeModal('siteFinanceDetailModal'); // 소유 엔트리 안전 pop
+    const ownCloseOk = !mobVm.elements.get('siteFinanceDetailModal').classList.contains('open') && mobVm.getMetrics().index === idxBeforeClose - 1;
+    const backsBeforeGuard = mobVm.getMetrics().backCallCount;
+    mobVm.sb.closeModal('siteFinanceDetailModal'); // 이미 닫힌 모달 재호출 시 back 금지
+    mobVm.sb.openModal('syncStatusModal', { skipHistory: true });
+    mobVm.sb.closeModal('syncStatusModal'); // skipHistory 모달 닫기 시 back 금지
+    const safeCloseGuardOk = mobVm.getMetrics().backCallCount === backsBeforeGuard;
+    mobVm.history.back(); // Q_2
+    const qSelBackOk = mobVm.sb.state.selectedQuoteKey === 'Q_2' && mobVm.sb.state.quoteStatusFilter === 'done';
+    mobVm.history.back(); // done (unselected)
+    mobVm.history.back(); // active quote
+    const qFilterBackOk = mobVm.sb.state.quoteStatusFilter === 'active';
+    mobVm.history.back(); // calendar/gantt
+    const mCalBackOk = mobVm.sb.state.mobileTab === 'calendar' && mobVm.sb.state.mobileCalMode === 'gantt';
+    mobVm.history.back(); // calendar/month
+    mobVm.history.back(); // sites/asWarranty
+    const mAsBackOk = mobVm.sb.state.mobileTab === 'sites' && mobVm.sb.state.sitesSubView === 'asWarranty';
+
+    assertTest(
+      'SPA 히스토리 네비게이션(초기 replaceState·잠금화면 보호·PC/모바일 탭·서브뷰·모달 뒤로가기 및 closeModal 안전성) 런타임 검증',
+      lockSafeOk && pcFlowOk && pcSubViewsOk && stackModalBackOk && ownCloseOk && safeCloseGuardOk && qSelBackOk && qFilterBackOk && mCalBackOk && mAsBackOk,
+      `lock=${lockSafeOk}, pc=${pcFlowOk}, pcSub=${pcSubViewsOk}, stack=${stackModalBackOk}, ownClose=${ownCloseOk}, safeGuard=${safeCloseGuardOk}, qSel=${qSelBackOk}, qFilter=${qFilterBackOk}, mCal=${mCalBackOk}, mAs=${mAsBackOk}`
+    );
+  })());
+
 Promise.all(pendingAsyncTests).then(() => {
 if (isVerbose) {
   rawConsoleLog('\n========================================================');

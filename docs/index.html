@@ -3876,16 +3876,17 @@ end $$;`;
         const jumpPartnerBtn = document.querySelector('.preview-global-bar .pg-jump-btn[onclick*="partners"]');
         if (jumpPartnerBtn) jumpPartnerBtn.style.display = "";
 
+        const navSkipOpt = !window.__wsBootstrapDone ? { skipHistory: true } : undefined;
         if (!canView) {
           if (state.pcTab === "finance") {
-            window.switchMainTab("partners");
+            window.switchMainTab("partners", navSkipOpt);
           }
           if (state.mobileTab === "finance") {
-            window.switchMobileTab("partners");
+            window.switchMobileTab("partners", navSkipOpt);
           }
         } else {
           if (state.mobileTab === "partners") {
-            window.switchMobileTab("finance");
+            window.switchMobileTab("finance", navSkipOpt);
           }
         }
       }
@@ -5905,6 +5906,7 @@ end $$;`;
         state.dirtyPcTabs.sites = true;
         state.dirtyMobileTabs.sites = true;
         renderActiveViews();
+        recordNavHistory();
       };
       window.setMobileSitesSubView = function (subView, archivedFlag) {
         state.sitesSubView = subView === "asWarranty" ? "asWarranty" : "list";
@@ -5915,6 +5917,7 @@ end $$;`;
         state.dirtyMobileTabs.sites = true;
         state.dirtyPcTabs.sites = true;
         renderActiveViews();
+        recordNavHistory();
       };
       window.setAsWarrantyDays = function (days) {
         state.asWarrantyDays = Number(days) === 730 ? 730 : 365;
@@ -5976,6 +5979,7 @@ end $$;`;
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
         markAllDirty();
         renderActiveViews();
+        recordNavHistory();
       };
 
       function markAllDirty() {
@@ -6783,7 +6787,7 @@ end $$;`;
               <div class="home-panel-box" id="homeSecFinanceCol" style="margin-bottom:0;">
                 <div class="hp-header">
                   <span class="hp-title">💰 수금 예정 · 미수 (${homeColSummary.items.length}건)</span>
-                  <a class="hp-link" onclick="state.financeSubTab='collection'; state.financeStatusFilter='uncollected'; switchMainTab('finance');">수금현황 ➔</a>
+                  <a class="hp-link" onclick="state.financeSubTab='collection'; state.financeStatusFilter='uncollected'; switchMainTab('finance', { keepSubTab: true });">수금현황 ➔</a>
                 </div>
                 <div style="display:flex;justify-content:space-between;align-items:center;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 10px;margin-bottom:8px;">
                   <span style="font-size:11.5px;font-weight:700;color:#166534;">총 미수 잔금${homeColSummary.soonCount > 0 ? ` · 7일내 ${homeColSummary.soonCount}건` : ""}</span>
@@ -7973,7 +7977,9 @@ end $$;`;
         state.selectedQuoteKey = siteKey;
         state.dirtyPcTabs.quote = true;
         renderActiveViews();
+        recordNavHistory();
       };
+      window.selectQuoteSite = window.selectQuoteCard;
       window.setQuoteStatusFilter = function (st) {
         state.quoteStatusFilter = st === "done" ? "done" : (st === "failed" ? "failed" : "active");
         state.quoteShowArchived = state.quoteStatusFilter === "done";
@@ -7982,11 +7988,13 @@ end $$;`;
         state.selectedQuoteKey = null;
         markAllDirty();
         renderActiveViews();
+        recordNavHistory();
       };
       window.toggleFailedQuotes = function () {
         state.showFailedQuotes = !state.showFailedQuotes;
         markAllDirty();
         renderActiveViews();
+        recordNavHistory();
       };
       window.setQuoteSort = function (sortBy) {
         state.quoteSortBy = sortBy === "inquiry" ? "inquiry" : "priority";
@@ -7994,10 +8002,15 @@ end $$;`;
         renderActiveViews();
       };
       window.toggleMobileQuoteCard = function (siteKey) {
-        if (state.mobileExpandedQuoteKeys.has(siteKey)) state.mobileExpandedQuoteKeys.delete(siteKey);
-        else state.mobileExpandedQuoteKeys.add(siteKey);
+        const wasExpanded = state.mobileExpandedQuoteKeys.has(siteKey);
+        if (wasExpanded) state.mobileExpandedQuoteKeys.delete(siteKey);
+        else {
+          state.mobileExpandedQuoteKeys.add(siteKey);
+          state.selectedQuoteKey = siteKey;
+        }
         state.dirtyMobileTabs.quote = true;
         renderActiveViews();
+        if (!wasExpanded) recordNavHistory();
       };
       window.onFilterQuoteTable = function (query) {
         state.quoteTableSearch = String(query || "");
@@ -9095,6 +9108,7 @@ end $$;`;
             });
           });
         }
+        recordNavHistory();
         ensureFinanceDbDataLoaded(true);
       };
 
@@ -16736,7 +16750,7 @@ end $$;`;
           <div class="m-card-box" id="mHomeSecFinanceCol">
             <div class="m-card-title-row">
               <span class="m-card-title">💰 수금 예정 · 미수 (${homeColSummary.items.length}건)</span>
-              <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="state.financeSubTab='collection'; state.financeStatusFilter='uncollected'; switchMobileTab('finance');">수금현황 ➔</span>
+              <span style="font-size:11px;color:#2563eb;font-weight:700;cursor:pointer;" onclick="state.financeSubTab='collection'; state.financeStatusFilter='uncollected'; switchMobileTab('finance', { keepSubTab: true });">수금현황 ➔</span>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 10px;margin-bottom:8px;">
               <span style="font-size:11px;font-weight:700;color:#166534;">총 미수 잔금${homeColSummary.soonCount > 0 ? ` · 7일내 ${homeColSummary.soonCount}건` : ""}</span>
@@ -18444,11 +18458,270 @@ end $$;`;
       let _modalHistoryDepth = 0;
       let _ignorePopstateCount = 0;
       let _modalTopZIndex = 10000;
+      let _isRestoringNavHistory = false;
+      let _suppressNavHistoryPushDepth = 0;
+      let _navHistorySeq = 0;
+      let _lastNavSnapshotKey = "";
+      let _lastKnownNavState = null;
+      let _historyReflectsStateProp = null;
+      let _pendingReplaceNavSlot = null;
+      let _suppressPopstateForNavId = null;
+      let _suppressPopstateUntil = 0;
+      window.__wsBootstrapDone = false;
+
+      function isAuthLockOpen() {
+        const ov = typeof document !== "undefined" ? document.getElementById("topAccessLockOverlay") : null;
+        return Boolean(ov && ov.classList && ov.classList.contains("open"));
+      }
+
+      function getModalEffectiveZIndex(el) {
+        if (!el) return 0;
+        const inlineZ = el.style && el.style.zIndex ? parseInt(el.style.zIndex, 10) : NaN;
+        if (!isNaN(inlineZ)) return inlineZ;
+        if (typeof window.getComputedStyle === "function") {
+          try {
+            const compZ = parseInt(window.getComputedStyle(el).zIndex, 10);
+            if (!isNaN(compZ)) return compZ;
+          } catch (_) {}
+        }
+        return 0;
+      }
+
+      function getTopmostOpenModal() {
+        const openModals = Array.from(document.querySelectorAll(".ws-modal-backdrop.open"));
+        if (openModals.length === 0) return null;
+        openModals.sort((a, b) => getModalEffectiveZIndex(a) - getModalEffectiveZIndex(b));
+        return openModals[openModals.length - 1];
+      }
+
+      function getOpenModalIds() {
+        const openModals = Array.from(document.querySelectorAll(".ws-modal-backdrop.open"));
+        openModals.sort((a, b) => getModalEffectiveZIndex(a) - getModalEffectiveZIndex(b));
+        return openModals.map((el) => el.id).filter(Boolean);
+      }
+
+      function captureNavHistorySnapshot() {
+        return {
+          device: state.device === "mobile" ? "mobile" : "pc",
+          pcTab: state.pcTab || "home",
+          mobileTab: state.mobileTab || "home",
+          scope: state.scope || "site",
+          quoteCategory: state.quoteCategory || "site",
+          calViewMode: state.calViewMode || "month",
+          mobileCalMode: state.mobileCalMode || "month",
+          sitesSubView: state.sitesSubView === "asWarranty" ? "asWarranty" : "list",
+          showArchivedSites: Boolean(state.showArchivedSites),
+          selectedSiteKey: state.selectedSiteKey || null,
+          financeSubTab: state.financeSubTab || "dashboard",
+          quoteStatusFilter: state.quoteStatusFilter === "done" ? "done" : (state.quoteStatusFilter === "failed" ? "failed" : "active"),
+          quoteShowArchived: Boolean(state.quoteShowArchived),
+          showFailedQuotes: Boolean(state.showFailedQuotes),
+          selectedQuoteKey: state.selectedQuoteKey || null,
+          mobileExpandedSiteKeys: Array.from(state.mobileExpandedSiteKeys || []).sort(),
+          mobileExpandedQuoteKeys: Array.from(state.mobileExpandedQuoteKeys || []).sort()
+        };
+      }
+
+      function getNavSnapshotKey(snap) {
+        if (!snap || typeof snap !== "object") return "";
+        return JSON.stringify([
+          snap.device || "pc",
+          snap.pcTab || "home",
+          snap.mobileTab || "home",
+          snap.scope || "site",
+          snap.quoteCategory || "site",
+          snap.calViewMode || "month",
+          snap.mobileCalMode || "month",
+          snap.sitesSubView || "list",
+          Boolean(snap.showArchivedSites),
+          snap.selectedSiteKey || "",
+          snap.financeSubTab || "dashboard",
+          snap.quoteStatusFilter || "active",
+          Boolean(snap.quoteShowArchived),
+          Boolean(snap.showFailedQuotes),
+          snap.selectedQuoteKey || "",
+          Array.isArray(snap.mobileExpandedSiteKeys) ? snap.mobileExpandedSiteKeys : [],
+          Array.isArray(snap.mobileExpandedQuoteKeys) ? snap.mobileExpandedQuoteKeys : []
+        ]);
+      }
+
+      function getCurrentNavHistoryState() {
+        if (typeof history !== "undefined") {
+          const hs = history.state;
+          if (hs && typeof hs === "object" && hs.wsNav) return hs;
+          if (_historyReflectsStateProp === true) return hs || null;
+        }
+        return _lastKnownNavState;
+      }
+
+      function buildNavHistoryState(snap, opts) {
+        opts = opts || {};
+        const cur = getCurrentNavHistoryState();
+        const isReplace = Boolean(opts.replace);
+        const curDepth = (cur && cur.wsNav && typeof cur.navDepth === "number") ? cur.navDepth : 0;
+        const navDepth = isReplace ? curDepth : (curDepth + 1);
+        const parentNavId = isReplace
+          ? (cur && cur.wsNav ? (cur.parentNavId || null) : null)
+          : (cur && cur.wsNav ? cur.navId : null);
+        return {
+          wsNav: true,
+          navId: ++_navHistorySeq,
+          parentNavId,
+          navDepth,
+          wsMobileTab: snap.mobileTab || "home",
+          wsModal: opts.modalId || null,
+          modalId: opts.modalId || null,
+          modalStack: Array.isArray(opts.modalStack) ? opts.modalStack.slice() : [],
+          snap
+        };
+      }
+
+      function replaceCurrentNavHistory(opts) {
+        opts = opts || {};
+        const snap = captureNavHistorySnapshot();
+        const snapKey = getNavSnapshotKey(snap);
+        const modalStack = opts.preserveModals ? getOpenModalIds() : [];
+        const modalId = modalStack.length > 0 ? modalStack[modalStack.length - 1] : null;
+        const entry = buildNavHistoryState(snap, { replace: true, modalId, modalStack });
+        if (opts.resetDepth) {
+          entry.navDepth = 0;
+          entry.parentNavId = null;
+        }
+        _lastNavSnapshotKey = snapKey;
+        _lastKnownNavState = entry;
+        _pendingReplaceNavSlot = null;
+        if (typeof history !== "undefined" && typeof history.replaceState === "function") {
+          try {
+            history.replaceState(entry, "");
+            if (_historyReflectsStateProp === null) {
+              _historyReflectsStateProp = Boolean(history.state && history.state.wsNav);
+            }
+          } catch (_) {}
+        }
+        return entry;
+      }
+
+      function recordNavHistory(opts) {
+        opts = opts || {};
+        if (_isRestoringNavHistory || _suppressNavHistoryPushDepth > 0 || opts.skipHistory) return null;
+        if (isAuthLockOpen()) return null;
+
+        const snap = captureNavHistorySnapshot();
+        const snapKey = getNavSnapshotKey(snap);
+        const curState = getCurrentNavHistoryState();
+        const shouldReplace = Boolean(opts.replace || _pendingReplaceNavSlot);
+        const modalStack = getOpenModalIds();
+        const modalId = modalStack.length > 0 ? modalStack[modalStack.length - 1] : null;
+        const curModalId = curState && curState.modalId ? curState.modalId : null;
+
+        if (!shouldReplace && snapKey === _lastNavSnapshotKey && curModalId === modalId) {
+          return null;
+        }
+
+        const entry = buildNavHistoryState(snap, { replace: shouldReplace, modalId, modalStack });
+        _lastNavSnapshotKey = snapKey;
+        _lastKnownNavState = entry;
+        _pendingReplaceNavSlot = null;
+        _suppressPopstateForNavId = null;
+        _suppressPopstateUntil = 0;
+
+        if (typeof history !== "undefined") {
+          try {
+            if (shouldReplace && typeof history.replaceState === "function") {
+              history.replaceState(entry, "");
+            } else if (typeof history.pushState === "function") {
+              history.pushState(entry, "");
+            }
+          } catch (_) {}
+        }
+        return entry;
+      }
+
+      function restoreNavHistorySnapshot(snap) {
+        if (!snap || typeof snap !== "object") return;
+        const prevRestoring = _isRestoringNavHistory;
+        _isRestoringNavHistory = true;
+        try {
+          if (snap.device && IS_PREVIEW_MODE && state.device !== snap.device && typeof window.switchDeviceMode === "function") {
+            window.switchDeviceMode(snap.device);
+          }
+          state.pcTab = snap.pcTab || "home";
+          state.mobileTab = snap.mobileTab || "home";
+          state.scope = snap.scope || "site";
+          state.quoteCategory = snap.quoteCategory || "site";
+          state.calViewMode = snap.calViewMode || "month";
+          state.mobileCalMode = snap.mobileCalMode || "month";
+          state.sitesSubView = snap.sitesSubView === "asWarranty" ? "asWarranty" : "list";
+          state.showArchivedSites = Boolean(snap.showArchivedSites);
+          state.selectedSiteKey = snap.selectedSiteKey || null;
+          state.financeSubTab = snap.financeSubTab || "dashboard";
+          state.quoteStatusFilter = snap.quoteStatusFilter === "done" ? "done" : (snap.quoteStatusFilter === "failed" ? "failed" : "active");
+          state.quoteShowArchived = Boolean(snap.quoteShowArchived);
+          state.showFailedQuotes = Boolean(snap.showFailedQuotes);
+          state.selectedQuoteKey = snap.selectedQuoteKey || null;
+          state.mobileExpandedSiteKeys = new Set(Array.isArray(snap.mobileExpandedSiteKeys) ? snap.mobileExpandedSiteKeys : []);
+          state.mobileExpandedQuoteKeys = new Set(Array.isArray(snap.mobileExpandedQuoteKeys) ? snap.mobileExpandedQuoteKeys : []);
+
+          if (typeof getActiveScopeSites === "function") {
+            state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
+          }
+
+          const activeDevice = state.device === "mobile" ? "mobile" : "pc";
+          if (activeDevice === "mobile") {
+            if (typeof window.switchMobileTab === "function") {
+              window.switchMobileTab(state.mobileTab, {
+                skipHistory: true,
+                keepSubTab: true,
+                preserveSelectedSite: true,
+                targetScope: state.scope !== "newSite" ? state.scope : undefined
+              });
+            }
+            state.mobileExpandedSiteKeys = new Set(Array.isArray(snap.mobileExpandedSiteKeys) ? snap.mobileExpandedSiteKeys : []);
+            state.mobileExpandedQuoteKeys = new Set(Array.isArray(snap.mobileExpandedQuoteKeys) ? snap.mobileExpandedQuoteKeys : []);
+          } else {
+            if (typeof window.switchMainTab === "function") {
+              window.switchMainTab(state.pcTab, {
+                skipHistory: true,
+                keepDevice: true,
+                keepSubTab: true,
+                preserveSelectedSite: true,
+                targetScope: state.scope !== "newSite" ? state.scope : undefined
+              });
+            }
+          }
+
+          state.scope = snap.scope || "site";
+          state.quoteCategory = snap.quoteCategory || "site";
+          state.calViewMode = snap.calViewMode || "month";
+          state.mobileCalMode = snap.mobileCalMode || "month";
+          state.sitesSubView = snap.sitesSubView === "asWarranty" ? "asWarranty" : "list";
+          state.showArchivedSites = Boolean(snap.showArchivedSites);
+          state.selectedSiteKey = snap.selectedSiteKey || null;
+          state.financeSubTab = snap.financeSubTab || "dashboard";
+          state.quoteStatusFilter = snap.quoteStatusFilter === "done" ? "done" : (snap.quoteStatusFilter === "failed" ? "failed" : "active");
+          state.quoteShowArchived = Boolean(snap.quoteShowArchived);
+          state.showFailedQuotes = Boolean(snap.showFailedQuotes);
+          state.selectedQuoteKey = snap.selectedQuoteKey || null;
+
+          markAllDirty();
+          renderActiveViews();
+          _lastNavSnapshotKey = getNavSnapshotKey(captureNavHistorySnapshot());
+        } finally {
+          _isRestoringNavHistory = prevRestoring;
+        }
+      }
+
+      window.captureNavHistorySnapshot = captureNavHistorySnapshot;
+      window.recordNavHistory = recordNavHistory;
+      window.replaceCurrentNavHistory = replaceCurrentNavHistory;
+      window.restoreNavHistorySnapshot = restoreNavHistorySnapshot;
+
       function openModal(id, opts) {
         const el = document.getElementById(id);
         if (!el) return;
         const wasOpen = el.classList.contains("open");
         const skipHistory = Boolean(opts && opts.skipHistory);
+        const replaceHistory = Boolean((opts && opts.replaceHistory) || _pendingReplaceNavSlot);
 
         // 최상위 z-index 동적 부여: 열리는 모달을 항상 최상위 계층으로 올림
         _modalTopZIndex = Math.max(_modalTopZIndex + 10, 10000);
@@ -18463,11 +18736,28 @@ end $$;`;
 
         el.classList.add("open");
         el.dataset.skipHistory = skipHistory ? "1" : "";
-        if (!wasOpen && !skipHistory) {
+        if (!wasOpen && !skipHistory && !_isRestoringNavHistory && !isAuthLockOpen()) {
           try {
-            if (window.history && typeof window.history.pushState === "function") {
-              _modalHistoryDepth++;
-              window.history.pushState({ wsModal: id }, "");
+            const snap = captureNavHistorySnapshot();
+            const modalStack = getOpenModalIds();
+            if (!modalStack.includes(id)) modalStack.push(id);
+            const entry = buildNavHistoryState(snap, {
+              replace: replaceHistory,
+              modalId: id,
+              modalStack
+            });
+            _lastNavSnapshotKey = getNavSnapshotKey(snap);
+            _lastKnownNavState = entry;
+            _pendingReplaceNavSlot = null;
+            _suppressPopstateForNavId = null;
+            _suppressPopstateUntil = 0;
+            if (window.history) {
+              if (replaceHistory && typeof window.history.replaceState === "function") {
+                window.history.replaceState(entry, "");
+              } else if (typeof window.history.pushState === "function") {
+                _modalHistoryDepth++;
+                window.history.pushState(entry, "");
+              }
             }
           } catch (ePush) {}
           if (window.parent && window.parent !== window) {
@@ -18475,14 +18765,17 @@ end $$;`;
           }
         }
       }
-      window.closeModal = function (id, fromPopstate) {
+      window.openModal = openModal;
+      window.closeModal = function (id, optsOrFromPopstate) {
         const el = document.getElementById(id);
         if (!el) return;
+        const fromPopstate = optsOrFromPopstate === true;
+        const skipHistoryBack = Boolean(optsOrFromPopstate && typeof optsOrFromPopstate === "object" && optsOrFromPopstate.skipHistoryBack);
         const wasOpen = el.classList.contains("open");
-        const hadSkipHistory = el.dataset.skipHistory === "1";
+        const hadSkipHistory = Boolean(el.dataset && el.dataset.skipHistory === "1");
         el.classList.remove("open");
-        el.style.zIndex = "";
-        el.dataset.skipHistory = "";
+        if (el.style) el.style.zIndex = "";
+        if (el.dataset) el.dataset.skipHistory = "";
         if (id === "syncStatusModal") {
           const card = el.querySelector(".ws-modal-card");
           if (card) card.style.maxWidth = "";
@@ -18505,30 +18798,28 @@ end $$;`;
         if (!openModals || openModals.length === 0) {
           _modalTopZIndex = 10000;
         }
-        if (wasOpen && !fromPopstate && !hadSkipHistory && _modalHistoryDepth > 0) {
-          _modalHistoryDepth--;
-          try {
-            if (window.history && typeof window.history.back === "function") {
-              _ignorePopstateCount++;
-              window.history.back();
+        if (wasOpen && !fromPopstate && !hadSkipHistory && !_isRestoringNavHistory) {
+          const curHist = getCurrentNavHistoryState();
+          const ownsTopHistoryEntry = Boolean(
+            curHist && curHist.wsNav && curHist.modalId === id && Number(curHist.navDepth || 0) > 0
+          );
+          if (ownsTopHistoryEntry) {
+            if (_modalHistoryDepth > 0) _modalHistoryDepth--;
+            if (skipHistoryBack) {
+              _pendingReplaceNavSlot = curHist.navId;
+            } else if (window.history && typeof window.history.back === "function") {
+              _suppressPopstateForNavId = curHist.parentNavId || null;
+              _suppressPopstateUntil = Date.now() + 800;
+              try {
+                window.history.back();
+              } catch (eBack) {}
             }
-          } catch (eBack) {}
+          }
         }
         if (wasOpen && !fromPopstate && window.parent && window.parent !== window) {
           try { window.parent.postMessage({ type: "ORCA_SHEET_MODAL_CLOSED_BY_UI" }, "*"); } catch (ePm) {}
         }
       };
-
-      function getTopmostOpenModal() {
-        const openModals = Array.from(document.querySelectorAll(".ws-modal-backdrop.open"));
-        if (openModals.length === 0) return null;
-        openModals.sort((a, b) => {
-          const za = parseInt(window.getComputedStyle(a).zIndex, 10) || 0;
-          const zb = parseInt(window.getComputedStyle(b).zIndex, 10) || 0;
-          return za - zb;
-        });
-        return openModals[openModals.length - 1];
-      }
 
       // 부모 창(GitHub Pages 등)과의 postMessage 브릿지 통신
       window.addEventListener("message", (ev) => {
@@ -18552,13 +18843,60 @@ end $$;`;
           }
         }
       });
-      window.addEventListener("popstate", () => {
+      window.addEventListener("popstate", (ev) => {
+        const incomingState = (ev && ev.state !== undefined)
+          ? ev.state
+          : (typeof history !== "undefined" ? history.state : null);
+
+        if (_suppressPopstateForNavId !== null && Date.now() <= _suppressPopstateUntil) {
+          if (incomingState && incomingState.wsNav && incomingState.navId === _suppressPopstateForNavId) {
+            _suppressPopstateForNavId = null;
+            _suppressPopstateUntil = 0;
+            _lastKnownNavState = incomingState;
+            return;
+          }
+        }
+        _suppressPopstateForNavId = null;
+        _suppressPopstateUntil = 0;
+
         if (_ignorePopstateCount > 0) {
           _ignorePopstateCount--;
           return;
         }
+
+        if (isAuthLockOpen()) {
+          return;
+        }
+
+        if (incomingState && incomingState.wsNav && incomingState.snap) {
+          _pendingReplaceNavSlot = null;
+          _lastKnownNavState = incomingState;
+          const targetModalStack = Array.isArray(incomingState.modalStack) ? incomingState.modalStack : [];
+          const openModalIds = getOpenModalIds();
+          let closedAnyModal = false;
+
+          for (let i = openModalIds.length - 1; i >= 0; i--) {
+            const openId = openModalIds[i];
+            if (!targetModalStack.includes(openId)) {
+              if (openId === "syncStatusModal" && window._isSyncInProgress) continue;
+              window.closeModal(openId, true);
+              closedAnyModal = true;
+            }
+          }
+          if (closedAnyModal && _modalHistoryDepth > 0) {
+            _modalHistoryDepth = Math.max(0, _modalHistoryDepth - 1);
+          }
+
+          const targetSnapKey = getNavSnapshotKey(incomingState.snap);
+          if (targetSnapKey !== _lastNavSnapshotKey) {
+            restoreNavHistorySnapshot(incomingState.snap);
+          }
+          return;
+        }
+
         const last = getTopmostOpenModal();
         if (last) {
+          if (last.id === "syncStatusModal" && window._isSyncInProgress) return;
           if (_modalHistoryDepth > 0) _modalHistoryDepth--;
           window.closeModal(last.id, true);
           return;
@@ -18587,7 +18925,12 @@ end $$;`;
                     </div>`;
                 }, 150);
               } else {
-                window.history.pushState({ wsMobileTab: "home" }, "");
+                const homeSnap = captureNavHistorySnapshot();
+                const rePushEntry = buildNavHistoryState(homeSnap, { replace: false });
+                rePushEntry.navDepth = 0;
+                rePushEntry.wsMobileTab = "home";
+                _lastKnownNavState = rePushEntry;
+                window.history.pushState(rePushEntry, "");
               }
             } catch (eConfirm) {}
           }
@@ -18835,8 +19178,8 @@ end $$;`;
               if (sc.asMeta.costAmount) draft.costAmount = sc.asMeta.costAmount;
             }
           }
-          if (wasTaskOpen) window.closeModal("taskSheetModal", true);
-          window.openEstimateModal(null, normQuoteType, draft, { skipHistory: wasTaskOpen });
+          if (wasTaskOpen) window.closeModal("taskSheetModal", { skipHistoryBack: true });
+          window.openEstimateModal(null, normQuoteType, draft, { replaceHistory: wasTaskOpen });
           return;
         }
 
@@ -19457,7 +19800,7 @@ end $$;`;
 
         footEl.innerHTML = isEdit ? `
           <div style="display:flex;gap:6px;align-items:center;">
-            <button type="button" class="btn-act-danger" onclick="closeModal('taskSheetModal'); openDeleteConfirm('task', '${escJs(ctx.taskId)}')">🗑️ 삭제</button>
+            <button type="button" class="btn-act-danger" onclick="closeModal('taskSheetModal', { skipHistoryBack: true }); openDeleteConfirm('task', '${escJs(ctx.taskId)}')">🗑️ 삭제</button>
             <button type="button" class="btn-act-white" onclick="window.copyTaskToNewModal('${escJs(ctx.taskId)}')" title="동일 공종·협력업체로 새 공정 등록">📋 복사 등록</button>
           </div>
           <div style="display:flex;gap:8px;">
@@ -20511,7 +20854,7 @@ end $$;`;
             </div>
             <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:2px;">
               <button type="button" class="btn-act-white" onclick="document.getElementById('driveRequiredAlertOverlay').style.display='none'">닫기</button>
-              <button type="button" class="btn-act-blue" onclick="document.getElementById('driveRequiredAlertOverlay').style.display='none'; ${fromModalId ? `closeModal('${escJs(fromModalId)}');` : ""} openSiteInfoModal('${escJs(cleanSite)}');">📂 드라이브 연결하기</button>
+              <button type="button" class="btn-act-blue" onclick="document.getElementById('driveRequiredAlertOverlay').style.display='none'; ${fromModalId ? `closeModal('${escJs(fromModalId)}', { skipHistoryBack: true });` : ""} openSiteInfoModal('${escJs(cleanSite)}');">📂 드라이브 연결하기</button>
             </div>
           </div>
         `;
@@ -22571,7 +22914,7 @@ end $$;`;
         document.getElementById("siteUploadModalBody").innerHTML = `
           <div style="background:${info.driveUrl ? "#eff6ff" : "#fef2f2"};border:1px solid ${info.driveUrl ? "#bfdbfe" : "#fecaca"};border-radius:8px;padding:10px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
             <span>📁 연결 폴더: <strong>${info.driveUrl ? "Google Drive 연결됨" : "⚠️ 폴더 미연결 (업로드 불가)"}</strong></span>
-            ${info.driveUrl ? `<a href="${escHtml(info.driveUrl)}" target="_blank" rel="noopener" class="btn-tool-tag">폴더 열기 ↗</a>` : `<button type="button" class="btn-tool-tag" onclick="closeModal('siteFileUploadModal'); openSiteInfoModal('${escJs(siteName)}')">연결하기</button>`}
+            ${info.driveUrl ? `<a href="${escHtml(info.driveUrl)}" target="_blank" rel="noopener" class="btn-tool-tag">폴더 열기 ↗</a>` : `<button type="button" class="btn-tool-tag" onclick="closeModal('siteFileUploadModal', { skipHistoryBack: true }); openSiteInfoModal('${escJs(siteName)}')">연결하기</button>`}
           </div>
           <div class="fg">
             <label>업로드할 현장 사진 / 도면 / PDF 선택</label>
@@ -24059,7 +24402,7 @@ end $$;`;
           <div class="fg"><label>상세 메모</label><textarea class="ws-textarea" id="tdDetail" placeholder="세부 내역 입력">${escHtml(d.detail || "")}</textarea></div>
         `;
         document.getElementById("todoModalFooter").innerHTML = d.id ? `
-          <button type="button" class="btn-act-danger" onclick="closeModal('todoActionModal'); openDeleteConfirm('todo', '${escJs(d.id)}')">🗑️ 삭제</button>
+          <button type="button" class="btn-act-danger" onclick="closeModal('todoActionModal', { skipHistoryBack: true }); openDeleteConfirm('todo', '${escJs(d.id)}')">🗑️ 삭제</button>
           <div style="display:flex;gap:8px;">
             <button type="button" class="btn-act-white" onclick="closeModal('todoActionModal')">취소</button>
             <button type="button" class="btn-act-blue" onclick="saveTodoModal()">💾 저장</button>
@@ -25602,7 +25945,7 @@ end $$;`;
         }
 
         document.getElementById("estimateModalFooter").innerHTML = `
-          ${ctx.isEdit ? `<button type="button" class="btn-act-danger" onclick="closeModal('estimateEditModal'); openDeleteConfirm('site', '${escJs(ctx.siteKey)}');" style="margin-right:auto;">🗑️ 삭제</button>` : ""}
+          ${ctx.isEdit ? `<button type="button" class="btn-act-danger" onclick="closeModal('estimateEditModal', { skipHistoryBack: true }); openDeleteConfirm('site', '${escJs(ctx.siteKey)}');" style="margin-right:auto;">🗑️ 삭제</button>` : ""}
           <button type="button" class="btn-act-white" onclick="closeModal('estimateEditModal')">취소</button>
           <button type="button" class="btn-act-blue" onclick="saveEstimateModal()">💾 저장</button>
         `;
@@ -30723,6 +31066,9 @@ end $$;`;
             requestAnimationFrame(() => resetPcScrollTop(tabKey));
           });
         }
+        if (!opts.skipHistory) {
+          recordNavHistory();
+        }
       };
 
       window.switchMobileTab = function (tabKey, opts) {
@@ -30735,11 +31081,15 @@ end $$;`;
           state._needFinanceScrollTop = true;
           ensureFinanceDbDataLoaded(true);
         }
-        const prevTab = state.mobileTab;
         state.mobileTab = tabKey;
         state.mobileExpandedSiteKeys.clear();
         if (opts.expandSiteKey) {
-          state.mobileExpandedSiteKeys.add(opts.expandSiteKey);
+          if (tabKey === "quote") {
+            state.mobileExpandedQuoteKeys.clear();
+            state.mobileExpandedQuoteKeys.add(opts.expandSiteKey);
+          } else {
+            state.mobileExpandedSiteKeys.add(opts.expandSiteKey);
+          }
         }
         state.dirtyMobileTabs[tabKey] = true;
 
@@ -30753,20 +31103,6 @@ end $$;`;
             state.calYear = Number(todayYmd.slice(0, 4));
             state.calMonth = Number(todayYmd.slice(5, 7));
           }
-        }
-
-        if (!opts.skipHistory && typeof history !== "undefined" && history.pushState) {
-          try {
-            if (tabKey !== "home") {
-              if (prevTab === "home") {
-                history.pushState({ wsMobileTab: tabKey }, "");
-              } else {
-                history.replaceState({ wsMobileTab: tabKey }, "");
-              }
-            } else if (prevTab !== "home") {
-              history.replaceState({ wsMobileTab: "home" }, "");
-            }
-          } catch (_) {}
         }
         if (tabKey === "quote") {
           if (state.scope !== "newSite") {
@@ -30806,6 +31142,9 @@ end $$;`;
             requestAnimationFrame(resetMobileScrollTop);
           });
         }
+        if (!opts.skipHistory) {
+          recordNavHistory();
+        }
       };
 
       window.onCategoryClicked = function (scope) {
@@ -30816,6 +31155,7 @@ end $$;`;
           state.selectedQuoteKey = null;
           markAllDirty();
           renderActiveViews();
+          recordNavHistory();
           return;
         }
         state.scope = scope;
@@ -30824,7 +31164,10 @@ end $$;`;
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
         markAllDirty();
         if (scope === "newSite") window.switchMainTab("quote");
-        else renderActiveViews();
+        else {
+          renderActiveViews();
+          recordNavHistory();
+        }
       };
 
       window.onMScopeClick = function (scope) {
@@ -30835,6 +31178,7 @@ end $$;`;
           state.mobileExpandedQuoteKeys.clear();
           markAllDirty();
           renderActiveViews();
+          recordNavHistory();
           return;
         }
         state.scope = scope;
@@ -30844,7 +31188,10 @@ end $$;`;
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
         markAllDirty();
         if (scope === "newSite") window.switchMobileTab("quote");
-        else renderActiveViews();
+        else {
+          renderActiveViews();
+          recordNavHistory();
+        }
       };
 
       window.onMMemberClick = function (member) { state.memberFilter = member; state.mobileHomeTasksExpanded = false; markAllDirty(); renderActiveViews(); };
@@ -30934,13 +31281,19 @@ end $$;`;
         const bodyEl = document.getElementById("mAppBody");
         if (bodyEl) bodyEl.scrollTop = 0;
         if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
+        recordNavHistory();
       };
       window.toggleMobileSiteCard = function (siteKey) {
-        if (state.mobileExpandedSiteKeys.has(siteKey)) state.mobileExpandedSiteKeys.delete(siteKey);
-        else state.mobileExpandedSiteKeys.add(siteKey);
+        const wasExpanded = state.mobileExpandedSiteKeys.has(siteKey);
+        if (wasExpanded) state.mobileExpandedSiteKeys.delete(siteKey);
+        else {
+          state.mobileExpandedSiteKeys.add(siteKey);
+          state.selectedSiteKey = siteKey;
+        }
         state.dirtyMobileTabs.sites = true;
         state.dirtyMobileTabs.quote = true;
         renderActiveViews();
+        if (!wasExpanded) recordNavHistory();
       };
       window.toggleMobileTaskCheck = function (tid, checked) {
         if (checked) state.checkedMobileTaskIds.add(tid);
@@ -30991,7 +31344,7 @@ end $$;`;
         state.userSelectedCalDay = false;
         markAllDirty(); renderActiveViews();
       };
-      window.setCalViewMode = function (mode) { state.calViewMode = mode; state.dirtyPcTabs.calendar = true; renderActiveViews(); };
+      window.setCalViewMode = function (mode) { state.calViewMode = mode; state.dirtyPcTabs.calendar = true; renderActiveViews(); recordNavHistory(); };
       window.selectCalDay = function (ymd) {
         state.selectedDayStr = ymd;
         state.userSelectedCalDay = true;
@@ -30999,7 +31352,7 @@ end $$;`;
         state.dirtyPcTabs.calendar = true;
         renderActiveViews();
       };
-      window.setMobileCalMode = function (mode) { state.mobileCalMode = mode; state.dirtyMobileTabs.calendar = true; renderActiveViews(); };
+      window.setMobileCalMode = function (mode) { state.mobileCalMode = mode; state.dirtyMobileTabs.calendar = true; renderActiveViews(); recordNavHistory(); };
       window.toggleSiteCheck = function (siteKey, checked, ev) {
         if (ev) ev.stopPropagation();
         ensureCheckedSitesInitialized();
@@ -31085,7 +31438,7 @@ end $$;`;
           window.switchMobileTab("sites", { preserveSelectedSite: true, targetScope: nav.targetScope, expandSiteKey: nav.expandSiteKey });
         }
       };
-      window.selectSiteCard = function (siteKey) { state.selectedSiteKey = siteKey; state.siteTaskStatusFilter = "all"; state.checkedTableTaskIds.clear(); state.dirtyPcTabs.sites = true; state.dirtyPcTabs.quote = true; renderActiveViews(); };
+      window.selectSiteCard = function (siteKey) { state.selectedSiteKey = siteKey; state.siteTaskStatusFilter = "all"; state.checkedTableTaskIds.clear(); state.dirtyPcTabs.sites = true; state.dirtyPcTabs.quote = true; renderActiveViews(); recordNavHistory(); };
       window.focusSiteOnCalendar = function (siteKey, isMobile) {
         const site = getAllSites().find((s) => s.siteKey === siteKey);
         if (site && site.scope) state.scope = site.scope;
@@ -31115,7 +31468,7 @@ end $$;`;
           window.switchMainTab("calendar");
         }
       };
-      window.toggleArchivedSites = function () { state.sitesSubView = "list"; state.showArchivedSites = !state.showArchivedSites; markAllDirty(); renderActiveViews(); };
+      window.toggleArchivedSites = function () { state.sitesSubView = "list"; state.showArchivedSites = !state.showArchivedSites; markAllDirty(); renderActiveViews(); recordNavHistory(); };
       window.setSiteSort = function (sortBy) { state.siteSortBy = sortBy; state.dirtyPcTabs.sites = true; state.dirtyPcTabs.quote = true; state.dirtyMobileTabs.sites = true; state.dirtyMobileTabs.quote = true; renderActiveViews(); };
       window.setSiteTaskFilter = function (f) {
         state.siteTaskStatusFilter = f;
@@ -31391,7 +31744,7 @@ end $$;`;
               if (fEl) {
                 fEl.innerHTML = `
                   <button type="button" class="btn-act-white" onclick="closeModal('syncStatusModal')">닫기</button>
-                  <button type="button" class="btn-act-blue" style="background:#059669;border-color:#047857;" onclick="closeModal('syncStatusModal'); openSupabaseSetupModal();">⚡ 원클릭 이관 열기</button>
+                  <button type="button" class="btn-act-blue" style="background:#059669;border-color:#047857;" onclick="closeModal('syncStatusModal', { skipHistoryBack: true }); openSupabaseSetupModal();">⚡ 원클릭 이관 열기</button>
                 `;
               }
               const cBtn = document.getElementById("syncStatusModalCloseBtn");
@@ -31624,8 +31977,7 @@ end $$;`;
 
           window.state._lastCaptureBlob = await new Promise(r => canvas.toBlob(r, "image/png"));
 
-          const modal = document.getElementById("captureModal");
-          if (modal) modal.classList.add("open");
+          openModal("captureModal");
           showToast("✅ 화면 캡쳐가 완료되었습니다.");
         } catch (err) {
           console.error("화면 캡쳐 에러:", err);
@@ -31634,8 +31986,12 @@ end $$;`;
       };
 
       window.closeCaptureModal = function () {
-        const modal = document.getElementById("captureModal");
-        if (modal) modal.classList.remove("open");
+        if (typeof window.closeModal === "function") {
+          window.closeModal("captureModal");
+        } else {
+          const modal = document.getElementById("captureModal");
+          if (modal) modal.classList.remove("open");
+        }
       };
 
       window.copyCaptureImageToClipboard = async function () {
@@ -31836,14 +32192,19 @@ end $$;`;
           }
         } catch (eHash) {}
 
-        if (typeof window.switchMainTab === "function") {
-          window.switchMainTab("home", { keepDevice: true });
+        _suppressNavHistoryPushDepth++;
+        try {
+          if (typeof window.switchMainTab === "function") {
+            window.switchMainTab("home", { keepDevice: true });
+          }
+          if (typeof window.switchMobileTab === "function") {
+            window.switchMobileTab("home", { skipHistory: true });
+          }
+        } finally {
+          _suppressNavHistoryPushDepth = Math.max(0, _suppressNavHistoryPushDepth - 1);
         }
-        if (typeof window.switchMobileTab === "function") {
-          window.switchMobileTab("home", { skipHistory: true });
-        }
-        if (typeof history !== "undefined" && history.replaceState) {
-          try { history.replaceState({ wsMobileTab: "home" }, ""); } catch (_) {}
+        if (window.__wsBootstrapDone) {
+          replaceCurrentNavHistory({ resetDepth: true });
         }
         if (typeof resetMobileScrollTop === "function") {
           resetMobileScrollTop();
@@ -32054,9 +32415,6 @@ end $$;`;
           else state.mobileTab = "home";
           window.switchDeviceMode("mobile");
           window.switchMobileTab(state.mobileTab, { skipHistory: true });
-          if (typeof history !== "undefined" && history.replaceState) {
-            try { history.replaceState({ wsMobileTab: state.mobileTab }, ""); } catch (_) {}
-          }
         } else {
           if (hash.includes("tab=calendar")) state.pcTab = "calendar";
           else if (hash.includes("tab=sites")) state.pcTab = "sites";
@@ -32065,8 +32423,10 @@ end $$;`;
           else if (hash.includes("tab=finance")) state.pcTab = canViewFinance() ? "finance" : "partners";
           else if (hash.includes("tab=partners")) state.pcTab = "partners";
           else state.pcTab = "home";
-          window.switchMainTab(state.pcTab);
+          window.switchMainTab(state.pcTab, { skipHistory: true });
         }
+        replaceCurrentNavHistory();
+        window.__wsBootstrapDone = true;
 
         window.__initialRenderMs = performance.now() - T0;
         const badge = document.getElementById("perfBadge");
@@ -32287,7 +32647,7 @@ end $$;`;
         state.auditDisplayLimit = 100;
         if (typeof window.closeModal === "function") {
           const syncEl = document.getElementById("syncStatusModal");
-          if (syncEl && syncEl.classList.contains("open")) window.closeModal("syncStatusModal");
+          if (syncEl && syncEl.classList.contains("open")) window.closeModal("syncStatusModal", { skipHistoryBack: true });
         }
         renderSettingsModal();
         const settingsEl = document.getElementById("settingsModal");
@@ -32329,6 +32689,7 @@ end $$;`;
           return;
         }
         const navTabCmd = (t) => state.device === "mobile" ? `switchMobileTab('${t}')` : `switchMainTab('${t}')`;
+        const openSiteCmd = (k) => state.device === "mobile" ? `openSiteDetailMobile('${escJs(k)}')` : `openSiteDetail('${escJs(k)}')`;
         const hits = [];
         getAllSites().forEach((s) => {
           if (!s) return;
@@ -32337,7 +32698,7 @@ end $$;`;
               cat: s.scope === "newSite" ? "📋 신규견적" : "🏢 현장",
               title: s.siteName,
               sub: `${(s.tasks || []).length}개 공정`,
-              onClick: `closeModal('syncStatusModal'); ${s.scope === "newSite" ? `state.selectedQuoteKey='${escJs(s.siteKey)}'; ${navTabCmd('quote')}` : `openSiteDetail('${escJs(s.siteKey)}')`}`
+              onClick: `closeModal('syncStatusModal', { skipHistoryBack: true }); ${openSiteCmd(s.siteKey)}`
             });
           }
           (s.tasks || []).forEach((t) => {
@@ -32348,7 +32709,7 @@ end $$;`;
                 cat: "🔨 공정",
                 title: `[${s.siteName}] ${t.taskName}`,
                 sub: `${t.startDateStr || t.dateDisplay || ""} · ${t.manager || "미지정"} ${t.partner ? "· " + t.partner : ""}`,
-                onClick: `closeModal('syncStatusModal'); openTaskEditModal('${escJs(t.id || t.taskId)}')`
+                onClick: `closeModal('syncStatusModal', { skipHistoryBack: true }); openTaskEditModal('${escJs(t.id || t.taskId)}')`
               });
             }
           });
@@ -32361,7 +32722,7 @@ end $$;`;
               cat: "🤝 거래처",
               title: `${p.biz ? p.biz + "_" : ""}${p.name}`,
               sub: `${p.phone || "연락처 없음"}${p.bankAccount ? " · " + p.bankAccount : ""}`,
-              onClick: `closeModal('syncStatusModal'); ${navTabCmd('partners')};`
+              onClick: `closeModal('syncStatusModal', { skipHistoryBack: true }); ${navTabCmd('partners')};`
             });
           }
         });
@@ -32373,7 +32734,7 @@ end $$;`;
               cat: "✅ To-Do",
               title: td.title,
               sub: `${td.status || "미완료"} · ${td.manager || "미지정"}${td.siteName ? " · " + td.siteName : ""}`,
-              onClick: `closeModal('syncStatusModal'); ${navTabCmd('todo')};`
+              onClick: `closeModal('syncStatusModal', { skipHistoryBack: true }); ${navTabCmd('todo')};`
             });
           }
         });
@@ -32385,7 +32746,7 @@ end $$;`;
                 cat: "💰 수금",
                 title: c.siteName,
                 sub: `총액 ${formatShortAmount(c.totalAmount)} · 미수 ${formatShortAmount(getCollectionRowFinancials(c).uncollected)}`,
-                onClick: `closeModal('syncStatusModal'); state.financeSubTab='collection'; ${state.device === "mobile" ? "switchMobileTab('finance', { keepSubTab: true })" : "switchMainTab('finance', { keepSubTab: true })"}; openCollectionModal('${escJs(c.id)}');`
+                onClick: `closeModal('syncStatusModal', { skipHistoryBack: true }); state.financeSubTab='collection'; ${state.device === "mobile" ? "switchMobileTab('finance', { keepSubTab: true })" : "switchMainTab('finance', { keepSubTab: true })"}; openCollectionModal('${escJs(c.id)}');`
               });
             }
           });
@@ -32415,17 +32776,30 @@ end $$;`;
           if (el) { el.focus(); el.select(); }
         }
         if (e.key === "Escape") {
-          ["taskSheetModal", "deleteConfirmModal", "siteInfoModal", "siteFileUploadModal", "partnerGuideModal", "mobileSiteFilterModal", "todoActionModal", "estimateEditModal", "monthlyReportModal", "settingsModal", "supabaseSetupModal"].forEach(window.closeModal);
-          if (!window._isSyncInProgress && typeof window.closeModal === "function") window.closeModal("syncStatusModal");
-          if (typeof window.closeCaptureModal === "function") window.closeCaptureModal();
+          const topModal = typeof getTopmostOpenModal === "function" ? getTopmostOpenModal() : null;
+          if (topModal) {
+            if (topModal.id === "syncStatusModal" && window._isSyncInProgress) return;
+            if (topModal.id === "captureModal" && typeof window.closeCaptureModal === "function") {
+              window.closeCaptureModal();
+            } else if (typeof window.closeModal === "function") {
+              window.closeModal(topModal.id);
+            }
+          }
         }
       });
 
       window.addEventListener("resize", () => {
         if (!IS_PREVIEW_MODE) {
           const wantMob = window.innerWidth <= 860;
-          if (wantMob && state.device !== "mobile") { window.switchDeviceMode("mobile"); window.switchMobileTab(state.mobileTab); }
-          else if (!wantMob && state.device !== "pc") { window.switchDeviceMode("pc"); window.switchMainTab(state.pcTab); }
+          if (wantMob && state.device !== "mobile") {
+            window.switchDeviceMode("mobile");
+            window.switchMobileTab(state.mobileTab, { skipHistory: true });
+            replaceCurrentNavHistory({ preserveModals: true });
+          } else if (!wantMob && state.device !== "pc") {
+            window.switchDeviceMode("pc");
+            window.switchMainTab(state.pcTab, { skipHistory: true });
+            replaceCurrentNavHistory({ preserveModals: true });
+          }
         }
       });
 
