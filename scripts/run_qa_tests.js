@@ -6627,13 +6627,32 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     sb.resetAllTabsToHome();
     const resetToGanttOk = sb.state.calViewMode === 'gantt' && sb.state.mobileCalMode === 'gantt' && sb.state.pcTab === 'home';
 
-    // 모바일 주간 타임라인도 현장+단건+AS 통합 + 바 배지 + 오늘 날짜 맨 앞(오늘~+6일) + 이전/다음 주 이동 확인
+    // 모바일 주간 타임라인도 PC와 동일한 월~일 7일 + 현장/단건+AS 통합 + 바 배지 + 오늘 열 자동 스크롤 정렬 확인
+    const mPageCalNode = elements.get('m-page-calendar');
+    const mockGanttWrap = {
+      scrollLeft: 999,
+      querySelector(sel) {
+        const html = mPageCalNode.innerHTML || '';
+        const thList = html.match(/<th[^>]*>[\s\S]*?<\/th>/g) || [];
+        if (sel === 'th.site-col') {
+          return thList.some((th) => th.includes('site-col')) ? { offsetWidth: 132, offsetLeft: 0 } : null;
+        }
+        if (sel === 'th.today-col') {
+          const idx = thList.findIndex((th) => th.includes('today-col'));
+          if (idx === -1) return null;
+          return { offsetLeft: 132 + (idx - 1) * 84 };
+        }
+        return null;
+      }
+    };
+    mPageCalNode.querySelector = (sel) => (sel === '.ws-gantt-wrap' && (mPageCalNode.innerHTML || '').includes('ws-gantt-wrap') ? mockGanttWrap : null);
+
     sb.switchDeviceMode('mobile');
     sb.state.selectedDayStr = '2026-11-19';
     sb.state.calYear = 2026;
     sb.state.calMonth = 11;
     sb.switchMobileTab('calendar');
-    const mobCalHtml = elements.get('m-page-calendar').innerHTML;
+    const mobCalHtml = mPageCalNode.innerHTML;
     const mobileIntegratedOk = (
       mobCalHtml.includes('강남 현장') &&
       mobCalHtml.includes('판교 중문 단건') &&
@@ -6648,39 +6667,52 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       d.setDate(d.getDate() + delta);
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     };
+    const getMonRangeShort = (ymd) => {
+      const d = new Date(ymd + 'T00:00:00');
+      const dow = d.getDay();
+      const monYmd = addDaysLocal(ymd, dow === 0 ? -6 : 1 - dow);
+      const sunYmd = addDaysLocal(monYmd, 6);
+      return {
+        monYmd,
+        sunYmd,
+        monShort: monYmd.slice(5).replace('-', '.'),
+        sunShort: sunYmd.slice(5).replace('-', '.'),
+        todayColIdx: (dow === 0 ? 6 : dow - 1) + 1
+      };
+    };
     const realTodayYmd = sb.getTodayYmd();
+    const curWeekRange = getMonRangeShort(realTodayYmd);
     sb.resetCalendarToday();
-    const mobTodayHtml = elements.get('m-page-calendar').innerHTML;
+    const mobTodayHtml = mPageCalNode.innerHTML;
     const mobThMatches = mobTodayHtml.match(/<th[^>]*>[\s\S]*?<\/th>/g) || [];
-    const todayShort = realTodayYmd.slice(5).replace('-', '.');
-    const todayPlus6Short = addDaysLocal(realTodayYmd, 6).slice(5).replace('-', '.');
-    const mobTodayFirstColOk = (
+    const expectedTodayScroll = (curWeekRange.todayColIdx - 1) * 84;
+    const mobMonSunWeekOk = (
       mobThMatches.length >= 8 &&
       mobThMatches[0].includes('site-col') &&
-      mobThMatches[1].includes(todayShort) &&
-      mobThMatches[1].includes('오늘') &&
-      mobTodayHtml.includes(`(${todayShort} ~ ${todayPlus6Short})`)
+      mobThMatches[1].includes(`${curWeekRange.monShort} (월)`) &&
+      mobThMatches[7].includes(`${curWeekRange.sunShort} (일)`) &&
+      mobThMatches[curWeekRange.todayColIdx].includes('today-col') &&
+      mobTodayHtml.includes(`(${curWeekRange.monShort} ~ ${curWeekRange.sunShort})`) &&
+      mockGanttWrap.scrollLeft === expectedTodayScroll
     );
 
     sb.moveCalendarMonth(1);
-    const mobNextHtml = elements.get('m-page-calendar').innerHTML;
-    const nextStartShort = addDaysLocal(realTodayYmd, 7).slice(5).replace('-', '.');
-    const nextEndShort = addDaysLocal(realTodayYmd, 13).slice(5).replace('-', '.');
-    const mobNextWeekOk = mobNextHtml.includes(`(${nextStartShort} ~ ${nextEndShort})`);
+    const mobNextHtml = mPageCalNode.innerHTML;
+    const nextWeekRange = getMonRangeShort(addDaysLocal(realTodayYmd, 7));
+    const mobNextWeekOk = mobNextHtml.includes(`(${nextWeekRange.monShort} ~ ${nextWeekRange.sunShort})`) && mockGanttWrap.scrollLeft === 0;
 
     sb.moveCalendarMonth(-2);
-    const mobPrevHtml = elements.get('m-page-calendar').innerHTML;
-    const prevStartShort = addDaysLocal(realTodayYmd, -7).slice(5).replace('-', '.');
-    const prevEndShort = addDaysLocal(realTodayYmd, -1).slice(5).replace('-', '.');
-    const mobPrevWeekOk = mobPrevHtml.includes(`(${prevStartShort} ~ ${prevEndShort})`);
+    const mobPrevHtml = mPageCalNode.innerHTML;
+    const prevWeekRange = getMonRangeShort(addDaysLocal(realTodayYmd, -7));
+    const mobPrevWeekOk = mobPrevHtml.includes(`(${prevWeekRange.monShort} ~ ${prevWeekRange.sunShort})`) && mockGanttWrap.scrollLeft === 0;
 
     sb.resetCalendarToday();
-    const mobResetTodayOk = elements.get('m-page-calendar').innerHTML.includes(`(${todayShort} ~ ${todayPlus6Short})`);
+    const mobResetTodayOk = mPageCalNode.innerHTML.includes(`(${curWeekRange.monShort} ~ ${curWeekRange.sunShort})`) && mockGanttWrap.scrollLeft === expectedTodayScroll;
 
     assertTest(
-      '캘린더 기본 주간 타임라인(gantt)·좌측 뷰전환 툴바·현장/단건/AS 통합·막대 배지·모바일 오늘 우선 7일 및 충돌감지 런타임 검증',
-      initGanttOk && switchInLeftOk && scopeChipHiddenInGanttOk && integratedRowsOk && barScopeBadgesOk && pcWeekMonStartOk && monthChipShownOk && modePersistedAcrossTabsOk && selectCalDayOk && resetToGanttOk && mobileIntegratedOk && mobTodayFirstColOk && mobNextWeekOk && mobPrevWeekOk && mobResetTodayOk,
-      `init=${initGanttOk}, switchLeft=${switchInLeftOk}, hideScope=${scopeChipHiddenInGanttOk}, integrated=${integratedRowsOk}, barBadges=${barScopeBadgesOk}, pcMon=${pcWeekMonStartOk}, monthChip=${monthChipShownOk}, persist=${modePersistedAcrossTabsOk}, selDay=${selectCalDayOk}, reset=${resetToGanttOk}, mob=${mobileIntegratedOk}, mobToday=${mobTodayFirstColOk}, mobNext=${mobNextWeekOk}, mobPrev=${mobPrevWeekOk}, mobReset=${mobResetTodayOk}`
+      '캘린더 기본 주간 타임라인(gantt)·좌측 뷰전환 툴바·현장/단건/AS 통합·막대 배지·모바일 월~일 동일 주간 및 오늘 열 자동 스크롤 런타임 검증',
+      initGanttOk && switchInLeftOk && scopeChipHiddenInGanttOk && integratedRowsOk && barScopeBadgesOk && pcWeekMonStartOk && monthChipShownOk && modePersistedAcrossTabsOk && selectCalDayOk && resetToGanttOk && mobileIntegratedOk && mobMonSunWeekOk && mobNextWeekOk && mobPrevWeekOk && mobResetTodayOk,
+      `init=${initGanttOk}, switchLeft=${switchInLeftOk}, hideScope=${scopeChipHiddenInGanttOk}, integrated=${integratedRowsOk}, barBadges=${barScopeBadgesOk}, pcMon=${pcWeekMonStartOk}, monthChip=${monthChipShownOk}, persist=${modePersistedAcrossTabsOk}, selDay=${selectCalDayOk}, reset=${resetToGanttOk}, mob=${mobileIntegratedOk}, mobMonSun=${mobMonSunWeekOk}, mobNext=${mobNextWeekOk}, mobPrev=${mobPrevWeekOk}, mobReset=${mobResetTodayOk}`
     );
   })());
 

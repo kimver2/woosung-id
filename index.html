@@ -4780,34 +4780,31 @@ end $$;`;
         return { label: "미지정", key: "미지정", colorClass: "muted", isExplicit: false, isInferred: false, source: "none" };
       }
 
-      /** 기준 날짜 기준 주간 정보(PC: 월~일, 모바일 startFromAnchor: 기준일~+6일) 및 주차를 반환합니다. */
-      function getGanttWeekInfo(anchorYmd, options) {
-        const opts = options || {};
-        const startFromAnchor = Boolean(opts.startFromAnchor || opts.isMobile);
+      /** 기준 날짜가 속한 월~일 주간 정보 및 주차를 반환합니다. */
+      function getGanttWeekInfo(anchorYmd) {
         const baseYmd = (anchorYmd && /^\d{4}-\d{2}-\d{2}$/.test(anchorYmd)) ? anchorYmd : getTodayYmd();
         const d = new Date(baseYmd + "T00:00:00");
         const dow = d.getDay();
         const diffToMon = dow === 0 ? -6 : 1 - dow;
-        const weekStartYmd = startFromAnchor ? baseYmd : addDaysYmd(baseYmd, diffToMon);
-        const dowKoByJsDay = ["일", "월", "화", "수", "목", "금", "토"];
+        const weekStartYmd = addDaysYmd(baseYmd, diffToMon);
+        const dowKoList = ["월", "화", "수", "목", "금", "토", "일"];
         const days = [];
         for (let i = 0; i < 7; i++) {
           const ymd = addDaysYmd(weekStartYmd, i);
           const dd = new Date(ymd + "T00:00:00");
-          const jsDow = dd.getDay();
           days.push({
             ymd,
             month: dd.getMonth() + 1,
             day: dd.getDate(),
-            dowIdx: jsDow === 0 ? 6 : jsDow - 1,
-            dowKo: dowKoByJsDay[jsDow],
-            isSun: jsDow === 0,
-            isSat: jsDow === 6,
+            dowIdx: i,
+            dowKo: dowKoList[i],
+            isSun: i === 6,
+            isSat: i === 5,
             shortLabel: ymd.slice(5).replace("-", "."),
             slashLabel: (dd.getMonth() + 1) + "/" + dd.getDate()
           });
         }
-        const refDate = new Date((startFromAnchor ? days[0].ymd : days[3].ymd) + "T00:00:00");
+        const refDate = new Date(days[3].ymd + "T00:00:00");
         const weekNum = Math.ceil(refDate.getDate() / 7);
         const weekLabel = `${refDate.getFullYear()}년 ${refDate.getMonth() + 1}월 ${weekNum}주차 (${days[0].shortLabel} ~ ${days[6].shortLabel})`;
         return {
@@ -4845,8 +4842,7 @@ end $$;`;
         const sourceEvents = Array.isArray(events)
           ? events
           : getFilteredCalendarTasks({ includeAllScopes: true });
-        const startFromAnchor = Boolean(opts.startFromAnchor || opts.isMobile);
-        const weekInfo = getGanttWeekInfo(opts.anchorYmd || state.selectedDayStr || getTodayYmd(), { startFromAnchor });
+        const weekInfo = getGanttWeekInfo(opts.anchorYmd || state.selectedDayStr || getTodayYmd());
         const weekStart = weekInfo.weekStartYmd;
         const weekEnd = weekInfo.weekEndYmd;
         const tradeFilter = opts.tradeFilter !== undefined ? opts.tradeFilter : (state.ganttTradeFilter || "all");
@@ -5024,10 +5020,7 @@ end $$;`;
         const ganttEvents = Array.isArray(events)
           ? events
           : getFilteredCalendarTasks({ includeAllScopes: true });
-        const model = computeWeeklyGanttModel(ganttEvents, {
-          isMobile: Boolean(isMobile),
-          startFromAnchor: Boolean(isMobile)
-        });
+        const model = computeWeeklyGanttModel(ganttEvents);
         const todayYmd = getTodayYmd();
         const tradeVal = state.ganttTradeFilter || "all";
         const partnerVal = state.ganttPartnerFilter || "all";
@@ -17035,6 +17028,22 @@ end $$;`;
         `;
       }
 
+      /** 모바일 주간 타임라인에서 오늘 열이 좌측 고정 현장명 열 바로 오른쪽에 오도록 자동 스크롤 정렬합니다. */
+      function alignMobileGanttTodayScroll(containerEl) {
+        if (!containerEl || typeof containerEl.querySelector !== "function") return;
+        const wrap = containerEl.querySelector(".ws-gantt-wrap");
+        if (!wrap) return;
+        const todayTh = typeof wrap.querySelector === "function" ? wrap.querySelector("th.today-col") : null;
+        const siteCol = typeof wrap.querySelector === "function" ? wrap.querySelector("th.site-col") : null;
+        if (todayTh && siteCol) {
+          const siteWidth = Number(siteCol.offsetWidth) || 0;
+          const todayLeft = Number(todayTh.offsetLeft) || 0;
+          wrap.scrollLeft = Math.max(0, todayLeft - siteWidth);
+        } else {
+          wrap.scrollLeft = 0;
+        }
+      }
+
       // [모바일 탭 3: 캘린더 — 모든 일정 가변 높이 전부 노출 + 기존 공종 알약/공유박스 반영]
       function renderMobileCalendarTab() {
         const isGanttMode = state.mobileCalMode === "gantt";
@@ -17261,6 +17270,14 @@ end $$;`;
         `;
         state._lastCalSlideDir = "";
         setupCalendarSwipe(mCalEl);
+        if (state.mobileCalMode === "gantt") {
+          alignMobileGanttTodayScroll(mCalEl);
+          if (typeof requestAnimationFrame === "function") {
+            requestAnimationFrame(() => {
+              if (state.mobileCalMode === "gantt") alignMobileGanttTodayScroll(mCalEl);
+            });
+          }
+        }
         setTimeout(() => {
           if (mCalEl) {
             const animated = mCalEl.querySelectorAll(".cal-slide-next, .cal-slide-prev");
