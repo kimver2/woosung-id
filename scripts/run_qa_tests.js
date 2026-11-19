@@ -5946,7 +5946,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     subVm.sb.onCategoryClicked('single');
     subVm.sb.setSitesSubView('asWarranty');
     subVm.sb.switchMainTab('calendar');
-    subVm.sb.setCalViewMode('gantt');
+    subVm.sb.setCalViewMode('month');
     subVm.sb.switchMainTab('quote');
     subVm.sb.setQuoteStatusFilter('done');
     subVm.sb.selectQuoteSite('Q_3');
@@ -5955,9 +5955,9 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     subVm.history.back();
     const pcQFilterBackOk = subVm.sb.state.quoteStatusFilter === 'active';
     subVm.history.back();
-    const pcCalGanttBackOk = subVm.sb.state.pcTab === 'calendar' && subVm.sb.state.calViewMode === 'gantt';
+    const pcCalMonthBackOk = subVm.sb.state.pcTab === 'calendar' && subVm.sb.state.calViewMode === 'month';
     subVm.history.back();
-    const pcCalMonthBackOk = subVm.sb.state.calViewMode === 'month';
+    const pcCalGanttBackOk = subVm.sb.state.calViewMode === 'gantt';
     subVm.history.back();
     const pcAsBackOk = subVm.sb.state.pcTab === 'sites' && subVm.sb.state.sitesSubView === 'asWarranty';
     subVm.history.back();
@@ -5972,7 +5972,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     mobVm.sb.openSiteDetailMobile('SITE_2');
     mobVm.sb.setMobileSitesSubView('asWarranty');
     mobVm.sb.switchMobileTab('calendar');
-    mobVm.sb.setMobileCalMode('gantt');
+    mobVm.sb.setMobileCalMode('month');
     mobVm.sb.switchMobileTab('quote');
     mobVm.sb.setQuoteStatusFilter('done');
     mobVm.sb.toggleMobileQuoteCard('Q_2');
@@ -5994,9 +5994,9 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     mobVm.history.back(); // done (unselected)
     mobVm.history.back(); // active quote
     const qFilterBackOk = mobVm.sb.state.quoteStatusFilter === 'active';
-    mobVm.history.back(); // calendar/gantt
-    const mCalBackOk = mobVm.sb.state.mobileTab === 'calendar' && mobVm.sb.state.mobileCalMode === 'gantt';
     mobVm.history.back(); // calendar/month
+    const mCalBackOk = mobVm.sb.state.mobileTab === 'calendar' && mobVm.sb.state.mobileCalMode === 'month';
+    mobVm.history.back(); // calendar/gantt
     mobVm.history.back(); // sites/asWarranty
     const mAsBackOk = mobVm.sb.state.mobileTab === 'sites' && mobVm.sb.state.sitesSubView === 'asWarranty';
 
@@ -6458,6 +6458,187 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       'PC 좌측 사이드바 세로 경계 드래그 리사이저(범위 220~480px·탭전환/새로고침 유지·더블클릭 초기화·모바일 비간섭) 런타임 검증',
       hasResizerHtmlCss && defaultInitOk && dragActiveOk && minClampOk && maxClampOk && dragEndSavedOk && tabSitesOk && tabQuoteOk && reloadPersistOk && mobileGuardOk && dblClickResetOk,
       `htmlCss=${hasResizerHtmlCss}, init=${defaultInitOk}, dragActive=${dragActiveOk}, min=${minClampOk}, max=${maxClampOk}, saved=${dragEndSavedOk}, sites=${tabSitesOk}, quote=${tabQuoteOk}, reload=${reloadPersistOk}, mob=${mobileGuardOk}, dblReset=${dblClickResetOk}`
+    );
+  })());
+
+  // [캘린더 기본 뷰(gantt)·툴바 좌측 뷰 전환·스코프 칩 숨김·현장+단건+AS 통합 간트 및 충돌 감지 런타임 QA]
+  pendingAsyncTests.push((async () => {
+    const idxHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const marker = '<script src="data/dashboard_data.js"></script>';
+    const mPos = idxHtml.indexOf(marker);
+    const sStart = idxHtml.indexOf('<script>', mPos) + '<script>'.length;
+    const sEnd = idxHtml.lastIndexOf('</script>');
+    const mainScript = idxHtml.slice(sStart, sEnd);
+
+    const makeNode = (id) => ({
+      id,
+      dataset: {},
+      style: { setProperty: () => {} },
+      value: '',
+      innerHTML: '',
+      textContent: '',
+      classList: {
+        _set: new Set(),
+        add(c) { this._set.add(c); },
+        remove(c) { this._set.delete(c); },
+        toggle(c, f) { if (f === undefined) { if (this._set.has(c)) this._set.delete(c); else this._set.add(c); } else if (f) this._set.add(c); else this._set.delete(c); },
+        contains(c) { return this._set.has(c); }
+      },
+      setAttribute: () => {},
+      getAttribute: () => null,
+      addEventListener: () => {},
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      contains: () => false
+    });
+    const elements = new Map();
+    [
+      'pcViewFrame', 'mobilePhoneFrame', 'mobileScreenInner', 'btnDevPc', 'btnDevMobile',
+      'pcCalSidebar', 'pcSiteSidebar', 'pcQuoteSidebar', 'pcCalMain', 'pcSiteMain', 'pcQuoteMain',
+      'pcHomeMain', 'pcTodoMain', 'pcFinanceMain', 'pcPartnersMain',
+      'mHomeMain', 'mCalMain', 'mSitesMain', 'mQuoteMain', 'mTodoMain', 'mobileFinanceMain', 'mPartnersMain',
+      'page-home', 'page-todo', 'page-calendar', 'page-sites', 'page-quote', 'page-finance', 'page-partners',
+      'm-page-home', 'm-page-todo', 'm-page-calendar', 'm-page-sites', 'm-page-quote', 'm-page-finance', 'm-page-partners',
+      'topAccessLockOverlay', 'topAccessPinInput', 'topAccessPinError', 'wsMembersAuthDl',
+      'userSelector', 'mUserSelector', 'toastBanner', 'perfBadge'
+    ].forEach((id) => elements.set(id, makeNode(id)));
+
+    const sb = {
+      console, Math, Date, Number, String, Array, Object, Set, Map, JSON, RegExp, Promise, Error, TypeError,
+      parseInt, parseFloat, isNaN, encodeURIComponent, decodeURIComponent, URL, URLSearchParams,
+      fetch: () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]), text: () => Promise.resolve('[]') }),
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      requestAnimationFrame: (fn) => { if (typeof fn === 'function') fn(); return 0; },
+      performance: { now: () => 100 },
+      navigator: { maxTouchPoints: 0, userAgent: 'node-qa' },
+      innerWidth: 1440,
+      scrollTo: () => {},
+      confirm: () => false,
+      close: () => {},
+      location: { protocol: 'https:', hostname: 'kimver2.github.io', pathname: '/woosung-id/index.html', search: '?noauth=1', hash: '', href: 'https://kimver2.github.io/woosung-id/index.html?noauth=1' },
+      localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+      sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+      history: { state: null, length: 1, pushState: () => {}, replaceState: () => {} },
+      document: {
+        body: makeNode('body'),
+        documentElement: makeNode('html'),
+        activeElement: null,
+        cookie: '',
+        getElementById: (id) => elements.get(id) || null,
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        addEventListener: () => {},
+        removeEventListener: () => {}
+      },
+      getSelection: () => ({ removeAllRanges: () => {} }),
+      getComputedStyle: () => ({ zIndex: '0' }),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      WSSupabaseV3: { isSupabaseActive: () => false },
+      WSDataService: { isRemoteApiEnabled: () => false, saveDashboardCache: () => {}, saveFinanceCache: () => {} }
+    };
+    sb.window = sb;
+    sb.global = sb;
+    sb.globalThis = sb;
+    vm.createContext(sb);
+    vm.runInContext(mainScript, sb);
+    sb.state.dashData = {
+      generatedAt: '2026-11-19',
+      members: ['조항만', '송지은'],
+      holidays: {},
+      scopeCounts: { site: 1, single: 1, as: 1, newSite: 1 },
+      siteInfoMap: {},
+      sites: [
+        {
+          siteKey: 'SITE_A',
+          siteName: '강남 현장',
+          scope: 'site',
+          colorHex: '#2563eb',
+          tasks: [{ id: 't_site_1', taskName: '목공', partner: '김목수', manager: '조항만', startDateStr: '2026-11-19', endDateStr: '2026-11-19', status: '진행' }]
+        },
+        {
+          siteKey: 'SINGLE_B',
+          siteName: '판교 중문 단건',
+          scope: 'single',
+          colorHex: '#0284c7',
+          tasks: [{ id: 't_single_1', taskName: '중문', partner: '박설치', manager: '송지은', startDateStr: '2026-11-19', endDateStr: '2026-11-19', status: '예정' }]
+        },
+        {
+          siteKey: 'AS_C',
+          siteName: '서초 AS',
+          scope: 'as',
+          colorHex: '#d97706',
+          tasks: [{ id: 't_as_1', taskName: '목공AS', partner: '김목수', manager: '조항만', startDateStr: '2026-11-19', endDateStr: '2026-11-19', status: 'AS' }]
+        },
+        {
+          siteKey: 'QUOTE_D',
+          siteName: '잠실 신규견적',
+          scope: 'newSite',
+          colorHex: '#10b981',
+          tasks: [{ id: 't_quote_1', taskName: '1차상담', partner: '김목수', manager: '조항만', startDateStr: '2026-11-19', endDateStr: '2026-11-19', status: '예정' }]
+        }
+      ]
+    };
+    sb.markAllDirty();
+
+    const initGanttOk = sb.state.calViewMode === 'gantt' && sb.state.mobileCalMode === 'gantt';
+
+    // 캘린더 진입 시 좌측 툴바에 .cal-view-switch 배치 + 📂 현장 칩 숨김 + 현장/단건/AS 통합(신규 제외) + 충돌 감지
+    sb.state.selectedDayStr = '2026-11-19';
+    sb.switchMainTab('calendar');
+    const calHtmlGantt = elements.get('pcCalMain').innerHTML;
+    const leftIdx = calHtmlGantt.indexOf('class="pc-cal-toolbar-left"');
+    const rightIdx = calHtmlGantt.indexOf('class="pc-cal-toolbar-right"');
+    const switchIdx = calHtmlGantt.indexOf('class="cal-view-switch"');
+    const switchInLeftOk = leftIdx !== -1 && rightIdx !== -1 && switchIdx > leftIdx && switchIdx < rightIdx;
+    const scopeChipHiddenInGanttOk = !calHtmlGantt.includes('📂 <b>현장</b>');
+    const integratedRowsOk = (
+      calHtmlGantt.includes('강남 현장') &&
+      calHtmlGantt.includes('판교 중문 단건') &&
+      calHtmlGantt.includes('[단건]') &&
+      calHtmlGantt.includes('서초 AS') &&
+      calHtmlGantt.includes('[AS]') &&
+      !calHtmlGantt.includes('잠실 신규견적') &&
+      calHtmlGantt.includes('김목수 2개 현장 동시 배정')
+    );
+
+    // 월간/주간 전환 시 모드 유지 및 📂 현장 칩 복원
+    sb.setCalViewMode('month');
+    const calHtmlMonth = elements.get('pcCalMain').innerHTML;
+    const monthChipShownOk = sb.state.calViewMode === 'month' && calHtmlMonth.includes('📂 <b>현장</b>');
+    sb.switchMainTab('sites');
+    sb.switchMainTab('calendar');
+    const modePersistedAcrossTabsOk = sb.state.calViewMode === 'month';
+
+    // selectCalDay 점프 및 resetAllTabsToHome 기본값 복원 확인
+    sb.selectCalDay('2026-12-03');
+    sb.switchMainTab('calendar');
+    const selectCalDayOk = sb.state.selectedDayStr === '2026-12-03' && sb.state.calYear === 2026 && sb.state.calMonth === 12 && sb.state.userSelectedCalDay === true;
+
+    sb.setCalViewMode('week');
+    sb.setMobileCalMode('week');
+    sb.resetAllTabsToHome();
+    const resetToGanttOk = sb.state.calViewMode === 'gantt' && sb.state.mobileCalMode === 'gantt' && sb.state.pcTab === 'home';
+
+    // 모바일 주간 타임라인도 현장+단건+AS 통합 확인
+    sb.switchDeviceMode('mobile');
+    sb.state.selectedDayStr = '2026-11-19';
+    sb.state.calYear = 2026;
+    sb.state.calMonth = 11;
+    sb.switchMobileTab('calendar');
+    const mobCalHtml = elements.get('m-page-calendar').innerHTML;
+    const mobileIntegratedOk = (
+      mobCalHtml.includes('강남 현장') &&
+      mobCalHtml.includes('판교 중문 단건') &&
+      mobCalHtml.includes('서초 AS') &&
+      !mobCalHtml.includes('잠실 신규견적')
+    );
+
+    assertTest(
+      '캘린더 기본 주간 타임라인(gantt)·좌측 뷰전환 툴바·현장/단건/AS 통합 및 충돌감지 런타임 검증',
+      initGanttOk && switchInLeftOk && scopeChipHiddenInGanttOk && integratedRowsOk && monthChipShownOk && modePersistedAcrossTabsOk && selectCalDayOk && resetToGanttOk && mobileIntegratedOk,
+      `init=${initGanttOk}, switchLeft=${switchInLeftOk}, hideScope=${scopeChipHiddenInGanttOk}, integrated=${integratedRowsOk}, monthChip=${monthChipShownOk}, persist=${modePersistedAcrossTabsOk}, selDay=${selectCalDayOk}, reset=${resetToGanttOk}, mob=${mobileIntegratedOk}`
     );
   })());
 

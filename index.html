@@ -1200,7 +1200,7 @@
     .cal-view-btn {
       border: none; background: transparent; padding: 0 12px; height: 26px; border-radius: 6px;
       font-size: 11.5px; font-weight: 700; color: var(--text-sub); cursor: pointer; transition: all 0.15s;
-      display: inline-flex; align-items: center; justify-content: center;
+      display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;
     }
     .cal-view-btn:hover:not(.active) { color: #0f172a; }
     .cal-view-btn.active {
@@ -3631,10 +3631,10 @@ end $$;`;
         searchQuery: "",
         calYear: _initCalYear,
         calMonth: _initCalMonth,
-        calViewMode: "month",
+        calViewMode: "gantt",
         selectedDayStr: _initTodayYmd,
         userSelectedCalDay: false,
-        mobileCalMode: "month",
+        mobileCalMode: "gantt",
         ganttTradeFilter: "all",
         ganttPartnerFilter: "all",
         ganttOnlyConflict: false,
@@ -4558,22 +4558,30 @@ end $$;`;
       }
 
       // 다중 일자(연속 공정) 포함 필터링 — 현장서식.js renderCalendar 정책과 100% 일치
-      function getFilteredCalendarTasks() {
+      function getFilteredCalendarTasks(opts) {
+        opts = opts || {};
         ensureCheckedSitesInitialized();
         const checked = state.checkedSiteKeys;
         const q = state.searchQuery.trim();
         const m = state.memberFilter;
         const hasMemberFilter = !!m;
         const hasKeywordFilter = !!q;
+        const includeAllScopes = Boolean(opts.includeAllScopes);
         const isGlobalSearch = hasKeywordFilter;
         const result = [];
 
-        const targetSites = isGlobalSearch
-          ? getAllSites().filter((s) => (s.scope || "site") !== "newSite" && (!isSiteCompleted(s) || (checked && checked.has(s.siteKey))))
+        const targetSites = (isGlobalSearch || includeAllScopes)
+          ? getAllSites().filter((s) => {
+              const sc = s.scope || "site";
+              if (sc === "newSite") return false;
+              if (includeAllScopes && sc !== "site" && sc !== "single" && sc !== "as") return false;
+              return !isSiteCompleted(s) || (checked && checked.has(s.siteKey));
+            })
           : getAllSites().filter((s) => (s.scope || "site") !== "newSite" && s.scope === state.scope && (!isSiteCompleted(s) || (checked && checked.has(s.siteKey))));
 
         targetSites.forEach((site) => {
-          if (!isGlobalSearch && checked && !checked.has(site.siteKey)) return;
+          const siteScope = site.scope || "site";
+          if (!isGlobalSearch && (!includeAllScopes || siteScope === state.scope) && checked && !checked.has(site.siteKey)) return;
           (site.tasks || []).forEach((task) => {
             if ((hasMemberFilter || hasKeywordFilter) && isTaskCompleted(task)) return;
             if (!taskMatchesMember(task, m)) return;
@@ -4786,6 +4794,9 @@ end $$;`;
       /** 주간 간트 모델 및 협력업체 동시 배정 충돌을 계산합니다. */
       function computeWeeklyGanttModel(events, options) {
         const opts = options || {};
+        const sourceEvents = Array.isArray(events)
+          ? events
+          : getFilteredCalendarTasks({ includeAllScopes: true });
         const weekInfo = getGanttWeekInfo(opts.anchorYmd || state.selectedDayStr || getTodayYmd());
         const weekStart = weekInfo.weekStartYmd;
         const weekEnd = weekInfo.weekEndYmd;
@@ -4793,14 +4804,23 @@ end $$;`;
         const partnerFilter = opts.partnerFilter !== undefined ? opts.partnerFilter : (state.ganttPartnerFilter || "all");
         const onlyConflict = opts.onlyConflict !== undefined ? Boolean(opts.onlyConflict) : Boolean(state.ganttOnlyConflict);
 
-        const weekEvents = (events || []).filter((item) => {
+        const weekEvents = (sourceEvents || []).filter((item) => {
           if (!item || !item.site || !item.task) return false;
+          if ((item.site.scope || "site") === "newSite") return false;
           const st = String(item.task.status || "").replace(/\s+/g, "");
           if (st.indexOf("취소") !== -1 || st.indexOf("제외") !== -1) return false;
           const sYmd = item.startYmd;
           const eYmd = item.endYmd && item.endYmd >= sYmd ? item.endYmd : sYmd;
           return Boolean(sYmd && sYmd <= weekEnd && eYmd >= weekStart);
         });
+
+        const getGanttConflictSiteLabel = (siteObj) => {
+          const name = String((siteObj && siteObj.siteName) || "").trim();
+          if (!siteObj) return name;
+          if (siteObj.scope === "as" && !/^\[AS\]/i.test(name)) return "[AS] " + name;
+          if (siteObj.scope === "single" && !/^\[단건\]/i.test(name)) return "[단건] " + name;
+          return name;
+        };
 
         // 1) 충돌 감지 (공종/업체 서브필터 적용 전 주간 전체 활성 공정 기준)
         const dayPartnerBuckets = {};
@@ -4831,7 +4851,7 @@ end $$;`;
                 };
               }
               dayPartnerBuckets[bk].siteKeys.add(site.siteKey || site.siteName);
-              dayPartnerBuckets[bk].siteNames.add(site.siteName);
+              dayPartnerBuckets[bk].siteNames.add(getGanttConflictSiteLabel(site));
               dayPartnerBuckets[bk].entries.push(item);
               cur = addDaysYmd(cur, 1);
               guard++;
@@ -4860,7 +4880,8 @@ end $$;`;
           bucket.entries.forEach((entry) => {
             const tid = entry.task.id || entry.task.taskId || (entry.site.siteKey + "::" + entry.task.taskName);
             const ck = bucket.ymd + "||" + tid;
-            const otherSites = Array.from(bucket.siteNames).filter((sn) => sn !== entry.site.siteName);
+            const curSiteLabel = getGanttConflictSiteLabel(entry.site);
+            const otherSites = Array.from(bucket.siteNames).filter((sn) => sn !== curSiteLabel);
             conflictMap[ck] = {
               partnerKey: bucket.partnerKey,
               partnerName: bucket.partnerName,
@@ -4947,7 +4968,10 @@ end $$;`;
 
       /** 주간 멀티현장 간트 타임라인 HTML을 생성합니다(PC·모바일 공용). */
       function renderWeeklyGanttTimelineHtml(events, isMobile) {
-        const model = computeWeeklyGanttModel(events);
+        const ganttEvents = Array.isArray(events)
+          ? events
+          : getFilteredCalendarTasks({ includeAllScopes: true });
+        const model = computeWeeklyGanttModel(ganttEvents);
         const todayYmd = getTodayYmd();
         const tradeVal = state.ganttTradeFilter || "all";
         const partnerVal = state.ganttPartnerFilter || "all";
@@ -5021,12 +5045,14 @@ end $$;`;
               </td>`;
           }).join("");
 
+          const effScope = s.scope || (/^\[단건\]/i.test(s.siteName) ? "single" : /^\[AS\]/i.test(s.siteName) ? "as" : "site");
+          const cleanSiteName = String(s.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "");
           return `
             <tr>
               <td class="site-col" onclick="${siteClick}" title="현장 상세 보기">
                 <div class="ws-gantt-site-name">
                   <span style="color:${escHtml(s.colorHex || "#2563eb")};flex-shrink:0;">●</span>
-                  <span>${escHtml(s.siteName)}</span>
+                  ${getHomeScopeBadgeHtml(effScope)}<span>${escHtml(cleanSiteName)}</span>
                 </div>
                 <div class="ws-gantt-site-meta">담당: ${escHtml(row.managersLabel)} · 진행 ${doneCnt}/${totalCnt}</div>
               </td>
@@ -6897,14 +6923,15 @@ end $$;`;
         document.getElementById("pcCalSidebar").innerHTML = renderSharedSidebarHtml("calendar");
 
         const activeSites = getActiveScopeSites();
-        const events = getFilteredCalendarTasks();
+        const isGanttMode = state.calViewMode === "gantt";
+        const events = getFilteredCalendarTasks({ includeAllScopes: isGanttMode });
         const scopeNameMap = { site: "현장", single: "단건", as: "AS", newSite: "신규견적" };
         const todayYmd = getTodayYmd();
         const holidays = (state.dashData && state.dashData.holidays) || {};
         const checkedCount = state.checkedSiteKeys ? state.checkedSiteKeys.size : activeSites.length;
         const hasSubsetSites = state.checkedSiteKeys && checkedCount < activeSites.length;
 
-        const chips = [`<span class="m-pill-chip">📂 <b>${scopeNameMap[state.scope] || state.scope}</b></span>`];
+        const chips = isGanttMode ? [] : [`<span class="m-pill-chip">📂 <b>${scopeNameMap[state.scope] || state.scope}</b></span>`];
         if (hasSubsetSites) chips.push(`<span class="m-pill-chip">☑️ 선택 현장 <b>${checkedCount}/${activeSites.length}</b> <span class="del-x" onclick="checkAllSites(true)">✕</span></span>`);
         if (state.memberFilter) chips.push(`<span class="m-pill-chip">👤 <b>${escHtml(state.memberFilter)}</b> <span class="del-x" onclick="onMemberFilterChange('')">✕</span></span>`);
         if (state.searchQuery.trim()) chips.push(`<span class="m-pill-chip">🔍 <b>"${escHtml(state.searchQuery.trim())}"</b> <span class="del-x" onclick="clearGlobalSearch()">✕</span></span>`);
@@ -7084,6 +7111,7 @@ end $$;`;
           return;
         }
 
+        const hasChips = chips.length > 0 || hasSubsetSites || Boolean(state.memberFilter) || Boolean(state.searchQuery.trim());
         pcCalEl.innerHTML = `
           <div class="pc-cal-toolbar">
             <div class="pc-cal-toolbar-left">
@@ -7093,9 +7121,17 @@ end $$;`;
                 <button type="button" class="cal-nav-seg-btn today" onclick="resetCalendarToday()" title="오늘로 이동">오늘</button>
                 <button type="button" class="cal-nav-seg-btn" onclick="moveCalendarMonth(1)" title="다음 달">▶</button>
               </div>
-              <div class="pc-cal-chips-wrap">
-                ${chips.join("")}
-                ${(hasSubsetSites || state.memberFilter || state.searchQuery.trim()) ? `<button type="button" class="btn-tool-tag" onclick="resetAllFilters()" style="height:32px;padding:0 10px;border-radius:8px;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;background:#fff;border:1px solid #cbd5e1;cursor:pointer;">초기화</button>` : ""}
+              ${hasChips ? `
+                <div class="pc-cal-chips-wrap">
+                  ${chips.join("")}
+                  ${(hasSubsetSites || state.memberFilter || state.searchQuery.trim()) ? `<button type="button" class="btn-tool-tag" onclick="resetAllFilters()" style="height:32px;padding:0 10px;border-radius:8px;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;background:#fff;border:1px solid #cbd5e1;cursor:pointer;">초기화</button>` : ""}
+                </div>
+              ` : ""}
+              <div class="pc-cal-divider"></div>
+              <div class="cal-view-switch">
+                <button type="button" class="cal-view-btn ${state.calViewMode === "month" ? "active" : ""}" onclick="setCalViewMode('month')">📅 월간</button>
+                <button type="button" class="cal-view-btn ${state.calViewMode === "week" ? "active" : ""}" onclick="setCalViewMode('week')">주간</button>
+                <button type="button" class="cal-view-btn ${state.calViewMode === "gantt" ? "active" : ""}" onclick="setCalViewMode('gantt')">📊 주간 타임라인</button>
               </div>
             </div>
             <div class="pc-cal-toolbar-right">
@@ -7107,12 +7143,6 @@ end $$;`;
               <span class="cal-count-capsule">
                 총 <strong>${events.length}건</strong> <span class="dot">·</span> 다중일자 포함
               </span>
-              <div class="pc-cal-divider"></div>
-              <div class="cal-view-switch">
-                <button type="button" class="cal-view-btn ${state.calViewMode === "month" ? "active" : ""}" onclick="setCalViewMode('month')">📅 월간</button>
-                <button type="button" class="cal-view-btn ${state.calViewMode === "week" ? "active" : ""}" onclick="setCalViewMode('week')">주간</button>
-                <button type="button" class="cal-view-btn ${state.calViewMode === "gantt" ? "active" : ""}" onclick="setCalViewMode('gantt')">📊 주간 타임라인</button>
-              </div>
               <button type="button" class="btn-tool-tag btn-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐">📸 캡쳐</button>
             </div>
           </div>
@@ -16945,7 +16975,8 @@ end $$;`;
 
       // [모바일 탭 3: 캘린더 — 모든 일정 가변 높이 전부 노출 + 기존 공종 알약/공유박스 반영]
       function renderMobileCalendarTab() {
-        const events = getFilteredCalendarTasks();
+        const isGanttMode = state.mobileCalMode === "gantt";
+        const events = getFilteredCalendarTasks({ includeAllScopes: isGanttMode });
         const todayYmd = getTodayYmd();
         const holidays = (state.dashData && state.dashData.holidays) || {};
         const scopeNameMap = { site: "현장", single: "단건", as: "AS", newSite: "신규" };
@@ -16964,7 +16995,7 @@ end $$;`;
           }
         }
 
-        const filterChips = [`<span class="m-pill-chip">📁 <b>${scopeNameMap[state.scope] || state.scope}</b></span>`];
+        const filterChips = isGanttMode ? [] : [`<span class="m-pill-chip">📁 <b>${scopeNameMap[state.scope] || state.scope}</b></span>`];
         if (state.memberFilter) filterChips.push(`<span class="m-pill-chip">👤 <b>${escHtml(state.memberFilter)}</b> <span class="del-x" onclick="onMMemberClick('')">✕</span></span>`);
         if (state.searchQuery.trim()) filterChips.push(`<span class="m-pill-chip">🔍 <b>"${escHtml(state.searchQuery.trim())}"</b> <span class="del-x" onclick="clearGlobalSearch()">✕</span></span>`);
 
@@ -18676,8 +18707,8 @@ end $$;`;
           mobileTab: state.mobileTab || "home",
           scope: state.scope || "site",
           quoteCategory: state.quoteCategory || "site",
-          calViewMode: state.calViewMode || "month",
-          mobileCalMode: state.mobileCalMode || "month",
+          calViewMode: state.calViewMode || "gantt",
+          mobileCalMode: state.mobileCalMode || "gantt",
           sitesSubView: state.sitesSubView === "asWarranty" ? "asWarranty" : "list",
           showArchivedSites: Boolean(state.showArchivedSites),
           selectedSiteKey: state.selectedSiteKey || null,
@@ -18699,8 +18730,8 @@ end $$;`;
           snap.mobileTab || "home",
           snap.scope || "site",
           snap.quoteCategory || "site",
-          snap.calViewMode || "month",
-          snap.mobileCalMode || "month",
+          snap.calViewMode || "gantt",
+          snap.mobileCalMode || "gantt",
           snap.sitesSubView || "list",
           Boolean(snap.showArchivedSites),
           snap.selectedSiteKey || "",
@@ -18818,8 +18849,8 @@ end $$;`;
           state.mobileTab = snap.mobileTab || "home";
           state.scope = snap.scope || "site";
           state.quoteCategory = snap.quoteCategory || "site";
-          state.calViewMode = snap.calViewMode || "month";
-          state.mobileCalMode = snap.mobileCalMode || "month";
+          state.calViewMode = snap.calViewMode || "gantt";
+          state.mobileCalMode = snap.mobileCalMode || "gantt";
           state.sitesSubView = snap.sitesSubView === "asWarranty" ? "asWarranty" : "list";
           state.showArchivedSites = Boolean(snap.showArchivedSites);
           state.selectedSiteKey = snap.selectedSiteKey || null;
@@ -18861,8 +18892,8 @@ end $$;`;
 
           state.scope = snap.scope || "site";
           state.quoteCategory = snap.quoteCategory || "site";
-          state.calViewMode = snap.calViewMode || "month";
-          state.mobileCalMode = snap.mobileCalMode || "month";
+          state.calViewMode = snap.calViewMode || "gantt";
+          state.mobileCalMode = snap.mobileCalMode || "gantt";
           state.sitesSubView = snap.sitesSubView === "asWarranty" ? "asWarranty" : "list";
           state.showArchivedSites = Boolean(snap.showArchivedSites);
           state.selectedSiteKey = snap.selectedSiteKey || null;
@@ -31829,6 +31860,10 @@ end $$;`;
       window.setCalViewMode = function (mode) { state.calViewMode = mode; state.dirtyPcTabs.calendar = true; renderActiveViews(); recordNavHistory(); };
       window.selectCalDay = function (ymd) {
         state.selectedDayStr = ymd;
+        if (typeof ymd === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+          state.calYear = Number(ymd.slice(0, 4));
+          state.calMonth = Number(ymd.slice(5, 7));
+        }
         state.userSelectedCalDay = true;
         state.dirtyMobileTabs.calendar = true;
         state.dirtyPcTabs.calendar = true;
@@ -32657,6 +32692,8 @@ end $$;`;
         opts = opts || {};
         state.pcTab = "home";
         state.mobileTab = "home";
+        state.calViewMode = "gantt";
+        state.mobileCalMode = "gantt";
         const tabKeysToRemove = [
           "ws_active_tab", "ws_pc_tab", "ws_mobile_tab", "ws_tab",
           "activeTab", "pcTab", "mobileTab", "currentTab"
