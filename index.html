@@ -27622,8 +27622,8 @@ end $$;`;
           <tr>
             <td style="text-align:center;font-size:11.5px;color:#94a3b8;font-weight:700;white-space:nowrap;">${idx + 1}</td>
             <td style="text-align:center;white-space:nowrap;">
-              <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${originalIdx},-1)" title="위로">▲</button>
-              <button type="button" class="btn-tool-tag" onclick="moveSettingItem('partners',${originalIdx},1)" title="아래로">▼</button>
+              <button type="button" class="btn-tool-tag" onclick="openPartnerForm(${originalIdx})" title="수정">✏️</button>
+              <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="delSettingItem('partners',${originalIdx})" title="삭제">🗑️</button>
             </td>
             <td style="white-space:nowrap;"><strong style="color:#0f172a;font-size:12.5px;">${escHtml(p.name || p.fullName)}</strong></td>
             <td style="white-space:nowrap;"><span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:4px;font-weight:700;font-size:11px;">${escHtml(dispBiz)}</span></td>
@@ -27640,10 +27640,6 @@ end $$;`;
             <td style="font-size:11.5px;color:#475569;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.feature || "")}">${escHtml(p.feature || "-")}</td>
             <td style="font-size:11.5px;color:#64748b;white-space:nowrap;">${escHtml(p.orderMethod || "-")}</td>
             <td style="font-size:11.5px;color:#64748b;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(p.note || p.memo || "")}">${escHtml(p.note || p.memo || "-")}</td>
-            <td style="text-align:center;white-space:nowrap;">
-              <button type="button" class="btn-tool-tag" onclick="openPartnerForm(${originalIdx})" title="수정">✏️</button>
-              <button type="button" class="btn-tool-tag" style="color:#dc2626;" onclick="delSettingItem('partners',${originalIdx})" title="삭제">🗑️</button>
-            </td>
           </tr>`;
       };
 
@@ -27704,7 +27700,7 @@ end $$;`;
           if (filtered.length) {
             tbody.innerHTML = filtered.map(({ p, originalIdx }, idx) => window.renderPartnerTableRow(p, originalIdx, idx)).join("");
           } else {
-            tbody.innerHTML = `<tr><td colspan="14" style="text-align:center;padding:36px;color:#94a3b8;font-weight:600;">조건에 일치하는 거래처가 없습니다.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:36px;color:#94a3b8;font-weight:600;">조건에 일치하는 거래처가 없습니다.</td></tr>`;
           }
         }
         const hasActiveFilters = !!(state.partnerSearchQuery || state.partnerBizFilter || state.partnerCatFilter || state.partnerPrioFilter || state.partnerStatusFilter);
@@ -27943,7 +27939,7 @@ end $$;`;
                 <thead>
                   <tr style="position:sticky;top:0;background:#ffffff;z-index:2;box-shadow:0 1px 2px rgba(0,0,0,0.05);">
                     <th style="width:45px;text-align:center;white-space:nowrap;">순서</th>
-                    <th style="width:55px;text-align:center;white-space:nowrap;">이동</th>
+                    <th style="width:75px;text-align:center;white-space:nowrap;">관리</th>
                     <th style="width:170px;min-width:170px;text-align:left;white-space:nowrap;">상호 / 업체 / 반장명</th>
                     <th style="width:125px;min-width:125px;text-align:left;white-space:nowrap;">대표 공종</th>
                     <th style="width:70px;min-width:70px;text-align:center;white-space:nowrap;">대구분</th>
@@ -27955,11 +27951,10 @@ end $$;`;
                     <th style="width:180px;min-width:180px;text-align:left;white-space:nowrap;">주력분야 및 특징</th>
                     <th style="width:115px;min-width:115px;text-align:left;white-space:nowrap;">발주 / 접수방식</th>
                     <th style="min-width:140px;text-align:left;white-space:nowrap;">비고 / 메모</th>
-                    <th style="width:75px;text-align:center;white-space:nowrap;">관리</th>
                   </tr>
                 </thead>
                 <tbody id="stPartnersTbody">
-                  ${filteredPartners.length ? filteredPartners.map(({ p, originalIdx }, idx) => window.renderPartnerTableRow(p, originalIdx, idx)).join("") : `<tr><td colspan="14" style="text-align:center;padding:36px;color:#94a3b8;font-weight:600;">조건에 일치하는 거래처가 없습니다.</td></tr>`}
+                  ${filteredPartners.length ? filteredPartners.map(({ p, originalIdx }, idx) => window.renderPartnerTableRow(p, originalIdx, idx)).join("") : `<tr><td colspan="13" style="text-align:center;padding:36px;color:#94a3b8;font-weight:600;">조건에 일치하는 거래처가 없습니다.</td></tr>`}
                 </tbody>
               </table>
             </div>`;
