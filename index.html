@@ -17036,9 +17036,23 @@ end $$;`;
         const todayTh = typeof wrap.querySelector === "function" ? wrap.querySelector("th.today-col") : null;
         const siteCol = typeof wrap.querySelector === "function" ? wrap.querySelector("th.site-col") : null;
         if (todayTh && siteCol) {
-          const siteWidth = Number(siteCol.offsetWidth) || 0;
-          const todayLeft = Number(todayTh.offsetLeft) || 0;
-          wrap.scrollLeft = Math.max(0, todayLeft - siteWidth);
+          const siteRect = typeof siteCol.getBoundingClientRect === "function" ? siteCol.getBoundingClientRect() : null;
+          const todayRect = typeof todayTh.getBoundingClientRect === "function" ? todayTh.getBoundingClientRect() : null;
+          const hasMeasuredRect = !!(
+            siteRect &&
+            todayRect &&
+            (siteRect.width > 0 || siteRect.right > 0 || todayRect.width > 0 || todayRect.right > 0)
+          );
+          if (hasMeasuredRect) {
+            const delta = Math.round(todayRect.left - siteRect.right);
+            if (delta !== 0) {
+              wrap.scrollLeft = Math.max(0, (Number(wrap.scrollLeft) || 0) + delta);
+            }
+          } else {
+            const siteWidth = Number(siteCol.offsetWidth) || 0;
+            const todayLeft = Number(todayTh.offsetLeft) || 0;
+            wrap.scrollLeft = Math.max(0, todayLeft - siteWidth);
+          }
         } else {
           wrap.scrollLeft = 0;
         }
@@ -17270,12 +17284,27 @@ end $$;`;
         `;
         state._lastCalSlideDir = "";
         setupCalendarSwipe(mCalEl);
+        if (state._mobileGanttAlignTimer && typeof clearTimeout === "function") {
+          clearTimeout(state._mobileGanttAlignTimer);
+          state._mobileGanttAlignTimer = null;
+        }
         if (state.mobileCalMode === "gantt") {
           alignMobileGanttTodayScroll(mCalEl);
           if (typeof requestAnimationFrame === "function") {
             requestAnimationFrame(() => {
-              if (state.mobileCalMode === "gantt") alignMobileGanttTodayScroll(mCalEl);
+              if (state.mobileCalMode === "gantt") {
+                alignMobileGanttTodayScroll(mCalEl);
+                requestAnimationFrame(() => {
+                  if (state.mobileCalMode === "gantt") alignMobileGanttTodayScroll(mCalEl);
+                });
+              }
             });
+          }
+          if (typeof setTimeout === "function") {
+            state._mobileGanttAlignTimer = setTimeout(() => {
+              state._mobileGanttAlignTimer = null;
+              if (state.mobileCalMode === "gantt") alignMobileGanttTodayScroll(mCalEl);
+            }, 50);
           }
         }
         setTimeout(() => {
