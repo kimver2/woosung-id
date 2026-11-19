@@ -708,11 +708,14 @@
       `;
     }
 
+    function isPartnerTaskScope(p) {
+      return Boolean(p && p.scopeMode === "task" && String(p.targetTaskName || "").trim());
+    }
+
     function getVisiblePartnerTasks(p) {
       const tasks = (p && Array.isArray(p.tasks)) ? p.tasks : [];
-      const scopeMode = p && p.scopeMode === "task" ? "task" : "all";
-      const target = String((p && p.targetTaskName) || "").trim();
-      if (scopeMode === "task" && target) {
+      if (isPartnerTaskScope(p)) {
+        const target = String(p.targetTaskName || "").trim();
         return tasks.filter((t) => t && String(t.taskName || "").trim() === target);
       }
       return tasks;
@@ -720,7 +723,7 @@
 
     function buildFallbackPartnerGuideText(p) {
       const tasks = getVisiblePartnerTasks(p);
-      const isTaskScope = p && p.scopeMode === "task" && String(p.targetTaskName || "").trim();
+      const isTaskScope = isPartnerTaskScope(p);
       const scopeLabel = isTaskScope ? String(p.targetTaskName).trim() : `전체 공정 일정 (${tasks.length}건)`;
       const designerLine = p.manager ? `${p.manager}${p.managerPhone ? " | " + p.managerPhone : ""}` : "미지정";
       const lines = [
@@ -741,6 +744,17 @@
         lines.push(`━━━━━━━━━━━━━━━━━━`);
         lines.push(`📌 작업 지시사항:\n${String(p.noticeText).trim()}`);
       }
+      if (!isTaskScope) {
+        const activeList = tasks.filter((t) => t && t.status !== "완료").slice(0, 8);
+        if (activeList.length) {
+          lines.push(`━━━━━━━━━━━━━━━━━━`);
+          lines.push(`🗓️ 예정·진행 일정 요약:`);
+          activeList.forEach((t) => {
+            const d = t.date || t.dateDisplay || "일정 미정";
+            lines.push(`· ${d} | ${t.taskName || "공정"}`);
+          });
+        }
+      }
       lines.push(`━━━━━━━━━━━━━━━━━━`);
       lines.push(`※ 현장 진입 및 작업 전 특이사항을 반드시 확인해 주세요.`);
       return lines.join("\n");
@@ -749,7 +763,11 @@
     function copyPartnerGuideText() {
       const p = clientViewState.payload;
       if (!p) return;
-      const text = String(p.guideText || "").trim() || buildFallbackPartnerGuideText(p);
+      const isTaskScope = isPartnerTaskScope(p);
+      const hasLegacyTaskLeak = !isTaskScope && Array.isArray(p.tasks) && p.tasks.some((t) => t && (t.partner || t.memo));
+      const text = (!hasLegacyTaskLeak && String(p.guideText || "").trim())
+        ? String(p.guideText).trim()
+        : buildFallbackPartnerGuideText(p);
       copyShareText(text, "📋 반장님 작업 안내문이 복사되었습니다!");
     }
 
@@ -936,6 +954,7 @@
       let dayDetailHtml = "";
       if (clientViewState.selectedYmd) {
         const selTasks = evMap[clientViewState.selectedYmd] || [];
+        const showPartnerTaskMeta = clientViewState.mode === "partner" && isPartnerTaskScope(clientViewState.payload);
         dayDetailHtml = `
           <div class="cal-day-detail">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -947,7 +966,7 @@
               const isProg = !isDone && ((t.date && t.endDate && t.date <= todayYmd && t.endDate >= todayYmd) || t.date === todayYmd || String(t.status || "").includes("진행"));
               const badgeCls = isDone ? "badge-done" : (isProg ? "badge-prog" : "badge-plan");
               const badgeTxt = isDone ? "✅ 완료" : (isProg ? "🔨 진행 중" : "예정");
-              const extraPartnerInfo = (clientViewState.mode === "partner" && (t.partner || t.memo))
+              const extraPartnerInfo = (showPartnerTaskMeta && (t.partner || t.memo))
                 ? `<div style="font-size:11px;color:#475569;margin-top:2px;">${[t.partner ? `👷 ${esc(t.partner)}` : "", t.memo ? `📝 ${esc(t.memo)}` : ""].filter(Boolean).join(" · ")}</div>`
                 : "";
               return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-top:1px dashed #cbd5e1;font-size:12px;"><div style="min-width:0;"><span style="font-weight:700;color:#1e293b;">${esc(t.taskName)}</span>${extraPartnerInfo}</div><span class="badge ${badgeCls}">${badgeTxt}</span></div>`;
@@ -1138,7 +1157,7 @@
     }
 
     function renderPartnerShareView(p, updatedAt) {
-      const isTaskScope = p.scopeMode === "task" && Boolean(String(p.targetTaskName || "").trim());
+      const isTaskScope = isPartnerTaskScope(p);
       const targetName = String(p.targetTaskName || "").trim();
       const tasks = getVisiblePartnerTasks(p);
       const totalCnt = tasks.length;
@@ -1217,12 +1236,14 @@
         const badgeCls = isDone ? "badge-done" : (isToday ? "badge-prog" : "badge-plan");
         const badgeTxt = isDone ? "✅ 완료" : (isToday ? "🔨 진행 중" : "예정");
         const dateStr = (t.date && t.endDate && t.endDate !== t.date) ? `${t.date} ~ ${t.endDate}` : (t.date || t.dateDisplay || "일정 조율 중");
+        const partnerSuffix = (isTaskScope && t.partner) ? ` · 👷 ${esc(t.partner)}` : "";
+        const memoHtml = (isTaskScope && t.memo) ? `<div class="task-memo">📝 ${esc(t.memo)}</div>` : "";
         return `
           <div class="task-row ${isDone ? "is-done" : (isToday ? "is-today" : "")}">
             <div style="min-width:0;">
               <div class="task-name">${esc(t.taskName)}</div>
-              <div class="task-date">📅 ${esc(dateStr)}${t.partner ? ` · 👷 ${esc(t.partner)}` : ""}</div>
-              ${t.memo ? `<div class="task-memo">📝 ${esc(t.memo)}</div>` : ""}
+              <div class="task-date">📅 ${esc(dateStr)}${partnerSuffix}</div>
+              ${memoHtml}
             </div>
             <span class="badge ${badgeCls}">${badgeTxt}</span>
           </div>

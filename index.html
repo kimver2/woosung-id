@@ -23968,11 +23968,12 @@ end $$;`;
         const info = (state.dashData && state.dashData.siteInfoMap && state.dashData.siteInfoMap[siteName]) || getSiteInfo(siteName) || {};
         const scopeMode = shareCfg.scopeMode === "task" ? "task" : "all";
         const targetTaskName = String(shareCfg.targetTaskName || "").trim();
+        const isTaskScope = scopeMode === "task" && Boolean(targetTaskName);
         const customNotice = String(shareCfg.noticeText || "").trim();
         const tasksRaw = Array.isArray(site.tasks) ? site.tasks.slice() : [];
         tasksRaw.sort((a, b) => String(parseYmdFromTask(a) || "9999-99-99").localeCompare(String(parseYmdFromTask(b) || "9999-99-99")));
 
-        if (scopeMode === "task" && targetTaskName) {
+        if (isTaskScope) {
           const matched = tasksRaw.filter((t) => String((t && t.taskName) || "").trim() === targetTaskName);
           if (matched.length === 1) {
             let baseText = buildGuideTextForTask(site, matched[0]);
@@ -23991,7 +23992,7 @@ end $$;`;
 
         const suptList = getSiteSuperintendentList();
         const suptNames = new Set(suptList.map((sp) => sp.name));
-        const relevantTasks = (scopeMode === "task" && targetTaskName)
+        const relevantTasks = isTaskScope
           ? tasksRaw.filter((t) => String((t && t.taskName) || "").trim() === targetTaskName)
           : tasksRaw;
 
@@ -24030,7 +24031,7 @@ end $$;`;
           `[우성아이디 현장 작업 안내]`,
           `━━━━━━━━━━━━━━━━━━`,
           `■ 현장명: ${siteName}`,
-          scopeMode === "task" && targetTaskName
+          isTaskScope
             ? `■ 공종: ${targetTaskName}${relevantTasks.length > 1 ? ` (${relevantTasks.length}건)` : ""}`
             : `■ 공종: 전체 공정 일정 (${relevantTasks.length}건)`,
           `■ 작업일자: ${periodDisplay}`,
@@ -24041,14 +24042,16 @@ end $$;`;
         lines.push(`📍 현장 주소: ${info.address || "(주소 미등록 - 담당자 문의)"}`);
         lines.push(`🔑 도어락 비번: ${info.doorPassword || "(비밀번호 미등록 - 담당자 문의)"}`);
         if (info.officePhone) lines.push(`📞 관리사무소: ${info.officePhone}`);
-        const taskMemos = Array.from(new Set(relevantTasks.map((t) => String((t && t.memo) || "").trim()).filter(Boolean)));
+        const taskMemos = isTaskScope
+          ? Array.from(new Set(relevantTasks.map((t) => String((t && t.memo) || "").trim()).filter(Boolean)))
+          : [];
         const combinedMemo = [String(info.memo || "").trim(), ...taskMemos].filter(Boolean).join(" / ");
         if (combinedMemo) lines.push(`⚠️ 특이사항 / 주차: ${combinedMemo}`);
         if (customNotice) {
           lines.push(`━━━━━━━━━━━━━━━━━━`);
           lines.push(`📌 작업 지시사항:\n${customNotice}`);
         }
-        if (scopeMode === "all") {
+        if (!isTaskScope) {
           const activeList = relevantTasks.filter((t) => !isTaskCompleted(t)).slice(0, 8);
           if (activeList.length) {
             lines.push(`━━━━━━━━━━━━━━━━━━`);
@@ -24071,6 +24074,7 @@ end $$;`;
         const tasksRaw = (site && Array.isArray(site.tasks)) ? site.tasks : [];
         const scopeMode = shareCfg.scopeMode === "task" ? "task" : "all";
         const targetTaskName = String(shareCfg.targetTaskName || "").trim();
+        const isTaskScope = scopeMode === "task" && Boolean(targetTaskName);
 
         const allNormalizedTasks = tasksRaw
           .map((t) => {
@@ -24088,14 +24092,14 @@ end $$;`;
               date: d,
               endDate: ed && ed !== d ? ed : "",
               dateDisplay: String(t.dateDisplay || ""),
-              partner: String(t.partner || ""),
+              partner: isTaskScope ? String(t.partner || "") : "",
               manager: String(t.manager || ""),
-              memo: memoParts.filter(Boolean).join(" · ")
+              memo: isTaskScope ? memoParts.filter(Boolean).join(" · ") : ""
             };
           })
           .sort((a, b) => String(a.date || "9999-99-99").localeCompare(String(b.date || "9999-99-99")));
 
-        const filteredTasks = (scopeMode === "task" && targetTaskName)
+        const filteredTasks = isTaskScope
           ? allNormalizedTasks.filter((t) => String(t.taskName || "").trim() === targetTaskName)
           : allNormalizedTasks;
 
@@ -24235,7 +24239,7 @@ end $$;`;
                       ${taskOptsHtml}
                     </select>
                   </div>
-                ` : `<div style="font-size:11.5px;color:#64748b;">이 현장의 전체 공정 일정과 월간 캘린더를 반장님께 공유합니다.</div>`}
+                ` : `<div style="font-size:11.5px;color:#64748b;">이 현장의 전체 공정 일정과 월간 캘린더를 반장님께 공유합니다. (공종·날짜·상태만 표시 / 협력업체·비고 비노출)</div>`}
               </div>
 
               <div class="fg" style="margin:0;">
@@ -26425,7 +26429,7 @@ end $$;`;
 
       // ================= 변경이력(Audit Log) 공통 저장·병합·UI 헬퍼 =================
       const AUDIT_STORAGE_KEY = "ws_audit_logs_v1";
-      const AUDIT_MAX_LOGS = 300;
+      const AUDIT_MAX_LOGS = 500;
       const AUDIT_DOMAIN_CHIPS = [
         ["all", "전체"],
         ["신규견적", "신규견적"],
@@ -27047,7 +27051,7 @@ end $$;`;
         return raw.filter((item) => item && typeof item === "object");
       }
 
-      function mergeAuditLogLists(localList, remoteList, maxCount) {
+      function mergeAuditLogLists(localList, remoteList, maxCount = AUDIT_MAX_LOGS) {
         const limit = Number(maxCount) > 0 ? Number(maxCount) : AUDIT_MAX_LOGS;
         const byKey = new Map();
         const ingest = (arr) => {
@@ -27208,7 +27212,7 @@ end $$;`;
             ? `⚡ Supabase 다중 기기 병합 완료 (${state.auditLastSyncedAt})`
             : "⚡ Supabase 실시간 연동";
         }
-        return "💾 로컬 저장소 모드 (최대 300건)";
+        return "💾 로컬 저장소 모드 (최대 500건)";
       }
 
       function buildAuditSummaryBarHtml(allLogs, filteredLogs, shownCount) {
@@ -27355,6 +27359,7 @@ end $$;`;
         updateAuditSyncIndicators();
       }
 
+      window.AUDIT_MAX_LOGS = AUDIT_MAX_LOGS;
       window.AUDIT_FIELD_SPECS = AUDIT_FIELD_SPECS;
       window.computeAuditDiff = computeAuditDiff;
       window.buildAuditDiffDetail = buildAuditDiffDetail;

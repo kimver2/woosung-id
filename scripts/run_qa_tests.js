@@ -2604,11 +2604,12 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     indexShareVm.copyPartnerShareGuideText();
     const copiedGuideAll = copiedTexts[copiedTexts.length - 1] || '';
 
-    assertTest('반장 공유 전체 일정 모달/페이로드 금액 완전 제외 및 직접 입력·안내문 복사 검증',
+    assertTest('반장 공유 전체 일정 모달/페이로드 금액·협력업체·비고 완전 제외 및 직접 입력·안내문 복사 검증',
       Boolean(payloadAll) &&
       payloadAll.shareType === 'partner' &&
       payloadAll.scopeMode === 'all' &&
       payloadAll.tasks.length === 3 &&
+      payloadAll.tasks.every((t) => t.partner === '' && t.memo === '') &&
       payloadAll.noticeText === '오전 9시 이전 소음 작업 금지' &&
       !initialBodyHtml.includes('수금') &&
       !initialBodyHtml.includes('계약금액') &&
@@ -2618,6 +2619,12 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       !payloadAllStr.includes('28000000') &&
       !payloadAllStr.includes('770000') &&
       !payloadAllStr.includes('420000') &&
+      !payloadAllStr.includes('철거_이수현 반장') &&
+      !payloadAllStr.includes('전기_최성필 반장') &&
+      !payloadAllStr.includes('목공_박동연 반장') &&
+      !payloadAllStr.includes('철거 폐기물 반출') &&
+      !payloadAllStr.includes('분전반 확인') &&
+      !payloadAllStr.includes('천장 평탄화') &&
       !Object.prototype.hasOwnProperty.call(payloadAll, 'payment') &&
       !Object.prototype.hasOwnProperty.call(payloadAll, 'showPayment') &&
       copiedGuideAll.includes('신대방우성 16동 902호') &&
@@ -2626,6 +2633,9 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       copiedGuideAll.includes('02-812-0000') &&
       copiedGuideAll.includes('사다리차 금지') &&
       copiedGuideAll.includes('오전 9시 이전 소음 작업 금지') &&
+      !copiedGuideAll.includes('철거 폐기물 반출') &&
+      !copiedGuideAll.includes('분전반 확인') &&
+      !copiedGuideAll.includes('천장 평탄화') &&
       Boolean(wsStateStore['dashboard_main'] && wsStateStore['dashboard_main'].siteInfoMap['신대방우성 16동 902호'].partnerShare)
     );
 
@@ -2637,7 +2647,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     const payloadTask = wsStateStore['partner_share::' + tok1];
     const urlTask = indexShareVm.getPartnerShareUrl(tok1);
 
-    assertTest('반장 공유 일정 범위 토글(해당 공종만) 드롭다운 노출 및 해당 공종 필터링 검증',
+    assertTest('반장 공유 일정 범위 토글(해당 공종만) 드롭다운 노출 및 해당 공종 필터링·비고/업체 유지 검증',
       taskModeBodyHtml.includes('id="psTargetTaskSelect"') &&
       taskModeBodyHtml.includes('<option value="전기"') &&
       urlTask.includes('client.html?mode=partner&token=' + encodeURIComponent(tok1)) &&
@@ -2645,6 +2655,8 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       payloadTask.targetTaskName === '전기' &&
       payloadTask.tasks.length === 1 &&
       payloadTask.tasks[0].taskName === '전기' &&
+      payloadTask.tasks[0].partner === '전기_최성필 반장' &&
+      payloadTask.tasks[0].memo.includes('분전반 확인') &&
       payloadTask.totalTasksCount === 1 &&
       payloadTask.completedTasksCount === 0 &&
       payloadTask.guideText.includes('■ 공종: 전기') &&
@@ -2723,6 +2735,26 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       const partnerRes = await runClientPage('?mode=partner&token=' + encodeURIComponent(tok2));
       await partnerRes.cVm.copyPartnerGuideText();
       const pHtml = partnerRes.cDom.clientShareRoot.innerHTML;
+      partnerRes.cVm.selectClientCalDay('2026-11-18');
+      const pCalDetailHtml = partnerRes.cDom.clientShareRoot.innerHTML;
+
+      // 전체 일정(scopeMode === 'all') 검증: 기존 스냅샷에 partner/memo가 남아 있더라도 남은 작업·완료된 작업·날짜 상세·복사 모두에서 완전 비노출 + 공종/날짜/상태만 노출
+      wsStateStore['partner_share::legacy_all'] = Object.assign({}, JSON.parse(JSON.stringify(payloadAll)), {
+        guideText: '[우성아이디 현장 작업 안내]\n⚠️ 특이사항 / 주차: 사다리차 금지 / 비밀단가 550만원 010-7777-8888',
+        tasks: [
+          { taskName: '철거', status: '완료', date: '2026-11-10', endDate: '', partner: '철거_이수현 반장', memo: '완료단가 200만원 010-1234-5678' },
+          { taskName: '전기', status: '진행', date: '2026-11-18', endDate: '2026-11-19', partner: '전기_최성필 반장', memo: '배선단가 330만원 010-5555-6666' },
+          { taskName: '목공', status: '예정', date: '2026-11-22', endDate: '2026-11-23', partner: '목공_박동연 반장', memo: '목공단가 440만원 010-8888-9999' }
+        ]
+      });
+      const partnerAllRes = await runClientPage('?mode=partner&token=legacy_all');
+      const pAllRemainHtml = partnerAllRes.cDom.clientShareRoot.innerHTML;
+      partnerAllRes.cVm.togglePartnerDoneTasks();
+      const pAllWithDoneHtml = partnerAllRes.cDom.clientShareRoot.innerHTML;
+      partnerAllRes.cVm.selectClientCalDay('2026-11-18');
+      const pAllCalHtml = partnerAllRes.cDom.clientShareRoot.innerHTML;
+      await partnerAllRes.cVm.copyPartnerGuideText();
+      const pAllCopiedGuide = partnerAllRes.pageCopied[0] || '';
 
       // 고객 모드(?token=tok2)로 반장 토큰 접근 시 격리 거부 검증 + 정상 고객 공유 무결성 비회귀 검증
       wsStateStore['client_share::leak_test'] = JSON.parse(JSON.stringify(wsStateStore['partner_share::' + tok2]));
@@ -2745,10 +2777,15 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       };
       const clientOkRes = await runClientPage('?token=cust_ok');
 
-      assertTest('client.html?mode=partner 런타임 렌더링(공종 필터, 상단 지시사항, 비번/안내문 복사, 금액 완전 제외 및 고객모드 격리·비회귀) 검증',
+      assertTest('client.html?mode=partner 런타임 렌더링(공종 필터·전체일정 비고/업체 완전 차단·날짜상세/완료목록 차단·안내문 복사·금액 제외·고객모드 격리) 검증',
         partnerRes.fetchedKeys[0] === ('partner_share::' + tok2) &&
         partnerRes.cDom.shareBrandSub.textContent.includes('반장님') &&
         pHtml.includes('전기 공종만 표시') &&
+        pHtml.includes('전기_최성필 반장') &&
+        pHtml.includes('분전반 확인') &&
+        pCalDetailHtml.includes('2026-11-18 일정') &&
+        pCalDetailHtml.includes('전기_최성필 반장') &&
+        pCalDetailHtml.includes('분전반 확인') &&
         pHtml.includes('오전 9시 이전 소음 작업 금지') &&
         pHtml.includes('공동 #*1212종 / 세대 608436') &&
         pHtml.includes('copyPartnerGuideText()') &&
@@ -2759,6 +2796,29 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
         !pHtml.includes('총 계약금액') &&
         partnerRes.pageCopied.length === 1 &&
         partnerRes.pageCopied[0].includes('공동 #*1212종 / 세대 608436') &&
+        pAllRemainHtml.includes('전체 공정 일정 공유') &&
+        pAllRemainHtml.includes('전기') &&
+        pAllRemainHtml.includes('목공') &&
+        pAllRemainHtml.includes('2026-11-18 ~ 2026-11-19') &&
+        pAllRemainHtml.includes('진행 중') &&
+        pAllRemainHtml.includes('예정') &&
+        pAllWithDoneHtml.includes('철거') &&
+        pAllWithDoneHtml.includes('2026-11-10') &&
+        pAllWithDoneHtml.includes('✅ 완료') &&
+        pAllCalHtml.includes('2026-11-18 일정') &&
+        !pAllCalHtml.includes('철거_이수현 반장') &&
+        !pAllCalHtml.includes('전기_최성필 반장') &&
+        !pAllCalHtml.includes('목공_박동연 반장') &&
+        !pAllCalHtml.includes('완료단가') &&
+        !pAllCalHtml.includes('배선단가') &&
+        !pAllCalHtml.includes('목공단가') &&
+        !pAllCalHtml.includes('010-1234-5678') &&
+        !pAllCalHtml.includes('010-5555-6666') &&
+        !pAllCalHtml.includes('010-8888-9999') &&
+        !pAllCalHtml.includes('task-memo') &&
+        !pAllCopiedGuide.includes('비밀단가') &&
+        !pAllCopiedGuide.includes('010-7777-8888') &&
+        pAllCopiedGuide.includes('사다리차 금지') &&
         clientRejectRes.fetchedKeys[0] === 'client_share::leak_test' &&
         clientRejectRes.cDom.clientShareRoot.innerHTML.includes('유효하지 않은 고객 공유 링크입니다') &&
         clientOkRes.fetchedKeys[0] === 'client_share::cust_ok' &&
@@ -3482,7 +3542,20 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     const searchCompactHits = auditVm.filterAuditLogsList(mixedLogs, '재무', '48000000');
     const searchAfterHits = auditVm.filterAuditLogsList(mixedLogs, '공정', '번개전기');
 
-    assertTest('📜 변경 이력 UI 타임라인 Diff 칩 렌더링, 구버전 로그 호환 및 변경 전/후 키워드 검색 검증',
+    const bulkAuditSamples = Array.from({ length: 550 }, (_, i) => ({
+      id: `AUD_BULK_${String(i).padStart(4, '0')}`,
+      at: new Date(Date.UTC(2026, 10, 1, 0, 0, i)).toISOString(),
+      user: '조항만',
+      domain: '공정',
+      action: '수정',
+      target: `테스트_${i}`,
+      detail: `상세_${i}`
+    }));
+    const mergedMaxDefault = auditVm.mergeAuditLogLists(bulkAuditSamples.slice(0, 275), bulkAuditSamples.slice(275));
+    const localSyncStatusText = auditVm.getAuditSyncStatusText();
+    const summaryBarHtml = auditVm.buildAuditSummaryBarHtml(mergedMaxDefault, mergedMaxDefault, 100);
+
+    assertTest('📜 변경 이력 UI 타임라인 Diff 칩 렌더링, 구버전 로그 호환, 키워드 검색 및 500건 보관 상한 검증',
       timelineHtml.includes('45,000,000원') &&
       timelineHtml.includes('48,000,000원') &&
       timelineHtml.includes('→') &&
@@ -3491,7 +3564,13 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       !timelineHtml.includes('<script>alert(1)') &&
       searchBeforeHits.some((l) => l.id === colEditLog.id) &&
       searchCompactHits.some((l) => l.id === colEditLog.id) &&
-      searchAfterHits.some((l) => l.id === taskEditLog.id)
+      searchAfterHits.some((l) => l.id === taskEditLog.id) &&
+      auditVm.AUDIT_MAX_LOGS === 500 &&
+      mergedMaxDefault.length === 500 &&
+      mergedMaxDefault[0].id === 'AUD_BULK_0549' &&
+      mergedMaxDefault[499].id === 'AUD_BULK_0050' &&
+      localSyncStatusText.includes('500건') &&
+      summaryBarHtml.includes('최대 500건 병합 보관')
     );
   })());
 
@@ -4706,7 +4785,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
           querySelectorAll: () => []
         },
         SUPABASE_V3_DEFAULT_CONFIG: { url: 'https://mock.supabase.local', anonKey: 'mock_anon_key_123456', engineMode: 'supabase', dualWrite: false },
-        AUDIT_MAX_LOGS: 300,
+        AUDIT_MAX_LOGS: 500,
         getLocalAuditLogs: () => [],
         saveLocalAuditLogs: () => {},
         mergeAuditLogLists: (a, b) => [...(a || []), ...(b || [])],
