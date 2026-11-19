@@ -2644,6 +2644,9 @@
       color: #64748b;
       margin-top: 3px;
       font-weight: 600;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+      word-break: keep-all;
     }
     .ws-gantt-day-cell { position: relative; min-height: 52px; }
     .ws-gantt-cell-add {
@@ -2688,7 +2691,7 @@
     .ws-gantt-bar.demo { background: #f1f5f9; color: #334155; border-color: #cbd5e1; }
     .ws-gantt-bar.etc { background: #f8fafc; color: #1e293b; border-color: #cbd5e1; }
     .ws-gantt-bar.is-done { opacity: 0.6; }
-    .ws-gantt-bar.is-done .ws-gantt-bar-title { text-decoration: line-through; }
+    .ws-gantt-bar.is-done .ws-gantt-bar-title-text { text-decoration: line-through; }
     .ws-gantt-bar.is-delayed { border-left: 3px solid #dc2626; }
     .ws-gantt-bar.conflict {
       outline: 2px solid #dc2626;
@@ -2708,6 +2711,30 @@
       border-radius: 4px;
       width: fit-content;
       line-height: 1.25;
+    }
+    .ws-gantt-scope-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 1px 5px;
+      border-radius: 999px;
+      line-height: 1.2;
+      white-space: nowrap;
+      vertical-align: middle;
+      margin-right: 4px;
+      flex-shrink: 0;
+    }
+    .ws-gantt-scope-badge.single {
+      background: #ede9fe;
+      color: #5b21b6;
+      border: 1px solid #a78bfa;
+    }
+    .ws-gantt-scope-badge.as {
+      background: #fef3c7;
+      color: #b45309;
+      border: 1px solid #fbbf24;
     }
     .ws-gantt-bar-title { font-weight: 800; line-height: 1.25; word-break: keep-all; }
     .ws-gantt-bar-partner { font-size: 10px; font-weight: 600; opacity: 0.88; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2897,7 +2924,25 @@
     .mobile-screen-inner .ws-gantt-table th,
     .mobile-screen-inner .ws-gantt-table td { min-width: 84px; padding: 5px 4px; }
     .mobile-screen-inner .ws-gantt-table th.site-col,
-    .mobile-screen-inner .ws-gantt-table td.site-col { width: 126px; min-width: 126px; max-width: 132px; }
+    .mobile-screen-inner .ws-gantt-table td.site-col {
+      width: 132px;
+      min-width: 132px;
+      max-width: 138px;
+      padding: 6px 8px 6px 7px;
+      box-sizing: border-box;
+    }
+    .mobile-screen-inner .ws-gantt-site-name {
+      font-size: 11.5px;
+      gap: 4px;
+      flex-wrap: wrap;
+      overflow-wrap: anywhere;
+    }
+    .mobile-screen-inner .ws-gantt-site-meta {
+      font-size: 10px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+      word-break: keep-all;
+    }
     .mobile-screen-inner .ws-gantt-cell-add { opacity: 0.7; }
     .mobile-screen-inner .ws-as-header-card { padding: 11px; }
     .mobile-screen-inner .ws-as-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -4735,33 +4780,36 @@ end $$;`;
         return { label: "미지정", key: "미지정", colorClass: "muted", isExplicit: false, isInferred: false, source: "none" };
       }
 
-      /** 기준 날짜가 속한 월~일 주간 정보 및 주차를 반환합니다. */
-      function getGanttWeekInfo(anchorYmd) {
+      /** 기준 날짜 기준 주간 정보(PC: 월~일, 모바일 startFromAnchor: 기준일~+6일) 및 주차를 반환합니다. */
+      function getGanttWeekInfo(anchorYmd, options) {
+        const opts = options || {};
+        const startFromAnchor = Boolean(opts.startFromAnchor || opts.isMobile);
         const baseYmd = (anchorYmd && /^\d{4}-\d{2}-\d{2}$/.test(anchorYmd)) ? anchorYmd : getTodayYmd();
         const d = new Date(baseYmd + "T00:00:00");
         const dow = d.getDay();
         const diffToMon = dow === 0 ? -6 : 1 - dow;
-        const weekStartYmd = addDaysYmd(baseYmd, diffToMon);
-        const dowKoList = ["월", "화", "수", "목", "금", "토", "일"];
+        const weekStartYmd = startFromAnchor ? baseYmd : addDaysYmd(baseYmd, diffToMon);
+        const dowKoByJsDay = ["일", "월", "화", "수", "목", "금", "토"];
         const days = [];
         for (let i = 0; i < 7; i++) {
           const ymd = addDaysYmd(weekStartYmd, i);
           const dd = new Date(ymd + "T00:00:00");
+          const jsDow = dd.getDay();
           days.push({
             ymd,
             month: dd.getMonth() + 1,
             day: dd.getDate(),
-            dowIdx: i,
-            dowKo: dowKoList[i],
-            isSun: i === 6,
-            isSat: i === 5,
+            dowIdx: jsDow === 0 ? 6 : jsDow - 1,
+            dowKo: dowKoByJsDay[jsDow],
+            isSun: jsDow === 0,
+            isSat: jsDow === 6,
             shortLabel: ymd.slice(5).replace("-", "."),
             slashLabel: (dd.getMonth() + 1) + "/" + dd.getDate()
           });
         }
-        const thu = new Date(days[3].ymd + "T00:00:00");
-        const weekNum = Math.ceil(thu.getDate() / 7);
-        const weekLabel = `${thu.getFullYear()}년 ${thu.getMonth() + 1}월 ${weekNum}주차 (${days[0].shortLabel} ~ ${days[6].shortLabel})`;
+        const refDate = new Date((startFromAnchor ? days[0].ymd : days[3].ymd) + "T00:00:00");
+        const weekNum = Math.ceil(refDate.getDate() / 7);
+        const weekLabel = `${refDate.getFullYear()}년 ${refDate.getMonth() + 1}월 ${weekNum}주차 (${days[0].shortLabel} ~ ${days[6].shortLabel})`;
         return {
           weekStartYmd,
           weekEndYmd: days[6].ymd,
@@ -4797,7 +4845,8 @@ end $$;`;
         const sourceEvents = Array.isArray(events)
           ? events
           : getFilteredCalendarTasks({ includeAllScopes: true });
-        const weekInfo = getGanttWeekInfo(opts.anchorYmd || state.selectedDayStr || getTodayYmd());
+        const startFromAnchor = Boolean(opts.startFromAnchor || opts.isMobile);
+        const weekInfo = getGanttWeekInfo(opts.anchorYmd || state.selectedDayStr || getTodayYmd(), { startFromAnchor });
         const weekStart = weekInfo.weekStartYmd;
         const weekEnd = weekInfo.weekEndYmd;
         const tradeFilter = opts.tradeFilter !== undefined ? opts.tradeFilter : (state.ganttTradeFilter || "all");
@@ -4904,6 +4953,7 @@ end $$;`;
 
           const totalSpanDays = Math.max(1, diffDaysYmd(startYmd, endYmd) + 1);
           const tid = task.id || task.taskId || (site.siteKey + "::" + tName);
+          const effScope = site.scope || (/^\[단건\]/i.test(site.siteName || "") ? "single" : /^\[AS\]/i.test(site.siteName || "") ? "as" : "site");
           let cur = startYmd < weekStart ? weekStart : startYmd;
           const limitEnd = endYmd > weekEnd ? weekEnd : endYmd;
           let guard = 0;
@@ -4916,6 +4966,7 @@ end $$;`;
                 weekInfo.days.forEach((d) => { cellsByDay[d.ymd] = []; });
                 siteMap.set(site.siteKey, {
                   site,
+                  effScope,
                   managersLabel: getUniqueSiteManagers(site.tasks).slice(0, 2).join(", ") || "미지정",
                   cellsByDay,
                   totalBars: 0,
@@ -4929,6 +4980,8 @@ end $$;`;
                 site,
                 task,
                 tid,
+                scope: effScope,
+                effScope,
                 ymd: cur,
                 dayIdx,
                 totalSpanDays,
@@ -4971,7 +5024,10 @@ end $$;`;
         const ganttEvents = Array.isArray(events)
           ? events
           : getFilteredCalendarTasks({ includeAllScopes: true });
-        const model = computeWeeklyGanttModel(ganttEvents);
+        const model = computeWeeklyGanttModel(ganttEvents, {
+          isMobile: Boolean(isMobile),
+          startFromAnchor: Boolean(isMobile)
+        });
         const todayYmd = getTodayYmd();
         const tradeVal = state.ganttTradeFilter || "all";
         const partnerVal = state.ganttPartnerFilter || "all";
@@ -5011,6 +5067,7 @@ end $$;`;
 
         const rowsHtml = model.siteRows.map((row) => {
           const s = row.site;
+          const effScope = row.effScope || s.scope || (/^\[단건\]/i.test(s.siteName) ? "single" : /^\[AS\]/i.test(s.siteName) ? "as" : "site");
           const doneCnt = s.completedTasksCount || 0;
           const totalCnt = s.totalTasksCount || (s.tasks ? s.tasks.length : 0);
           const siteClick = isMobile ? `openSiteDetailMobile('${escJs(s.siteKey)}')` : `openSiteDetail('${escJs(s.siteKey)}')`;
@@ -5025,13 +5082,19 @@ end $$;`;
               const spanBadge = b.totalSpanDays > 1 ? ` · ${b.dayIdx}/${b.totalSpanDays}일차` : "";
               const barTitle = `${t.taskName}${spanBadge}`;
               const conflictTitle = b.conflictInfo ? `동시 배정 현장: ${b.conflictInfo.otherSites.join(", ")}` : "";
+              const barScope = b.effScope || b.scope || effScope;
+              const scopeBadgeHtml = barScope === "single"
+                ? `<span class="ws-gantt-scope-badge single">단건</span>`
+                : barScope === "as"
+                  ? `<span class="ws-gantt-scope-badge as">AS</span>`
+                  : "";
               return `
                 <div class="ws-gantt-bar ${tradeCls} ${b.conflictInfo ? "conflict" : ""} ${isDone ? "is-done" : ""} ${isDel ? "is-delayed" : ""}"
                      title="${escHtml(conflictTitle || `[${s.siteName}] ${t.taskName} (${t.partner || "업체 미지정"})`)}"
                      onclick="event.stopPropagation(); openTaskEditModal('${escJs(b.tid)}')">
                   ${b.conflictInfo ? `<span class="ws-gantt-conflict-tag">겹침 · ${escHtml(b.conflictInfo.partnerName)}</span>` : ""}
                   <div class="ws-gantt-bar-title">
-                    ${isDel ? "⚠️ " : isDone ? "✓ " : ""}${timeStr ? `<span style="font-size:9.5px;opacity:0.85;">[${escHtml(timeStr)}]</span> ` : ""}${escHtml(barTitle)}
+                    ${scopeBadgeHtml}<span class="ws-gantt-bar-title-text">${isDel ? "⚠️ " : isDone ? "✓ " : ""}${timeStr ? `<span style="font-size:9.5px;opacity:0.85;">[${escHtml(timeStr)}]</span> ` : ""}${escHtml(barTitle)}</span>
                   </div>
                   <div class="ws-gantt-bar-partner">${escHtml(b.partnerDisplay || "업체 미지정")}${isDel ? " · 지연" : ""}</div>
                 </div>`;
@@ -5045,7 +5108,6 @@ end $$;`;
               </td>`;
           }).join("");
 
-          const effScope = s.scope || (/^\[단건\]/i.test(s.siteName) ? "single" : /^\[AS\]/i.test(s.siteName) ? "as" : "site");
           const cleanSiteName = String(s.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "");
           return `
             <tr>
