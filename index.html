@@ -277,7 +277,7 @@
       background: #ffffff;
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 7px 9px;
+      padding: 7px 8px;
       margin-bottom: 8px;
       display: flex;
       flex-direction: column;
@@ -288,7 +288,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 6px;
+      gap: 4px;
       min-width: 0;
     }
     .m-cal-row-secondary {
@@ -299,6 +299,12 @@
       min-width: 0;
       padding-top: 5px;
       border-top: 1px solid #f1f5f9;
+    }
+    .m-cal-row-secondary-right {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
     }
     .m-pill-chip {
       background: #f8fafc; border: 1px solid #cbd5e1; color: #1e293b; padding: 0 8px;
@@ -328,7 +334,7 @@
       border: 1px solid #cbd5e1;
       background: #ffffff;
       border-radius: 6px;
-      width: 26px;
+      width: 24px;
       height: 28px;
       font-size: 11px;
       font-weight: 700;
@@ -338,6 +344,8 @@
       align-items: center;
       justify-content: center;
       padding: 0;
+      white-space: nowrap;
+      flex-shrink: 0;
       transition: all 0.15s;
     }
     .m-cal-nav-btn:hover {
@@ -346,12 +354,14 @@
     }
     .m-cal-nav-btn.m-cal-today-btn {
       width: auto;
-      padding: 0 8px;
+      padding: 0 7px;
       background: #eff6ff;
       color: #1d4ed8;
       border-color: #bfdbfe;
       font-weight: 800;
       margin-left: 1px;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     .m-cal-nav-btn.m-cal-today-btn:hover {
       background: #dbeafe;
@@ -365,18 +375,25 @@
       height: 28px;
       box-sizing: border-box;
       align-items: center;
-      gap: 2px;
+      gap: 1px;
+      flex-shrink: 0;
     }
     .m-cal-view-btn {
       border: none;
       background: transparent;
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 700;
-      padding: 0 7px;
+      padding: 0 5.5px;
       height: 22px;
       border-radius: 5px;
       color: #64748b;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      flex-shrink: 0;
+      letter-spacing: -0.2px;
       transition: all 0.15s;
     }
     .m-cal-view-btn.active {
@@ -400,6 +417,7 @@
       cursor: pointer;
       box-shadow: 0 1px 2px rgba(0,0,0,0.03);
       white-space: nowrap;
+      flex-shrink: 0;
       transition: all 0.15s;
     }
     .btn-m-cal-capture:hover {
@@ -2228,6 +2246,56 @@
       .btn-subtab-chip {
         white-space: nowrap;
         flex-shrink: 0;
+      }
+      .m-cal-top-card {
+        padding: 7px 8px;
+      }
+      .m-cal-row-primary {
+        gap: 4px;
+      }
+      .m-cal-nav-btn {
+        width: 24px;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .m-cal-nav-btn.m-cal-today-btn {
+        width: auto;
+        padding: 0 7px;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .m-cal-view-switch {
+        flex-shrink: 0;
+        gap: 1px;
+      }
+      .m-cal-view-btn {
+        padding: 0 5.5px;
+        font-size: 10.5px;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .m-cal-row-secondary-right {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+      .btn-m-cal-capture {
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+    }
+    @media (max-width: 374px) {
+      .m-cal-nav-btn {
+        width: 21px;
+      }
+      .m-cal-nav-btn.m-cal-today-btn {
+        padding: 0 5px;
+        font-size: 10.5px;
+      }
+      .m-cal-view-btn {
+        padding: 0 4px;
+        font-size: 10px;
       }
     }
 
@@ -17254,11 +17322,11 @@ end $$;`;
           <!-- 캘린더 전용 캡쳐 영역 (월간/주간 헤더 + 달력 그리드만 포함) -->
           <div id="mCalCaptureArea" class="m-cal-capture-area">
             <div class="m-cal-top-card">
-              <!-- 1단: 좌측 날짜 탐색(◀ YYYY년 M월 ▶ 오늘) / 우측 뷰 전환(월간|주간) + 📸 캡쳐 -->
+              <!-- 1단: 좌측 날짜 탐색(◀ YYYY년 M월 ▶ 오늘) / 우측 뷰 전환(월간|주간|타임라인) -->
               <div class="m-cal-row-primary">
-                <div style="display:flex;align-items:center;gap:3px;min-width:0;flex-shrink:1;">
+                <div style="display:flex;align-items:center;gap:2px;min-width:0;flex-shrink:0;">
                   <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(-1)" title="이전 달">◀</button>
-                  <span id="mCalMonthTitle" style="font-size:13.5px;font-weight:900;color:var(--text);letter-spacing:-0.2px;white-space:nowrap;padding:0 2px;">${year}년 ${month}월</span>
+                  <span id="mCalMonthTitle" style="font-size:13px;font-weight:900;color:var(--text);letter-spacing:-0.3px;white-space:nowrap;flex-shrink:0;padding:0 2px;">${year}년 ${month}월</span>
                   <button type="button" class="m-cal-nav-btn" onclick="moveCalendarMonth(1)" title="다음 달">▶</button>
                   <button type="button" class="m-cal-nav-btn m-cal-today-btn" onclick="resetCalendarToday()" title="오늘로 이동">오늘</button>
                 </div>
@@ -17268,11 +17336,10 @@ end $$;`;
                     <button type="button" class="m-cal-view-btn ${state.mobileCalMode === "week" ? "active" : ""}" onclick="setMobileCalMode('week')">주간</button>
                     <button type="button" class="m-cal-view-btn ${state.mobileCalMode === "gantt" ? "active" : ""}" onclick="setMobileCalMode('gantt')">📊 타임라인</button>
                   </div>
-                  <button type="button" class="btn-m-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐">📸 캡쳐</button>
                 </div>
               </div>
 
-              <!-- 2단: 좌측 [현장] 스코프 칩 + [전체 현장 ▾] 드롭다운 / 우측 단 1회 요약 뱃지(169건) -->
+              <!-- 2단: 좌측 [현장] 스코프 칩 + [전체 현장 ▾] 드롭다운 / 우측 요약 뱃지(169건) + 📸 캡쳐 -->
               <div class="m-cal-row-secondary">
                 <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;">
                   ${filterChips.join("")}
@@ -17281,9 +17348,12 @@ end $$;`;
                   </button>
                   ${hasSubsetSites ? `<button type="button" class="m-site-filter-clear-btn" onclick="resetAndApplyAllSitesFilter()" title="전체 현장 보기로 초기화">✕</button>` : ""}
                 </div>
-                <span class="m-cal-count-badge">
-                  ${events.length}건
-                </span>
+                <div class="m-cal-row-secondary-right">
+                  <span class="m-cal-count-badge">
+                    ${events.length}건
+                  </span>
+                  <button type="button" class="btn-m-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐">📸 캡쳐</button>
+                </div>
               </div>
             </div>
             ${calContentHtml}
