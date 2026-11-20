@@ -6716,6 +6716,511 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     );
   })());
 
+  // ========================================================
+  // [Supabase dashboard_main 유실 방지 3중 보완 런타임 QA]
+  // 1) 저장 전 원격 병합(Read-Modify-Write) + 직렬화 + Tombstone/메타 정합성
+  // 2) 초기 로드 시 ws_sites/ws_tasks 교차 복구 보험 (삭제 유령 차단)
+  // 3) visibilitychange / window.focus 자동 최신화 가드 및 쿨다운 디바운스
+  // ========================================================
+  pendingAsyncTests.push((async () => {
+    const extractBlock = (startMarker, endMarker) => {
+      const s = idxRootHtml.indexOf(startMarker);
+      const e = idxRootHtml.indexOf(endMarker, s > -1 ? s : 0);
+      if (s === -1 || e <= s) throw new Error(`Supabase Merge QA missing marker: ${startMarker} .. ${endMarker}`);
+      return idxRootHtml.slice(s, e);
+    };
+
+    const snapCode = fs.readFileSync(path.join(__dirname, '..', 'data', 'dashboard_data.js'), 'utf8');
+    const coreBlock = extractBlock('function escHtml(str)', '// ================= 공유 사이드바 =================');
+    const resolvedPartnerBlock = extractBlock('function getResolvedSheetPartner(ctx)', 'function registerOptimisticCustomPartner(');
+    const saveTaskBlock = extractBlock('window.saveTaskSheetModal = function ()', '// ================= 모달 2: 삭제 확인 모달 =================');
+    const tombstoneAndDeleteBlock = extractBlock('const __WS_TOMBSTONE_TTL_MS =', '// ================= 모달 3 & 착공 필수 체크박스 =================');
+    const siteInfoModalBlock = extractBlock('window.togglePreChecklist = function (siteName, field)', '// ================= 모달 4: 현장 파일 업로드 모달 =================');
+    const mergeShareBlock = extractBlock('function mergePreservedShareConfigs(targetDash, prevDash)', 'function buildPartnerShareGuideText(');
+    const supabaseBlock = extractBlock('// ================= [v3 Supabase 하이브리드 엔진 & 실시간 동기화] =================', 'window.openSupabaseSetupModal = function ()');
+
+    const baseTs = Date.now() - 120000;
+    const makeInitialDash = () => ({
+      kpi: { totalSites: 2, activeSites: 2, totalTasks: 3, todayCount: 0, delayedCount: 0 },
+      scopeCounts: { site: 2, single: 0, as: 0, newSite: 0 },
+      siteSuperintendents: [{ name: '차정률', role: '현장소장', phone: '010-8734-8586' }],
+      sites: [
+        {
+          siteKey: '유지 현장',
+          siteName: '유지 현장',
+          scope: 'site',
+          colorCode: '1',
+          colorHex: '#2563eb',
+          createdAtMs: baseTs,
+          tasks: [
+            {
+              id: 't_b_edit', taskId: 't_b_edit', taskName: '전기',
+              startDateStr: '2026-11-20', endDateStr: '2026-11-20', dateDisplay: '2026-11-20',
+              manager: '송지은', partner: '전기_유지', status: '예정', scope: 'site', sheetName: '현장데이터', createdAtMs: baseTs
+            },
+            {
+              id: 't_a_edit', taskId: 't_a_edit', taskName: '도배',
+              startDateStr: '2026-11-21', endDateStr: '2026-11-21', dateDisplay: '2026-11-21',
+              manager: '조항만', partner: '도배_기존', status: '예정', scope: 'site', sheetName: '현장데이터', createdAtMs: baseTs
+            }
+          ]
+        },
+        {
+          siteKey: '삭제예정현장',
+          siteName: '삭제예정현장',
+          scope: 'site',
+          colorCode: '1',
+          colorHex: '#2563eb',
+          createdAtMs: baseTs,
+          tasks: [
+            {
+              id: 't_del_site', taskId: 't_del_site', taskName: '철거',
+              startDateStr: '2026-11-19', endDateStr: '2026-11-19', dateDisplay: '2026-11-19',
+              manager: '조항만', partner: '', status: '예정', scope: 'site', sheetName: '현장데이터', createdAtMs: baseTs
+            }
+          ]
+        }
+      ],
+      siteInfoMap: {
+        '유지 현장': { address: '서울 서초구', doorPassword: '0000*', officePhone: '02-111-2222', memo: '', driveUrl: '' },
+        '삭제예정현장': { address: '서울 마포구', doorPassword: '1111*' }
+      }
+    });
+
+    const mockDb = {
+      ws_state_store: new Map([
+        ['dashboard_main', { key: 'dashboard_main', payload: Object.assign(makeInitialDash(), { _updatedMs: baseTs, _clientMutId: 'seed_mut_0' }), updated_at: '2026-11-20T00:00:00Z', updated_by: 'seed' }]
+      ]),
+      ws_sites: new Map(),
+      ws_tasks: new Map(),
+      ws_finance_store: new Map()
+    };
+    const tablePkCol = { ws_state_store: 'key', ws_sites: 'site_name', ws_tasks: 'id', ws_finance_store: 'record_key' };
+    const fetchLog = [];
+
+    const parseInValues = (raw) => {
+      const m = String(raw || '').match(/^in\.\((.*)\)$/);
+      if (!m) return null;
+      return m[1].split(',').map((tok) => decodeURIComponent(tok.trim().replace(/^"(.*)"$/, '$1'))).filter(Boolean);
+    };
+
+    const mockFetch = async (rawUrl, init = {}) => {
+      const method = String((init && init.method) || 'GET').toUpperCase();
+      const u = new URL(String(rawUrl));
+      const parts = u.pathname.split('/').filter(Boolean);
+      const table = parts[parts.length - 1];
+      fetchLog.push({ method, table, query: u.search });
+      const store = mockDb[table];
+      const pk = tablePkCol[table];
+      if (!store || !pk) return { ok: false, status: 404, text: async () => `Unknown ${table}` };
+      if (method === 'GET') {
+        let rows = Array.from(store.values()).map((r) => JSON.parse(JSON.stringify(r)));
+        for (const [k, v] of u.searchParams.entries()) {
+          if (k === 'select' || k === 'limit' || k === 'order') continue;
+          if (String(v).startsWith('eq.')) {
+            const val = decodeURIComponent(String(v).slice(3));
+            rows = rows.filter((r) => String(r[k] ?? '') === val);
+          } else if (String(v).startsWith('in.(')) {
+            const vals = new Set(parseInValues(v) || []);
+            rows = rows.filter((r) => vals.has(String(r[k] ?? '')));
+          }
+        }
+        return { ok: true, status: 200, text: async () => JSON.stringify(rows) };
+      }
+      if (method === 'POST') {
+        const bodyRows = init && init.body ? JSON.parse(init.body) : [];
+        const arr = Array.isArray(bodyRows) ? bodyRows : [bodyRows];
+        arr.forEach((row) => {
+          if (!row || !row[pk]) return;
+          store.set(String(row[pk]), JSON.parse(JSON.stringify(row)));
+        });
+        return { ok: true, status: 201, text: async () => '[]' };
+      }
+      if (method === 'DELETE') {
+        const filters = [];
+        for (const [k, v] of u.searchParams.entries()) {
+          if (String(v).startsWith('eq.')) filters.push({ k, type: 'eq', val: decodeURIComponent(String(v).slice(3)) });
+          else if (String(v).startsWith('in.(')) filters.push({ k, type: 'in', vals: new Set(parseInValues(v) || []) });
+        }
+        for (const [rowKey, rowVal] of Array.from(store.entries())) {
+          const matchesAll = filters.length > 0 && filters.every((f) => {
+            const rv = String(rowVal[f.k] ?? '');
+            return f.type === 'eq' ? rv === f.val : f.vals.has(rv);
+          });
+          if (matchesAll) store.delete(rowKey);
+        }
+        return { ok: true, status: 204, text: async () => '' };
+      }
+      return { ok: false, status: 405, text: async () => 'Method Not Allowed' };
+    };
+
+    const createTabClient = (userName) => {
+      const storageMap = new Map([
+        ['ws_supabase_v3_config_v1', JSON.stringify({ url: 'https://mock.supabase.local', anonKey: 'mock_anon_key_123456', engineMode: 'supabase', dualWrite: false })]
+      ]);
+      const domMap = {
+        siteInfoModalTitle: { textContent: '' },
+        siteInfoModalBody: { innerHTML: '' },
+        siteInfoModalFooter: { innerHTML: '' }
+      };
+      const docListeners = {};
+      const winListeners = {};
+      const pendingWrites = [];
+      let renderCallCount = 0;
+      let dirtyCallCount = 0;
+
+      const simState = {
+        user: userName,
+        authUser: userName,
+        currentUser: userName,
+        device: 'pc',
+        pcTab: 'sites',
+        mobileTab: 'sites',
+        scope: 'site',
+        selectedSiteKey: '유지 현장',
+        checkedSiteKeys: new Set(['유지 현장', '삭제예정현장']),
+        dirtyPcTabs: {},
+        dirtyMobileTabs: {},
+        dashData: makeInitialDash(),
+        todoData: { list: [] },
+        settingsData: { partners: [], tasks: [], members: [{ name: '조항만', role: '대표' }, { name: '송지은', role: '과장' }] }
+      };
+
+      const docObj = {
+        visibilityState: 'visible',
+        body: { classList: { add() {}, remove() {} } },
+        getElementById: (id) => domMap[id] || null,
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        addEventListener: (t, fn) => { docListeners[t] = docListeners[t] || []; docListeners[t].push(fn); }
+      };
+
+      const ctx = vm.createContext({
+        console,
+        Math, Date, Number, String, Array, Object, Set, Map, JSON, RegExp, Promise, Error, TypeError,
+        parseInt, parseFloat, isNaN, encodeURIComponent, decodeURIComponent, setTimeout, clearTimeout,
+        URL,
+        performance: { now: () => Date.now() },
+        fetch: mockFetch,
+        localStorage: {
+          getItem: (k) => (storageMap.has(k) ? storageMap.get(k) : null),
+          setItem: (k, v) => { storageMap.set(k, String(v)); },
+          removeItem: (k) => { storageMap.delete(k); }
+        },
+        location: { protocol: 'https:', pathname: '/index.html', search: '', href: 'https://kimver2.github.io/woosung-id/index.html' },
+        document: docObj,
+        addEventListener: (t, fn) => { winListeners[t] = winListeners[t] || []; winListeners[t].push(fn); },
+        removeEventListener: (t, fn) => { if (winListeners[t]) winListeners[t] = winListeners[t].filter((f) => f !== fn); },
+        SUPABASE_V3_DEFAULT_CONFIG: { url: 'https://mock.supabase.local', anonKey: 'mock_anon_key_123456', engineMode: 'supabase', dualWrite: false },
+        AUDIT_MAX_LOGS: 500,
+        getLocalAuditLogs: () => [],
+        saveLocalAuditLogs: () => {},
+        mergeAuditLogLists: (a, b) => [...(a || []), ...(b || [])],
+        syncAuthConfigLocalCache: () => {},
+        recordAuditLog: () => {},
+        getTopSavedAuth: () => ({ user: userName }),
+        applyAuthenticatedUser: () => {},
+        populateAuthMembersDatalist: () => {},
+        lookupMemberPhone: () => '',
+        formatPartnerPhoneInputValue: (v) => String(v || '').trim(),
+        extractDriveIdFromAnyUrl: () => '',
+        COL_STAGE_DEFS: [],
+        getTodayYmd: () => '2026-11-20',
+        registerOptimisticCustomPartner: () => {},
+        syncAsTaskToFinance: () => {},
+        syncSingleTaskToFinance: () => {},
+        sanitizeUnregisteredMembers: () => {},
+        syncUserSelectorOptions: () => {},
+        markAllDirty: () => { dirtyCallCount++; },
+        renderActiveViews: () => { renderCallCount++; },
+        showToast: () => {},
+        openModal: () => {},
+        closeModal: () => {},
+        domMap,
+        state: simState
+      });
+      ctx.window = ctx;
+      ctx.global = ctx;
+
+      vm.runInContext(snapCode, ctx);
+      vm.runInContext(coreBlock, ctx);
+      vm.runInContext(resolvedPartnerBlock, ctx);
+      vm.runInContext(mergeShareBlock, ctx);
+      vm.runInContext(saveTaskBlock, ctx);
+      vm.runInContext(tombstoneAndDeleteBlock, ctx);
+      vm.runInContext(siteInfoModalBlock, ctx);
+      vm.runInContext(supabaseBlock, ctx);
+
+      const svc = ctx.WSDataService;
+      Object.keys(svc).forEach((m) => {
+        if (typeof svc[m] === 'function' && m !== '_origGas') {
+          const origFn = svc[m].bind(svc);
+          svc[m] = (...args) => {
+            const ret = origFn(...args);
+            if (ret && typeof ret.then === 'function') pendingWrites.push(ret);
+            return ret;
+          };
+        }
+      });
+
+      ctx.flushWrites = async () => {
+        while (pendingWrites.length > 0) {
+          const batch = pendingWrites.splice(0, pendingWrites.length);
+          await Promise.all(batch);
+        }
+      };
+      ctx.setInput = (id, value, checked = false) => {
+        domMap[id] = { value: String(value ?? ''), checked: Boolean(checked) };
+      };
+      ctx.storageMap = storageMap;
+      ctx.docObj = docObj;
+      ctx.docListeners = docListeners;
+      ctx.winListeners = winListeners;
+      ctx.getCounts = () => ({ renderCallCount, dirtyCallCount });
+      return ctx;
+    };
+
+    // --- [시나리오 1] Read-Modify-Write 병합 (타 탭 신규 현장 보존 + 동일 현장 다른 공정 병존 + tombstone 유지 + 메타 재집계) ---
+    const tabA = createTabClient('조항만');
+    const tabB = createTabClient('송지은');
+
+    await tabA.WSSupabaseV3.syncLiveFromSupabase();
+    await tabB.WSSupabaseV3.syncLiveFromSupabase();
+
+    // Tab A: '한남동 준빌라 301호' 신규 등록 + '유지 현장'의 t_a_edit 수정 + 새 공정 추가 + '삭제예정현장' 삭제 + 소장 추가
+    tabA.state.sheetCtx = {
+      mode: 'create', siteName: '__NEW__', newSiteName: '한남동 준빌라 301호', taskName: '목공',
+      scope: 'site', status: '예정', startYmd: '2026-11-23', endYmd: '2026-11-23',
+      isRange: false, hasTime: false, partner: '', partnerPhone: '',
+      manager1: '조항만', manager2: '', isShared: true, memo: '301호 신설'
+    };
+    tabA.saveTaskSheetModal();
+    tabA.state.sheetCtx = {
+      mode: 'edit', taskId: 't_a_edit', siteName: '유지 현장', taskName: '도배(A완료)',
+      scope: 'site', status: '완료', startYmd: '2026-11-21', endYmd: '2026-11-21', origStartYmd: '2026-11-21',
+      isRange: false, hasTime: false, partner: '도배_기존', partnerPhone: '',
+      manager1: '조항만', manager2: '', isShared: true, memo: 'A완료처리'
+    };
+    tabA.saveTaskSheetModal();
+    tabA.state.sheetCtx = {
+      mode: 'create', siteName: '유지 현장', taskName: '타일(A추가)',
+      scope: 'site', status: '예정', startYmd: '2026-11-24', endYmd: '2026-11-24',
+      isRange: false, hasTime: false, partner: '', partnerPhone: '',
+      manager1: '조항만', manager2: '', isShared: false, memo: ''
+    };
+    tabA.saveTaskSheetModal();
+    tabA.state.dashData.siteSuperintendents = [
+      { name: '차정률', role: '현장소장', phone: '010-8734-8586' },
+      { name: '인경호', role: '현장소장', phone: '010-2222-3333' }
+    ];
+    tabA.state.dashData.siteInfoMap['한남동 준빌라 301호'] = { address: '용산구 한남동 301호', updatedAtMs: Date.now() };
+    tabA.executeDelete('site', '삭제예정현장');
+    await tabA.flushWrites();
+
+    // Tab B는 아직 동기화 전 구상태를 들고 있음 ('한남동 준빌라 301호' 없음, '삭제예정현장' 여전히 있음)
+    const tabBStaleBeforeEdit = Boolean(
+      !tabB.state.dashData.sites.some((s) => s.siteKey === '한남동 준빌라 301호') &&
+      tabB.state.dashData.sites.some((s) => s.siteKey === '삭제예정현장')
+    );
+
+    // Tab B가 '유지 현장'의 t_b_edit 수정 + 현장정보 비밀번호 수정 동시 저장
+    tabB.state.sheetCtx = {
+      mode: 'edit', taskId: 't_b_edit', siteName: '유지 현장', taskName: '전기(B수정)',
+      scope: 'site', status: '진행 중', startYmd: '2026-11-20', endYmd: '2026-11-20', origStartYmd: '2026-11-20',
+      isRange: false, hasTime: false, partner: '전기_유지', partnerPhone: '',
+      manager1: '송지은', manager2: '', isShared: false, memo: 'B메모수정'
+    };
+    tabB.saveTaskSheetModal();
+    tabB.state._siteInfoName = '유지 현장';
+    tabB.setInput('siAddr', '서울 서초구');
+    tabB.setInput('siPw', '4321*');
+    tabB.setInput('siOffice', '02-111-2222');
+    tabB.setInput('siDrive', '');
+    tabB.setInput('siMemo', 'B현장메모');
+    tabB.setInput('siC1', '', true);
+    tabB.setInput('siC2', '', false);
+    tabB.setInput('siC3', '', false);
+    tabB.saveSiteInfoModal();
+
+    // 직렬화 검증: 직접 persistSnapshot 연속 호출도 교착 없이 병합·직렬화되어야 함
+    await tabB.flushWrites();
+    await Promise.all([
+      tabB.WSSupabaseV3.persistSnapshot('dashboard_main', tabB.state.dashData),
+      tabB.WSSupabaseV3.persistSnapshot('dashboard_main', tabB.state.dashData)
+    ]);
+
+    const savedDashAfterB = (mockDb.ws_state_store.get('dashboard_main') || {}).payload || {};
+    const site301 = (savedDashAfterB.sites || []).find((s) => s.siteKey === '한남동 준빌라 301호');
+    const keepSite = (savedDashAfterB.sites || []).find((s) => s.siteKey === '유지 현장');
+    const keepTasks = (keepSite && keepSite.tasks) || [];
+    const req1Ok = Boolean(
+      tabBStaleBeforeEdit &&
+      site301 && site301.tasks.some((t) => t.taskName === '목공') &&
+      savedDashAfterB.siteInfoMap && savedDashAfterB.siteInfoMap['한남동 준빌라 301호'] &&
+      savedDashAfterB.siteInfoMap['유지 현장'] && savedDashAfterB.siteInfoMap['유지 현장'].doorPassword === '4321*' &&
+      keepTasks.some((t) => t.id === 't_b_edit' && t.taskName === '전기(B수정)' && t.memo === 'B메모수정') &&
+      keepTasks.some((t) => t.id === 't_a_edit' && t.taskName === '도배(A완료)' && t.status === '완료') &&
+      keepTasks.some((t) => t.taskName === '타일(A추가)') &&
+      !(savedDashAfterB.sites || []).some((s) => s.siteKey === '삭제예정현장') &&
+      Array.isArray(savedDashAfterB.siteSuperintendents) && savedDashAfterB.siteSuperintendents.some((x) => x.name === '인경호') &&
+      savedDashAfterB.kpi && savedDashAfterB.kpi.totalSites === 2 &&
+      savedDashAfterB.scopeCounts && savedDashAfterB.scopeCounts.site === 2 &&
+      tabB.state.dashData.sites.some((s) => s.siteKey === '한남동 준빌라 301호')
+    );
+
+    // --- [시나리오 2] 초기 로드 시 ws_sites / ws_tasks 교차 복구 보험 (삭제 유령 차단) ---
+    // 고의 유실 시뮬레이션: ws_state_store.dashboard_main에서 '한남동 준빌라 301호'와 'AS::서초동 빌라'를 누락시키되 ws_sites/ws_tasks에는 존재
+    const corruptedDash = JSON.parse(JSON.stringify(savedDashAfterB));
+    corruptedDash.sites = corruptedDash.sites.filter((s) => s.siteKey !== '한남동 준빌라 301호');
+    if (corruptedDash.siteInfoMap) delete corruptedDash.siteInfoMap['한남동 준빌라 301호'];
+    corruptedDash._updatedMs = Date.now() + 50;
+    corruptedDash._clientMutId = 'legacy_overwrite_mut';
+    mockDb.ws_state_store.set('dashboard_main', { key: 'dashboard_main', payload: corruptedDash, updated_at: '2026-11-20T01:00:00Z', updated_by: 'legacy' });
+
+    // ws_tasks에 raw_json 없는 순수 컬럼 태스크 + AS 현장 + 이미 삭제된 유령현장 잔여 행 주입
+    mockDb.ws_tasks.set('t_301_rel_only', {
+      id: 't_301_rel_only', row_index: 99, site_name: '한남동 준빌라 301호', category: 'site',
+      work_date: '2026-11-25', end_date: '2026-11-25', assignee: '조항만', content: '마루(컬럼복구)', status: '예정', memo: '컬럼기반복구', raw_json: {}
+    });
+    mockDb.ws_sites.set('서초동 빌라', {
+      site_name: '서초동 빌라', status: '진행중', drive_folder_url: 'https://drive.google.com/seocho',
+      meta: {
+        siteKey: 'AS::서초동 빌라', scope: 'as', createdAtMs: Date.now() - 1000,
+        siteInfo: { address: '서초구 101호', doorPassword: '7777*' },
+        allScopes: [{ siteKey: 'AS::서초동 빌라', scope: 'as', status: '진행중', createdAtMs: Date.now() - 1000 }]
+      }
+    });
+    mockDb.ws_tasks.set('t_seocho_as', {
+      id: 't_seocho_as', site_name: '서초동 빌라', category: 'as', work_date: '2026-11-26', end_date: '2026-11-26',
+      assignee: '송지은', content: '누수AS', status: 'AS', memo: '',
+      raw_json: { id: 't_seocho_as', taskId: 't_seocho_as', taskName: '누수AS', startDateStr: '2026-11-26', endDateStr: '2026-11-26', scope: 'as', siteKey: 'AS::서초동 빌라', siteName: '서초동 빌라', status: 'AS', createdAtMs: Date.now() - 1000 }
+    });
+    // 삭제된 유령 현장이 ws_sites/ws_tasks에 남아 있어도 부활 금지
+    mockDb.ws_sites.set('삭제예정현장', {
+      site_name: '삭제예정현장', status: '진행중',
+      meta: { siteKey: '삭제예정현장', scope: 'site', createdAtMs: baseTs, allScopes: [{ siteKey: '삭제예정현장', scope: 'site', createdAtMs: baseTs }] }
+    });
+    mockDb.ws_tasks.set('t_del_site', {
+      id: 't_del_site', site_name: '삭제예정현장', category: 'site', work_date: '2026-11-19', end_date: '2026-11-19',
+      assignee: '조항만', content: '철거', status: '예정', memo: '',
+      raw_json: { id: 't_del_site', taskId: 't_del_site', taskName: '철거', scope: 'site', siteKey: '삭제예정현장', siteName: '삭제예정현장', createdAtMs: baseTs }
+    });
+    // 정보만등록 행은 가짜 site 객체를 생성하지 않고 siteInfoMap만 복원해야 함
+    mockDb.ws_sites.set('정보만등록현장', {
+      site_name: '정보만등록현장', status: '정보등록', drive_folder_url: 'https://drive.google.com/info-only',
+      meta: { siteKey: '정보만등록현장', scope: 'site', siteInfo: { address: '강남구 정보만' }, allScopes: [] }
+    });
+
+    const freshClient = createTabClient('조항만');
+    const syncRes = await freshClient.WSSupabaseV3.syncLiveFromSupabase();
+    const cachedDashRaw = freshClient.storageMap.get('ws_dashboard_data_v3');
+    const cachedDash = cachedDashRaw ? JSON.parse(cachedDashRaw) : null;
+    const rec301 = (syncRes.dashData.sites || []).find((s) => s.siteKey === '한남동 준빌라 301호');
+    const recAs = (syncRes.dashData.sites || []).find((s) => s.siteKey === 'AS::서초동 빌라');
+    const req2Ok = Boolean(
+      syncRes.recoveredSiteCount >= 2 &&
+      rec301 && rec301.tasks.some((t) => t.taskName === '목공') && rec301.tasks.some((t) => t.id === 't_301_rel_only' && t.taskName === '마루(컬럼복구)') &&
+      syncRes.dashData.siteInfoMap['한남동 준빌라 301호'] &&
+      recAs && recAs.scope === 'as' && recAs.tasks.some((t) => t.id === 't_seocho_as') &&
+      syncRes.dashData.siteInfoMap['서초동 빌라'] && syncRes.dashData.siteInfoMap['서초동 빌라'].doorPassword === '7777*' &&
+      !(syncRes.dashData.sites || []).some((s) => s.siteKey === '삭제예정현장') &&
+      !(syncRes.dashData.sites || []).some((s) => s.siteName === '정보만등록현장') &&
+      syncRes.dashData.siteInfoMap['정보만등록현장'] && syncRes.dashData.siteInfoMap['정보만등록현장'].address === '강남구 정보만' &&
+      syncRes.dashData.scopeCounts && syncRes.dashData.scopeCounts.site === 2 && syncRes.dashData.scopeCounts.as === 1 &&
+      cachedDash && Array.isArray(cachedDash.sites) && cachedDash.sites.some((s) => s.siteKey === '한남동 준빌라 301호')
+    );
+
+    // --- [시나리오 3] 유휴/백그라운드 탭 재활성화(visibilitychange / window.focus) 자동 최신화 및 쿨다운 ---
+    const idleClient = createTabClient('송지은');
+    idleClient.WSSupabaseV3.init();
+    const initialIdleSync = await idleClient.WSSupabaseV3.syncLiveFromSupabase();
+    idleClient.state.dashData = JSON.parse(JSON.stringify(initialIdleSync.dashData));
+    idleClient.state.checkedSiteKeys = new Set((idleClient.state.dashData.sites || []).map((s) => s.siteKey));
+
+    // 원격에 더 최신 상태('역삼동 신축 401호') 반영
+    const remoteNextDash = JSON.parse(JSON.stringify(syncRes.dashData));
+    remoteNextDash.sites.push({
+      siteKey: '역삼동 신축 401호', siteName: '역삼동 신축 401호', scope: 'site', colorCode: '1', colorHex: '#2563eb',
+      createdAtMs: Date.now(),
+      tasks: [{ id: 't_401_1', taskId: 't_401_1', taskName: '착공', startDateStr: '2026-11-27', endDateStr: '2026-11-27', status: '예정', scope: 'site', createdAtMs: Date.now() }]
+    });
+    remoteNextDash._updatedMs = Date.now() + 500;
+    remoteNextDash._clientMutId = 'remote_tab_mut_401';
+    mockDb.ws_state_store.set('dashboard_main', { key: 'dashboard_main', payload: remoteNextDash, updated_at: '2026-11-20T02:00:00Z', updated_by: '조항만' });
+
+    // 1) hidden 상태에서는 조회/갱신하지 않음
+    const fetchCountBeforeHidden = fetchLog.length;
+    idleClient.docObj.visibilityState = 'hidden';
+    (idleClient.docListeners.visibilitychange || []).forEach((fn) => fn());
+    await new Promise((r) => setTimeout(r, 15));
+    const hiddenIgnoredOk = fetchLog.length === fetchCountBeforeHidden && !idleClient.state.dashData.sites.some((s) => s.siteKey === '역삼동 신축 401호');
+
+    // 2) visible 전환 시 자동 최신화(state.dashData, checkedSiteKeys, UI 렌더, 캐시 갱신)
+    idleClient.state.dirtyPcTabs = { home: false, todo: false, calendar: false, sites: false, quote: false, finance: false, partners: false };
+    idleClient.state.dirtyMobileTabs = { home: false, todo: false, calendar: false, sites: false, quote: false, finance: false, partners: false };
+    const countsBeforeVisible = idleClient.getCounts();
+    idleClient.docObj.visibilityState = 'visible';
+    (idleClient.docListeners.visibilitychange || []).forEach((fn) => fn());
+    await new Promise((r) => setTimeout(r, 30));
+    const countsAfterVisible = idleClient.getCounts();
+    const idleCacheRaw = idleClient.storageMap.get('ws_dashboard_data_v3');
+    const idleCache = idleCacheRaw ? JSON.parse(idleCacheRaw) : null;
+    const visibleRefreshedOk = Boolean(
+      idleClient.state.dashData.sites.some((s) => s.siteKey === '역삼동 신축 401호') &&
+      idleClient.state.checkedSiteKeys.has('역삼동 신축 401호') &&
+      countsAfterVisible.renderCallCount > countsBeforeVisible.renderCallCount &&
+      idleClient.state.dirtyPcTabs.sites === true &&
+      idleClient.state.dirtyMobileTabs.sites === true &&
+      idleCache && idleCache.sites.some((s) => s.siteKey === '역삼동 신축 401호')
+    );
+
+    // 3) 쿨다운(12초) 이내 연속 focus 이벤트는 중복 네트워크 조회 없이 디바운스되어야 함
+    const remoteNextDash2 = JSON.parse(JSON.stringify(remoteNextDash));
+    remoteNextDash2.sites.push({
+      siteKey: '청담동 502호', siteName: '청담동 502호', scope: 'site', colorCode: '1', colorHex: '#2563eb',
+      createdAtMs: Date.now() + 1000,
+      tasks: [{ id: 't_502_1', taskId: 't_502_1', taskName: '전기', startDateStr: '2026-11-28', endDateStr: '2026-11-28', status: '예정', scope: 'site', createdAtMs: Date.now() + 1000 }]
+    });
+    remoteNextDash2._updatedMs = Date.now() + 2000;
+    remoteNextDash2._clientMutId = 'remote_tab_mut_502';
+    mockDb.ws_state_store.set('dashboard_main', { key: 'dashboard_main', payload: remoteNextDash2, updated_at: '2026-11-20T02:05:00Z', updated_by: '조항만' });
+
+    const fetchCountBeforeFocusCooldown = fetchLog.length;
+    (idleClient.winListeners.focus || []).forEach((fn) => fn());
+    await new Promise((r) => setTimeout(r, 20));
+    const cooldownDebouncedOk = fetchLog.length === fetchCountBeforeFocusCooldown && !idleClient.state.dashData.sites.some((s) => s.siteKey === '청담동 502호');
+
+    const forceRefreshRes = await idleClient.WSSupabaseV3.checkRemoteDashAndRefresh({ force: true });
+    const forceRefreshOk = Boolean(
+      forceRefreshRes && forceRefreshRes.updated === true &&
+      idleClient.state.dashData.sites.some((s) => s.siteKey === '청담동 502호')
+    );
+
+    // 4) window.focus 직접 트리거(쿨다운 만료/초기 상태) 자동 최신화 검증
+    const focusClient = createTabClient('조항만');
+    focusClient.WSSupabaseV3.init();
+    const initialFocusSync = await focusClient.WSSupabaseV3.syncLiveFromSupabase();
+    focusClient.state.dashData = JSON.parse(JSON.stringify(initialFocusSync.dashData));
+    const remoteFocusDash = JSON.parse(JSON.stringify(remoteNextDash2));
+    remoteFocusDash.sites.push({
+      siteKey: '성수동 603호', siteName: '성수동 603호', scope: 'site', colorCode: '1', colorHex: '#2563eb',
+      createdAtMs: Date.now() + 3000,
+      tasks: [{ id: 't_603_1', taskId: 't_603_1', taskName: '설비', startDateStr: '2026-11-29', endDateStr: '2026-11-29', status: '예정', scope: 'site', createdAtMs: Date.now() + 3000 }]
+    });
+    remoteFocusDash._updatedMs = Date.now() + 4000;
+    remoteFocusDash._clientMutId = 'remote_tab_mut_603';
+    mockDb.ws_state_store.set('dashboard_main', { key: 'dashboard_main', payload: remoteFocusDash, updated_at: '2026-11-20T02:10:00Z', updated_by: '송지은' });
+    (focusClient.winListeners.focus || []).forEach((fn) => fn());
+    await new Promise((r) => setTimeout(r, 30));
+    const focusTriggerOk = focusClient.state.dashData.sites.some((s) => s.siteKey === '성수동 603호');
+
+    assertTest(
+      'Supabase dashboard_main 유실 방지 3중 보완(저장전 RMW 원격병합 · ws_sites/ws_tasks 교차복구 · visibility/focus 자동최신화) 런타임 검증',
+      req1Ok && req2Ok && hiddenIgnoredOk && visibleRefreshedOk && cooldownDebouncedOk && forceRefreshOk && focusTriggerOk,
+      `req1=${req1Ok}, req2=${req2Ok}, hiddenIgnored=${hiddenIgnoredOk}, visibleRefreshed=${visibleRefreshedOk}, cooldownDebounced=${cooldownDebouncedOk}, forceRefresh=${forceRefreshOk}, focusTrigger=${focusTriggerOk}`
+    );
+  })());
+
 Promise.all(pendingAsyncTests).then(() => {
 if (isVerbose) {
   rawConsoleLog('\n========================================================');

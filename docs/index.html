@@ -4510,18 +4510,30 @@ end $$;`;
         return h === "#F6BF26" || h === "#FACC15" || h === "#EAB308" || h === "#FDE047";
       }
 
-      function recalcDashMeta() {
-        if (!state.dashData) return;
+      function recalcDashMeta(targetDash) {
+        const dash = targetDash || state.dashData;
+        if (!dash) return;
         const todayY = getTodayYmd();
         let tCnt = 0, dCnt = 0;
-        const scCounts = { site: 0, single: 0, as: 0, newSite: 0 };
-        getAllSites().forEach((s) => {
+        let totalSites = 0, activeSites = 0, totalTasks = 0;
+        const scCounts = { site: 0, single: 0, as: 0, newSite: 0, siteDone: 0, singleDone: 0, asDone: 0, newSiteDone: 0 };
+        const sitesArr = Array.isArray(dash.sites) ? dash.sites : [];
+        sitesArr.forEach((s) => {
+          if (!s) return;
+          totalSites++;
           const sc = s.scope || "site";
-          if (!isSiteCompleted(s)) {
+          const tasksArr = Array.isArray(s.tasks) ? s.tasks : [];
+          totalTasks += tasksArr.length;
+          const doneSite = isSiteCompleted(s);
+          if (!doneSite) {
+            activeSites++;
             if (scCounts[sc] !== undefined) scCounts[sc]++;
+          } else {
+            const doneKey = sc + "Done";
+            if (scCounts[doneKey] !== undefined) scCounts[doneKey]++;
           }
-          if (sc === "newSite" || isSiteCompleted(s)) return;
-          (s.tasks || []).forEach((t) => {
+          if (sc === "newSite" || doneSite) return;
+          tasksArr.forEach((t) => {
             if (!isTaskCompleted(t)) {
               const y = parseYmdFromTask(t);
               if (y === todayY || t.isToday) tCnt++;
@@ -4529,10 +4541,13 @@ end $$;`;
             }
           });
         });
-        state.dashData.scopeCounts = scCounts;
-        if (!state.dashData.kpi) state.dashData.kpi = {};
-        state.dashData.kpi.todayCount = tCnt;
-        state.dashData.kpi.delayedCount = dCnt;
+        dash.scopeCounts = Object.assign({}, dash.scopeCounts || {}, scCounts);
+        if (!dash.kpi) dash.kpi = {};
+        dash.kpi.totalSites = totalSites;
+        dash.kpi.activeSites = activeSites;
+        dash.kpi.totalTasks = totalTasks;
+        dash.kpi.todayCount = tCnt;
+        dash.kpi.delayedCount = dCnt;
       }
 
       function recalcSiteStats(site, skipDashMeta) {
@@ -22174,6 +22189,7 @@ end $$;`;
                 other.dateDisplay = ne > ns ? `${formatKoreanDateLabel(ns)} ~ ${formatKoreanDateLabel(ne)}` : formatKoreanDateLabel(ns);
                 other.dateMs = new Date(ns + "T00:00:00").getTime();
                 other.isDelayed = ns < todayYmd && other.status !== "완료";
+                other.updatedAtMs = Date.now();
                 shifts.push({ row: other.row, newStart: ns, newEnd: ne });
                 auditShiftChanges.push({ key: other.id || other.taskName, label: other.taskName || "후속공정", before: prevDisp, after: nextDisp });
               }
@@ -22280,6 +22296,9 @@ end $$;`;
           savedTaskRef = newTask;
           recalcSiteStats(site);
           const newTaskAuditSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, newTask) : null;
+          if (window.WSSupabaseV3 && typeof window.WSSupabaseV3.markLocalDashMutation === "function") {
+            window.WSSupabaseV3.markLocalDashMutation({ taskId: newId, siteKey: site.siteKey, siteName: finalSiteName, scope: ctx.scope });
+          }
           if (window.WSDataService) {
             const req = window.WSDataService.saveTask(false, {
               site: finalSiteName, task: newTask.taskName, date: dateParam, manager: managerCombined,
@@ -23131,6 +23150,7 @@ end $$;`;
         const info = state.dashData.siteInfoMap[siteName];
         const beforeVal = Boolean(info[field]);
         info[field] = !beforeVal;
+        info.updatedAtMs = Date.now();
         if (window.WSDataService) {
           window.WSDataService.toggleChecklist({
             site: siteName,
@@ -23187,7 +23207,8 @@ end $$;`;
           memo: document.getElementById("siMemo").value.trim(),
           consentDone: document.getElementById("siC1").checked,
           elevatorCoverDone: document.getElementById("siC2").checked,
-          officeNoticeDone: document.getElementById("siC3").checked
+          officeNoticeDone: document.getElementById("siC3").checked,
+          updatedAtMs: Date.now()
         });
         state.dashData.siteInfoMap[siteName] = updated;
         if (window.WSDataService) {
@@ -24628,6 +24649,7 @@ end $$;`;
           } else if (field === "shared") {
             t.isShared = val;
           }
+          t.updatedAtMs = Date.now();
           const afterTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, t) : null;
           cnt++;
           if (window.WSDataService) {
@@ -25610,7 +25632,9 @@ end $$;`;
         if (estSiteObj) {
           if (estSiteObj.estimateData) {
             estSiteObj.estimateData.status = "계약 완료";
+            estSiteObj.estimateData.updatedAtMs = Date.now();
           }
+          estSiteObj.updatedAtMs = Date.now();
           estSiteObj.isArchived = true;
           estSiteObj.isAllCompleted = true;
         }
@@ -26357,8 +26381,10 @@ end $$;`;
           const s = getAllSites().find((x) => x.siteKey === ctx.siteKey);
           if (s) {
             const prevEstName = String(s.siteName || "").trim();
+            ed.updatedAtMs = Date.now();
             s.siteName = siteName;
             s.estimateData = ed;
+            s.updatedAtMs = ed.updatedAtMs;
             s.isArchived = ed.status === "계약 완료" || ed.status === "수주 실패" || ed.status === "실패";
             s.isAllCompleted = s.isArchived;
             if (prevEstName && prevEstName !== siteName) {
@@ -26414,8 +26440,9 @@ end $$;`;
         if (!confirm(`[${s.siteName}] 현장을 '계약 완료' 상태로 변경하시겠습니까?`)) return;
         const beforeEst = JSON.parse(JSON.stringify(s.estimateData));
         const prevStatus = (s.estimateData.status && s.estimateData.status !== "계약 완료") ? s.estimateData.status : (s.estimateData.prevStatus || "1차상담 예정");
-        const ed = Object.assign({}, s.estimateData, { prevStatus: prevStatus, status: "계약 완료" });
+        const ed = Object.assign({}, s.estimateData, { prevStatus: prevStatus, status: "계약 완료", updatedAtMs: Date.now() });
         s.estimateData = ed;
+        s.updatedAtMs = ed.updatedAtMs;
         s.isArchived = true;
         s.isAllCompleted = true;
         state.selectedQuoteKey = s.siteKey;
@@ -26443,8 +26470,9 @@ end $$;`;
         if (!s || !s.estimateData) return showToast("신규현장 정보를 찾을 수 없습니다.");
         const beforeEst = JSON.parse(JSON.stringify(s.estimateData));
         const targetStatus = s.estimateData.prevStatus || "1차상담 예정";
-        const ed = Object.assign({}, s.estimateData, { status: targetStatus });
+        const ed = Object.assign({}, s.estimateData, { status: targetStatus, updatedAtMs: Date.now() });
         s.estimateData = ed;
+        s.updatedAtMs = ed.updatedAtMs;
         s.isArchived = false;
         s.isAllCompleted = false;
         (s.tasks || []).forEach(t => {
@@ -28595,6 +28623,19 @@ end $$;`;
         let modalLogs = [];
         let realtimeToastTimer = null;
         let hooksInstalled = false;
+        let lastKnownRemoteDashUpdatedMs = 0;
+        let lastKnownRemoteDashMutId = "";
+        let lastSyncedDashBaseline = null;
+        const localTaskMutTs = new Map();
+        const localSiteMutTs = new Map();
+        const localScopeNameMutTs = new Map();
+        const localInfoMutTs = new Map();
+        let localMetaMutTs = 0;
+        let pendingDashWritesCount = 0;
+        let visibilitySyncInFlight = null;
+        let lastVisibilitySyncCheckMs = 0;
+        const VISIBILITY_CHECK_COOLDOWN_MS = 12000;
+        let visibilityListenersBound = false;
 
         function getConfig() {
           let stored = {};
@@ -28711,6 +28752,17 @@ end $$;`;
           return (await restRequest("GET", `ws_state_store?select=key,payload,updated_at,updated_by${filter}`, undefined, undefined, customCfg)) || [];
         }
 
+        async function selectTableRows(table, selectCols, customCfg) {
+          const cols = selectCols || "*";
+          const client = getClient(customCfg);
+          if (client) {
+            const { data, error } = await client.from(table).select(cols);
+            if (error) throw new Error(`[${table}] ${error.message || "Supabase select 오류"}`);
+            return data || [];
+          }
+          return (await restRequest("GET", `${table}?select=${encodeURIComponent(cols)}`, undefined, undefined, customCfg)) || [];
+        }
+
         async function upsertRows(table, rows, onConflict, customCfg) {
           if (!Array.isArray(rows) || rows.length === 0) return;
           const CHUNK = 200;
@@ -28763,10 +28815,724 @@ end $$;`;
         }
 
         function enqueueKeyWrite(key, fn) {
+          const isDash = (key === "dashboard_main" || key === "dash_main");
+          if (isDash) pendingDashWritesCount++;
           const prev = writeQueues[key] || Promise.resolve();
-          const next = prev.catch(() => {}).then(fn);
+          const next = prev.catch(() => {}).then(fn).finally(() => {
+            if (isDash) pendingDashWritesCount = Math.max(0, pendingDashWritesCount - 1);
+          });
           writeQueues[key] = next;
           return next;
+        }
+
+        function _normDashSiteName(s) {
+          return typeof _normDelSiteName === "function"
+            ? _normDelSiteName(s)
+            : String(s || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
+        }
+
+        function _normDashScope(sc) {
+          if (typeof _normalizeScopeForGuard === "function") return _normalizeScopeForGuard(sc);
+          const s = String(sc || "").trim();
+          if (!s || s === "완료현장") return "site";
+          const low = s.toLowerCase();
+          if (low === "newsite" || s === "신규견적") return "newSite";
+          if (low === "single" || s === "단건") return "single";
+          if (low === "as") return "as";
+          return s;
+        }
+
+        function getCanonicalSiteKey(site) {
+          if (!site || typeof site !== "object") return "";
+          const explicit = String(site.siteKey || "").trim();
+          if (explicit) return explicit;
+          const name = _normDashSiteName(site.siteName);
+          if (!name) return "";
+          const sc = _normDashScope(site.scope);
+          if (sc === "single") return "SINGLE::" + name;
+          if (sc === "as") return "AS::" + name;
+          if (sc === "newSite") return "NEWSITE::" + name;
+          return name;
+        }
+
+        function getCanonicalTaskKey(task, idx) {
+          if (!task || typeof task !== "object") return "";
+          const tid = String(task.id || task.taskId || "").trim();
+          if (tid) return "ID::" + tid;
+          const tn = String(task.taskName || "").trim();
+          const yd = String(task.startDateStr || task.dateDisplay || "").trim();
+          const rw = task.row !== undefined && task.row !== null && task.row !== "" ? String(task.row) : "";
+          return `FALLBACK::${tn}::${yd}::${rw || idx}`;
+        }
+
+        function cloneJsonSafe(val) {
+          if (val === null || val === undefined || typeof val !== "object") return val;
+          try { return JSON.parse(JSON.stringify(val)); } catch (_) { return Object.assign({}, val); }
+        }
+
+        function buildTaskFingerprint(t) {
+          if (!t || typeof t !== "object") return "";
+          return JSON.stringify({
+            id: String(t.id || t.taskId || ""),
+            taskName: String(t.taskName || ""),
+            startDateStr: String(t.startDateStr || ""),
+            endDateStr: String(t.endDateStr || ""),
+            dateDisplay: String(t.dateDisplay || ""),
+            timeStr: String(t.timeStr || t.time || ""),
+            partner: String(t.partner || ""),
+            manager: String(t.manager || ""),
+            status: String(t.status || ""),
+            isShared: Boolean(t.isShared),
+            memo: String(t.memo || ""),
+            isArchived: Boolean(t.isArchived),
+            asMeta: t.asMeta || null
+          });
+        }
+
+        function buildSiteMetaFingerprint(s) {
+          if (!s || typeof s !== "object") return "";
+          return JSON.stringify({
+            siteKey: getCanonicalSiteKey(s),
+            siteName: String(s.siteName || ""),
+            scope: _normDashScope(s.scope),
+            isArchived: Boolean(s.isArchived),
+            originArchived: Boolean(s.originArchived),
+            primaryManager: String(s.primaryManager || ""),
+            estimateData: s.estimateData || null
+          });
+        }
+
+        function buildInfoFingerprint(info) {
+          if (!info || typeof info !== "object") return "";
+          const copy = Object.assign({}, info);
+          delete copy.updatedAtMs;
+          return JSON.stringify(copy);
+        }
+
+        function buildDashBaseline(dash) {
+          if (!dash || typeof dash !== "object") return null;
+          const sitesMap = new Map();
+          (Array.isArray(dash.sites) ? dash.sites : []).forEach((s) => {
+            if (!s) return;
+            const sk = getCanonicalSiteKey(s);
+            if (!sk) return;
+            const tasksMap = new Map();
+            (Array.isArray(s.tasks) ? s.tasks : []).forEach((t, idx) => {
+              if (!t) return;
+              const tk = getCanonicalTaskKey(t, idx);
+              if (tk) tasksMap.set(tk, buildTaskFingerprint(t));
+            });
+            sitesMap.set(sk, { siteFp: buildSiteMetaFingerprint(s), tasks: tasksMap });
+          });
+          const infoMap = new Map();
+          [dash.siteInfoMap, dash.siteInfos].forEach((m) => {
+            if (!m || typeof m !== "object") return;
+            Object.keys(m).forEach((sn) => {
+              const k = _normDashSiteName(sn);
+              if (k && m[sn] && typeof m[sn] === "object") {
+                infoMap.set(k, buildInfoFingerprint(m[sn]));
+              }
+            });
+          });
+          return {
+            sites: sitesMap,
+            info: infoMap,
+            superintendentsFp: JSON.stringify(dash.siteSuperintendents || null)
+          };
+        }
+
+        function updateKnownRemoteDashState(dashPayload) {
+          if (!dashPayload || typeof dashPayload !== "object") return;
+          const upd = Number(dashPayload._updatedMs) || 0;
+          if (upd > lastKnownRemoteDashUpdatedMs) lastKnownRemoteDashUpdatedMs = upd;
+          if (dashPayload._clientMutId) lastKnownRemoteDashMutId = String(dashPayload._clientMutId);
+          lastSyncedDashBaseline = buildDashBaseline(dashPayload);
+        }
+
+        let localMutSeq = 0;
+
+        function markLocalDashMutation(info) {
+          if (!info || typeof info !== "object") return;
+          const ts = Math.max(Date.now(), lastKnownRemoteDashUpdatedMs + 1);
+          const seq = ++localMutSeq;
+          const stamp = { ts, seq };
+          if (info.taskId) {
+            const tid = String(info.taskId).trim();
+            if (tid) localTaskMutTs.set(tid, stamp);
+          }
+          if (info.siteKey) {
+            const sk = String(info.siteKey).trim();
+            if (sk) localSiteMutTs.set(sk, stamp);
+          }
+          if (info.siteName) {
+            const clean = _normDashSiteName(info.siteName);
+            if (clean) {
+              if (info.isInfo) localInfoMutTs.set(clean, stamp);
+              if (info.scope && (info.isEstimate || info.isSiteMeta)) {
+                localScopeNameMutTs.set(`${_normDashScope(info.scope)}::${clean}`, stamp);
+              }
+            }
+          }
+          if (info.isMeta) localMetaMutTs = ts;
+        }
+
+        function _getMutTs(val) {
+          if (!val) return 0;
+          return typeof val === "object" ? (Number(val.ts) || 0) : (Number(val) || 0);
+        }
+
+        function _getMutSeq(val) {
+          if (!val) return 0;
+          return typeof val === "object" ? (Number(val.seq) || 0) : 0;
+        }
+
+        function pruneLocalDashMutationsBySeq(cutoffSeq, cutoffTs) {
+          const pruneMap = (m) => {
+            for (const [k, v] of m.entries()) {
+              const s = _getMutSeq(v);
+              if (s > 0 ? s <= cutoffSeq : _getMutTs(v) <= cutoffTs) {
+                m.delete(k);
+              }
+            }
+          };
+          pruneMap(localTaskMutTs);
+          pruneMap(localSiteMutTs);
+          pruneMap(localScopeNameMutTs);
+          pruneMap(localInfoMutTs);
+          if (localMetaMutTs && localMetaMutTs <= cutoffTs) localMetaMutTs = 0;
+        }
+
+        function addNewRemoteSitesToCheckedSet(prevDash, nextDash) {
+          if (!state || !(state.checkedSiteKeys instanceof Set) || !nextDash || !Array.isArray(nextDash.sites)) return;
+          const prevKeys = new Set(
+            ((prevDash && Array.isArray(prevDash.sites)) ? prevDash.sites : [])
+              .map(s => getCanonicalSiteKey(s))
+              .filter(Boolean)
+          );
+          nextDash.sites.forEach((s) => {
+            if (!s) return;
+            const sk = getCanonicalSiteKey(s);
+            if (sk && !prevKeys.has(sk)) {
+              state.checkedSiteKeys.add(sk);
+            }
+          });
+        }
+
+        function chooseMergedTaskVersion(localTask, remoteTask, baseTaskFp, preferLocal, isRemoteNewer) {
+          const tid = String(localTask.id || localTask.taskId || remoteTask.id || remoteTask.taskId || "").trim();
+          const mutTs = tid ? _getMutTs(localTaskMutTs.get(tid)) : 0;
+          const localTs = Math.max(Number(localTask.updatedAtMs) || 0, Number(localTask.memoUpdatedAtMs) || 0, Number(localTask.createdAtMs) || 0);
+          const remoteTs = Math.max(Number(remoteTask.updatedAtMs) || 0, Number(remoteTask.memoUpdatedAtMs) || 0, Number(remoteTask.createdAtMs) || 0);
+          const localFp = buildTaskFingerprint(localTask);
+          const remoteFp = buildTaskFingerprint(remoteTask);
+
+          let pickLocal;
+          if (localFp === remoteFp) {
+            pickLocal = preferLocal || localTs >= remoteTs;
+          } else if (mutTs > 0 && remoteTs > mutTs) {
+            pickLocal = false;
+          } else if (mutTs > 0 && mutTs > lastKnownRemoteDashUpdatedMs) {
+            pickLocal = true;
+          } else if (localTs !== remoteTs) {
+            pickLocal = localTs > remoteTs;
+          } else if (baseTaskFp) {
+            const lc = localFp !== baseTaskFp;
+            const rc = remoteFp !== baseTaskFp;
+            if (lc !== rc) pickLocal = lc;
+            else pickLocal = preferLocal;
+          } else if (preferLocal && localTaskMutTs.size > 0 && mutTs === 0 && isRemoteNewer) {
+            pickLocal = false;
+          } else {
+            pickLocal = preferLocal;
+          }
+
+          const chosen = cloneJsonSafe(pickLocal ? localTask : remoteTask);
+          const other = pickLocal ? remoteTask : localTask;
+          if (!chosen.row && other && other.row) chosen.row = other.row;
+          if (!chosen.id && other && other.id) chosen.id = other.id;
+          if (!chosen.taskId && other && other.taskId) chosen.taskId = other.taskId;
+          return chosen;
+        }
+
+        function mergeSiteObjects(localSite, remoteSite, opts) {
+          const preferLocal = Boolean(opts && opts.preferLocal);
+          const isRemoteNewer = Boolean(opts && opts.isRemoteNewer);
+          const sk = getCanonicalSiteKey(localSite) || getCanonicalSiteKey(remoteSite);
+          const normName = _normDashSiteName(localSite.siteName || remoteSite.siteName);
+          const effScope = _normDashScope(localSite.scope || remoteSite.scope || "site");
+          const scopeNameKey = `${effScope}::${normName}`;
+          const baseEntry = lastSyncedDashBaseline && lastSyncedDashBaseline.sites ? lastSyncedDashBaseline.sites.get(sk) : null;
+          const baseSiteFp = baseEntry ? baseEntry.siteFp : "";
+          const baseTasksMap = baseEntry ? baseEntry.tasks : null;
+
+          const siteMutTs = Math.max(_getMutTs(localSiteMutTs.get(sk)), _getMutTs(localScopeNameMutTs.get(scopeNameKey)));
+          const localMetaTs = Math.max(Number(localSite.updatedAtMs) || 0, Number(localSite.estimateData && localSite.estimateData.updatedAtMs) || 0);
+          const remoteMetaTs = Math.max(Number(remoteSite.updatedAtMs) || 0, Number(remoteSite.estimateData && remoteSite.estimateData.updatedAtMs) || 0);
+          const localSiteFp = buildSiteMetaFingerprint(localSite);
+          const remoteSiteFp = buildSiteMetaFingerprint(remoteSite);
+
+          let siteMetaLocalWins;
+          if (localSiteFp === remoteSiteFp) {
+            siteMetaLocalWins = preferLocal;
+          } else if (siteMutTs > 0 && remoteMetaTs > siteMutTs) {
+            siteMetaLocalWins = false;
+          } else if (siteMutTs > 0 && siteMutTs > lastKnownRemoteDashUpdatedMs) {
+            siteMetaLocalWins = true;
+          } else if (localMetaTs !== remoteMetaTs) {
+            siteMetaLocalWins = localMetaTs > remoteMetaTs;
+          } else if (baseSiteFp) {
+            const lc = localSiteFp !== baseSiteFp;
+            const rc = remoteSiteFp !== baseSiteFp;
+            if (lc !== rc) siteMetaLocalWins = lc;
+            else siteMetaLocalWins = preferLocal;
+          } else if (preferLocal && (localTaskMutTs.size > 0 || localSiteMutTs.size > 0 || localScopeNameMutTs.size > 0) && siteMutTs === 0 && isRemoteNewer) {
+            siteMetaLocalWins = false;
+          } else {
+            siteMetaLocalWins = preferLocal;
+          }
+
+          const baseSite = cloneJsonSafe(siteMetaLocalWins ? localSite : remoteSite);
+          const otherSite = siteMetaLocalWins ? remoteSite : localSite;
+          const maxCreated = Math.max(Number(localSite.createdAtMs) || 0, Number(remoteSite.createdAtMs) || 0);
+          if (maxCreated > 0) baseSite.createdAtMs = maxCreated;
+          if (!baseSite.siteKey && sk) baseSite.siteKey = sk;
+          if (baseSite.estimateData && otherSite.estimateData && !baseSite.estimateData.row && otherSite.estimateData.row) {
+            baseSite.estimateData.row = otherSite.estimateData.row;
+          }
+
+          const localTasks = Array.isArray(localSite.tasks) ? localSite.tasks : [];
+          const remoteTasks = Array.isArray(remoteSite.tasks) ? remoteSite.tasks : [];
+          const remoteTaskMap = new Map();
+          remoteTasks.forEach((rt, idx) => {
+            if (!rt) return;
+            const tk = getCanonicalTaskKey(rt, idx);
+            if (tk) remoteTaskMap.set(tk, rt);
+          });
+
+          const mergedTasks = [];
+          const seenKeys = new Set();
+          localTasks.forEach((lt, idx) => {
+            if (!lt) return;
+            const tk = getCanonicalTaskKey(lt, idx);
+            if (!tk) return;
+            seenKeys.add(tk);
+            const rt = remoteTaskMap.get(tk);
+            if (!rt) {
+              mergedTasks.push(cloneJsonSafe(lt));
+            } else {
+              const baseFp = baseTasksMap ? (baseTasksMap.get(tk) || "") : "";
+              mergedTasks.push(chooseMergedTaskVersion(lt, rt, baseFp, preferLocal, isRemoteNewer));
+            }
+          });
+          remoteTasks.forEach((rt, idx) => {
+            if (!rt) return;
+            const tk = getCanonicalTaskKey(rt, idx);
+            if (!tk || seenKeys.has(tk)) return;
+            seenKeys.add(tk);
+            mergedTasks.push(cloneJsonSafe(rt));
+          });
+          baseSite.tasks = mergedTasks;
+          if (typeof recalcSiteStats === "function") recalcSiteStats(baseSite, true);
+          return baseSite;
+        }
+
+        function mergeSiteInfoMaps(localMap, remoteMap, opts) {
+          const lMap = (localMap && typeof localMap === "object") ? localMap : {};
+          const rMap = (remoteMap && typeof remoteMap === "object") ? remoteMap : {};
+          const preferLocal = Boolean(opts && opts.preferLocal);
+          const isRemoteNewer = Boolean(opts && opts.isRemoteNewer);
+          const baseInfoMap = lastSyncedDashBaseline && lastSyncedDashBaseline.info ? lastSyncedDashBaseline.info : null;
+          const allKeys = new Set([...Object.keys(lMap), ...Object.keys(rMap)]);
+          const out = {};
+          allKeys.forEach((k) => {
+            const lVal = lMap[k];
+            const rVal = rMap[k];
+            if (lVal && !rVal) { out[k] = cloneJsonSafe(lVal); return; }
+            if (!lVal && rVal) { out[k] = cloneJsonSafe(rVal); return; }
+            if (!lVal && !rVal) return;
+
+            const normK = _normDashSiteName(k);
+            const mutTs = _getMutTs(localInfoMutTs.get(normK));
+            const lTs = Number(lVal.updatedAtMs) || (lVal.updatedAt ? Date.parse(lVal.updatedAt) || 0 : 0);
+            const rTs = Number(rVal.updatedAtMs) || (rVal.updatedAt ? Date.parse(rVal.updatedAt) || 0 : 0);
+            const baseFp = baseInfoMap ? (baseInfoMap.get(normK) || "") : "";
+            const lFp = buildInfoFingerprint(lVal);
+            const rFp = buildInfoFingerprint(rVal);
+
+            let localWins;
+            if (lFp === rFp) {
+              localWins = preferLocal;
+            } else if (mutTs > 0 && rTs > mutTs) {
+              localWins = false;
+            } else if (mutTs > 0 && mutTs > lastKnownRemoteDashUpdatedMs) {
+              localWins = true;
+            } else if (lTs !== rTs) {
+              localWins = lTs > rTs;
+            } else if (baseFp) {
+              const lc = lFp !== baseFp;
+              const rc = rFp !== baseFp;
+              if (lc !== rc) localWins = lc;
+              else localWins = preferLocal;
+            } else if (preferLocal && localInfoMutTs.size > 0 && mutTs === 0 && isRemoteNewer) {
+              localWins = false;
+            } else {
+              localWins = preferLocal;
+            }
+
+            const mergedEntry = localWins ? Object.assign({}, cloneJsonSafe(rVal), cloneJsonSafe(lVal)) : Object.assign({}, cloneJsonSafe(lVal), cloneJsonSafe(rVal));
+            ["clientShare", "partnerShare"].forEach((sk) => {
+              const ls = lVal[sk];
+              const rs = rVal[sk];
+              if (ls && rs) {
+                const lUpd = String(ls.updatedAt || "");
+                const rUpd = String(rs.updatedAt || "");
+                mergedEntry[sk] = cloneJsonSafe(lUpd > rUpd ? ls : rs);
+              } else if (ls || rs) {
+                mergedEntry[sk] = cloneJsonSafe(ls || rs);
+              }
+            });
+            out[k] = mergedEntry;
+          });
+          return out;
+        }
+
+        function mergeSuperintendents(localList, remoteList, opts) {
+          const hasLocal = Array.isArray(localList);
+          const hasRemote = Array.isArray(remoteList);
+          if (!hasLocal && !hasRemote) return undefined;
+          if (!hasLocal) return cloneJsonSafe(remoteList);
+          if (!hasRemote) return cloneJsonSafe(localList);
+          const preferLocal = Boolean(opts && opts.preferLocal);
+          const isRemoteNewer = Boolean(opts && opts.isRemoteNewer);
+          const baseFp = lastSyncedDashBaseline ? lastSyncedDashBaseline.superintendentsFp : "";
+          const lFp = JSON.stringify(localList);
+          const rFp = JSON.stringify(remoteList);
+          if (lFp === rFp) return cloneJsonSafe(localList);
+          const localEditedMeta = localMetaMutTs > lastKnownRemoteDashUpdatedMs;
+          if (localEditedMeta && preferLocal) return cloneJsonSafe(localList);
+          if (baseFp && lFp === baseFp && rFp !== baseFp) return cloneJsonSafe(remoteList);
+          if (baseFp && rFp === baseFp && lFp !== baseFp) return cloneJsonSafe(localList);
+          if (isRemoteNewer && !localEditedMeta) {
+            return cloneJsonSafe(remoteList);
+          }
+          return cloneJsonSafe(preferLocal ? localList : remoteList);
+        }
+
+        function mergeDashDataSnapshots(localDash, remoteDash, opts) {
+          opts = opts || {};
+          const preferLocal = opts.preferLocal !== false;
+          const lDash = (localDash && typeof localDash === "object") ? cloneJsonSafe(localDash) : { sites: [], siteInfoMap: {} };
+          const rDash = (remoteDash && typeof remoteDash === "object") ? cloneJsonSafe(remoteDash) : null;
+          if (!rDash) return lDash;
+
+          const remoteUpdMs = Number(opts.remoteUpdatedMs !== undefined ? opts.remoteUpdatedMs : rDash._updatedMs) || 0;
+          const remoteMutId = String(rDash._clientMutId || "");
+          const isRemoteNewer = Boolean(
+            (remoteUpdMs > 0 && remoteUpdMs > lastKnownRemoteDashUpdatedMs) ||
+            (remoteMutId && remoteMutId !== lastKnownRemoteDashMutId)
+          );
+
+          const metaLocalWins = Boolean(preferLocal && localMetaMutTs > lastKnownRemoteDashUpdatedMs && localMetaMutTs >= remoteUpdMs);
+          const baseTop = (metaLocalWins || !isRemoteNewer) ? Object.assign({}, rDash, lDash) : Object.assign({}, lDash, rDash);
+
+          const lSites = Array.isArray(lDash.sites) ? lDash.sites : [];
+          const rSites = Array.isArray(rDash.sites) ? rDash.sites : [];
+          const remoteSiteMap = new Map();
+          rSites.forEach((rs) => {
+            if (!rs) return;
+            const sk = getCanonicalSiteKey(rs);
+            if (sk) remoteSiteMap.set(sk, rs);
+          });
+
+          const mergedSites = [];
+          const seenSiteKeys = new Set();
+          lSites.forEach((ls) => {
+            if (!ls) return;
+            const sk = getCanonicalSiteKey(ls);
+            if (!sk) return;
+            seenSiteKeys.add(sk);
+            const rs = remoteSiteMap.get(sk);
+            if (!rs) {
+              mergedSites.push(ls);
+            } else {
+              mergedSites.push(mergeSiteObjects(ls, rs, { preferLocal, isRemoteNewer }));
+            }
+          });
+          rSites.forEach((rs) => {
+            if (!rs) return;
+            const sk = getCanonicalSiteKey(rs);
+            if (!sk || seenSiteKeys.has(sk)) return;
+            seenSiteKeys.add(sk);
+            const copyRs = cloneJsonSafe(rs);
+            if (typeof recalcSiteStats === "function") recalcSiteStats(copyRs, true);
+            mergedSites.push(copyRs);
+          });
+
+          baseTop.sites = mergedSites;
+          baseTop.siteInfoMap = mergeSiteInfoMaps(lDash.siteInfoMap, rDash.siteInfoMap, { preferLocal, isRemoteNewer });
+          if (lDash.siteInfos || rDash.siteInfos) {
+            baseTop.siteInfos = mergeSiteInfoMaps(lDash.siteInfos, rDash.siteInfos, { preferLocal, isRemoteNewer });
+          }
+          const mergedSupt = mergeSuperintendents(lDash.siteSuperintendents, rDash.siteSuperintendents, { preferLocal, isRemoteNewer });
+          if (mergedSupt !== undefined) baseTop.siteSuperintendents = mergedSupt;
+          if (lDash.holidays || rDash.holidays) {
+            baseTop.holidays = metaLocalWins
+              ? Object.assign({}, rDash.holidays || {}, lDash.holidays || {})
+              : Object.assign({}, lDash.holidays || {}, rDash.holidays || {});
+          }
+
+          if (typeof applyDeletedGuardsToDashData === "function") {
+            applyDeletedGuardsToDashData(baseTop);
+          }
+          if (typeof ensureStandardTasksInDashData === "function") {
+            ensureStandardTasksInDashData(baseTop);
+          }
+          if (typeof recalcDashMeta === "function") {
+            recalcDashMeta(baseTop);
+          }
+          return baseTop;
+        }
+
+        function _parseJsonFieldSafe(val) {
+          if (val && typeof val === "object") return val;
+          if (typeof val === "string" && val.trim()) {
+            try {
+              const parsed = JSON.parse(val);
+              if (parsed && typeof parsed === "object") return parsed;
+            } catch (_) {}
+          }
+          return null;
+        }
+
+        function recoverMissingSitesFromNormalizedTables(dashData, wsSitesRows, wsTasksRows) {
+          if (!dashData || typeof dashData !== "object") return { recoveredCount: 0, recoveredInfoCount: 0, recoveredKeys: [] };
+          if (!Array.isArray(dashData.sites)) dashData.sites = [];
+          if (!dashData.siteInfoMap || typeof dashData.siteInfoMap !== "object") dashData.siteInfoMap = {};
+
+          const sitesRows = Array.isArray(wsSitesRows) ? wsSitesRows : [];
+          const tasksRows = Array.isArray(wsTasksRows) ? wsTasksRows : [];
+          if (sitesRows.length === 0 && tasksRows.length === 0) {
+            return { recoveredCount: 0, recoveredInfoCount: 0, recoveredKeys: [] };
+          }
+
+          const existingSiteKeys = new Set();
+          const existingScopeNames = new Set();
+          dashData.sites.forEach((s) => {
+            if (!s) return;
+            const sk = getCanonicalSiteKey(s);
+            if (sk) existingSiteKeys.add(sk);
+            const nn = _normDashSiteName(s.siteName);
+            const sc = _normDashScope(s.scope);
+            if (nn) existingScopeNames.add(`${sc}::${nn}`);
+          });
+
+          const candidates = new Map();
+          const getOrCreateCandidate = (siteKey, siteName, scope) => {
+            const sc = _normDashScope(scope || "site");
+            const cleanName = String(siteName || "").trim();
+            const normName = _normDashSiteName(cleanName);
+            const effKey = String(siteKey || "").trim() || (sc === "single" ? "SINGLE::" + cleanName : sc === "as" ? "AS::" + cleanName : sc === "newSite" ? "NEWSITE::" + cleanName : cleanName);
+            const bucketId = `${sc}::${normName}`;
+            if (!candidates.has(bucketId)) {
+              candidates.set(bucketId, {
+                siteKey: effKey,
+                siteName: cleanName,
+                normName,
+                scope: sc,
+                tasks: [],
+                taskKeys: new Set(),
+                siteMeta: null,
+                siteInfo: null,
+                driveFolderUrl: "",
+                rowStatus: ""
+              });
+            }
+            const cand = candidates.get(bucketId);
+            if (siteKey && !cand.siteKey) cand.siteKey = String(siteKey).trim();
+            return cand;
+          };
+
+          tasksRows.forEach((tRow, idx) => {
+            if (!tRow || typeof tRow !== "object") return;
+            const raw = _parseJsonFieldSafe(tRow.raw_json) || {};
+            const siteName = String(raw.siteName || tRow.site_name || "").trim();
+            if (!siteName) return;
+            const scope = _normDashScope(raw.scope || tRow.category || "site");
+            const siteKey = String(raw.siteKey || "").trim();
+            const cand = getOrCreateCandidate(siteKey, siteName, scope);
+            const tid = String(raw.id || raw.taskId || tRow.id || "").trim();
+            const startYmd = String(raw.startDateStr || tRow.work_date || "").trim();
+            const endYmd = String(raw.endDateStr || tRow.end_date || startYmd).trim();
+            const taskObj = Object.assign({}, cloneJsonSafe(raw), {
+              id: tid || `recovered_${idx}`,
+              taskId: String(raw.taskId || tid || `recovered_${idx}`).trim(),
+              taskName: String(raw.taskName || tRow.content || "").trim() || "공정",
+              startDateStr: startYmd,
+              endDateStr: endYmd,
+              dateDisplay: String(raw.dateDisplay || (endYmd && startYmd && endYmd > startYmd ? `${startYmd} ~ ${endYmd}` : startYmd) || "").trim(),
+              manager: String(raw.manager !== undefined ? raw.manager : (tRow.assignee || "")),
+              status: String(raw.status || tRow.status || "예정"),
+              memo: String(raw.memo !== undefined ? raw.memo : (tRow.memo || "")),
+              scope
+            });
+            if (tRow.row_index !== null && tRow.row_index !== undefined && !taskObj.row) {
+              taskObj.row = tRow.row_index;
+            }
+            if (!taskObj.dateMs && startYmd) {
+              const parsedMs = Date.parse(startYmd.replace(/\./g, "-") + "T00:00:00");
+              if (Number.isFinite(parsedMs)) taskObj.dateMs = parsedMs;
+            }
+            const tk = getCanonicalTaskKey(taskObj, idx);
+            if (!cand.taskKeys.has(tk)) {
+              cand.taskKeys.add(tk);
+              cand.tasks.push(taskObj);
+            }
+          });
+
+          const infoOnlyCandidates = [];
+          sitesRows.forEach((sRow) => {
+            if (!sRow || typeof sRow !== "object") return;
+            const siteName = String(sRow.site_name || "").trim();
+            if (!siteName) return;
+            const meta = _parseJsonFieldSafe(sRow.meta) || {};
+            const driveUrl = String(sRow.drive_folder_url || "").trim();
+            const siteInfo = (meta.siteInfo && typeof meta.siteInfo === "object") ? cloneJsonSafe(meta.siteInfo) : null;
+            if (siteInfo || driveUrl) {
+              infoOnlyCandidates.push({ siteName, siteInfo, driveUrl });
+            }
+            const allScopes = Array.isArray(meta.allScopes) ? meta.allScopes : [];
+            const scopesList = allScopes.length > 0
+              ? allScopes
+              : ((String(sRow.status || "").trim() === "정보등록" && !meta.estimateData) ? [] : [meta]);
+            scopesList.forEach((scMeta) => {
+              if (!scMeta || typeof scMeta !== "object") return;
+              const scope = _normDashScope(scMeta.scope || sRow.scope || "site");
+              const cand = getOrCreateCandidate(scMeta.siteKey || "", siteName, scope);
+              cand.siteMeta = Object.assign({}, scMeta);
+              if (siteInfo) cand.siteInfo = siteInfo;
+              if (driveUrl) cand.driveFolderUrl = driveUrl;
+              if (sRow.status) cand.rowStatus = String(sRow.status);
+            });
+            // If tasks existed for this site without allScopes, enrich matching candidates with siteInfo/driveUrl
+            for (const cand of candidates.values()) {
+              if (_normDashSiteName(cand.siteName) === _normDashSiteName(siteName)) {
+                if (!cand.siteInfo && siteInfo) cand.siteInfo = siteInfo;
+                if (!cand.driveFolderUrl && driveUrl) cand.driveFolderUrl = driveUrl;
+                if (!cand.siteMeta && meta && _normDashScope(meta.scope) === cand.scope) cand.siteMeta = Object.assign({}, meta);
+              }
+            }
+          });
+
+          let recoveredCount = 0;
+          let recoveredInfoCount = 0;
+          const recoveredKeys = [];
+
+          candidates.forEach((cand) => {
+            const scopeNameId = `${cand.scope}::${cand.normName}`;
+            if (existingSiteKeys.has(cand.siteKey) || existingScopeNames.has(scopeNameId)) {
+              return;
+            }
+            const hasEstimate = Boolean(cand.siteMeta && cand.siteMeta.estimateData);
+            if (cand.tasks.length === 0 && !(cand.scope === "newSite" && hasEstimate)) {
+              return;
+            }
+            const maxTaskCreated = cand.tasks.reduce((mx, t) => Math.max(mx, Number(t && (t.createdAtMs || t.updatedAtMs)) || 0), 0);
+            const createdAtMs = Number(cand.siteMeta && cand.siteMeta.createdAtMs) || maxTaskCreated || 0;
+            const isArchived = Boolean(
+              (cand.siteMeta && (cand.siteMeta.isArchived || cand.siteMeta.isAllCompleted)) ||
+              cand.rowStatus === "완료" ||
+              (cand.tasks.length > 0 && cand.tasks.every(t => t && (t.isArchived || t.sheetName === "완료현장")))
+            );
+            const defaultColorHex = cand.scope === "as" ? "#d97706" : (cand.scope === "single" || cand.scope === "newSite" ? "#0284c7" : "#2563eb");
+            const candidateSite = {
+              siteKey: cand.siteKey,
+              siteName: cand.siteName,
+              colorCode: (cand.siteMeta && cand.siteMeta.colorCode) || "1",
+              colorHex: (cand.siteMeta && cand.siteMeta.colorHex) || defaultColorHex,
+              tasks: cand.tasks,
+              scope: cand.scope,
+              isArchived,
+              isAllCompleted: Boolean((cand.siteMeta && cand.siteMeta.isAllCompleted) || isArchived),
+              totalTasksCount: cand.tasks.length,
+              completedTasksCount: 0,
+              delayedTasksCount: 0,
+              progressRate: Number(cand.siteMeta && cand.siteMeta.progressRate) || 0
+            };
+            if (createdAtMs > 0) candidateSite.createdAtMs = createdAtMs;
+            if (hasEstimate) candidateSite.estimateData = cloneJsonSafe(cand.siteMeta.estimateData);
+
+            if (typeof isSiteTombstoned === "function" && isSiteTombstoned(candidateSite, candidateSite.scope)) {
+              return;
+            }
+            if (typeof applyDeletedGuardsToDashData === "function") {
+              const guardWrap = { sites: [candidateSite], siteInfoMap: {} };
+              applyDeletedGuardsToDashData(guardWrap);
+              if (!Array.isArray(guardWrap.sites) || guardWrap.sites.length === 0) {
+                return;
+              }
+            }
+            if (typeof recalcSiteStats === "function") recalcSiteStats(candidateSite, true);
+            dashData.sites.push(candidateSite);
+            existingSiteKeys.add(candidateSite.siteKey);
+            existingScopeNames.add(scopeNameId);
+            recoveredCount++;
+            recoveredKeys.push(candidateSite.siteKey);
+
+            if ((cand.siteInfo || cand.driveFolderUrl) && !dashData.siteInfoMap[cand.siteName]) {
+              const restoredInfo = Object.assign({
+                address: "",
+                doorPassword: "",
+                officePhone: "",
+                memo: "",
+                driveUrl: cand.driveFolderUrl || "",
+                consentDone: false,
+                elevatorCoverDone: false,
+                officeNoticeDone: false
+              }, cand.siteInfo || {});
+              if (!restoredInfo.driveUrl && cand.driveFolderUrl) restoredInfo.driveUrl = cand.driveFolderUrl;
+              dashData.siteInfoMap[cand.siteName] = restoredInfo;
+              recoveredInfoCount++;
+            }
+          });
+
+          // Restore siteInfoMap entries from ws_sites when not tombstoned and site survives or info-only
+          infoOnlyCandidates.forEach(({ siteName, siteInfo, driveUrl }) => {
+            if (dashData.siteInfoMap[siteName]) return;
+            const isTomb = (typeof isSiteTombstoned === "function") && (
+              isSiteTombstoned(siteName, "site") ||
+              isSiteTombstoned(siteName, "newSite") ||
+              isSiteTombstoned(siteName, "single") ||
+              isSiteTombstoned(siteName, "as")
+            );
+            const hasSurvivingSite = dashData.sites.some(s => s && _normDashSiteName(s.siteName) === _normDashSiteName(siteName));
+            if (isTomb && !hasSurvivingSite) return;
+            const restored = Object.assign({
+              address: "",
+              doorPassword: "",
+              officePhone: "",
+              memo: "",
+              driveUrl: driveUrl || "",
+              consentDone: false,
+              elevatorCoverDone: false,
+              officeNoticeDone: false
+            }, siteInfo || {});
+            if (!restored.driveUrl && driveUrl) restored.driveUrl = driveUrl;
+            dashData.siteInfoMap[siteName] = restored;
+            recoveredInfoCount++;
+          });
+
+          if (recoveredCount > 0 || recoveredInfoCount > 0) {
+            if (typeof applyDeletedGuardsToDashData === "function") {
+              applyDeletedGuardsToDashData(dashData);
+            }
+            if (typeof ensureStandardTasksInDashData === "function") {
+              ensureStandardTasksInDashData(dashData);
+            }
+            if (typeof recalcDashMeta === "function") {
+              recalcDashMeta(dashData);
+            }
+          }
+          return { recoveredCount, recoveredInfoCount, recoveredKeys };
         }
 
         function getActorName() {
@@ -28989,6 +29755,16 @@ end $$;`;
         }
 
         async function persistDomainSnapshot(key, rawPayload, opts) {
+          if ((key === "dashboard_main" || key === "dash_main") && !(opts && opts._fromQueue)) {
+            return enqueueKeyWrite(key, () => persistDomainSnapshotImpl(key, rawPayload, opts));
+          }
+          return persistDomainSnapshotImpl(key, rawPayload, opts);
+        }
+
+        async function persistDomainSnapshotImpl(key, rawPayload, opts) {
+          const isDashKey = (key === "dashboard_main" || key === "dash_main");
+          const capturedMutSeq = localMutSeq;
+          const saveStartTs = Math.max(Date.now(), lastKnownRemoteDashUpdatedMs + 1);
           let effectiveRaw = rawPayload || {};
           const shouldFilterTombstone = TOMBSTONE_PROTECTED_KEYS.has(key) && !(opts && opts.skipTombstoneFilter);
           if (shouldFilterTombstone) {
@@ -28997,7 +29773,7 @@ end $$;`;
             }
             const filterOpts = { changed: false };
             const filteredCopy = cloneForTombstoneFilter(key, effectiveRaw);
-            if ((key === "dashboard_main" || key === "dash_main") && typeof applyDeletedGuardsToDashData === "function") {
+            if (isDashKey && typeof applyDeletedGuardsToDashData === "function") {
               applyDeletedGuardsToDashData(filteredCopy, filterOpts);
               if (filterOpts.changed) {
                 if (rawPayload && typeof rawPayload === "object") {
@@ -29005,7 +29781,7 @@ end $$;`;
                   if (filteredCopy.siteInfoMap) rawPayload.siteInfoMap = filteredCopy.siteInfoMap;
                   if (filteredCopy.siteInfos) rawPayload.siteInfos = filteredCopy.siteInfos;
                 }
-                if (state && state.dashData) {
+                if (state && state.dashData && rawPayload === state.dashData) {
                   applyDeletedGuardsToDashData(state.dashData);
                   if (typeof recalcDashMeta === "function") recalcDashMeta();
                   if (window.WSDataService && window.WSDataService.saveDashboardCache) {
@@ -29066,11 +29842,80 @@ end $$;`;
             effectiveRaw = filteredCopy;
           }
 
-          const mutId = `${SESSION_CLIENT_ID}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          let remoteDashUpdMs = 0;
+          if (isDashKey && isSupabaseActive() && !(opts && opts.skipRemoteMerge)) {
+            let remoteDash = null;
+            try {
+              const remoteRows = await selectStateRows([key]);
+              const remoteRow = Array.isArray(remoteRows) ? remoteRows.find(r => r && r.key === key) : null;
+              if (remoteRow && remoteRow.payload && typeof remoteRow.payload === "object") {
+                remoteDash = remoteRow.payload;
+              }
+            } catch (err) {
+              console.warn("[Supabase Dash Merge] 원격 dashboard_main 사전 조회 경고:", err);
+            }
+            if (remoteDash && Array.isArray(remoteDash.sites)) {
+              remoteDashUpdMs = Number(remoteDash._updatedMs) || 0;
+              const remoteMutId = String(remoteDash._clientMutId || "");
+              const isRemoteNewerOrDiff = Boolean(
+                (remoteDashUpdMs > 0 && remoteDashUpdMs > lastKnownRemoteDashUpdatedMs) ||
+                (remoteMutId && remoteMutId !== lastKnownRemoteDashMutId) ||
+                (!lastKnownRemoteDashUpdatedMs && !lastKnownRemoteDashMutId && remoteDash.sites.length > 0)
+              );
+              if (isRemoteNewerOrDiff) {
+                const prevSnapshotForChecked = cloneJsonSafe(effectiveRaw);
+                const remoteCopy = cloneForTombstoneFilter(key, remoteDash);
+                if (typeof applyDeletedGuardsToDashData === "function") {
+                  applyDeletedGuardsToDashData(remoteCopy);
+                }
+                const mergedDash = mergeDashDataSnapshots(effectiveRaw, remoteCopy, {
+                  preferLocal: true,
+                  remoteUpdatedMs: remoteDashUpdMs
+                });
+                effectiveRaw = mergedDash;
+                if (rawPayload && typeof rawPayload === "object") {
+                  rawPayload.sites = mergedDash.sites;
+                  if (mergedDash.siteInfoMap) rawPayload.siteInfoMap = mergedDash.siteInfoMap;
+                  if (mergedDash.siteInfos) rawPayload.siteInfos = mergedDash.siteInfos;
+                  if (mergedDash.siteSuperintendents) rawPayload.siteSuperintendents = mergedDash.siteSuperintendents;
+                  if (mergedDash.members) rawPayload.members = mergedDash.members;
+                  if (mergedDash.tasks) rawPayload.tasks = mergedDash.tasks;
+                  if (mergedDash.partners) rawPayload.partners = mergedDash.partners;
+                  if (mergedDash.partnerPhoneMap) rawPayload.partnerPhoneMap = mergedDash.partnerPhoneMap;
+                  if (mergedDash.memberPhoneMap) rawPayload.memberPhoneMap = mergedDash.memberPhoneMap;
+                  if (mergedDash.memberRoleMap) rawPayload.memberRoleMap = mergedDash.memberRoleMap;
+                  if (mergedDash.holidays) rawPayload.holidays = mergedDash.holidays;
+                  if (mergedDash.kpi) rawPayload.kpi = mergedDash.kpi;
+                  if (mergedDash.scopeCounts) rawPayload.scopeCounts = mergedDash.scopeCounts;
+                }
+                if (state && state.dashData && rawPayload === state.dashData) {
+                  addNewRemoteSitesToCheckedSet(prevSnapshotForChecked, mergedDash);
+                  if (window.WSDataService && window.WSDataService.saveDashboardCache) {
+                    window.WSDataService.saveDashboardCache(state.dashData);
+                  }
+                  if (typeof markAllDirty === "function") markAllDirty();
+                  if (typeof renderActiveViews === "function") renderActiveViews();
+                }
+              }
+            }
+          }
+
+          if (isDashKey && typeof recalcDashMeta === "function") {
+            recalcDashMeta(effectiveRaw);
+            if (rawPayload && typeof rawPayload === "object" && rawPayload !== effectiveRaw) {
+              if (effectiveRaw.kpi) rawPayload.kpi = effectiveRaw.kpi;
+              if (effectiveRaw.scopeCounts) rawPayload.scopeCounts = effectiveRaw.scopeCounts;
+            }
+          }
+
+          const nextUpdatedMs = isDashKey
+            ? Math.max(Date.now(), lastKnownRemoteDashUpdatedMs + 1, remoteDashUpdMs + 1)
+            : Date.now();
+          const mutId = `${SESSION_CLIENT_ID}_${nextUpdatedMs}_${Math.random().toString(36).slice(2, 6)}`;
           markLocalMutId(mutId);
           const payload = Object.assign({}, effectiveRaw || {}, {
             _clientMutId: mutId,
-            _updatedMs: Date.now()
+            _updatedMs: nextUpdatedMs
           });
           const row = {
             key,
@@ -29080,6 +29925,10 @@ end $$;`;
           };
           const t0 = performance.now();
           await upsertRows("ws_state_store", [row], "key");
+          if (isDashKey) {
+            updateKnownRemoteDashState(payload);
+            pruneLocalDashMutationsBySeq(capturedMutSeq, saveStartTs);
+          }
           if (!(opts && opts.skipShareSync)) {
             const shareDashSource = (key === "dashboard_main" || key === "dash_main") ? effectiveRaw : state.dashData;
             const survivingShareNames = new Set(
@@ -29379,15 +30228,32 @@ end $$;`;
                 renderActiveViews();
               }
             } else if (key === "dashboard_main" && Array.isArray(data.sites)) {
-              state.dashData = applyDeletedGuardsToDashData(data);
-              if (typeof ensureStandardTasksInDashData === "function") ensureStandardTasksInDashData(state.dashData);
+              const incUpdMs = Number(data._updatedMs) || 0;
+              if (incUpdMs > 0 && lastKnownRemoteDashUpdatedMs > 0 && incUpdMs < lastKnownRemoteDashUpdatedMs) {
+                return; // 지연 도착한 구버전 Realtime 이벤트 무시
+              }
+              const prevDashForChecked = state.dashData;
+              if (pendingDashWritesCount > 0 && state.dashData && Array.isArray(state.dashData.sites)) {
+                const guardedRemote = typeof applyDeletedGuardsToDashData === "function" ? applyDeletedGuardsToDashData(cloneJsonSafe(data)) : cloneJsonSafe(data);
+                state.dashData = mergeDashDataSnapshots(state.dashData, guardedRemote, { preferLocal: true, remoteUpdatedMs: incUpdMs });
+                if (incUpdMs > lastKnownRemoteDashUpdatedMs) lastKnownRemoteDashUpdatedMs = incUpdMs;
+                if (data._clientMutId) lastKnownRemoteDashMutId = String(data._clientMutId);
+                lastSyncedDashBaseline = buildDashBaseline(state.dashData);
+              } else {
+                const nextDash = typeof applyDeletedGuardsToDashData === "function" ? applyDeletedGuardsToDashData(data) : data;
+                if (typeof ensureStandardTasksInDashData === "function") ensureStandardTasksInDashData(nextDash);
+                if (typeof recalcDashMeta === "function") recalcDashMeta(nextDash);
+                state.dashData = nextDash;
+                updateKnownRemoteDashState(nextDash);
+              }
+              addNewRemoteSitesToCheckedSet(prevDashForChecked, state.dashData);
               if (window.WSDataService && window.WSDataService.saveDashboardCache) {
                 window.WSDataService.saveDashboardCache(state.dashData);
               }
-              sanitizeUnregisteredMembers();
-              syncUserSelectorOptions();
-              markAllDirty();
-              renderActiveViews();
+              if (typeof sanitizeUnregisteredMembers === "function") sanitizeUnregisteredMembers();
+              if (typeof syncUserSelectorOptions === "function") syncUserSelectorOptions();
+              if (typeof markAllDirty === "function") markAllDirty();
+              if (typeof renderActiveViews === "function") renderActiveViews();
               label = "현장·공정";
             } else if (key === "todo_main" && Array.isArray(data.list)) {
               state.todoData = typeof applyDeletedGuardsToTodoData === "function" ? applyDeletedGuardsToTodoData(data) : data;
@@ -29580,12 +30446,35 @@ end $$;`;
             return emptyRes;
           }
 
+          const rawDashUpdatedMs = Number(byKey.dashboard_main._updatedMs) || 0;
+          const rawDashMutId = String(byKey.dashboard_main._clientMutId || "");
+
           if (typeof applyDeletedGuardsToDashData === "function") {
             byKey.dashboard_main = applyDeletedGuardsToDashData(byKey.dashboard_main);
           }
+
+          // 2번: 초기 로딩 시 ws_sites / ws_tasks 교차 복구 보험 (삭제 tombstone이 없는 누락 현장 자동 복구)
+          let recoveryRes = { recoveredCount: 0, recoveredInfoCount: 0, recoveredKeys: [] };
+          try {
+            const [wsSitesRows, wsTasksRows] = await Promise.all([
+              selectTableRows("ws_sites", "*"),
+              selectTableRows("ws_tasks", "*")
+            ]);
+            recoveryRes = recoverMissingSitesFromNormalizedTables(byKey.dashboard_main, wsSitesRows, wsTasksRows);
+          } catch (recErr) {
+            console.warn("[Supabase Cross-Recovery] ws_sites/ws_tasks 교차 복구 조회 경고:", recErr);
+          }
+
           if (typeof ensureStandardTasksInDashData === "function") {
             ensureStandardTasksInDashData(byKey.dashboard_main);
           }
+          if (recoveryRes.recoveredCount > 0 || recoveryRes.recoveredInfoCount > 0) {
+            if (typeof recalcDashMeta === "function") recalcDashMeta(byKey.dashboard_main);
+          }
+          if (rawDashUpdatedMs > lastKnownRemoteDashUpdatedMs) lastKnownRemoteDashUpdatedMs = rawDashUpdatedMs;
+          if (rawDashMutId) lastKnownRemoteDashMutId = rawDashMutId;
+          lastSyncedDashBaseline = buildDashBaseline(byKey.dashboard_main);
+
           if (byKey.todo_main && Array.isArray(byKey.todo_main.list) && typeof applyDeletedGuardsToTodoData === "function") {
             byKey.todo_main = applyDeletedGuardsToTodoData(byKey.todo_main);
           }
@@ -29636,10 +30525,130 @@ end $$;`;
             settingsData: byKey.settings_main || null,
             financeData: byKey.finance_db ? Object.assign({ success: true }, byKey.finance_db) : null,
             meta,
-            elapsedMs
+            elapsedMs,
+            recoveredSiteCount: recoveryRes.recoveredCount,
+            recoveredInfoCount: recoveryRes.recoveredInfoCount,
+            recoveredSiteKeys: recoveryRes.recoveredKeys
           };
           if (typeof cb === "function") cb(resObj);
           return resObj;
+        }
+
+        async function checkRemoteDashAndRefresh(opts) {
+          opts = opts || {};
+          if (!isSupabaseActive()) return { checked: false, updated: false, reason: "inactive" };
+          if (!opts.force && typeof document !== "undefined" && document.visibilityState === "hidden") {
+            return { checked: false, updated: false, reason: "hidden" };
+          }
+          if (!opts.force && pendingDashWritesCount > 0) {
+            return { checked: false, updated: false, reason: "write_in_progress" };
+          }
+          const nowMs = Date.now();
+          if (!opts.force && (nowMs - lastVisibilitySyncCheckMs) < VISIBILITY_CHECK_COOLDOWN_MS) {
+            return { checked: false, updated: false, reason: "cooldown" };
+          }
+          if (visibilitySyncInFlight) return visibilitySyncInFlight;
+          lastVisibilitySyncCheckMs = nowMs;
+
+          visibilitySyncInFlight = (async () => {
+            try {
+              const rows = await selectStateRows(["dashboard_main"]);
+              const row = Array.isArray(rows) ? rows.find(r => r && r.key === "dashboard_main") : null;
+              const remoteDash = (row && row.payload && typeof row.payload === "object") ? row.payload : null;
+              if (!remoteDash || !Array.isArray(remoteDash.sites)) {
+                return { checked: true, updated: false, reason: "empty_remote" };
+              }
+              const remoteUpdMs = Number(remoteDash._updatedMs) || 0;
+              const remoteMutId = String(remoteDash._clientMutId || "");
+              if (remoteMutId && recentLocalMutIds.has(remoteMutId)) {
+                if (remoteUpdMs > lastKnownRemoteDashUpdatedMs) lastKnownRemoteDashUpdatedMs = remoteUpdMs;
+                lastKnownRemoteDashMutId = remoteMutId;
+                return { checked: true, updated: false, reason: "own_mutation" };
+              }
+              const isRemoteNewer = Boolean(
+                (remoteUpdMs > 0 && remoteUpdMs > lastKnownRemoteDashUpdatedMs) ||
+                (remoteMutId && lastKnownRemoteDashMutId && remoteMutId !== lastKnownRemoteDashMutId) ||
+                (!lastKnownRemoteDashUpdatedMs && !lastKnownRemoteDashMutId && remoteUpdMs > 0)
+              );
+              if (!isRemoteNewer) {
+                return { checked: true, updated: false, reason: "up_to_date" };
+              }
+
+              await pullAndMergeTombstonesFromSupabase();
+
+              const prevLocalDash = (state && state.dashData && Array.isArray(state.dashData.sites))
+                ? state.dashData
+                : { sites: [], siteInfoMap: {} };
+              const remoteCopy = cloneJsonSafe(remoteDash);
+              if (typeof applyDeletedGuardsToDashData === "function") {
+                applyDeletedGuardsToDashData(remoteCopy);
+              }
+              const merged = mergeDashDataSnapshots(prevLocalDash, remoteCopy, {
+                preferLocal: false,
+                remoteUpdatedMs: remoteUpdMs
+              });
+              if (typeof mergePreservedShareConfigs === "function") {
+                mergePreservedShareConfigs(merged, prevLocalDash);
+              }
+              if (typeof applyDeletedGuardsToDashData === "function") {
+                applyDeletedGuardsToDashData(merged);
+              }
+              if (typeof ensureStandardTasksInDashData === "function") {
+                ensureStandardTasksInDashData(merged);
+              }
+              if (typeof recalcDashMeta === "function") {
+                recalcDashMeta(merged);
+              }
+
+              if (remoteUpdMs > lastKnownRemoteDashUpdatedMs) lastKnownRemoteDashUpdatedMs = remoteUpdMs;
+              if (remoteMutId) lastKnownRemoteDashMutId = remoteMutId;
+              lastSyncedDashBaseline = buildDashBaseline(merged);
+
+              addNewRemoteSitesToCheckedSet(prevLocalDash, merged);
+              if (state) {
+                state.dashData = merged;
+                const dNow = new Date();
+                state.syncSource = "supabase";
+                state.syncTime = `${String(dNow.getHours()).padStart(2, "0")}:${String(dNow.getMinutes()).padStart(2, "0")}:${String(dNow.getSeconds()).padStart(2, "0")}`;
+              }
+              if (window.WSDataService && typeof window.WSDataService.saveDashboardCache === "function") {
+                window.WSDataService.saveDashboardCache(merged);
+              }
+              if (typeof sanitizeUnregisteredMembers === "function") sanitizeUnregisteredMembers();
+              if (typeof syncUserSelectorOptions === "function") syncUserSelectorOptions();
+              if (typeof markAllDirty === "function") markAllDirty();
+              if (typeof renderActiveViews === "function") renderActiveViews();
+              updatePerfBadgeText();
+              updateHeaderBadges();
+              if (typeof showToast === "function") {
+                showToast("⚡ 최신 데이터로 자동 동기화되었습니다.");
+              }
+              return { checked: true, updated: true, remoteUpdatedMs: remoteUpdMs, siteCount: (merged.sites || []).length };
+            } catch (err) {
+              console.warn("[Supabase Visibility Refresh] 경고:", err);
+              return { checked: true, updated: false, error: err && err.message ? err.message : String(err) };
+            } finally {
+              visibilitySyncInFlight = null;
+            }
+          })();
+          return visibilitySyncInFlight;
+        }
+
+        function bindVisibilityAndFocusRefresh() {
+          if (visibilityListenersBound) return;
+          visibilityListenersBound = true;
+          if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+            document.addEventListener("visibilitychange", () => {
+              if (document.visibilityState === "hidden") return;
+              checkRemoteDashAndRefresh({ trigger: "visibilitychange" });
+            });
+          }
+          if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+            window.addEventListener("focus", () => {
+              if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+              checkRemoteDashAndRefresh({ trigger: "focus" });
+            });
+          }
         }
 
         async function fetchFinanceSnapshotFromSupabase() {
@@ -29854,7 +30863,7 @@ end $$;`;
           if (financeDb && typeof applyDeletedGuardsToFinanceData === "function") financeDb = applyDeletedGuardsToFinanceData(financeDb, { fromGas: true });
 
           appendLog("3/5 ws_state_store 도메인 스냅샷 저장 중...");
-          await persistDomainSnapshot("dashboard_main", dashData, { skipTombstoneFetch: true });
+          await persistDomainSnapshot("dashboard_main", dashData, { skipTombstoneFetch: true, skipRemoteMerge: true });
           if (todoData) await persistDomainSnapshot("todo_main", todoData, { skipTombstoneFetch: true });
           if (settingsData) await persistDomainSnapshot("settings_main", settingsData, { skipTombstoneFetch: true });
           if (financeDb) await persistDomainSnapshot("finance_db", financeDb, { skipTombstoneFetch: true });
@@ -30060,12 +31069,17 @@ end $$;`;
               }
             }
             if (d) ds.saveDashboardCache(d);
+            markLocalDashMutation({
+              taskId: clean && (clean.id || clean.taskId),
+              siteName: clean && clean.site,
+              scope: clean && (clean.category || clean.scope || (clean.sheetName === "AS" ? "as" : clean.sheetName === "단건" ? "single" : "site"))
+            });
             bgDualWrite("saveTask", () => orig.saveTask.call(ds, isEdit, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
               if (!isEdit && typeof syncTombstonesToSupabase === "function") {
                 await syncTombstonesToSupabase();
               }
-              await persistDomainSnapshot("dashboard_main", d);
+              await persistDomainSnapshotImpl("dashboard_main", d);
               if (clean && clean.site) {
                 await syncNormalizedForSite(clean.site, d, clean.id || clean.taskId || "");
               }
@@ -30098,7 +31112,7 @@ end $$;`;
               if (typeof syncTombstonesToSupabase === "function") {
                 await syncTombstonesToSupabase();
               }
-              await persistDomainSnapshot("dashboard_main", d);
+              await persistDomainSnapshotImpl("dashboard_main", d);
               if (clean && (clean.id || clean.taskId)) {
                 await removeNormalizedTask(clean.id || clean.taskId);
               }
@@ -30121,9 +31135,13 @@ end $$;`;
             if (!isSupabaseActive()) return orig.moveTaskDate.call(ds, clean, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
+            markLocalDashMutation({
+              taskId: clean && (clean.id || clean.taskId),
+              siteName: clean && clean.site
+            });
             bgDualWrite("moveTaskDate", () => orig.moveTaskDate.call(ds, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
-              await persistDomainSnapshot("dashboard_main", d);
+              await persistDomainSnapshotImpl("dashboard_main", d);
               if (clean && clean.site) {
                 await syncNormalizedForSite(clean.site, d, clean.id || clean.taskId || "");
               }
@@ -30140,9 +31158,14 @@ end $$;`;
             if (!isSupabaseActive()) return orig.cascadeShiftTasks.call(ds, clean, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
+            markLocalDashMutation({
+              siteName: clean && clean.site,
+              scope: clean && (clean.sheetName === "AS" ? "as" : clean.sheetName === "단건" ? "single" : "site"),
+              isSiteMeta: true
+            });
             bgDualWrite("cascadeShiftTasks", () => orig.cascadeShiftTasks.call(ds, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
-              await persistDomainSnapshot("dashboard_main", d);
+              await persistDomainSnapshotImpl("dashboard_main", d);
               if (clean && clean.site) {
                 await syncNormalizedForSite(clean.site, d);
               }
@@ -30171,7 +31194,7 @@ end $$;`;
               if (typeof syncTombstonesToSupabase === "function") {
                 await syncTombstonesToSupabase();
               }
-              await persistDomainSnapshot("dashboard_main", d);
+              await persistDomainSnapshotImpl("dashboard_main", d);
               if (revokeShareTokens.length > 0) {
                 for (const tokInfo of revokeShareTokens) {
                   if (!tokInfo || !tokInfo.key) continue;
@@ -30204,9 +31227,10 @@ end $$;`;
             if (!isSupabaseActive()) return orig.saveSiteInfo.call(ds, clean, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
+            markLocalDashMutation({ siteName: clean && (clean.site || clean.siteName), isInfo: true });
             bgDualWrite("saveSiteInfo", () => orig.saveSiteInfo.call(ds, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
-              await persistDomainSnapshot("dashboard_main", d);
+              await persistDomainSnapshotImpl("dashboard_main", d);
               if (clean && (clean.site || clean.siteName)) {
                 await syncNormalizedForSite(clean.site || clean.siteName, d);
               }
@@ -30229,9 +31253,10 @@ end $$;`;
             if (!isSupabaseActive()) return orig.toggleChecklist.call(ds, clean, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
+            markLocalDashMutation({ siteName: clean && clean.site, isInfo: true });
             bgDualWrite("toggleChecklist", () => orig.toggleChecklist.call(ds, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
-              await persistDomainSnapshot("dashboard_main", d);
+              await persistDomainSnapshotImpl("dashboard_main", d);
               if (clean && clean.site) {
                 await syncNormalizedForSite(clean.site, d);
               }
@@ -30254,12 +31279,13 @@ end $$;`;
               }
             }
             if (d) ds.saveDashboardCache(d);
+            markLocalDashMutation({ siteName: payload && payload.siteName, scope: "newSite", isEstimate: true });
             bgDualWrite("saveEstimate", () => orig.saveEstimate.call(ds, isEdit, payload, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
               if (!isEdit && typeof syncTombstonesToSupabase === "function") {
                 await syncTombstonesToSupabase();
               }
-              await persistDomainSnapshot("dashboard_main", d);
+              await persistDomainSnapshotImpl("dashboard_main", d);
               if (payload && payload.siteName) {
                 await syncNormalizedForSite(payload.siteName, d);
               }
@@ -30275,12 +31301,14 @@ end $$;`;
               clearDeletedSiteGuardByName(payload.siteName, targetScope, { skipRemoteSync: true });
             }
             if (d) ds.saveDashboardCache(d);
+            markLocalDashMutation({ siteName: payload && payload.siteName, scope: "newSite", isEstimate: true, isInfo: true });
+            markLocalDashMutation({ siteName: payload && payload.siteName, scope: targetScope, isSiteMeta: true });
             bgDualWrite("promoteEstimateToSite", () => orig.promoteEstimateToSite.call(ds, payload, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
               if (typeof syncTombstonesToSupabase === "function") {
                 await syncTombstonesToSupabase();
               }
-              await persistDomainSnapshot("dashboard_main", d);
+              await persistDomainSnapshotImpl("dashboard_main", d);
               if (payload && payload.siteName) {
                 await syncNormalizedForSite(payload.siteName, d);
               }
@@ -30467,8 +31495,9 @@ end $$;`;
                   state.dashData.partnerPhoneMap = Object.assign({}, state.dashData.partnerPhoneMap || {}, ppMap);
                 }
                 if (typeof applyDeletedGuardsToDashData === "function") applyDeletedGuardsToDashData(state.dashData);
+                markLocalDashMutation({ isMeta: true });
                 ds.saveDashboardCache(state.dashData);
-                await enqueueKeyWrite("dashboard_main", () => persistDomainSnapshot("dashboard_main", state.dashData));
+                await enqueueKeyWrite("dashboard_main", () => persistDomainSnapshotImpl("dashboard_main", state.dashData));
               }
               return { success: true, message: "기준정보 설정이 Supabase에 0.05초 만에 저장되었습니다.", source: "supabase" };
             });
@@ -31111,6 +32140,7 @@ end $$;`;
 
         function init() {
           installServiceHooks();
+          bindVisibilityAndFocusRefresh();
           updateStatusState();
           if (isSupabaseActive()) {
             startRealtime();
@@ -31124,7 +32154,11 @@ end $$;`;
           isConfigured,
           isSupabaseActive,
           persistSnapshot: persistDomainSnapshot,
-          persistSnapshotQueued: (key, rawPayload, opts) => enqueueKeyWrite(key, () => persistDomainSnapshot(key, rawPayload, opts)),
+          persistSnapshotQueued: (key, rawPayload, opts) => enqueueKeyWrite(key, () => persistDomainSnapshotImpl(key, rawPayload, opts)),
+          markLocalDashMutation,
+          mergeDashDataSnapshots,
+          recoverMissingSitesFromNormalizedTables,
+          checkRemoteDashAndRefresh,
           syncTombstones: syncTombstonesToSupabase,
           pullTombstones: pullAndMergeTombstonesFromSupabase,
           fetchAuditLogs: fetchAuditLogsFromSupabase,
@@ -31332,6 +32366,7 @@ end $$;`;
         task.dateMs = new Date(targetYmd + "T00:00:00").getTime();
         task.isToday = targetYmd === todayYmd;
         task.isDelayed = targetYmd < todayYmd && task.status !== "완료";
+        task.updatedAtMs = Date.now();
         recalcSiteStats(site);
         const afterTaskSnap = typeof window.snapshotTaskForAudit === "function" ? window.snapshotTaskForAudit(site, task) : null;
 
@@ -32401,6 +33436,7 @@ end $$;`;
             mergePreservedShareConfigs(cleanDash, state.dashData);
             if (typeof ensureStandardTasksInDashData === "function") ensureStandardTasksInDashData(cleanDash);
             state.dashData = cleanDash;
+            if (typeof recalcDashMeta === "function") recalcDashMeta();
             if (window.WSDataService && typeof window.WSDataService.saveDashboardCache === "function") {
               window.WSDataService.saveDashboardCache(state.dashData);
             }
