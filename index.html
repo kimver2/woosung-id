@@ -16064,7 +16064,7 @@ end $$;`;
             <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:14px;">
               <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #f59e0b;background:#fffbeb;">
                 <div style="font-size:12px;color:#b45309;font-weight:700;">매월 고정 지출 예상액</div>
-                <div style="font-size:22px;font-weight:900;color:#b45309;margin-top:4px;">${formatKrw(totalMonthlyFixed)}</div>
+                <div style="font-size:20px;font-weight:900;color:#b45309;margin-top:4px;white-space:nowrap;">${(Number(totalMonthlyFixed) || 0).toLocaleString("ko-KR")} 원</div>
                 <div style="font-size:11.5px;color:#d97706;margin-top:4px;font-weight:700;">활성 고정비 ${activeCount}건 합계</div>
               </div>
               <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #16a34a;">
@@ -16139,7 +16139,7 @@ end $$;`;
                 <td style="padding:10px 10px;color:#334155;">${escHtml(f.category || "-")}</td>
                 <td style="padding:10px 12px;font-weight:400;color:#1e293b;font-size:13px;">${escHtml(f.vendor || "-")}</td>
                 <td style="padding:10px 10px;font-size:12px;color:#475569;">${escHtml(f.accountNumber || f.category2 || "-")}</td>
-                <td style="padding:10px 12px;text-align:right;font-weight:400;font-size:13px;color:#1e293b;">${formatKrw(amt)}</td>
+                <td style="padding:10px 12px;text-align:right;font-weight:400;font-size:13px;color:#1e293b;white-space:nowrap;">${amt.toLocaleString("ko-KR")} 원</td>
                 <td style="padding:10px 10px;text-align:center;font-size:12px;color:#64748b;">${escHtml(f.payDay || "-")}</td>
                 <td style="padding:10px 10px;font-size:12px;color:var(--text-sub);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(f.note || "-")}</td>
                 <td style="padding:10px 8px;text-align:center;">
@@ -16169,7 +16169,7 @@ end $$;`;
                     <th style="padding:10px 10px;width:110px;">구분</th>
                     <th style="padding:10px 12px;width:150px;">업체명 / 지급처</th>
                     <th style="padding:10px 10px;width:160px;">계좌번호 (은행)</th>
-                    <th style="padding:10px 12px;text-align:right;width:125px;">월 고정금액</th>
+                    <th style="padding:10px 12px;text-align:right;width:145px;white-space:nowrap;">월 고정금액</th>
                     <th style="padding:10px 10px;text-align:center;width:105px;">지급일</th>
                     <th style="padding:10px 10px;">비고</th>
                     <th style="padding:10px 8px;text-align:center;width:105px;">관리</th>
@@ -18385,7 +18385,7 @@ end $$;`;
             <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:8px;margin-bottom:12px;">
               <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #f59e0b;background:#fffbeb;">
                 <div style="font-size:10.5px;color:#b45309;font-weight:700;">월 고정 지출</div>
-                <div style="font-size:15px;font-weight:900;color:#b45309;margin-top:2px;">${formatKrw(totalMonthlyFixed)}</div>
+                <div style="font-size:15px;font-weight:900;color:#b45309;margin-top:2px;white-space:nowrap;">${(Number(totalMonthlyFixed) || 0).toLocaleString("ko-KR")} 원</div>
                 <div style="font-size:10px;color:#d97706;margin-top:2px;">활성 ${activeCount}건 합계</div>
               </div>
               <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #16a34a;">
@@ -18446,9 +18446,9 @@ end $$;`;
                   </div>
                 </div>
 
-                <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:4px;">
                   <div style="font-size:14px;font-weight:900;color:#1e293b;">${escHtml(f.vendor || "-")}</div>
-                  <div style="font-size:15px;font-weight:900;color:#1e293b;">${formatKrw(amt)}</div>
+                  <div style="font-size:15px;font-weight:900;color:#1e293b;white-space:nowrap;">${amt.toLocaleString("ko-KR")} 원</div>
                 </div>
 
                 <div style="font-size:11.5px;color:#475569;display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
