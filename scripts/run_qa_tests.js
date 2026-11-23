@@ -3582,6 +3582,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     const colModalEnd = idxRootHtml.indexOf('// ================= 비용마감 (Step 3) 헬퍼 및 모달 함수 =================');
     const fnFmtShort = idxRootHtml.match(/function formatShortAmount\([\s\S]*?\n      \}/);
     const fnFmtKrw = idxRootHtml.match(/function formatKrw\([\s\S]*?\n      \}/);
+    const fnFmtExactKrw = idxRootHtml.match(/function formatExactKrw\([\s\S]*?\n      \}/);
     const fnFmtNumComma = idxRootHtml.match(/function formatNumberInputWithCommas\([\s\S]*?\n      \}/);
     const fnFmtSignedComma = idxRootHtml.match(/function formatSignedNumberInputWithCommas\([\s\S]*?\n      \}/);
     const fnParseExtra = idxRootHtml.match(/function parseExtraAmountFromNote\([\s\S]*?\n      \}/);
@@ -3599,7 +3600,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       colHelperStart !== -1 && colHelperEnd > colHelperStart &&
       colModalStart !== -1 && colModalEnd > colModalStart &&
       shareS !== -1 && shareE > shareS &&
-      Boolean(fnFmtShort && fnFmtKrw && fnFmtNumComma && fnFmtSignedComma && fnParseExtra && fnStripExtra && fnBuildExtra && fnEscHtml && fnEscJs && fnNormYmd)
+      Boolean(fnFmtShort && fnFmtKrw && fnFmtExactKrw && fnFmtNumComma && fnFmtSignedComma && fnParseExtra && fnStripExtra && fnBuildExtra && fnEscHtml && fnEscJs && fnNormYmd)
     );
     assertTest('수금 모달 및 집계 런타임 검증용 코드 블록 추출 검증', canExtractCol);
     if (!canExtractCol) return;
@@ -3735,7 +3736,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     };
 
     const colScript = [
-      fnEscHtml[0], fnEscJs[0], fnFmtShort[0], fnFmtKrw[0], fnFmtNumComma[0], fnFmtSignedComma[0],
+      fnEscHtml[0], fnEscJs[0], fnFmtShort[0], fnFmtKrw[0], fnFmtExactKrw[0], fnFmtNumComma[0], fnFmtSignedComma[0],
       fnParseExtra[0], fnStripExtra[0], fnBuildExtra[0], fnNormYmd[0],
       idxRootHtml.slice(colHelperStart, colHelperEnd),
       idxRootHtml.slice(colModalStart, colModalEnd),
@@ -3924,6 +3925,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     const fnEscJs = idxRootHtml.match(/function escJs\([\s\S]*?\n      \}/);
     const fnFmtShort = idxRootHtml.match(/function formatShortAmount\([\s\S]*?\n      \}/);
     const fnFmtKrw = idxRootHtml.match(/function formatKrw\([\s\S]*?\n      \}/);
+    const fnFmtExactKrw = idxRootHtml.match(/function formatExactKrw\([\s\S]*?\n      \}/);
     const fnParseExtra = idxRootHtml.match(/function parseExtraAmountFromNote\([\s\S]*?\n      \}/);
     const fnIsFixed = idxRootHtml.match(/function isFixedExpenseRow\([\s\S]*?\n      \}/);
     const colHelperStart = idxRootHtml.indexOf('function isCollectionSiteCompleted(matchedSite, progress)');
@@ -3940,7 +3942,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     const mFinEnd = idxRootHtml.indexOf('function captureViewScrollPositions()');
 
     const extractedOk = Boolean(
-      fnEscHtml && fnEscJs && fnFmtShort && fnFmtKrw && fnParseExtra && fnIsFixed &&
+      fnEscHtml && fnEscJs && fnFmtShort && fnFmtKrw && fnFmtExactKrw && fnParseExtra && fnIsFixed &&
       colHelperStart !== -1 && colHelperEnd > colHelperStart &&
       importStart !== -1 && importEnd > importStart &&
       detailStart !== -1 && detailEnd > detailStart &&
@@ -4045,7 +4047,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     };
 
     const finRuntimeCode = [
-      fnEscHtml[0], fnEscJs[0], fnFmtShort[0], fnFmtKrw[0], fnParseExtra[0], fnIsFixed[0],
+      fnEscHtml[0], fnEscJs[0], fnFmtShort[0], fnFmtKrw[0], fnFmtExactKrw[0], fnParseExtra[0], fnIsFixed[0],
       idxRootHtml.slice(colHelperStart, colHelperEnd),
       idxRootHtml.slice(importStart, importEnd),
       idxRootHtml.slice(detailStart, detailEnd),
@@ -4165,6 +4167,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       !mobZeroOnlyHtml.includes('완납') &&
       !mobZeroOnlyHtml.includes('>완료<') &&
       monthlyZeroOnlyHtml.includes('금액 미입력') &&
+      !monthlyZeroOnlyHtml.includes('미수 0 원') &&
       !monthlyZeroOnlyHtml.includes('미수 0원') &&
       !monthlyZeroOnlyHtml.includes('저마진')
     );
@@ -4203,14 +4206,14 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       pcAllHtml.includes('완료 (1)') &&
       pcAllHtml.includes('금액 미입력') &&
       pcAllHtml.includes('완납 (0원)') &&
-      pcAllHtml.includes('6,000,000원') &&
+      pcAllHtml.includes('6,000,000 원') &&
       mobAllHtml.includes('전체 (4)') &&
       mobAllHtml.includes('미수 (1)') &&
       mobAllHtml.includes('완료 (1)') &&
       mobAllHtml.includes('금액 미입력') &&
       mobAllHtml.includes('완납') &&
       monthlyHtml.includes('금액 미입력') &&
-      monthlyHtml.includes('미수 0원') &&
+      monthlyHtml.includes('미수 0 원') &&
       detailZeroHtml.includes('금액 미입력') &&
       !detailZeroHtml.includes('완납 (미수금 0원)') &&
       detailPaidHtml.includes('완납 (미수금 0원)') &&
@@ -5457,6 +5460,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       },
       normalizeMonthStr: (m) => String(m || '').replace(/\./g, '-').slice(0, 7),
       formatKrw: (n) => Number(n || 0).toLocaleString('ko-KR') + '원',
+      formatExactKrw: (n) => (Number(n) || 0).toLocaleString('ko-KR') + ' 원',
       formatShortNum: (n) => String(Math.round((Number(n) || 0) / 10000)) + '만',
       parseExtraAmountFromNote: () => 0,
       isFixedExpenseRow: () => false,

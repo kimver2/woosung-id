@@ -3901,6 +3901,9 @@ end $$;`;
         if (Math.abs(n) >= 10000) return Math.round(n / 10000).toLocaleString("ko-KR") + "만";
         return n.toLocaleString("ko-KR") + "원";
       }
+      function formatExactKrw(num) {
+        return (Number(num) || 0).toLocaleString("ko-KR") + " 원";
+      }
       function formatShortSettleMonth(val) {
         if (!val) return "";
         const norm = (typeof normalizeMonthStr === "function") ? normalizeMonthStr(val) : String(val).trim();
@@ -8998,7 +9001,7 @@ end $$;`;
           (mid3PaidFlag && (Number(r && r.midPayment3) || 0) > 0) ||
           (midSched === 0 && (mid1PaidFlag || mid2PaidFlag || mid3PaidFlag));
 
-        const tip = `계약: ${formatShortAmount(down)} / 착수: ${formatShortAmount(start)} / 중도: ${formatShortAmount(mid)} / 잔금: ${formatShortAmount(fin)}`;
+        const tip = `계약: ${formatExactKrw(down)} / 착수: ${formatExactKrw(start)} / 중도: ${formatExactKrw(mid)} / 잔금: ${formatExactKrw(fin)}`;
 
         const makeChip = (label, paidAmt, schedAmt, isPaidFlag) => {
           const isPaid = Boolean(isPaidFlag && (paidAmt > 0 || schedAmt === 0));
@@ -9215,15 +9218,15 @@ end $$;`;
 
           return `
             <div data-month="${m.month}" ${isSelected ? 'data-selected="1"' : ""} onclick="window.setFinanceMonthFilter(${m.month})"
-              style="cursor:pointer;padding:${isMobile ? "6px 8px" : "8px 6px"};border-radius:8px;background:${bg};border:1.5px solid ${border};text-align:center;transition:all 0.15s ease;flex:${isMobile ? "0 0 68px" : "1"};min-width:${isMobile ? "68px" : "0"};position:relative;box-shadow:${isSelected ? "0 2px 8px rgba(37,99,235,0.25)" : "none"};"
-              title="${m.month}월: ${m.count}건 / 수금 ${formatKrw(m.collected)}${m.uncollected > 0 ? " / 미수 " + formatKrw(m.uncollected) : ""}">
+              style="cursor:pointer;padding:${isMobile ? "6px 8px" : "8px 6px"};border-radius:8px;background:${bg};border:1.5px solid ${border};text-align:center;transition:all 0.15s ease;flex:${isMobile ? "0 0 auto" : "1"};min-width:${isMobile ? "94px" : "0"};position:relative;box-shadow:${isSelected ? "0 2px 8px rgba(37,99,235,0.25)" : "none"};"
+              title="${m.month}월: ${m.count}건 / 수금 ${formatExactKrw(m.collected)}${m.uncollected > 0 ? " / 미수 " + formatExactKrw(m.uncollected) : ""}">
               ${m.hasUncollected ? `
                 <span style="position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:#ef4444;" title="미수 현장 있음"></span>
               ` : ""}
               <div style="font-size:${isMobile ? "11px" : "12px"};font-weight:800;color:${textTitle};">${m.month}월</div>
               <div style="font-size:10px;font-weight:700;color:${textCount};margin-top:2px;">${m.count > 0 ? m.count + "건" : "-"}</div>
-              <div style="font-size:10px;font-weight:700;color:${textAmt};margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                ${m.count > 0 ? formatShortAmount(m.collected) : ""}
+              <div style="font-size:${isMobile ? "9.5px" : "9.5px"};font-weight:700;color:${textAmt};margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                ${m.count > 0 ? formatExactKrw(m.collected) : ""}
               </div>
             </div>
           `;
@@ -12567,18 +12570,18 @@ end $$;`;
             <p style="color:#64748b;margin:0 0 14px;">출력일: ${escHtml(getTodayYmd())} · 수금 ${colList.length}건 / 매입(비용) ${expList.length}건 / 3.3% 원천징수 ${withholdingList.length}건</p>
             <h3 style="margin:12px 0 6px;">1. 거래처별 매입(지출) 합계 (${vendorRows.length}곳)</h3>
             <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:14px;">
-              <thead><tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1;padding:5px;text-align:left;">거래처/업체명</th><th style="border:1px solid #cbd5e1;padding:5px;text-align:right;">총 청구금액</th></tr></thead>
-              <tbody>${vendorRows.slice(0, 50).map(([v, amt]) => `<tr><td style="border:1px solid #cbd5e1;padding:5px;">${escHtml(v)}</td><td style="border:1px solid #cbd5e1;padding:5px;text-align:right;font-weight:700;">${amt.toLocaleString("ko-KR")}원</td></tr>`).join("")}</tbody>
+              <thead><tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1;padding:5px;text-align:left;">거래처/업체명</th><th style="border:1px solid #cbd5e1;padding:5px;text-align:right;white-space:nowrap;">총 청구금액</th></tr></thead>
+              <tbody>${vendorRows.slice(0, 50).map(([v, amt]) => `<tr><td style="border:1px solid #cbd5e1;padding:5px;">${escHtml(v)}</td><td style="border:1px solid #cbd5e1;padding:5px;text-align:right;font-weight:700;white-space:nowrap;">${formatExactKrw(amt)}</td></tr>`).join("")}</tbody>
             </table>
             <h3 style="margin:12px 0 6px;">2. 3.3% 원천징수(인건비) 내역 (${withholdingList.length}건)</h3>
             <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
-              <thead><tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1;padding:5px;">정산월</th><th style="border:1px solid #cbd5e1;padding:5px;">성명/업체</th><th style="border:1px solid #cbd5e1;padding:5px;text-align:right;">세전금액</th><th style="border:1px solid #cbd5e1;padding:5px;text-align:right;">실지급액</th><th style="border:1px solid #cbd5e1;padding:5px;">비고</th></tr></thead>
-              <tbody>${withholdingList.map(w => `<tr><td style="border:1px solid #cbd5e1;padding:5px;">${escHtml(w.settleMonth)}</td><td style="border:1px solid #cbd5e1;padding:5px;font-weight:700;">${escHtml(w.vendor)}</td><td style="border:1px solid #cbd5e1;padding:5px;text-align:right;">${Number(w.claimAmount||0).toLocaleString("ko-KR")}원</td><td style="border:1px solid #cbd5e1;padding:5px;text-align:right;">${Number(w.paidAmount||0).toLocaleString("ko-KR")}원</td><td style="border:1px solid #cbd5e1;padding:5px;">${escHtml(stripExpenseTaxProof(w.note))}</td></tr>`).join("") || `<tr><td colspan="5" style="border:1px solid #cbd5e1;padding:10px;text-align:center;color:#94a3b8;">3.3% 원천징수 내역이 없습니다.</td></tr>`}</tbody>
+              <thead><tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1;padding:5px;">정산월</th><th style="border:1px solid #cbd5e1;padding:5px;">성명/업체</th><th style="border:1px solid #cbd5e1;padding:5px;text-align:right;white-space:nowrap;">세전금액</th><th style="border:1px solid #cbd5e1;padding:5px;text-align:right;white-space:nowrap;">실지급액</th><th style="border:1px solid #cbd5e1;padding:5px;">비고</th></tr></thead>
+              <tbody>${withholdingList.map(w => `<tr><td style="border:1px solid #cbd5e1;padding:5px;">${escHtml(w.settleMonth)}</td><td style="border:1px solid #cbd5e1;padding:5px;font-weight:700;">${escHtml(w.vendor)}</td><td style="border:1px solid #cbd5e1;padding:5px;text-align:right;white-space:nowrap;">${formatExactKrw(w.claimAmount)}</td><td style="border:1px solid #cbd5e1;padding:5px;text-align:right;white-space:nowrap;">${formatExactKrw(w.paidAmount)}</td><td style="border:1px solid #cbd5e1;padding:5px;">${escHtml(stripExpenseTaxProof(w.note))}</td></tr>`).join("") || `<tr><td colspan="5" style="border:1px solid #cbd5e1;padding:10px;text-align:center;color:#94a3b8;">3.3% 원천징수 내역이 없습니다.</td></tr>`}</tbody>
             </table>
           </div>`;
 
         window._taxBundlePrintHtml = bundleHtml;
-        window._taxBundleCopyText = `[우성아이디 세무사 전달 요약 (${yr || "전체"})]\n- 수금현황: ${colList.length}건 (총 수금 ${formatShortAmount(colList.reduce((a,c)=>a+getCollectionRowFinancials(c).collected,0))})\n- 매입(비용): ${expList.length}건 (총 청구 ${formatShortAmount(expList.reduce((a,e)=>a+(Number(e.claimAmount)||0),0))})\n- 주요 거래처 Top 5:\n` + vendorRows.slice(0, 5).map(([v, a]) => `  · ${v}: ${a.toLocaleString("ko-KR")}원`).join("\n");
+        window._taxBundleCopyText = `[우성아이디 세무사 전달 요약 (${yr || "전체"})]\n- 수금현황: ${colList.length}건 (총 수금 ${formatExactKrw(colList.reduce((a,c)=>a+getCollectionRowFinancials(c).collected,0))})\n- 매입(비용): ${expList.length}건 (총 청구 ${formatExactKrw(expList.reduce((a,e)=>a+(Number(e.claimAmount)||0),0))})\n- 주요 거래처 Top 5:\n` + vendorRows.slice(0, 5).map(([v, a]) => `  · ${v}: ${formatExactKrw(a)}`).join("\n");
 
         const tEl = document.getElementById("syncStatusModalTitle");
         const cEl = document.getElementById("syncStatusModalCloseBtn");
@@ -12817,7 +12820,7 @@ end $$;`;
           (isCollectionStagePaid(col, "midPayment2") ? (Number(col.midPayment2) || 0) : 0) +
           (isCollectionStagePaid(col, "midPayment3") ? (Number(col.midPayment3) || 0) : 0);
         const paidFin = isCollectionStagePaid(col, "finalPayment") ? (Number(col.finalPayment) || 0) : 0;
-        const defaultFooterNote = `기수금: 계약 ${formatShortAmount(paidDown)} · 착수 ${formatShortAmount(paidStart)} · 중도 ${formatShortAmount(paidMid)} · 잔금 ${formatShortAmount(paidFin)}`;
+        const defaultFooterNote = `기수금: 계약 ${formatExactKrw(paidDown)} · 착수 ${formatExactKrw(paidStart)} · 중도 ${formatExactKrw(paidMid)} · 잔금 ${formatExactKrw(paidFin)}`;
         const footerNoteVal = ov.footerNote !== "" ? ov.footerNote : defaultFooterNote;
 
         const docHtml = `
@@ -14361,12 +14364,12 @@ end $$;`;
 
         // 1. 손익 요약 4칸
         const kpiSectionHtml = `
-          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;">
             <div class="standard-card" style="margin-bottom:0;padding:12px 14px;border-left:4px solid #3b82f6;">
               <div style="font-size:11.5px;color:var(--text-muted);font-weight:700;">최종 계약금액</div>
-              <div style="font-size:18px;font-weight:800;color:#1e293b;margin-top:2px;">${formatKrw(contractAmount)}</div>
+              <div style="font-size:17px;font-weight:800;color:#1e293b;margin-top:2px;white-space:nowrap;">${formatExactKrw(contractAmount)}</div>
               ${(FINANCE_EXT_FLAGS.extraContractAmount && extraAmt !== 0) ? `
-                <div style="font-size:11px;color:#2563eb;font-weight:700;margin-top:2px;">(최초 ${formatKrw(baseContract)} ${extraAmt > 0 ? "+" : ""}${formatKrw(extraAmt)})</div>
+                <div style="font-size:11px;color:#2563eb;font-weight:700;margin-top:2px;">(최초 ${formatExactKrw(baseContract)} ${extraAmt > 0 ? "+" : ""}${formatExactKrw(extraAmt)})</div>
               ` : ""}
               <div style="font-size:11px;color:#64748b;margin-top:2px;">
                 ${escHtml(colRow.clientName || "-")} · ${escHtml(extractFirstManager(colRow.manager, "-"))}
@@ -14374,21 +14377,21 @@ end $$;`;
             </div>
             <div class="standard-card" style="margin-bottom:0;padding:12px 14px;border-left:4px solid #10b981;">
               <div style="font-size:11.5px;color:var(--text-muted);font-weight:700;">누적 수금액 (미수금)</div>
-              <div style="font-size:18px;font-weight:800;color:#10b981;margin-top:2px;">${formatKrw(collected)}</div>
+              <div style="font-size:17px;font-weight:800;color:#10b981;margin-top:2px;white-space:nowrap;">${formatExactKrw(collected)}</div>
               <div style="font-size:11px;color:${colFin.isAmountUnset ? "#64748b" : (uncollected > 0 ? "#dc2626" : (uncollected < 0 ? "#2563eb" : "#16a34a"))};margin-top:2px;font-weight:700;">
-                ${colFin.isAmountUnset ? "금액 미입력" : (uncollected > 0 ? `미수금: ${formatKrw(uncollected)}` : (uncollected < 0 ? `초과수금: +${formatKrw(-uncollected)}` : "완납 (미수금 0원)"))}
+                ${colFin.isAmountUnset ? "금액 미입력" : (uncollected > 0 ? `미수금: ${formatExactKrw(uncollected)}` : (uncollected < 0 ? `초과수금: +${formatExactKrw(-uncollected)}` : "완납 (미수금 0원)"))}
               </div>
             </div>
             <div class="standard-card" style="margin-bottom:0;padding:12px 14px;border-left:4px solid #f59e0b;background:#fffdf7;">
               <div style="font-size:11.5px;color:#b45309;font-weight:700;">총 지출 (비용마감 합계)</div>
-              <div style="font-size:18px;font-weight:900;color:#d97706;margin-top:2px;">${formatKrw(totalExpenseClaim)}</div>
+              <div style="font-size:17px;font-weight:900;color:#d97706;margin-top:2px;white-space:nowrap;">${formatExactKrw(totalExpenseClaim)}</div>
               <div style="font-size:11px;color:#78350f;margin-top:2px;">
-                실지급 ${formatKrw(totalExpensePaid)} · 외상 ${formatKrw(totalExpenseBal)}
+                실지급 ${formatExactKrw(totalExpensePaid)} · 외상 ${formatExactKrw(totalExpenseBal)}
               </div>
             </div>
             <div class="standard-card" style="margin-bottom:0;padding:12px 14px;border-left:4px solid ${profit >= 0 ? "#10b981" : "#dc2626"};background:${profit >= 0 ? "#f0fdf4" : "#fff5f5"};">
               <div style="font-size:11.5px;color:${profit >= 0 ? "#166534" : "#991b1b"};font-weight:700;">예상 순이익 / 마진율</div>
-              <div style="font-size:18px;font-weight:900;color:${profit >= 0 ? "#15803d" : "#dc2626"};margin-top:2px;">${formatKrw(profit)}</div>
+              <div style="font-size:17px;font-weight:900;color:${profit >= 0 ? "#15803d" : "#dc2626"};margin-top:2px;white-space:nowrap;">${formatExactKrw(profit)}</div>
               <div style="font-size:11.5px;font-weight:800;color:${profit >= 0 ? "#15803d" : "#dc2626"};margin-top:2px;">
                 마진율 ${marginRate}% (${siteExpenses.length}건 지출 반영)
               </div>
@@ -14409,16 +14412,16 @@ end $$;`;
               </div>
             </div>
             <div class="table-container visible-scrollbar" style="max-height:280px;overflow-y:${tasks.length > 5 ? "scroll" : "auto"};">
-              <table class="clean-table" style="font-size:12px;min-width:680px;">
+              <table class="clean-table" style="font-size:12px;min-width:740px;">
                 <thead>
                   <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
                     <th style="width:110px;">공종</th>
                     <th style="width:130px;">일정</th>
                     <th style="width:130px;">협력업체</th>
                     <th style="width:70px;text-align:center;">공정상태</th>
-                    <th style="text-align:right;width:110px;">청구금액</th>
-                    <th style="text-align:right;width:110px;">지급금액</th>
-                    <th style="text-align:right;width:100px;">외상잔액</th>
+                    <th style="text-align:right;width:125px;white-space:nowrap;">청구금액</th>
+                    <th style="text-align:right;width:125px;white-space:nowrap;">지급금액</th>
+                    <th style="text-align:right;width:115px;white-space:nowrap;">외상잔액</th>
                     <th style="width:80px;text-align:center;">지급입력</th>
                   </tr>
                 </thead>
@@ -14452,9 +14455,9 @@ end $$;`;
                           ${matchedExps.length > 0 ? `<span style="font-size:10.5px;color:#2563eb;display:block;">(${matchedExps.length}건 연결)</span>` : ""}
                         </td>
                         <td style="text-align:center;">${stBadge}</td>
-                        <td style="text-align:right;font-weight:700;">${taskClaim > 0 ? formatKrw(taskClaim) : "-"}</td>
-                        <td style="text-align:right;font-weight:700;color:#15803d;">${taskPaid > 0 ? formatKrw(taskPaid) : "-"}</td>
-                        <td style="text-align:right;font-weight:800;color:${taskBal > 0 ? "#dc2626" : "#15803d"};">${taskBal > 0 ? formatKrw(taskBal) : (taskClaim > 0 ? "완납" : "-")}</td>
+                        <td style="text-align:right;font-weight:700;white-space:nowrap;">${taskClaim > 0 ? formatExactKrw(taskClaim) : "-"}</td>
+                        <td style="text-align:right;font-weight:700;color:#15803d;white-space:nowrap;">${taskPaid > 0 ? formatExactKrw(taskPaid) : "-"}</td>
+                        <td style="text-align:right;font-weight:800;color:${taskBal > 0 ? "#dc2626" : "#15803d"};white-space:nowrap;">${taskBal > 0 ? formatExactKrw(taskBal) : (taskClaim > 0 ? "완납" : "-")}</td>
                         <td style="text-align:center;">
                           <button type="button" class="btn-sub-xs" style="padding:3px 8px;font-size:11px;white-space:nowrap;"
                             onclick="${inputOnclick}">
@@ -14476,7 +14479,7 @@ end $$;`;
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
               <div style="font-size:14px;font-weight:800;color:#1e293b;display:flex;align-items:center;gap:6px;">
                 <span>🧾 현장 연결 비용마감 지출 내역</span>
-                <span style="font-size:11.5px;font-weight:600;color:var(--text-muted);">총 ${siteExpenses.length}건 (총 ${formatKrw(totalExpenseClaim)})</span>
+                <span style="font-size:11.5px;font-weight:600;color:var(--text-muted);">총 ${siteExpenses.length}건 (총 ${formatExactKrw(totalExpenseClaim)})</span>
                 ${siteExpenses.length > 5 ? `<span style="font-size:11px;font-weight:700;color:#2563eb;background:#eff6ff;padding:1px 7px;border-radius:999px;border:1px solid #bfdbfe;">↕️ 스크롤 가능</span>` : ""}
               </div>
               <button type="button" class="btn-act-blue" style="height:28px;padding:0 10px;font-size:11.5px;"
@@ -14485,16 +14488,16 @@ end $$;`;
               </button>
             </div>
             <div class="table-container visible-scrollbar" style="max-height:260px;overflow-y:${siteExpenses.length > 5 ? "scroll" : "auto"};">
-              <table class="clean-table" style="font-size:12px;min-width:720px;">
+              <table class="clean-table" style="font-size:12px;min-width:780px;">
                 <thead>
                   <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
                     <th style="width:70px;white-space:nowrap;">정산월</th>
                     <th style="width:60px;">항목</th>
                     <th style="width:90px;">구분</th>
                     <th style="width:120px;">업체명</th>
-                    <th style="text-align:right;width:100px;">청구금액</th>
-                    <th style="text-align:right;width:100px;">지급금액</th>
-                    <th style="text-align:right;width:90px;">잔금</th>
+                    <th style="text-align:right;width:120px;white-space:nowrap;">청구금액</th>
+                    <th style="text-align:right;width:120px;white-space:nowrap;">지급금액</th>
+                    <th style="text-align:right;width:110px;white-space:nowrap;">잔금</th>
                     <th style="width:85px;">지급일</th>
                     <th>비고</th>
                     <th style="width:85px;text-align:center;">관리</th>
@@ -14516,10 +14519,10 @@ end $$;`;
                         <td><span style="padding:1px 5px;border-radius:3px;font-size:10.5px;background:#f1f5f9;color:#334155;font-weight:700;">${escHtml(e.item)}</span></td>
                         <td>${escHtml(e.category)}</td>
                         <td><strong>${escHtml(e.vendor)}</strong></td>
-                        <td style="text-align:right;font-weight:700;">${formatKrw(claim)}</td>
-                        <td style="text-align:right;font-weight:700;color:#15803d;">${formatKrw(paid)}</td>
-                        <td style="text-align:right;font-weight:800;color:${bal > 0 ? "#dc2626" : "#15803d"};">
-                          ${bal > 0 ? formatKrw(bal) : "완납"}
+                        <td style="text-align:right;font-weight:700;white-space:nowrap;">${formatExactKrw(claim)}</td>
+                        <td style="text-align:right;font-weight:700;color:#15803d;white-space:nowrap;">${formatExactKrw(paid)}</td>
+                        <td style="text-align:right;font-weight:800;color:${bal > 0 ? "#dc2626" : "#15803d"};white-space:nowrap;">
+                          ${bal > 0 ? formatExactKrw(bal) : "완납"}
                         </td>
                         <td>${escHtml(e.payDate || "-")}</td>
                         <td style="font-size:11px;color:var(--text-sub);">${proofBadge}${escHtml(cleanNote || "-")}</td>
@@ -14872,34 +14875,34 @@ end $$;`;
           <div style="display:grid;grid-template-columns:repeat(${isMobile ? "2" : "4"}, 1fr);gap:${isMobile ? "8px" : "12px"};margin-bottom:16px;">
             <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #10b981;background:#ffffff;">
               <div style="font-size:${isMobile ? "11px" : "12px"};color:var(--text-muted);font-weight:700;">💰 총 수금액</div>
-              <div style="font-size:${isMobile ? "16px" : "20px"};font-weight:900;color:#10b981;margin-top:4px;">${formatKrw(totalCollected)}</div>
-              <div style="font-size:${isMobile ? "10.5px" : "11.5px"};color:#64748b;margin-top:4px;">
-                수금률 <strong style="color:#10b981;">${collectionRate}%</strong> (계약 ${formatKrw(totalContract)})
+              <div style="font-size:${isMobile ? "13.5px" : "18px"};font-weight:900;color:#10b981;margin-top:4px;white-space:nowrap;">${formatExactKrw(totalCollected)}</div>
+              <div style="font-size:${isMobile ? "10px" : "11.5px"};color:#64748b;margin-top:4px;">
+                수금률 <strong style="color:#10b981;">${collectionRate}%</strong> (계약 <span style="white-space:nowrap;">${formatExactKrw(totalContract)}</span>)
               </div>
             </div>
             <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #f59e0b;background:#ffffff;">
               <div style="font-size:${isMobile ? "11px" : "12px"};color:var(--text-muted);font-weight:700;">🧾 총 지출액 (청구마감)</div>
-              <div style="font-size:${isMobile ? "16px" : "20px"};font-weight:900;color:#d97706;margin-top:4px;">${formatKrw(totalExpense)}</div>
-              <div style="font-size:${isMobile ? "10.5px" : "11.5px"};color:#64748b;margin-top:4px;">
-                변동 <strong style="color:#2563eb;">${formatKrw(totalVariable)}</strong> · 고정 <strong style="color:#d97706;">${formatKrw(totalFixed)}</strong>
+              <div style="font-size:${isMobile ? "13.5px" : "18px"};font-weight:900;color:#d97706;margin-top:4px;white-space:nowrap;">${formatExactKrw(totalExpense)}</div>
+              <div style="font-size:${isMobile ? "10px" : "11.5px"};color:#64748b;margin-top:4px;">
+                변동 <strong style="color:#2563eb;white-space:nowrap;">${formatExactKrw(totalVariable)}</strong> · 고정 <strong style="color:#d97706;white-space:nowrap;">${formatExactKrw(totalFixed)}</strong>
               </div>
             </div>
             <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid ${netProfit >= 0 ? "#2563eb" : "#ef4444"};background:#ffffff;">
               <div style="font-size:${isMobile ? "11px" : "12px"};color:var(--text-muted);font-weight:700;">📈 예상 순이익 & 이익률</div>
-              <div style="font-size:${isMobile ? "16px" : "20px"};font-weight:900;color:${netProfit >= 0 ? "#16a34a" : "#dc2626"};margin-top:4px;">
-                ${(netProfit >= 0 ? "+" : "") + formatKrw(netProfit)}
+              <div style="font-size:${isMobile ? "13.5px" : "18px"};font-weight:900;color:${netProfit >= 0 ? "#16a34a" : "#dc2626"};margin-top:4px;white-space:nowrap;">
+                ${(netProfit >= 0 ? "+" : "") + formatExactKrw(netProfit)}
               </div>
-              <div style="font-size:${isMobile ? "10.5px" : "11.5px"};color:#64748b;margin-top:4px;">
+              <div style="font-size:${isMobile ? "10px" : "11.5px"};color:#64748b;margin-top:4px;">
                 순이익률 <strong style="color:${netProfit >= 0 ? "#16a34a" : "#dc2626"};">${profitRate}%</strong> (수금액 대비)
               </div>
             </div>
             <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #8b5cf6;background:#ffffff;">
               <div style="font-size:${isMobile ? "11px" : "12px"};color:var(--text-muted);font-weight:700;">⚖️ 미수금 vs 외상(미지급)</div>
-              <div style="font-size:${isMobile ? "16px" : "20px"};font-weight:900;color:#dc2626;margin-top:4px;">
-                ${formatKrw(totalUncollected)}
+              <div style="font-size:${isMobile ? "13.5px" : "18px"};font-weight:900;color:#dc2626;margin-top:4px;white-space:nowrap;">
+                ${formatExactKrw(totalUncollected)}
               </div>
-              <div style="font-size:${isMobile ? "10.5px" : "11.5px"};color:#64748b;margin-top:4px;">
-                외상잔금 <strong style="color:#b45309;">${formatKrw(totalUnpaidExpense)}</strong> · 차액 <strong style="color:#475569;">${formatKrw(netCashDiff)}</strong>
+              <div style="font-size:${isMobile ? "10px" : "11.5px"};color:#64748b;margin-top:4px;">
+                외상잔금 <strong style="color:#b45309;white-space:nowrap;">${formatExactKrw(totalUnpaidExpense)}</strong> · 차액 <strong style="color:#475569;white-space:nowrap;">${formatExactKrw(netCashDiff)}</strong>
               </div>
             </div>
           </div>
@@ -14917,16 +14920,16 @@ end $$;`;
               </div>
             </div>
             <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-              <table class="finance-table" style="width:100%;min-width:680px;border-collapse:collapse;font-size:12.5px;">
+              <table class="finance-table" style="width:100%;min-width:820px;border-collapse:collapse;font-size:12.5px;">
                 <thead>
                   <tr style="background:#f8fafc;border-bottom:1.5px solid #cbd5e1;color:#475569;font-weight:700;height:36px;text-align:right;">
-                    <th style="padding:8px 12px;text-align:center;width:60px;">월</th>
-                    <th style="padding:8px 12px;">수금액</th>
-                    <th style="padding:8px 12px;">변동비 (현장/일반)</th>
-                    <th style="padding:8px 12px;">고정비</th>
-                    <th style="padding:8px 12px;">총 지출</th>
-                    <th style="padding:8px 12px;">순이익</th>
-                    <th style="padding:8px 12px;text-align:center;width:75px;">이익률</th>
+                    <th style="padding:8px 12px;text-align:center;width:60px;white-space:nowrap;">월</th>
+                    <th style="padding:8px 12px;white-space:nowrap;">수금액</th>
+                    <th style="padding:8px 12px;white-space:nowrap;">변동비 (현장/일반)</th>
+                    <th style="padding:8px 12px;white-space:nowrap;">고정비</th>
+                    <th style="padding:8px 12px;white-space:nowrap;">총 지출</th>
+                    <th style="padding:8px 12px;white-space:nowrap;">순이익</th>
+                    <th style="padding:8px 12px;text-align:center;width:75px;white-space:nowrap;">이익률</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -14935,13 +14938,13 @@ end $$;`;
                     const profitColor = mr.netProfit > 0 ? "#16a34a" : (mr.netProfit < 0 ? "#dc2626" : "#64748b");
                     return `
                       <tr style="border-bottom:1px solid #f1f5f9;height:38px;text-align:right;${hasActivity ? "background:#ffffff;" : "background:#fafafa;color:#94a3b8;"}">
-                        <td style="padding:8px 12px;text-align:center;font-weight:800;color:#334155;">${mr.monthLabel}</td>
-                        <td style="padding:8px 12px;font-weight:700;color:${mr.collected > 0 ? "#10b981" : "inherit"};">${formatKrw(mr.collected)}</td>
-                        <td style="padding:8px 12px;color:${mr.variable > 0 ? "#2563eb" : "inherit"};">${formatKrw(mr.variable)}</td>
-                        <td style="padding:8px 12px;color:${mr.fixed > 0 ? "#d97706" : "inherit"};">${formatKrw(mr.fixed)}</td>
-                        <td style="padding:8px 12px;font-weight:700;color:${mr.totalExpense > 0 ? "#1e293b" : "inherit"};">${formatKrw(mr.totalExpense)}</td>
-                        <td style="padding:8px 12px;font-weight:800;color:${profitColor};">${(mr.netProfit > 0 ? "+" : "") + formatKrw(mr.netProfit)}</td>
-                        <td style="padding:8px 12px;text-align:center;">
+                        <td style="padding:8px 12px;text-align:center;font-weight:800;color:#334155;white-space:nowrap;">${mr.monthLabel}</td>
+                        <td style="padding:8px 12px;font-weight:700;color:${mr.collected > 0 ? "#10b981" : "inherit"};white-space:nowrap;">${formatExactKrw(mr.collected)}</td>
+                        <td style="padding:8px 12px;color:${mr.variable > 0 ? "#2563eb" : "inherit"};white-space:nowrap;">${formatExactKrw(mr.variable)}</td>
+                        <td style="padding:8px 12px;color:${mr.fixed > 0 ? "#d97706" : "inherit"};white-space:nowrap;">${formatExactKrw(mr.fixed)}</td>
+                        <td style="padding:8px 12px;font-weight:700;color:${mr.totalExpense > 0 ? "#1e293b" : "inherit"};white-space:nowrap;">${formatExactKrw(mr.totalExpense)}</td>
+                        <td style="padding:8px 12px;font-weight:800;color:${profitColor};white-space:nowrap;">${(mr.netProfit > 0 ? "+" : "") + formatExactKrw(mr.netProfit)}</td>
+                        <td style="padding:8px 12px;text-align:center;white-space:nowrap;">
                           <span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:800;background:${mr.profitRate > 0 ? "#dcfce7" : (mr.profitRate < 0 ? "#fee2e2" : "#f1f5f9")};color:${mr.profitRate > 0 ? "#15803d" : (mr.profitRate < 0 ? "#b91c1c" : "#64748b")};">
                             ${mr.profitRate}%
                           </span>
@@ -14950,13 +14953,13 @@ end $$;`;
                     `;
                   }).join("")}
                   <tr style="background:#f1f5f9;border-top:2px solid #cbd5e1;font-weight:900;height:42px;text-align:right;color:#0f172a;">
-                    <td style="padding:8px 12px;text-align:center;color:#1e293b;font-weight:900;">합계</td>
-                    <td style="padding:8px 12px;color:#10b981;">${formatKrw(sumMonthCollected)}</td>
-                    <td style="padding:8px 12px;color:#2563eb;">${formatKrw(sumMonthVar)}</td>
-                    <td style="padding:8px 12px;color:#d97706;">${formatKrw(sumMonthFix)}</td>
-                    <td style="padding:8px 12px;color:#0f172a;">${formatKrw(sumMonthTotExp)}</td>
-                    <td style="padding:8px 12px;color:${sumMonthNetProfit >= 0 ? "#16a34a" : "#dc2626"};">${(sumMonthNetProfit >= 0 ? "+" : "") + formatKrw(sumMonthNetProfit)}</td>
-                    <td style="padding:8px 12px;text-align:center;">
+                    <td style="padding:8px 12px;text-align:center;color:#1e293b;font-weight:900;white-space:nowrap;">합계</td>
+                    <td style="padding:8px 12px;color:#10b981;white-space:nowrap;">${formatExactKrw(sumMonthCollected)}</td>
+                    <td style="padding:8px 12px;color:#2563eb;white-space:nowrap;">${formatExactKrw(sumMonthVar)}</td>
+                    <td style="padding:8px 12px;color:#d97706;white-space:nowrap;">${formatExactKrw(sumMonthFix)}</td>
+                    <td style="padding:8px 12px;color:#0f172a;white-space:nowrap;">${formatExactKrw(sumMonthTotExp)}</td>
+                    <td style="padding:8px 12px;color:${sumMonthNetProfit >= 0 ? "#16a34a" : "#dc2626"};white-space:nowrap;">${(sumMonthNetProfit >= 0 ? "+" : "") + formatExactKrw(sumMonthNetProfit)}</td>
+                    <td style="padding:8px 12px;text-align:center;white-space:nowrap;">
                       <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11.5px;font-weight:900;background:${sumMonthProfitRate >= 0 ? "#10b981" : "#ef4444"};color:#ffffff;">
                         ${sumMonthProfitRate}%
                       </span>
@@ -14974,18 +14977,18 @@ end $$;`;
                 <h3 style="margin:0;font-size:14.5px;font-weight:800;color:#0f172a;">🧾 부가세 참고 (추정)</h3>
                 <button type="button" class="btn-tool-tag" onclick="window.openTaxAccountantBundleModal('${escJs(selectedYear)}')">세무사 묶음 ➔</button>
               </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+              <div style="display:grid;grid-template-columns:${isMobile ? "1fr" : "1fr 1fr 1fr"};gap:8px;margin-bottom:8px;">
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;">
                   <div style="font-size:11px;color:#64748b;font-weight:700;">매출세액 (발행분)</div>
-                  <div style="font-size:15px;font-weight:900;color:#1e293b;margin-top:3px;">${formatShortAmount(salesVatEst)}</div>
+                  <div style="font-size:13.5px;font-weight:900;color:#1e293b;margin-top:3px;white-space:nowrap;">${formatExactKrw(salesVatEst)}</div>
                 </div>
                 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;">
                   <div style="font-size:11px;color:#64748b;font-weight:700;">매입세액 (증빙분)</div>
-                  <div style="font-size:15px;font-weight:900;color:#2563eb;margin-top:3px;">${formatShortAmount(buyVatEst)}</div>
+                  <div style="font-size:13.5px;font-weight:900;color:#2563eb;margin-top:3px;white-space:nowrap;">${formatExactKrw(buyVatEst)}</div>
                 </div>
                 <div style="background:${estVatPayable >= 0 ? "#fef2f2" : "#f0fdf4"};border:1px solid ${estVatPayable >= 0 ? "#fecaca" : "#bbf7d0"};border-radius:8px;padding:10px;">
                   <div style="font-size:11px;color:${estVatPayable >= 0 ? "#991b1b" : "#166534"};font-weight:700;">예상 납부(참고)</div>
-                  <div style="font-size:15px;font-weight:900;color:${estVatPayable >= 0 ? "#dc2626" : "#15803d"};margin-top:3px;">${(estVatPayable >= 0 ? "" : "환급 ") + formatShortAmount(Math.abs(estVatPayable))}</div>
+                  <div style="font-size:13.5px;font-weight:900;color:${estVatPayable >= 0 ? "#dc2626" : "#15803d"};margin-top:3px;white-space:nowrap;">${(estVatPayable >= 0 ? "" : "환급 ") + formatExactKrw(Math.abs(estVatPayable))}</div>
                 </div>
               </div>
               <div style="font-size:11px;color:#64748b;line-height:1.45;">※ 계산서 발행 수금 및 계산서·카드·현금영수증 지출 기준 추정치이며, 실제 신고세액은 세무사 확인을 따릅니다.</div>
@@ -14994,15 +14997,15 @@ end $$;`;
             <div class="standard-card" style="margin-bottom:0;padding:16px;background:#fff;">
               <h3 style="margin:0 0 10px;font-size:14.5px;font-weight:800;color:#0f172a;">👤 담당자별 실적 &amp; 마진 요약</h3>
               <div style="overflow-x:auto;">
-                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <table style="width:100%;min-width:500px;border-collapse:collapse;font-size:12px;">
                   <thead>
                     <tr style="background:#f8fafc;border-bottom:1.5px solid #cbd5e1;color:#475569;text-align:right;">
-                      <th style="padding:6px 8px;text-align:left;">담당자</th>
-                      <th style="padding:6px 8px;text-align:center;">현장</th>
-                      <th style="padding:6px 8px;">계약금액</th>
-                      <th style="padding:6px 8px;">투입지출</th>
-                      <th style="padding:6px 8px;">예상이익</th>
-                      <th style="padding:6px 8px;text-align:center;">마진</th>
+                      <th style="padding:6px 8px;text-align:left;white-space:nowrap;">담당자</th>
+                      <th style="padding:6px 8px;text-align:center;white-space:nowrap;">현장</th>
+                      <th style="padding:6px 8px;white-space:nowrap;">계약금액</th>
+                      <th style="padding:6px 8px;white-space:nowrap;">투입지출</th>
+                      <th style="padding:6px 8px;white-space:nowrap;">예상이익</th>
+                      <th style="padding:6px 8px;text-align:center;white-space:nowrap;">마진</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -15010,12 +15013,12 @@ end $$;`;
                       const mr = ms.contract > 0 ? Math.round((ms.net / ms.contract) * 100) : 0;
                       return `
                         <tr style="border-bottom:1px solid #f1f5f9;text-align:right;">
-                          <td style="padding:6px 8px;text-align:left;font-weight:800;color:#1e293b;">${escHtml(ms.manager)}</td>
-                          <td style="padding:6px 8px;text-align:center;">${ms.count}곳</td>
-                          <td style="padding:6px 8px;font-weight:700;">${formatShortAmount(ms.contract)}</td>
-                          <td style="padding:6px 8px;color:#d97706;">${formatShortAmount(ms.expense)}</td>
-                          <td style="padding:6px 8px;font-weight:800;color:${ms.net >= 0 ? "#16a34a" : "#dc2626"};">${formatShortAmount(ms.net)}</td>
-                          <td style="padding:6px 8px;text-align:center;font-weight:800;color:${mr >= 15 ? "#15803d" : "#dc2626"};">${mr}%</td>
+                          <td style="padding:6px 8px;text-align:left;font-weight:800;color:#1e293b;white-space:nowrap;">${escHtml(ms.manager)}</td>
+                          <td style="padding:6px 8px;text-align:center;white-space:nowrap;">${ms.count}곳</td>
+                          <td style="padding:6px 8px;font-weight:700;white-space:nowrap;">${formatExactKrw(ms.contract)}</td>
+                          <td style="padding:6px 8px;color:#d97706;white-space:nowrap;">${formatExactKrw(ms.expense)}</td>
+                          <td style="padding:6px 8px;font-weight:800;color:${ms.net >= 0 ? "#16a34a" : "#dc2626"};white-space:nowrap;">${formatExactKrw(ms.net)}</td>
+                          <td style="padding:6px 8px;text-align:center;font-weight:800;color:${mr >= 15 ? "#15803d" : "#dc2626"};white-space:nowrap;">${mr}%</td>
                         </tr>`;
                     }).join("") || `<tr><td colspan="6" style="padding:14px;text-align:center;color:#94a3b8;">집계 데이터가 없습니다.</td></tr>`}
                   </tbody>
@@ -15079,14 +15082,14 @@ end $$;`;
             </div>
             ${pagerHtml}
             <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-              <table class="finance-table" style="width:100%;min-width:760px;border-collapse:collapse;font-size:12.5px;">
+              <table class="finance-table" style="width:100%;min-width:900px;border-collapse:collapse;font-size:12.5px;">
                 <thead>
                   <tr style="background:#f8fafc;border-bottom:1.5px solid #cbd5e1;color:#475569;font-weight:700;height:36px;text-align:right;">
-                    <th style="padding:8px 12px;text-align:left;">현장명</th>
-                    <th style="padding:8px 12px;">최종 계약금액</th>
-                    <th style="padding:8px 12px;">누적 수금액</th>
-                    <th style="padding:8px 12px;">총 지출 (비용마감)</th>
-                    <th style="padding:8px 12px;">예상 순이익</th>
+                    <th style="padding:8px 12px;text-align:left;white-space:nowrap;">현장명</th>
+                    <th style="padding:8px 12px;white-space:nowrap;">최종 계약금액</th>
+                    <th style="padding:8px 12px;white-space:nowrap;">누적 수금액</th>
+                    <th style="padding:8px 12px;white-space:nowrap;">총 지출 (비용마감)</th>
+                    <th style="padding:8px 12px;white-space:nowrap;">예상 순이익</th>
                     <th style="padding:8px 12px;text-align:center;min-width:118px;white-space:nowrap;">마진율</th>
                     <th style="padding:8px 12px;white-space:nowrap;">미수금 / 외상</th>
                     <th style="padding:8px 8px;text-align:center;width:72px;white-space:nowrap;">상세</th>
@@ -15123,10 +15126,10 @@ end $$;`;
                           </span>
                           ${s.colRow && s.colRow.clientName ? `<span style="font-size:11px;color:#64748b;display:block;">${escHtml(s.colRow.clientName)}</span>` : ""}
                         </td>
-                        <td style="padding:8px 12px;font-weight:700;color:#1e293b;">${formatKrw(s.contractAmount)}</td>
-                        <td style="padding:8px 12px;color:#10b981;font-weight:700;">${formatKrw(s.collected)}</td>
-                        <td style="padding:8px 12px;color:#d97706;font-weight:700;">${formatKrw(s.expenseClaim)}</td>
-                        <td style="padding:8px 12px;font-weight:800;color:${profitColor};">${(s.netProfit > 0 ? "+" : "") + formatKrw(s.netProfit)}</td>
+                        <td style="padding:8px 12px;font-weight:700;color:#1e293b;white-space:nowrap;">${formatExactKrw(s.contractAmount)}</td>
+                        <td style="padding:8px 12px;color:#10b981;font-weight:700;white-space:nowrap;">${formatExactKrw(s.collected)}</td>
+                        <td style="padding:8px 12px;color:#d97706;font-weight:700;white-space:nowrap;">${formatExactKrw(s.expenseClaim)}</td>
+                        <td style="padding:8px 12px;font-weight:800;color:${profitColor};white-space:nowrap;">${(s.netProfit > 0 ? "+" : "") + formatExactKrw(s.netProfit)}</td>
                         <td style="padding:8px 10px;text-align:center;white-space:nowrap;">
                           <div style="display:inline-flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap;">
                             <span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:800;background:${marginBadgeBg};color:${marginBadgeColor};white-space:nowrap;">
@@ -15136,8 +15139,8 @@ end $$;`;
                           </div>
                         </td>
                         <td style="padding:8px 12px;font-size:11.5px;white-space:nowrap;">
-                          <span style="color:${isAmtUnset ? "#64748b" : (s.uncollected > 0 ? "#dc2626" : (s.uncollected < 0 ? "#2563eb" : "#16a34a"))};font-weight:700;">${isAmtUnset ? "금액 미입력" : (s.uncollected < 0 ? `초과 +${formatKrw(-s.uncollected)}` : `미수 ${formatKrw(s.uncollected)}`)}</span><br>
-                          <span style="color:${s.expenseBalance > 0 ? "#b45309" : "#64748b"};">외상 ${formatKrw(s.expenseBalance)}</span>
+                          <span style="color:${isAmtUnset ? "#64748b" : (s.uncollected > 0 ? "#dc2626" : (s.uncollected < 0 ? "#2563eb" : "#16a34a"))};font-weight:700;">${isAmtUnset ? "금액 미입력" : (s.uncollected < 0 ? `초과 +${formatExactKrw(-s.uncollected)}` : `미수 ${formatExactKrw(s.uncollected)}`)}</span><br>
+                          <span style="color:${s.expenseBalance > 0 ? "#b45309" : "#64748b"};">외상 ${formatExactKrw(s.expenseBalance)}</span>
                         </td>
                         <td style="padding:8px 8px;text-align:center;white-space:nowrap;">
                           <button type="button" class="btn-act-blue" style="height:28px;padding:0 10px;font-size:11.5px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;" onclick="event.stopPropagation(); window.openSiteFinanceDetailModal('${escJs(s.siteName)}')">
@@ -15435,15 +15438,15 @@ end $$;`;
           return `
             <g>
               ${isCur ? `<rect x="${(cx - groupW / 2 + 2).toFixed(1)}" y="${padT}" width="${(groupW - 4).toFixed(1)}" height="${plotH}" rx="4" fill="#eff6ff" />` : ""}
-              <rect x="${(cx - barW - 1.5).toFixed(1)}" y="${padT + plotH - hCol}" width="${barW}" height="${Math.max(2, hCol)}" rx="3" fill="#10b981"><title>${d.m}월 수금: ${formatKrw(d.col)}</title></rect>
-              <rect x="${(cx + 1.5).toFixed(1)}" y="${padT + plotH - hExp}" width="${barW}" height="${Math.max(2, hExp)}" rx="3" fill="#f59e0b"><title>${d.m}월 지출: ${formatKrw(d.exp)}</title></rect>
+              <rect x="${(cx - barW - 1.5).toFixed(1)}" y="${padT + plotH - hCol}" width="${barW}" height="${Math.max(2, hCol)}" rx="3" fill="#10b981"><title>${d.m}월 수금: ${formatExactKrw(d.col)}</title></rect>
+              <rect x="${(cx + 1.5).toFixed(1)}" y="${padT + plotH - hExp}" width="${barW}" height="${Math.max(2, hExp)}" rx="3" fill="#f59e0b"><title>${d.m}월 지출: ${formatExactKrw(d.exp)}</title></rect>
               <text x="${cx.toFixed(1)}" y="${svgH - 7}" text-anchor="middle" font-size="10.5" font-weight="${isCur ? "900" : "700"}" fill="${isCur ? "#1d4ed8" : "#64748b"}">${d.m}월</text>
             </g>`;
         }).join("");
         const lineSvg = `<polyline fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linejoin="round" points="${linePts.join(" ")}" />` +
           linePts.map((pt, idx) => {
             const [px, py] = pt.split(",");
-            return `<circle cx="${px}" cy="${py}" r="3.2" fill="#ffffff" stroke="#2563eb" stroke-width="2"><title>${idx + 1}월 순이익: ${formatKrw(monthlyStats[idx].col - monthlyStats[idx].exp)}</title></circle>`;
+            return `<circle cx="${px}" cy="${py}" r="3.2" fill="#ffffff" stroke="#2563eb" stroke-width="2"><title>${idx + 1}월 순이익: ${formatExactKrw(monthlyStats[idx].col - monthlyStats[idx].exp)}</title></circle>`;
           }).join("");
 
         // 5. 지출 항목 도넛 차트 (SVG stroke-dasharray)
@@ -15460,7 +15463,7 @@ end $$;`;
         const donutSegments = topDonut.map(([name, val], idx) => {
           const frac = val / sumItemExp;
           const dash = frac * C;
-          const seg = `<circle cx="80" cy="80" r="${R}" fill="transparent" stroke="${donutColors[idx % donutColors.length]}" stroke-width="24" stroke-dasharray="${dash.toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-offsetAcc).toFixed(2)}"><title>${escHtml(name)}: ${formatKrw(val)} (${Math.round(frac * 100)}%)</title></circle>`;
+          const seg = `<circle cx="80" cy="80" r="${R}" fill="transparent" stroke="${donutColors[idx % donutColors.length]}" stroke-width="24" stroke-dasharray="${dash.toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-offsetAcc).toFixed(2)}"><title>${escHtml(name)}: ${formatExactKrw(val)} (${Math.round(frac * 100)}%)</title></circle>`;
           offsetAcc += dash;
           return seg;
         }).join("");
@@ -15468,32 +15471,32 @@ end $$;`;
         return `
           <!-- 1. 핵심 KPI 4카드 -->
           <div style="display:grid;grid-template-columns:repeat(${isMobile ? "2" : "4"}, 1fr);gap:${isMobile ? "8px" : "12px"};margin-bottom:14px;">
-            <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid ${curMonthNet >= 0 ? "#10b981" : "#ef4444"};background:#fff;">
-              <div style="font-size:11.5px;color:#64748b;font-weight:700;">💵 ${curMonthNum}월 현금흐름 (순수익)</div>
-              <div style="font-size:${isMobile ? "16px" : "21px"};font-weight:900;color:${curMonthNet >= 0 ? "#059669" : "#dc2626"};margin-top:4px;">${(curMonthNet >= 0 ? "+" : "") + formatShortAmount(curMonthNet)}</div>
-              <div style="font-size:11px;color:#64748b;margin-top:4px;">수금 ${formatShortAmount(curMonthCol)} · 지출 ${formatShortAmount(curMonthExp)}</div>
+            <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid ${curMonthNet >= 0 ? "#10b981" : "#ef4444"};background:#fff;">
+              <div style="font-size:${isMobile ? "11px" : "11.5px"};color:#64748b;font-weight:700;">💵 ${curMonthNum}월 현금흐름 (순수익)</div>
+              <div style="font-size:${isMobile ? "13.5px" : "18.5px"};font-weight:900;color:${curMonthNet >= 0 ? "#059669" : "#dc2626"};margin-top:4px;white-space:nowrap;">${(curMonthNet >= 0 ? "+" : "") + formatExactKrw(curMonthNet)}</div>
+              <div style="font-size:${isMobile ? "10px" : "11px"};color:#64748b;margin-top:4px;">수금 <span style="white-space:nowrap;">${formatExactKrw(curMonthCol)}</span> · 지출 <span style="white-space:nowrap;">${formatExactKrw(curMonthExp)}</span></div>
             </div>
-            <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #ef4444;background:#fff;cursor:pointer;" onclick="window.setFinanceSubTab('collection'); window.setFinanceStatusFilter('uncollected');">
-              <div style="font-size:11.5px;color:#64748b;font-weight:700;display:flex;justify-content:space-between;"><span>🚨 총 미수금 (받을 돈)</span><span style="color:#2563eb;font-size:10.5px;">바로가기 ➔</span></div>
-              <div style="font-size:${isMobile ? "16px" : "21px"};font-weight:900;color:#dc2626;margin-top:4px;">${formatShortAmount(totalUncollected)}</div>
+            <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #ef4444;background:#fff;cursor:pointer;" onclick="window.setFinanceSubTab('collection'); window.setFinanceStatusFilter('uncollected');">
+              <div style="font-size:${isMobile ? "11px" : "11.5px"};color:#64748b;font-weight:700;display:flex;justify-content:space-between;"><span>🚨 총 미수금 (받을 돈)</span><span style="color:#2563eb;font-size:10.5px;">바로가기 ➔</span></div>
+              <div style="font-size:${isMobile ? "13.5px" : "18.5px"};font-weight:900;color:#dc2626;margin-top:4px;white-space:nowrap;">${formatExactKrw(totalUncollected)}</div>
               <div style="font-size:11px;color:#b91c1c;font-weight:700;margin-top:4px;">공사완료 미수 ${doneUncollectedCnt}건</div>
             </div>
-            <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #f59e0b;background:#fff;cursor:pointer;" onclick="window.setFinanceSubTab('expense'); window.setExpenseStatusFilter('unpaid');">
-              <div style="font-size:11.5px;color:#64748b;font-weight:700;display:flex;justify-content:space-between;"><span>🧾 ${curMonthNum}월 미지급금 (줄 돈)</span><span style="color:#2563eb;font-size:10.5px;">바로가기 ➔</span></div>
-              <div style="font-size:${isMobile ? "16px" : "21px"};font-weight:900;color:#d97706;margin-top:4px;">${formatShortAmount(curMonthUnpaid)}</div>
+            <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #f59e0b;background:#fff;cursor:pointer;" onclick="window.setFinanceSubTab('expense'); window.setExpenseStatusFilter('unpaid');">
+              <div style="font-size:${isMobile ? "11px" : "11.5px"};color:#64748b;font-weight:700;display:flex;justify-content:space-between;"><span>🧾 ${curMonthNum}월 미지급금 (줄 돈)</span><span style="color:#2563eb;font-size:10.5px;">바로가기 ➔</span></div>
+              <div style="font-size:${isMobile ? "13.5px" : "18.5px"};font-weight:900;color:#d97706;margin-top:4px;white-space:nowrap;">${formatExactKrw(curMonthUnpaid)}</div>
               <div style="font-size:11px;color:#92400e;font-weight:700;margin-top:4px;">미지급 정산 ${curMonthUnpaidCnt}건 대기</div>
             </div>
-            <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #2563eb;background:#fff;cursor:pointer;" onclick="window.setFinanceSubTab('monthly');">
-              <div style="font-size:11.5px;color:#64748b;font-weight:700;display:flex;justify-content:space-between;"><span>📈 ${curYear}년 평균 마진율</span><span style="color:#2563eb;font-size:10.5px;">월간집계 ➔</span></div>
-              <div style="font-size:${isMobile ? "16px" : "21px"};font-weight:900;color:#1d4ed8;margin-top:4px;">${avgMargin}%</div>
+            <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #2563eb;background:#fff;cursor:pointer;" onclick="window.setFinanceSubTab('monthly');">
+              <div style="font-size:${isMobile ? "11px" : "11.5px"};color:#64748b;font-weight:700;display:flex;justify-content:space-between;"><span>📈 ${curYear}년 평균 마진율</span><span style="color:#2563eb;font-size:10.5px;">월간집계 ➔</span></div>
+              <div style="font-size:${isMobile ? "13.5px" : "18.5px"};font-weight:900;color:#1d4ed8;margin-top:4px;white-space:nowrap;">${avgMargin}%</div>
               <div style="font-size:11px;color:${lowMarginCnt > 0 ? "#dc2626" : "#059669"};font-weight:700;margin-top:4px;">${lowMarginCnt > 0 ? `⚠️ 저마진(15%↓) ${lowMarginCnt}건` : "✓ 전체 마진 양호"}</div>
             </div>
           </div>
 
           <!-- 2. 향후 예상 유입 자금 배너 -->
           <div style="background:linear-gradient(135deg,#eff6ff,#ecfdf5);border:1px solid #bfdbfe;border-radius:10px;padding:11px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-            <div style="font-size:12.5px;font-weight:800;color:#1e3a8a;">💡 향후 예상 유입 자금: <span style="font-size:15px;color:#059669;margin-left:4px;">${formatKrw(expectedInflow)}</span></div>
-            <div style="font-size:11.5px;color:#475569;font-weight:600;">현장 잔금/미수 ${formatShortAmount(totalUncollected)} + 신규견적 계약완료 ${formatShortAmount(quoteContractedAmt)}</div>
+            <div style="font-size:12.5px;font-weight:800;color:#1e3a8a;">💡 향후 예상 유입 자금: <span style="font-size:15px;color:#059669;margin-left:4px;white-space:nowrap;">${formatExactKrw(expectedInflow)}</span></div>
+            <div style="font-size:11.5px;color:#475569;font-weight:600;">현장 잔금/미수 <span style="white-space:nowrap;">${formatExactKrw(totalUncollected)}</span> + 신규견적 계약완료 <span style="white-space:nowrap;">${formatExactKrw(quoteContractedAmt)}</span></div>
           </div>
 
           <!-- 3. 차트 2단 그리드: 월별 추이 복합 차트 + 지출 비중 도넛 -->
@@ -15521,14 +15524,14 @@ end $$;`;
                   <circle cx="80" cy="80" r="${R}" fill="transparent" stroke="#f1f5f9" stroke-width="24"></circle>
                   ${donutSegments}
                 </svg>
-                <div style="flex:1;min-width:140px;max-width:210px;display:flex;flex-direction:column;gap:8px;">
+                <div style="flex:1;min-width:175px;max-width:280px;display:flex;flex-direction:column;gap:8px;">
                   ${topDonut.map(([name, val], idx) => `
-                    <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;">
-                      <span style="display:inline-flex;align-items:center;gap:6px;color:#334155;font-weight:700;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;">
+                      <span style="display:inline-flex;align-items:center;gap:6px;color:#334155;font-weight:700;white-space:nowrap;">
                         <span style="width:9px;height:9px;border-radius:50%;background:${donutColors[idx % donutColors.length]};"></span>
                         ${escHtml(name)}
                       </span>
-                      <span style="font-weight:800;color:#0f172a;">${Math.round((val / sumItemExp) * 100)}% <span style="color:#64748b;font-weight:600;">(${formatShortAmount(val)})</span></span>
+                      <span style="font-weight:800;color:#0f172a;white-space:nowrap;">${Math.round((val / sumItemExp) * 100)}% <span style="color:#64748b;font-weight:600;">(${formatExactKrw(val)})</span></span>
                     </div>
                   `).join("") || `<div style="font-size:12px;color:#94a3b8;">지출 데이터가 없습니다.</div>`}
                 </div>
@@ -15550,7 +15553,7 @@ end $$;`;
                       <div style="font-size:12.5px;font-weight:800;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(row.siteName)} ${isDone ? `<span style="font-size:10px;background:#dc2626;color:#fff;padding:1px 5px;border-radius:4px;">공사완료</span>` : ""}</div>
                       <div style="font-size:11px;color:#64748b;">${escHtml(row.clientName || "계약자 미등록")} · 계산서 ${escHtml(row.taxInvoice || "미발행")}</div>
                     </div>
-                    <strong style="font-size:13px;color:#dc2626;white-space:nowrap;">${formatKrw(fin.uncollected)}</strong>
+                    <strong style="font-size:13px;color:#dc2626;white-space:nowrap;">${formatExactKrw(fin.uncollected)}</strong>
                   </div>
                 `).join("") || `<div style="font-size:12px;color:#94a3b8;padding:12px 0;text-align:center;">수금 독려가 필요한 현장이 없습니다. 🎉</div>`}
               </div>
@@ -15568,7 +15571,7 @@ end $$;`;
                       <div style="font-size:12.5px;font-weight:800;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(row.vendor || row.item || "업체 미등록")} <span style="font-size:11px;color:#64748b;font-weight:600;">(${escHtml(row.siteName || "공통")})</span></div>
                       <div style="font-size:11px;color:#64748b;">${escHtml(row.category || "-")} ${(row.accountNumber || row.category2) ? "· " + escHtml(row.accountNumber || row.category2) : ""}</div>
                     </div>
-                    <strong style="font-size:13px;color:#d97706;white-space:nowrap;">${formatKrw(bal)}</strong>
+                    <strong style="font-size:13px;color:#d97706;white-space:nowrap;">${formatExactKrw(bal)}</strong>
                   </div>
                 `).join("") || `<div style="font-size:12px;color:#94a3b8;padding:12px 0;text-align:center;">이번 달 미지급 항목이 없습니다. 🎉</div>`}
               </div>
@@ -15588,9 +15591,9 @@ end $$;`;
                   const col = sm.margin >= 25 ? "#10b981" : (sm.margin >= 15 ? "#2563eb" : "#ef4444");
                   return `
                     <div onclick="window.openSiteFinanceDetailModal('${escJs(sm.siteName)}', '${escJs(sm.id)}')" style="cursor:pointer;">
-                      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:3px;gap:6px;">
+                      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;font-size:12px;font-weight:700;margin-bottom:3px;gap:6px;">
                         <span style="color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(sm.siteName)}</span>
-                        <span style="color:${col};white-space:nowrap;">마진 ${sm.margin}% <span style="color:#64748b;font-weight:600;">(계약 ${formatShortAmount(sm.total)} / 지출 ${formatShortAmount(sm.exp)})</span></span>
+                        <span style="color:${col};white-space:nowrap;">마진 ${sm.margin}% <span style="color:#64748b;font-weight:600;">(계약 ${formatExactKrw(sm.total)} / 지출 ${formatExactKrw(sm.exp)})</span></span>
                       </div>
                       <div style="height:7px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
                         <div style="height:100%;width:${barW}%;background:${col};border-radius:999px;"></div>
@@ -15614,12 +15617,12 @@ end $$;`;
                   const badgeTxt = sm.margin < 0 ? "원가초과" : (sm.margin < 15 ? "저마진" : "원가점검");
                   return `
                     <div onclick="window.openSiteFinanceDetailModal('${escJs(sm.siteName)}', '${escJs(sm.id)}')" style="cursor:pointer;">
-                      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:3px;gap:6px;">
+                      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;font-size:12px;font-weight:700;margin-bottom:3px;gap:6px;">
                         <span style="color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                           ${escHtml(sm.siteName)}
                           <span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${sm.margin < 15 ? "#fef2f2" : "#fffbeb"};color:${col};border:1px solid ${sm.margin < 15 ? "#fecaca" : "#fde68a"};margin-left:3px;">${badgeTxt}</span>
                         </span>
-                        <span style="color:${col};white-space:nowrap;">마진 ${sm.margin}% · 원가율 ${costRatio}% <span style="color:#64748b;font-weight:600;">(지출 ${formatShortAmount(sm.exp)})</span></span>
+                        <span style="color:${col};white-space:nowrap;">마진 ${sm.margin}% · 원가율 ${costRatio}% <span style="color:#64748b;font-weight:600;">(지출 ${formatExactKrw(sm.exp)})</span></span>
                       </div>
                       <div style="height:7px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
                         <div style="height:100%;width:${barW}%;background:${col};border-radius:999px;"></div>
@@ -15655,7 +15658,7 @@ end $$;`;
                         </div>
                         <div style="font-size:11px;color:#64748b;margin-top:1px;">${escHtml(item.dueYmd.slice(5).replace("-", "/"))} · <b>${escHtml(item.label)}</b>${item.proof ? " · " + escHtml(item.proof) : ""}</div>
                       </div>
-                      <strong style="font-size:12.5px;color:${dCol};white-space:nowrap;">${formatShortAmount(item.amount)}</strong>
+                      <strong style="font-size:12.5px;color:${dCol};white-space:nowrap;">${formatExactKrw(item.amount)}</strong>
                     </div>
                   `;
                 }).join("") || `<div style="font-size:12px;color:#94a3b8;padding:12px 0;text-align:center;">예정된 미수금 일정이 없습니다. 🎉</div>`}
@@ -15675,14 +15678,14 @@ end $$;`;
                   const barCol = donutColors[idx % donutColors.length];
                   return `
                     <div onclick="window.openDashboardVendorExpenses('${escJs(v.vendor)}')" style="cursor:pointer;padding:4px 2px;" title="클릭하여 [${escHtml(v.vendor)}] 지출 내역 보기">
-                      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;margin-bottom:3px;gap:6px;">
+                      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;font-size:12px;font-weight:700;margin-bottom:3px;gap:6px;">
                         <span style="color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                           ${idx + 1}. ${escHtml(v.vendor)}
                           <span style="font-size:10.5px;color:#64748b;font-weight:600;">(${v.count}건)</span>
                         </span>
                         <span style="white-space:nowrap;color:#0f172a;font-weight:800;">
-                          ${formatShortAmount(v.claim)} <span style="font-size:10.5px;color:#64748b;">(${sharePct}%)</span>
-                          ${v.unpaid > 0 ? `<span style="font-size:10px;color:#dc2626;background:#fef2f2;padding:1px 4px;border-radius:4px;border:1px solid #fecaca;margin-left:2px;">미지급 ${formatShortAmount(v.unpaid)}</span>` : ""}
+                          ${formatExactKrw(v.claim)} <span style="font-size:10.5px;color:#64748b;">(${sharePct}%)</span>
+                          ${v.unpaid > 0 ? `<span style="font-size:10px;color:#dc2626;background:#fef2f2;padding:1px 4px;border-radius:4px;border:1px solid #fecaca;margin-left:2px;">미지급 ${formatExactKrw(v.unpaid)}</span>` : ""}
                         </span>
                       </div>
                       <div style="height:6px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
@@ -15708,7 +15711,7 @@ end $$;`;
                         ${escHtml(row.siteName)}
                         ${isDone ? `<span style="font-size:10px;background:#0f766e;color:#fff;padding:1px 5px;border-radius:4px;margin-left:3px;">완료</span>` : (hasCollected ? `<span style="font-size:10px;background:#0284c7;color:#fff;padding:1px 5px;border-radius:4px;margin-left:3px;">수금중</span>` : "")}
                       </div>
-                      <div style="font-size:11px;color:#475569;margin-top:1px;">${escHtml(row.clientName || "계약자 미등록")} · 수금 ${formatShortAmount(fin.collected)} / 도급 ${formatShortAmount(fin.total)}</div>
+                      <div style="font-size:11px;color:#475569;margin-top:1px;">${escHtml(row.clientName || "계약자 미등록")} · 수금 <span style="white-space:nowrap;">${formatExactKrw(fin.collected)}</span> / 도급 <span style="white-space:nowrap;">${formatExactKrw(fin.total)}</span></div>
                     </div>
                     <span style="font-size:11px;font-weight:800;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;padding:2px 7px;border-radius:6px;white-space:nowrap;">미발행</span>
                   </div>
@@ -15837,12 +15840,12 @@ end $$;`;
             <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:16px;">
               <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #3b82f6;">
                 <div style="font-size:12px;color:var(--text-muted);font-weight:600;">총 청구금액</div>
-                <div style="font-size:20px;font-weight:800;color:#1e293b;margin-top:4px;">${formatKrw(totalClaim)}</div>
+                <div style="font-size:18.5px;font-weight:800;color:#1e293b;margin-top:4px;white-space:nowrap;">${formatExactKrw(totalClaim)}</div>
                 <div style="font-size:11.5px;color:#64748b;margin-top:4px;">총 ${filtered.length}건 기준</div>
               </div>
               <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #10b981;">
                 <div style="font-size:12px;color:var(--text-muted);font-weight:600;">지급 완료금액</div>
-                <div style="font-size:20px;font-weight:800;color:#10b981;margin-top:4px;">${formatKrw(totalPaid)}</div>
+                <div style="font-size:18.5px;font-weight:800;color:#10b981;margin-top:4px;white-space:nowrap;">${formatExactKrw(totalPaid)}</div>
                 <div style="font-size:11.5px;color:#16a34a;margin-top:4px;font-weight:700;">지급 완료율 ${totalClaim > 0 ? Math.round((totalPaid / totalClaim) * 100) : 0}%</div>
               </div>
               <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #dc2626;background:${stFilter === "unpaid" ? "#fee2e2" : "#fff5f5"};${FINANCE_EXT_FLAGS.kpiClickFilter ? "cursor:pointer;transition:all 0.15s ease;" : ""}${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "unpaid" ? "outline:2px solid #dc2626;box-shadow:0 0 0 3px rgba(220,38,38,0.25);" : ""}" onclick="${FINANCE_EXT_FLAGS.kpiClickFilter ? "window.toggleExpenseUnpaidFilter()" : ""}" title="${FINANCE_EXT_FLAGS.kpiClickFilter ? "클릭 시 미지급 항목 즉시 필터링/해제" : ""}">
@@ -15850,12 +15853,12 @@ end $$;`;
                   <span>남은 미지급 잔금 (외상)</span>
                   ${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "unpaid" ? `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:800;background:#dc2626;color:#ffffff;">✕ 필터중</span>` : (FINANCE_EXT_FLAGS.kpiClickFilter ? `<span style="font-size:10.5px;color:#dc2626;font-weight:600;">(클릭 필터)</span>` : "")}
                 </div>
-                <div style="font-size:22px;font-weight:900;color:#dc2626;margin-top:4px;">${formatKrw(totalBal)}</div>
+                <div style="font-size:19px;font-weight:900;color:#dc2626;margin-top:4px;white-space:nowrap;">${formatExactKrw(totalBal)}</div>
                 <div style="font-size:11.5px;color:#b91c1c;margin-top:4px;font-weight:700;">미지급 건수: ${unpaidCount}건</div>
               </div>
               <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #8b5cf6;">
                 <div style="font-size:12px;color:var(--text-muted);font-weight:600;">등록 건수 / 미지급 건수</div>
-                <div style="font-size:20px;font-weight:800;color:#1e293b;margin-top:4px;">${filtered.length}건 <span style="font-size:14px;color:#dc2626;font-weight:700;">(미지급 ${unpaidCount}건)</span></div>
+                <div style="font-size:18.5px;font-weight:800;color:#1e293b;margin-top:4px;white-space:nowrap;">${filtered.length}건 <span style="font-size:14px;color:#dc2626;font-weight:700;">(미지급 ${unpaidCount}건)</span></div>
                 <div style="font-size:11.5px;color:#6d28d9;margin-top:4px;font-weight:600;">지급완료 ${filtered.length - unpaidCount}건</div>
               </div>
             </div>
@@ -15967,13 +15970,13 @@ end $$;`;
                     </span>
                   ` : `<span style="color:#64748b;font-weight:600;">공통</span>`}
                 </td>
-                <td style="text-align:right;font-weight:800;color:#1e293b;">${claim.toLocaleString("ko-KR")}원</td>
-                <td style="text-align:right;font-weight:700;color:#15803d;">${paid.toLocaleString("ko-KR")}원</td>
-                <td style="text-align:right;">
+                <td style="text-align:right;font-weight:800;color:#1e293b;white-space:nowrap;">${formatExactKrw(claim)}</td>
+                <td style="text-align:right;font-weight:700;color:#15803d;white-space:nowrap;">${formatExactKrw(paid)}</td>
+                <td style="text-align:right;white-space:nowrap;">
                   ${bal > 0 ? `
-                    <div style="font-weight:900;color:#dc2626;font-size:13.5px;">${bal.toLocaleString("ko-KR")}원</div>
+                    <div style="font-weight:900;color:#dc2626;font-size:13.5px;white-space:nowrap;">${formatExactKrw(bal)}</div>
                   ` : `
-                    <span style="color:#15803d;font-weight:700;font-size:12px;">완납 (0원)</span>
+                    <span style="color:#15803d;font-weight:700;font-size:12px;white-space:nowrap;">완납 (0원)</span>
                   `}
                 </td>
                 <td style="font-size:11.5px;color:var(--text-sub);">${escHtml(e.payDate || "-")}</td>
@@ -16009,7 +16012,7 @@ end $$;`;
           const allExpChecked = filtered.length > 0 && state.selectedExpenseIds instanceof Set && filtered.every(e => state.selectedExpenseIds.has(e.id));
           const tableHtml = `
             <div class="table-container" style="overflow-x:auto;">
-              <table class="clean-table" style="min-width:1130px;font-size:12.5px;">
+              <table class="clean-table" style="min-width:1180px;font-size:12.5px;">
                 <thead>
                   <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;text-align:left;">
                     <th style="padding:10px 8px;width:36px;text-align:center;"><input type="checkbox" ${allExpChecked ? "checked" : ""} onchange="window.toggleAllExpenseCheckboxes(this.checked)" style="width:15px;height:15px;accent-color:#2563eb;cursor:pointer;" title="현재 목록 전체 선택/해제"></th>
@@ -16018,9 +16021,9 @@ end $$;`;
                     <th style="padding:10px 10px;width:110px;">구분</th>
                     <th style="padding:10px 12px;width:140px;">업체명</th>
                     <th style="padding:10px 12px;width:130px;">연결 현장</th>
-                    <th style="padding:10px 12px;text-align:right;width:110px;">청구금액</th>
-                    <th style="padding:10px 12px;text-align:right;width:110px;">지급금액</th>
-                    <th style="padding:10px 12px;text-align:right;width:110px;">남은 잔금</th>
+                    <th style="padding:10px 12px;text-align:right;width:125px;white-space:nowrap;">청구금액</th>
+                    <th style="padding:10px 12px;text-align:right;width:125px;white-space:nowrap;">지급금액</th>
+                    <th style="padding:10px 12px;text-align:right;width:125px;white-space:nowrap;">남은 잔금</th>
                     <th style="padding:10px 10px;width:95px;">지급일</th>
                     <th style="padding:10px 10px;">비고</th>
                     <th style="padding:10px 8px;text-align:center;width:130px;">지급 / 관리</th>
@@ -16195,12 +16198,12 @@ end $$;`;
           <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:16px;">
             <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #3b82f6;">
               <div style="font-size:12px;color:var(--text-muted);font-weight:600;">총 최종 계약금액</div>
-              <div style="font-size:20px;font-weight:800;color:#1e293b;margin-top:4px;">${formatKrw(totalContract)}</div>
+              <div style="font-size:18.5px;font-weight:800;color:#1e293b;margin-top:4px;white-space:nowrap;">${formatExactKrw(totalContract)}</div>
               <div style="font-size:11.5px;color:#64748b;margin-top:4px;">${filtered.length}개 현장 (${allCollection.length}개 중)</div>
             </div>
             <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #10b981;">
               <div style="font-size:12px;color:var(--text-muted);font-weight:600;">누적 수금액</div>
-              <div style="font-size:20px;font-weight:800;color:#10b981;margin-top:4px;">${formatKrw(totalCollected)}</div>
+              <div style="font-size:18.5px;font-weight:800;color:#10b981;margin-top:4px;white-space:nowrap;">${formatExactKrw(totalCollected)}</div>
               <div style="font-size:11.5px;color:#16a34a;margin-top:4px;font-weight:700;">수금률 ${collectionRate}% 달성</div>
             </div>
             <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #dc2626;background:${stFilter === "uncollected" ? "#fee2e2" : "#fff5f5"};${FINANCE_EXT_FLAGS.kpiClickFilter ? "cursor:pointer;transition:all 0.15s ease;" : ""}${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "uncollected" ? "outline:2px solid #dc2626;box-shadow:0 0 0 3px rgba(220,38,38,0.25);" : ""}" onclick="${FINANCE_EXT_FLAGS.kpiClickFilter ? "window.toggleFinanceUncollectedFilter()" : ""}" title="${FINANCE_EXT_FLAGS.kpiClickFilter ? "클릭 시 미수 현장 즉시 필터링/해제" : ""}">
@@ -16208,7 +16211,7 @@ end $$;`;
                 <span>총 미수금 (미회수 잔액)</span>
                 ${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "uncollected" ? `<span style="padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:800;background:#dc2626;color:#ffffff;">✕ 필터중</span>` : (FINANCE_EXT_FLAGS.kpiClickFilter ? `<span style="font-size:10.5px;color:#dc2626;font-weight:600;">(클릭 필터)</span>` : "")}
               </div>
-              <div style="font-size:22px;font-weight:900;color:#dc2626;margin-top:4px;">${formatKrw(totalUncollected)}</div>
+              <div style="font-size:19px;font-weight:900;color:#dc2626;margin-top:4px;white-space:nowrap;">${formatExactKrw(totalUncollected)}</div>
               <div style="font-size:11.5px;color:#b91c1c;margin-top:4px;font-weight:600;">미수 현장 ${uncollectedSitesCount}개소</div>
             </div>
             <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #f59e0b;">
@@ -16328,26 +16331,26 @@ end $$;`;
               <td>
                 <div style="font-weight:600;color:#334155;">${escHtml(r.clientName || "-")}</div>
               </td>
-              <td style="text-align:right;">
-                <div style="font-weight:800;color:#1e293b;">${Number(fin.total || 0).toLocaleString("ko-KR")}원</div>
+              <td style="text-align:right;white-space:nowrap;">
+                <div style="font-weight:800;color:#1e293b;white-space:nowrap;">${formatExactKrw(fin.total)}</div>
                 ${(FINANCE_EXT_FLAGS.extraContractAmount && extraAmt !== 0) ? `
-                  <div style="font-size:11px;color:#64748b;font-weight:600;">(최초 ${formatKrw(baseContract)} ${extraAmt > 0 ? "+" : ""}${formatKrw(extraAmt)})</div>
-                ` : (r.changeAmount ? `<div style="font-size:11px;color:${r.changeAmount > 0 ? "#2563eb" : "#dc2626"};">${r.changeAmount > 0 ? "+" : ""}${Number(r.changeAmount).toLocaleString("ko-KR")}</div>` : "")}
+                  <div style="font-size:11px;color:#64748b;font-weight:600;white-space:nowrap;">(최초 ${formatExactKrw(baseContract)} ${extraAmt > 0 ? "+" : ""}${formatExactKrw(extraAmt)})</div>
+                ` : (r.changeAmount ? `<div style="font-size:11px;color:${r.changeAmount > 0 ? "#2563eb" : "#dc2626"};white-space:nowrap;">${r.changeAmount > 0 ? "+" : ""}${formatExactKrw(r.changeAmount)}</div>` : "")}
               </td>
-              <td style="text-align:right;">
-                <div style="font-weight:700;color:#15803d;">${Number(collected).toLocaleString("ko-KR")}원</div>
+              <td style="text-align:right;white-space:nowrap;">
+                <div style="font-weight:700;color:#15803d;white-space:nowrap;">${formatExactKrw(collected)}</div>
                 <div style="margin-top:3px;display:flex;justify-content:flex-end;">
                   ${renderCollectionStepsHtml(r)}
                 </div>
               </td>
-              <td style="text-align:right;">
+              <td style="text-align:right;white-space:nowrap;">
                 ${uncollected > 0
-                  ? `<div style="color:#dc2626;font-weight:900;font-size:13.5px;">${Number(uncollected).toLocaleString("ko-KR")}원</div>`
+                  ? `<div style="color:#dc2626;font-weight:900;font-size:13.5px;white-space:nowrap;">${formatExactKrw(uncollected)}</div>`
                   : (fin.isAmountUnset
                     ? `<span style="color:#64748b;font-weight:700;font-size:12px;">금액 미입력</span>`
                     : (uncollected === 0
                       ? `<span style="color:#15803d;font-weight:700;font-size:12px;">완납 (0원)</span>`
-                      : `<span style="color:#2563eb;font-weight:700;font-size:12px;">+${Number(-uncollected).toLocaleString("ko-KR")}원</span>`))}
+                      : `<span style="color:#2563eb;font-weight:700;font-size:12px;white-space:nowrap;">+${formatExactKrw(-uncollected)}</span>`))}
               </td>
               <td style="text-align:center;">${stBadge}</td>
               <td style="text-align:center;">${taxBadge}</td>
@@ -16370,15 +16373,15 @@ end $$;`;
 
         const tableHtml = `
           <div class="table-container" style="overflow-x:auto;">
-            <table class="clean-table" style="min-width:1050px;font-size:12.5px;">
+            <table class="clean-table" style="min-width:1120px;font-size:12.5px;">
               <thead>
                 <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;text-align:left;">
                   <th style="padding:10px 12px;width:220px;">현장명 / 공사기간</th>
                   <th style="padding:10px 10px;width:110px;">담당자/구분</th>
                   <th style="padding:10px 10px;width:100px;">계약자</th>
-                  <th style="padding:10px 12px;text-align:right;width:110px;">최종금액</th>
-                  <th style="padding:10px 12px;text-align:right;width:140px;">수금액 (단계)</th>
-                  <th style="padding:10px 12px;text-align:right;width:120px;">미수금</th>
+                  <th style="padding:10px 12px;text-align:right;width:130px;white-space:nowrap;">최종금액</th>
+                  <th style="padding:10px 12px;text-align:right;width:145px;white-space:nowrap;">수금액 (단계)</th>
+                  <th style="padding:10px 12px;text-align:right;width:130px;white-space:nowrap;">미수금</th>
                   <th style="padding:10px 8px;text-align:center;width:80px;">수금상태</th>
                   <th style="padding:10px 8px;text-align:center;width:90px;">계산서</th>
                   <th style="padding:10px 8px;text-align:center;width:60px;">관리</th>
@@ -18180,12 +18183,12 @@ end $$;`;
             <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:8px;margin-bottom:12px;">
               <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #3b82f6;">
                 <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">총 청구금액</div>
-                <div style="font-size:15px;font-weight:800;color:#1e293b;margin-top:2px;">${formatKrw(totalClaim)}</div>
+                <div style="font-size:13.5px;font-weight:800;color:#1e293b;margin-top:2px;white-space:nowrap;">${formatExactKrw(totalClaim)}</div>
                 <div style="font-size:10px;color:#64748b;margin-top:2px;">총 ${filtered.length}건</div>
               </div>
               <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #10b981;">
                 <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">지급 완료금액</div>
-                <div style="font-size:15px;font-weight:800;color:#10b981;margin-top:2px;">${formatKrw(totalPaid)}</div>
+                <div style="font-size:13.5px;font-weight:800;color:#10b981;margin-top:2px;white-space:nowrap;">${formatExactKrw(totalPaid)}</div>
                 <div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700;">지급 완료</div>
               </div>
               <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #dc2626;background:${stFilter === "unpaid" ? "#fee2e2" : "#fff8f8"};${FINANCE_EXT_FLAGS.kpiClickFilter ? "cursor:pointer;" : ""}${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "unpaid" ? "outline:2px solid #dc2626;" : ""}" onclick="${FINANCE_EXT_FLAGS.kpiClickFilter ? "window.toggleExpenseUnpaidFilter()" : ""}">
@@ -18193,12 +18196,12 @@ end $$;`;
                   <span>남은 미지급 잔금</span>
                   ${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "unpaid" ? `<span style="font-size:9.5px;padding:1px 5px;border-radius:4px;background:#dc2626;color:#fff;font-weight:800;">✕ 필터중</span>` : (FINANCE_EXT_FLAGS.kpiClickFilter ? `<span style="font-size:9.5px;color:#dc2626;">(터치 필터)</span>` : "")}
                 </div>
-                <div style="font-size:15px;font-weight:900;color:#dc2626;margin-top:2px;">${formatKrw(totalBal)}</div>
+                <div style="font-size:13.5px;font-weight:900;color:#dc2626;margin-top:2px;white-space:nowrap;">${formatExactKrw(totalBal)}</div>
                 <div style="font-size:10px;color:#b91c1c;margin-top:2px;font-weight:700;">${unpaidCount}건 미지급</div>
               </div>
               <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #8b5cf6;">
                 <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">등록 / 완료 건수</div>
-                <div style="font-size:15px;font-weight:800;color:#6d28d9;margin-top:2px;">${filtered.length}건 / ${filtered.length - unpaidCount}건</div>
+                <div style="font-size:13.5px;font-weight:800;color:#6d28d9;margin-top:2px;white-space:nowrap;">${filtered.length}건 / ${filtered.length - unpaidCount}건</div>
                 <div style="font-size:10px;color:#7c3aed;margin-top:2px;">처리 현황</div>
               </div>
             </div>
@@ -18299,19 +18302,19 @@ end $$;`;
                   </div>
                 </div>
 
-                <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;background:#f8fafc;padding:8px 10px;border-radius:6px;margin:8px 0;text-align:center;">
+                <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;background:#f8fafc;padding:8px 8px;border-radius:6px;margin:8px 0;text-align:center;">
                   <div>
                     <div style="font-size:10px;color:var(--text-muted);">청구금액</div>
-                    <div style="font-size:12.5px;font-weight:800;color:#1e293b;margin-top:2px;">${formatKrw(claim)}</div>
+                    <div style="font-size:11.5px;font-weight:800;color:#1e293b;margin-top:2px;white-space:nowrap;">${formatExactKrw(claim)}</div>
                   </div>
                   <div>
                     <div style="font-size:10px;color:var(--text-muted);">지급완료</div>
-                    <div style="font-size:12.5px;font-weight:800;color:#15803d;margin-top:2px;">${formatKrw(paid)}</div>
+                    <div style="font-size:11.5px;font-weight:800;color:#15803d;margin-top:2px;white-space:nowrap;">${formatExactKrw(paid)}</div>
                   </div>
                   <div>
                     <div style="font-size:10px;color:var(--text-muted);">남은 잔금</div>
-                    <div style="font-size:13px;font-weight:900;color:${bal > 0 ? "#dc2626" : "#15803d"};margin-top:2px;">
-                      ${bal > 0 ? formatKrw(bal) : "완납"}
+                    <div style="font-size:11.5px;font-weight:900;color:${bal > 0 ? "#dc2626" : "#15803d"};margin-top:2px;white-space:nowrap;">
+                      ${bal > 0 ? formatExactKrw(bal) : "완납"}
                     </div>
                   </div>
                 </div>
@@ -18488,12 +18491,12 @@ end $$;`;
           <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:8px;margin-bottom:12px;">
             <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #3b82f6;">
               <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">총 계약금액</div>
-              <div style="font-size:15px;font-weight:800;color:#1e293b;margin-top:2px;">${formatKrw(totalContract)}</div>
+              <div style="font-size:13.5px;font-weight:800;color:#1e293b;margin-top:2px;white-space:nowrap;">${formatExactKrw(totalContract)}</div>
               <div style="font-size:10px;color:#64748b;margin-top:2px;">${filtered.length}건 / 수금률 ${collectionRate}%</div>
             </div>
             <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #10b981;">
               <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">누적 수금액</div>
-              <div style="font-size:15px;font-weight:800;color:#10b981;margin-top:2px;">${formatKrw(totalCollected)}</div>
+              <div style="font-size:13.5px;font-weight:800;color:#10b981;margin-top:2px;white-space:nowrap;">${formatExactKrw(totalCollected)}</div>
               <div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700;">회수 완료</div>
             </div>
             <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #dc2626;background:${stFilter === "uncollected" ? "#fee2e2" : "#fff8f8"};${FINANCE_EXT_FLAGS.kpiClickFilter ? "cursor:pointer;" : ""}${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "uncollected" ? "outline:2px solid #dc2626;" : ""}" onclick="${FINANCE_EXT_FLAGS.kpiClickFilter ? "window.toggleFinanceUncollectedFilter()" : ""}">
@@ -18501,12 +18504,12 @@ end $$;`;
                 <span>총 미수금</span>
                 ${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "uncollected" ? `<span style="font-size:9.5px;padding:1px 5px;border-radius:4px;background:#dc2626;color:#fff;font-weight:800;">✕ 필터중</span>` : (FINANCE_EXT_FLAGS.kpiClickFilter ? `<span style="font-size:9.5px;color:#dc2626;">(터치 필터)</span>` : "")}
               </div>
-              <div style="font-size:15px;font-weight:900;color:#dc2626;margin-top:2px;">${formatKrw(totalUncollected)}</div>
+              <div style="font-size:13.5px;font-weight:900;color:#dc2626;margin-top:2px;white-space:nowrap;">${formatExactKrw(totalUncollected)}</div>
               <div style="font-size:10px;color:#b91c1c;margin-top:2px;font-weight:600;">${uncollectedSitesCount}개 현장 미수</div>
             </div>
             <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #f59e0b;">
               <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">계산서 미발행</div>
-              <div style="font-size:15px;font-weight:800;color:#d97706;margin-top:2px;">${unissuedTaxCount}건</div>
+              <div style="font-size:13.5px;font-weight:800;color:#d97706;margin-top:2px;white-space:nowrap;">${unissuedTaxCount}건</div>
               <div style="font-size:10px;color:#b45309;margin-top:2px;">발행 필요</div>
             </div>
           </div>
@@ -18617,22 +18620,22 @@ end $$;`;
                 </div>
               ` : ""}
 
-              <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;background:#f8fafc;padding:8px 10px;border-radius:6px;margin:8px 0;text-align:center;">
+              <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;background:#f8fafc;padding:8px 8px;border-radius:6px;margin:8px 0;text-align:center;">
                 <div>
                   <div style="font-size:10px;color:var(--text-muted);">최종 계약액</div>
-                  <div style="font-size:12.5px;font-weight:800;color:#1e293b;margin-top:2px;">${formatKrw(fin.total)}</div>
+                  <div style="font-size:11.5px;font-weight:800;color:#1e293b;margin-top:2px;white-space:nowrap;">${formatExactKrw(fin.total)}</div>
                   ${(FINANCE_EXT_FLAGS.extraContractAmount && extraAmt !== 0) ? `
-                    <div style="font-size:9.5px;color:#64748b;font-weight:600;margin-top:1px;">(최초 ${formatKrw(baseContract)} ${extraAmt > 0 ? "+" : ""}${formatKrw(extraAmt)})</div>
+                    <div style="font-size:9.5px;color:#64748b;font-weight:600;margin-top:1px;">(최초 <span style="white-space:nowrap;">${formatExactKrw(baseContract)}</span> <span style="white-space:nowrap;">${extraAmt > 0 ? "+" : ""}${formatExactKrw(extraAmt)}</span>)</div>
                   ` : ""}
                 </div>
                 <div>
                   <div style="font-size:10px;color:var(--text-muted);">수금액 (${rRate}%)</div>
-                  <div style="font-size:12.5px;font-weight:800;color:#15803d;margin-top:2px;">${formatKrw(collected)}</div>
+                  <div style="font-size:11.5px;font-weight:800;color:#15803d;margin-top:2px;white-space:nowrap;">${formatExactKrw(collected)}</div>
                 </div>
                 <div>
                   <div style="font-size:10px;color:var(--text-muted);">미수금</div>
-                  <div style="font-size:13px;font-weight:900;color:${uncollected > 0 ? "#dc2626" : (fin.isAmountUnset ? "#64748b" : (uncollected === 0 ? "#15803d" : "#2563eb"))};margin-top:2px;">
-                    ${uncollected > 0 ? formatKrw(uncollected) : (fin.isAmountUnset ? "금액 미입력" : (uncollected === 0 ? "완납" : "+" + formatKrw(-uncollected)))}
+                  <div style="font-size:11.5px;font-weight:900;color:${uncollected > 0 ? "#dc2626" : (fin.isAmountUnset ? "#64748b" : (uncollected === 0 ? "#15803d" : "#2563eb"))};margin-top:2px;white-space:nowrap;">
+                    ${uncollected > 0 ? formatExactKrw(uncollected) : (fin.isAmountUnset ? "금액 미입력" : (uncollected === 0 ? "완납" : "+" + formatExactKrw(-uncollected)))}
                   </div>
                 </div>
               </div>
