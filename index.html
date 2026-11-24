@@ -9062,9 +9062,6 @@ end $$;`;
             yearsSet.add(parseInt(info.year, 10));
           }
         });
-        const curY = new Date().getFullYear();
-        yearsSet.add(curY);
-        yearsSet.add(curY - 1);
         return Array.from(yearsSet).sort((a, b) => b - a);
       }
 
@@ -9113,6 +9110,11 @@ end $$;`;
       function renderCollectionMonthStripHtml(allList, selectedYear, selectedMonth, isMobile) {
         const months = getMonthlyCollectionStats(allList, selectedYear);
         const years = getCollectionYears(allList);
+        const hasUndetermined = (allList || []).some((r) => {
+          const matchedSite = findMatchedSiteInfo(r.siteName);
+          const info = getCollectionAttributionMonth(r, matchedSite);
+          return !info.month || info.month < 1 || info.month > 12;
+        });
 
         const yearChipsHtml = `
           <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
@@ -9121,7 +9123,7 @@ end $$;`;
             ${years.map(y => `
               <button type="button" class="btn-sub-chip ${String(selectedYear) === String(y) ? "active" : ""}" style="padding:3px 8px;font-size:11.5px;" onclick="window.setFinanceYearFilter('${y}')">${y}년</button>
             `).join("")}
-            <button type="button" class="btn-sub-chip ${selectedYear === "undetermined" ? "active" : ""}" style="padding:3px 8px;font-size:11.5px;" onclick="window.setFinanceYearFilter('undetermined')">기간미정</button>
+            ${(hasUndetermined || selectedYear === "undetermined") ? `<button type="button" class="btn-sub-chip ${selectedYear === "undetermined" ? "active" : ""}" style="padding:3px 8px;font-size:11.5px;" onclick="window.setFinanceYearFilter('undetermined')">기간미정</button>` : ""}
           </div>
         `;
 
@@ -9131,7 +9133,8 @@ end $$;`;
           </button>
         ` : "";
 
-        const monthCardsHtml = months.map((m) => {
+        const visibleMonths = months.filter(m => m.count > 0 || selectedMonth === m.month);
+        const monthCardsHtml = visibleMonths.length > 0 ? visibleMonths.map((m) => {
           const isSelected = selectedMonth === m.month;
           const hasData = m.count > 0;
           const bg = isSelected ? "#2563eb" : (hasData ? "#ffffff" : "#f8fafc");
@@ -9142,7 +9145,7 @@ end $$;`;
 
           return `
             <div data-month="${m.month}" ${isSelected ? 'data-selected="1"' : ""} onclick="window.setFinanceMonthFilter(${m.month})"
-              style="cursor:pointer;padding:${isMobile ? "6px 8px" : "8px 6px"};border-radius:8px;background:${bg};border:1.5px solid ${border};text-align:center;transition:all 0.15s ease;flex:${isMobile ? "0 0 auto" : "1"};min-width:${isMobile ? "94px" : "0"};position:relative;box-shadow:${isSelected ? "0 2px 8px rgba(37,99,235,0.25)" : "none"};"
+              style="cursor:pointer;padding:${isMobile ? "6px 8px" : "8px 6px"};border-radius:8px;background:${bg};border:1.5px solid ${border};text-align:center;transition:all 0.15s ease;flex:${isMobile ? "0 0 auto" : "1 1 80px"};min-width:${isMobile ? "94px" : "80px"};max-width:${isMobile ? "none" : "140px"};position:relative;box-shadow:${isSelected ? "0 2px 8px rgba(37,99,235,0.25)" : "none"};"
               title="${m.month}월: ${m.count}건 / 수금 ${formatExactKrw(m.collected)}${m.uncollected > 0 ? " / 미수 " + formatExactKrw(m.uncollected) : ""}">
               ${m.hasUncollected ? `
                 <span style="position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:#ef4444;" title="미수 현장 있음"></span>
@@ -9154,7 +9157,7 @@ end $$;`;
               </div>
             </div>
           `;
-        }).join("");
+        }).join("") : `<div style="font-size:11.5px;color:#94a3b8;padding:4px 2px;">선택한 조건에 귀속된 수금 월이 없습니다.</div>`;
 
         return `
           <div class="standard-card" style="padding:${isMobile ? "10px 12px" : "12px 16px"};margin-bottom:14px;background:#fcfdfe;border:1px solid #e2e8f0;">
@@ -9165,7 +9168,7 @@ end $$;`;
                 ${resetBtnHtml}
               </div>
             </div>
-            <div id="${isMobile ? "mFinanceMonthStrip" : "pcFinanceMonthStrip"}" style="${isMobile ? "display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;" : "display:grid;grid-template-columns:repeat(12, 1fr);gap:6px;"}">
+            <div id="${isMobile ? "mFinanceMonthStrip" : "pcFinanceMonthStrip"}" style="${isMobile ? "display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;" : "display:flex;flex-wrap:wrap;gap:6px;"}">
               ${monthCardsHtml}
             </div>
           </div>
@@ -14598,11 +14601,10 @@ end $$;`;
           }
         });
         const currentYear = getTodayYmd().slice(0, 4);
-        yearsSet.add(currentYear);
-        yearsSet.add(String(Number(currentYear) - 1));
+        if (yearsSet.size === 0) yearsSet.add(currentYear);
         const availableYears = Array.from(yearsSet).sort().reverse();
 
-        const selectedYear = state.financeMonthlyYear || currentYear;
+        const selectedYear = state.financeMonthlyYear || availableYears[0] || currentYear;
 
         // 2. 선택 연도 기준 수금 / 지출 필터링
         const filteredCol = allCollection.filter(r => {
