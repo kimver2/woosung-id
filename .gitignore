@@ -13,10 +13,18 @@ pnpm-debug.log*
 # Dependencies
 node_modules/
 
-# Temporary files
+# Temporary & Backup files
 tmp/
 temp/
 *.tmp
+*.bak
+backups/
+*_backup_*.json
+
+# Secrets & Credentials
+.env
+.env.*
+.clasprc.json
 
 # Excel & Internal Finance Payloads
 *.xlsx

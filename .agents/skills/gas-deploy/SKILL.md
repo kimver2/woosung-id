@@ -19,17 +19,29 @@ description: Standard runbook for deploying Google Apps Script Web App (v2 proje
 - **GitHub Pages 저장소**:
   - 원격 저장소: `https://github.com/kimver2/woosung-id.git` (`main` 브랜치)
   - 서비스 URL: `https://kimver2.github.io/woosung-id/`
-  - 진입점 파일: 루트 `index.html`, `docs/index.html` (메인 v2), `v2.html`, `docs/v2.html`, `preview_tabs.html`, `docs/preview_tabs.html` (6개 파일 항상 100% 동일한 내용 유지 필수)
+  - 정식 미러 동기화 쌍 (루트 <-> `docs/` 100% 일치 필수):
+    - `index.html` <-> `docs/index.html` (메인 통합 대시보드)
+    - `client.html` <-> `docs/client.html` (고객 공유용 페이지)
+    - `sw.js` <-> `docs/sw.js` (PWA 서비스워커)
+    - `manifest.json` <-> `docs/manifest.json` (웹 매니페스트)
+    - `data/dashboard_data.js` <-> `docs/data/dashboard_data.js` (데이터 서비스 & 스냅샷)
+  - 경량 리다이렉트 스텁 파일 (`./index.html`로 즉시 이동):
+    - `v2.html`, `docs/v2.html`, `v3.html`, `docs/v3.html`, `preview_tabs.html`, `docs/preview_tabs.html`
 
 ---
 
 ## 🚀 표준 배포 4단계 절차
 
-### Step 1. v2 메인 파일 100% 동기화 (`index.html`, `v2.html`, `preview_tabs.html` 및 `docs/` 내 대응 파일)
-프론트엔드/대시보드 수정 시 `index.html`, `docs/index.html`, `v2.html`, `docs/v2.html`, `preview_tabs.html`, `docs/preview_tabs.html` 6개 파일을 항상 100% 동일하게 동기화합니다.
+### Step 1. 루트 및 `docs/` 배포 파일 100% 미러 동기화
+프론트엔드/PWA/데이터 서비스 수정 시 아래 5쌍의 파일을 루트와 `docs/` 간에 항상 100% 동일하게 동기화합니다 (`v2.html`, `v3.html`, `preview_tabs.html` 및 `docs/` 사본은 경량 `./index.html` 리다이렉트 스텁으로 유지):
+- `index.html` <-> `docs/index.html`
+- `client.html` <-> `docs/client.html`
+- `sw.js` <-> `docs/sw.js`
+- `manifest.json` <-> `docs/manifest.json`
+- `data/dashboard_data.js` <-> `docs/data/dashboard_data.js`
 
 ### Step 2. 구문 검사 및 핵심 QA 스위트 검증
-배포 전 반드시 아래 명령으로 서버/클라이언트 문법 및 6개 HTML 파일 일치 여부를 검증합니다:
+배포 전 반드시 아래 명령으로 서버/클라이언트 문법 및 `docs/` 미러 일치 여부를 검증합니다:
 ```zsh
 node -c 현장서식.js && node scripts/run_qa_tests.js
 ```
@@ -42,5 +54,5 @@ npx clasp push --force && npx clasp deploy -i AKfycbzd6pJp0oDfhN55dv6xM1HsAoQikA
 
 ### Step 4. Git 커밋 및 원격 저장소 푸시
 ```zsh
-git add 현장서식.js index.html docs/index.html v2.html docs/v2.html preview_tabs.html docs/preview_tabs.html manifest.json docs/manifest.json && git commit -m "커밋 메시지" && git push origin main
+git add 현장서식.js index.html docs/index.html client.html docs/client.html sw.js docs/sw.js manifest.json docs/manifest.json data/dashboard_data.js docs/data/dashboard_data.js && git commit -m "커밋 메시지" && git push origin main
 ```

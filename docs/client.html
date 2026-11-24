@@ -618,6 +618,15 @@
     };
     let toastTimer = null;
 
+    function getKstTodayYmd() {
+      try {
+        return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date());
+      } catch (_) {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+    }
+
     function isPartnerRequest() {
       try {
         const params = new URLSearchParams(location.search);
@@ -808,17 +817,53 @@
       }
       try {
         const key = (isPartnerReq ? "partner_share::" : "client_share::") + token;
-        const url = `${SUPABASE_URL}/rest/v1/ws_state_store?key=eq.${encodeURIComponent(key)}&select=payload,updated_at`;
-        const res = await fetch(url, {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: "Bearer " + SUPABASE_ANON_KEY
-          },
-          cache: "no-store"
-        });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        const rows = await res.json();
-        const row = Array.isArray(rows) ? rows[0] : null;
+        let row = null;
+        try {
+          const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/ws_get_public_share`, {
+            method: "POST",
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: "Bearer " + SUPABASE_ANON_KEY,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ p_share_key: key }),
+            cache: "no-store"
+          });
+          if (rpcRes.ok) {
+            const rpcData = await rpcRes.json();
+            if (rpcData && !Array.isArray(rpcData) && rpcData.payload) {
+              row = rpcData;
+            } else if (Array.isArray(rpcData)) {
+              const url = `${SUPABASE_URL}/rest/v1/ws_state_store?key=eq.${encodeURIComponent(key)}&select=payload,updated_at`;
+              const res = await fetch(url, {
+                headers: {
+                  apikey: SUPABASE_ANON_KEY,
+                  Authorization: "Bearer " + SUPABASE_ANON_KEY
+                },
+                cache: "no-store"
+              });
+              if (!res.ok) throw new Error("HTTP " + res.status);
+              const rows = await res.json();
+              row = Array.isArray(rows) ? rows[0] : null;
+            }
+          } else if (rpcRes.status === 404 || rpcRes.status === 400) {
+            const url = `${SUPABASE_URL}/rest/v1/ws_state_store?key=eq.${encodeURIComponent(key)}&select=payload,updated_at`;
+            const res = await fetch(url, {
+              headers: {
+                apikey: SUPABASE_ANON_KEY,
+                Authorization: "Bearer " + SUPABASE_ANON_KEY
+              },
+              cache: "no-store"
+            });
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            const rows = await res.json();
+            row = Array.isArray(rows) ? rows[0] : null;
+          } else {
+            throw new Error("HTTP " + rpcRes.status);
+          }
+        } catch (rpcErr) {
+          throw rpcErr;
+        }
         const p = row && row.payload ? row.payload : null;
         if (!p || p.enabled === false) {
           renderError("🔒", "공유가 종료되었거나 만료된 링크입니다.", "현장 담당자에게 최신 공유 링크를 요청해 주세요.");
@@ -837,13 +882,13 @@
         clientViewState.showAllTasks = false;
         clientViewState.showDoneTasks = false;
         clientViewState.selectedYmd = "";
-        const now = new Date();
-        const curYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const kstToday = getKstTodayYmd();
+        const curYm = kstToday.slice(0, 7);
         const tasks = isPartnerReq ? getVisiblePartnerTasks(p) : (Array.isArray(p.tasks) ? p.tasks : []);
         const hasCurMonthTask = tasks.some((t) => String(t.date || "").startsWith(curYm) || String(t.endDate || "").startsWith(curYm));
         if (hasCurMonthTask || !tasks.length) {
-          clientViewState.calYear = now.getFullYear();
-          clientViewState.calMonth = now.getMonth() + 1;
+          clientViewState.calYear = Number(kstToday.slice(0, 4));
+          clientViewState.calMonth = Number(kstToday.slice(5, 7));
         } else {
           const dated = tasks.map((t) => String(t.date || "")).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
           const target = dated.length ? dated[dated.length - 1] : "";
@@ -871,10 +916,10 @@
     }
 
     function goClientCalToday() {
-      const now = new Date();
-      clientViewState.calYear = now.getFullYear();
-      clientViewState.calMonth = now.getMonth() + 1;
-      clientViewState.selectedYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const kstToday = getKstTodayYmd();
+      clientViewState.calYear = Number(kstToday.slice(0, 4));
+      clientViewState.calMonth = Number(kstToday.slice(5, 7));
+      clientViewState.selectedYmd = kstToday;
       rerenderActiveShareView();
     }
 
@@ -997,10 +1042,7 @@
       const totalCnt = Number(p.totalTasksCount) || tasks.length;
       const doneCnt = Number(p.completedTasksCount) || tasks.filter((t) => t.status === "완료").length;
       const remainCnt = Math.max(0, totalCnt - doneCnt);
-      const todayYmd = (() => {
-        const d = new Date();
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      })();
+      const todayYmd = getKstTodayYmd();
 
       let paymentHtml = "";
       const payObj = (p.showPayment !== false && p.payment && typeof p.payment === "object") ? p.payment : null;
@@ -1164,10 +1206,7 @@
       const doneCnt = tasks.filter((t) => t.status === "완료").length;
       const remainCnt = Math.max(0, totalCnt - doneCnt);
       const pct = totalCnt > 0 ? Math.round((doneCnt / totalCnt) * 100) : 0;
-      const todayYmd = (() => {
-        const d = new Date();
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      })();
+      const todayYmd = getKstTodayYmd();
 
       const mgrContactsHtml = (Array.isArray(p.managerContacts) && p.managerContacts.length)
         ? p.managerContacts.map((c) => `<span>👤 ${esc(c.name)}${c.phone ? ` | <a href="tel:${esc(String(c.phone).replace(/[^0-9+]/g, ""))}">${esc(c.phone)}</a>` : ""}</span>`).join("")

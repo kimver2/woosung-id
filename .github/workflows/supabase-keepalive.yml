@@ -13,7 +13,7 @@ jobs:
       - name: Ping Supabase REST API
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            "https://uyqvguzglviqegxmxqyn.supabase.co/rest/v1/ws_state_store?select=key&limit=1" \
+            "https://uyqvguzglviqegxmxqyn.supabase.co/rest/v1/ws_state_store?select=key&key=eq.sync_signal&limit=1" \
             -H "apikey: sb_publishable_f8JwxMgpgs6AVSEumSIV2g_KlK6o9GA")
           echo "Supabase Keep-Alive HTTP Status: $STATUS"
           if [ "$STATUS" != "200" ]; then
