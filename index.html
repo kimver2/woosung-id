@@ -7495,6 +7495,10 @@ end $$;`;
                 <div class="m5-cell"><span class="m5-lbl">📞 관리사무소</span><span class="m5-val">${escHtml(info.officePhone || "-")}</span></div>
                 <div class="m5-cell"><span class="m5-lbl">⚠️ 특이사항 / 주차</span><span class="m5-val">${escHtml(info.memo || "-")}</span></div>
                 <div class="m5-cell"><span class="m5-lbl">📁 드라이브 링크</span>${info.driveUrl ? `<a class="m5-val link" href="${escHtml(info.driveUrl)}" target="_blank" rel="noopener">드라이브 열기 ↗</a>` : `<span class="m5-val" style="color:var(--text-muted);cursor:pointer;" onclick="openSiteInfoModal('${escJs(selectedSite.siteName)}')">+ 연결하기</span>`}</div>
+                <div class="m5-cell" style="grid-column:1/-1;border-top:1px dashed #e2e8f0;padding-top:8px;margin-top:2px;">
+                  <span class="m5-lbl">💬 상담내역</span>
+                  ${info.consultHistory ? `<div class="memo-history-list" style="margin-top:4px;">${formatMemoHistoryWithPhotosHtml(info.consultHistory)}</div>` : `<span class="m5-val" style="color:var(--text-muted);">-</span>`}
+                </div>
               </div>
 
               <div class="stat-4bar">
@@ -8379,7 +8383,7 @@ end $$;`;
                       <div class="action-tag">⚡ 다음 해야 할 일 (Next Action)</div>
                       <div class="action-text">${escHtml(est.nextAction || "지정된 다음 액션이 없습니다.")}</div>
                     </div>
-                    ${est.memo ? `<div class="pc-est-memo-box"><strong>상담 메모:</strong> ${escHtml(est.memo)}</div>` : ""}
+                    ${est.memo ? `<div class="pc-est-memo-box"><strong>상담 메모:</strong><div class="memo-history-list" style="margin-top:4px;">${formatMemoHistoryWithPhotosHtml(est.memo)}</div></div>` : ""}
                     ${est.failReason ? `<div class="pc-est-fail-box"><strong>⚠️ 보류/실패 사유:</strong> ${escHtml(est.failReason)}</div>` : ""}
                     ${est.estimateFile ? `<div class="pc-est-info-row" style="margin-top:4px;"><span class="lbl">견적서 파일</span><span class="val"><a href="${escHtml(est.estimateFile)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;">파일 열기 ↗</a></span></div>` : ""}
                   </div>
@@ -17596,6 +17600,7 @@ end $$;`;
                     ${info.officePhone ? `<a href="tel:${escHtml(String(info.officePhone).replace(/[^0-9]/g, ""))}" class="btn-tool-tag" style="text-decoration:none;">전화</a>` : ""}
                   </div>
                   <div style="color:var(--text-sub);font-size:11px;">⚠️ <strong>특이사항/주차:</strong> ${escHtml(info.memo || "-")}</div>
+                  <div style="color:var(--text-sub);font-size:11px;">💬 <strong>상담내역:</strong> ${info.consultHistory ? `<div class="memo-history-list" style="margin-top:4px;">${formatMemoHistoryWithPhotosHtml(info.consultHistory)}</div>` : "-"}</div>
                   <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
                     <span>📁 <strong>드라이브:</strong> ${info.driveUrl ? "연결됨" : "미연결"}</span>
                     ${info.driveUrl ? `<a href="${escHtml(info.driveUrl)}" target="_blank" rel="noopener" class="btn-tool-tag" style="text-decoration:none;">드라이브 열기 ↗</a>` : `<button type="button" class="btn-tool-tag" onclick="openSiteInfoModal('${escJs(s.siteName)}')">+ 연결하기</button>`}
@@ -17985,7 +17990,7 @@ end $$;`;
                       <div style="color:#92400e;font-size:10.5px;font-weight:800;">⚡ 다음 해야 할 일</div>
                       <div style="color:#78350f;font-weight:600;margin-top:2px;">${escHtml(eData.nextAction)}</div>
                     </div>` : ""}
-                  ${eData.memo ? `<div style="background:#f8fafc;padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;color:#334155;"><strong>상담 메모:</strong> ${escHtml(eData.memo)}</div>` : ""}
+                  ${eData.memo ? `<div style="background:#f8fafc;padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;color:#334155;"><strong>상담 메모:</strong><div class="memo-history-list" style="margin-top:4px;">${formatMemoHistoryWithPhotosHtml(eData.memo)}</div></div>` : ""}
                   ${(eData.visitAccess || eData.originCompletedDate) ? `<div style="background:#f8fafc;padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;color:#334155;display:flex;flex-direction:column;gap:2px;">
                     ${eData.visitAccess ? `<div><strong>방문·출입:</strong> ${escHtml(eData.visitAccess)}</div>` : ""}
                     ${eData.originCompletedDate ? `<div><strong>원현장 준공:</strong> <span style="color:#0369a1;font-weight:700;">${escHtml(eData.originCompletedDate)}</span></div>` : ""}
@@ -23138,6 +23143,7 @@ end $$;`;
           </div>
           <div class="fg"><label>📁 구글 드라이브 폴더 URL</label><input class="ws-input" id="siDrive" value="${escHtml(info.driveUrl || "")}" placeholder="https://drive.google.com/..."></div>
           <div class="fg"><label>⚠️ 현장 특이사항 / 주차 안내</label><textarea class="ws-textarea" id="siMemo">${escHtml(info.memo || "")}</textarea></div>
+          <div class="fg"><label>💬 상담내역 (신규현장 상담 히스토리)</label><textarea class="ws-textarea" id="siConsultHistory" rows="3" placeholder="신규현장에서 승격된 상담 히스토리 및 주요 협의 내용">${escHtml(info.consultHistory || "")}</textarea></div>
           <div class="fg">
             <label>🛡️ 착공 필수 체크 상태</label>
             <div class="seg-row">
@@ -23165,6 +23171,7 @@ end $$;`;
           officePhone: document.getElementById("siOffice").value.trim(),
           driveUrl: document.getElementById("siDrive").value.trim(),
           memo: document.getElementById("siMemo").value.trim(),
+          consultHistory: (document.getElementById("siConsultHistory") ? document.getElementById("siConsultHistory").value.trim() : (prev.consultHistory || "")),
           consentDone: document.getElementById("siC1").checked,
           elevatorCoverDone: document.getElementById("siC2").checked,
           officeNoticeDone: document.getElementById("siC3").checked,
@@ -25699,17 +25706,23 @@ end $$;`;
           }
           existingSite = newSiteObj;
         }
-        if (state.dashData && state.dashData.siteInfoMap && !state.dashData.siteInfoMap[siteName]) {
-          state.dashData.siteInfoMap[siteName] = {
-            address: ed.address || "",
-            doorPassword: "",
-            officePhone: ed.clientPhone || "",
-            memo: ed.memo || "",
-            driveUrl: ed.estimateFile || "",
-            consentDone: false,
-            elevatorCoverDone: false,
-            officeNoticeDone: false
-          };
+        if (state.dashData && state.dashData.siteInfoMap) {
+          const prevInfo = state.dashData.siteInfoMap[siteName];
+          if (!prevInfo) {
+            state.dashData.siteInfoMap[siteName] = {
+              address: ed.address || "",
+              doorPassword: "",
+              officePhone: ed.clientPhone || "",
+              memo: "",
+              consultHistory: ed.memo || "",
+              driveUrl: ed.estimateFile || "",
+              consentDone: false,
+              elevatorCoverDone: false,
+              officeNoticeDone: false
+            };
+          } else if (ed.memo && !prevInfo.consultHistory) {
+            prevInfo.consultHistory = ed.memo;
+          }
         }
         recalcDashMeta();
         if (autoCreateCollection) {
@@ -25896,9 +25909,44 @@ end $$;`;
           clientName: "", clientPhone: "", manager: state.user, contractAmount: "", nextAction: "", failReason: "", visitDate: "", address: "", estimateFile: "", row: ""
         };
         const ed = Object.assign({}, baseEd, draftData || {}, { quoteType: resolvedType });
-        state._estCtx = { siteKey, isEdit: !!site, quoteType: resolvedType, ed: Object.assign({}, ed) };
+        state._estCtx = { siteKey, isEdit: !!site, quoteType: resolvedType, newMemo: "", editFullMemo: false, ed: Object.assign({}, ed) };
         renderEstimateModal();
         openModal("estimateEditModal", modalOpts);
+      };
+
+      window.toggleEstimateFullMemo = function () {
+        const ctx = state._estCtx; if (!ctx) return;
+        const gVal = (id, fb) => { const el = document.getElementById(id); return el ? el.value.trim() : fb; };
+        if (ctx.ed) {
+          ctx.ed.siteName = gVal("esSite", ctx.ed.siteName);
+          ctx.ed.status = gVal("esStatus", ctx.ed.status);
+          ctx.ed.priority = gVal("esPrio", ctx.ed.priority);
+          ctx.ed.scope = gVal("esScope", ctx.ed.scope);
+          ctx.ed.source = gVal("esSource", ctx.ed.source);
+          ctx.ed.manager = gVal("esMgr", ctx.ed.manager);
+          ctx.ed.clientName = gVal("esCName", ctx.ed.clientName);
+          ctx.ed.clientPhone = gVal("esCPhone", ctx.ed.clientPhone);
+          ctx.ed.expectedAmount = gVal("esExpAmt", ctx.ed.expectedAmount);
+          ctx.ed.inquiryDate = gVal("esInq", ctx.ed.inquiryDate);
+          ctx.ed.consultDate = gVal("esCons", ctx.ed.consultDate);
+          ctx.ed.visitDate = gVal("esVisit", ctx.ed.visitDate);
+          ctx.ed.estimateSendDate = gVal("esSend", ctx.ed.estimateSendDate);
+          ctx.ed.expectedDate = gVal("esExpD", ctx.ed.expectedDate);
+          ctx.ed.contractAmount = gVal("esConAmt", ctx.ed.contractAmount);
+          ctx.ed.address = gVal("esAddr", ctx.ed.address);
+          ctx.ed.nextAction = gVal("esNext", ctx.ed.nextAction);
+          ctx.ed.failReason = gVal("esFailReason", ctx.ed.failReason);
+          ctx.ed.estimateFile = gVal("esFile", ctx.ed.estimateFile);
+          if (ctx.editFullMemo) {
+            const fullEl = document.getElementById("esMemo");
+            if (fullEl) ctx.ed.memo = fullEl.value;
+          } else {
+            const newEl = document.getElementById("esNewMemo");
+            if (newEl) ctx.newMemo = newEl.value;
+          }
+        }
+        ctx.editFullMemo = !ctx.editFullMemo;
+        renderEstimateModal();
       };
 
       window.renderEstimateModal = function () {
@@ -26038,6 +26086,21 @@ end $$;`;
           items: partnersMaster.map((p) => ({ value: p, label: p }))
         });
 
+        const buildEstMemoFieldHtml = (labelText, placeholderText) => `
+          <div class="fg" style="grid-column:1/-1;">
+            <label style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+              <span>${escHtml(labelText)}</span>
+              ${ctx.isEdit ? `<button type="button" class="btn-tool-tag" onclick="window.toggleEstimateFullMemo()">${ctx.editFullMemo ? "추가 입력 모드로" : "전체 원문 편집"}</button>` : ""}
+            </label>
+            ${ctx.isEdit && !ctx.editFullMemo ? `
+              ${ed.memo ? `<div class="memo-history-list">${formatMemoHistoryWithPhotosHtml(ed.memo)}</div>` : ""}
+              <textarea class="ws-textarea" id="esNewMemo" rows="2" placeholder="새 ${escHtml(labelText)} 추가 입력 (저장 시 날짜·작성자 히스토리 누적)" oninput="if(state._estCtx) state._estCtx.newMemo = this.value;">${escHtml(ctx.newMemo || "")}</textarea>
+            ` : `
+              <textarea class="ws-textarea" id="esMemo" rows="3" placeholder="${escHtml(placeholderText)}">${escHtml(ed.memo || "")}</textarea>
+            `}
+          </div>
+        `;
+
         if (qt === "single") {
           document.getElementById("estimateModalBody").innerHTML = `
             ${typeSwitcherHtml}
@@ -26076,7 +26139,7 @@ end $$;`;
               <div class="fg"><label>⚠️ 보류·실패 사유</label>${mkEstFailReasonDrop()}</div>
               <div class="fg"><label>견적서 파일(URL 또는 파일명)</label><input class="ws-input" id="esFile" value="${escHtml(ed.estimateFile || "")}" placeholder="Google Drive 링크 또는 파일명"></div>
             </div>
-            <div class="fg"><label>상담 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="상담 메모, 고객 요구사항 등">${escHtml(ed.memo || "")}</textarea></div>
+            ${buildEstMemoFieldHtml("상담 메모", "상담 메모, 고객 요구사항 등")}
             <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 12px;font-size:11.5px;font-weight:700;color:#1e3a8a;">
               ℹ️ 저장 시 <b>[신규 현장 &gt; 단건]</b>에서 먼저 관리되며, <b>‘계약 완료’</b> 및 현장 승격 시 <b>정식 단건 현장 + 재무·원장(수금현황·비용마감)</b>에 자동 연동됩니다.
             </div>
@@ -26188,7 +26251,7 @@ end $$;`;
               <div class="fg"><label>다음 해야 할 일</label><input class="ws-input" id="esNext" value="${escHtml(ed.nextAction || "")}" placeholder="예: 반장님 일정 조율 후 방문"></div>
               <div class="fg"><label>⚠️ 보류·실패 사유</label>${mkEstFailReasonDrop()}</div>
             </div>
-            <div class="fg"><label>접수 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="AS 상세 메모">${escHtml(ed.memo || "")}</textarea></div>
+            ${buildEstMemoFieldHtml("접수 메모", "AS 상세 메모")}
             <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 12px;font-size:11.5px;font-weight:700;color:#1e3a8a;">
               ℹ️ 저장 시 <b>[신규 현장 &gt; AS]</b>에서 먼저 관리되며, <b>‘계약 완료(처리 확정)’</b> 및 현장 승격 시 <b>정식 AS 현장 + 재무·원장(수금현황·비용마감)</b>에 자동 연동됩니다.
             </div>
@@ -26259,10 +26322,8 @@ end $$;`;
                 })}
               </div>
             </div>
-            <div class="form-grid-2">
-              <div class="fg"><label>견적서 파일(URL 또는 파일명)</label><input class="ws-input" id="esFile" value="${escHtml(ed.estimateFile || "")}" placeholder="Google Drive 링크 또는 파일명"></div>
-              <div class="fg"><label>상담 메모</label><textarea class="ws-textarea" id="esMemo" rows="2" placeholder="상담 메모, 고객 요구사항 등">${escHtml(ed.memo || "")}</textarea></div>
-            </div>
+            <div class="fg"><label>견적서 파일(URL 또는 파일명)</label><input class="ws-input" id="esFile" value="${escHtml(ed.estimateFile || "")}" placeholder="Google Drive 링크 또는 파일명"></div>
+            ${buildEstMemoFieldHtml("상담 메모", "상담 메모, 고객 요구사항 등")}
           `;
         }
 
@@ -26311,6 +26372,18 @@ end $$;`;
         const gVal = (id, fb) => { const el = document.getElementById(id); return el ? el.value.trim() : (fb !== undefined ? fb : ""); };
         const siteName = gVal("esSite");
         if (!siteName) return showToast("⚠️ 현장명을 입력하세요.");
+        let finalEstMemo = "";
+        if (ctx.isEdit && !ctx.editFullMemo) {
+          finalEstMemo = String((ctx.ed && ctx.ed.memo) || "").trim();
+          const newEstMemo = gVal("esNewMemo", ctx.newMemo || "");
+          if (newEstMemo) {
+            const nowEst = new Date();
+            const estStamp = `[${nowEst.getMonth() + 1}/${nowEst.getDate()} ${String(nowEst.getHours()).padStart(2, "0")}:${String(nowEst.getMinutes()).padStart(2, "0")} | ${state.user || "조항만"}]`;
+            finalEstMemo = (finalEstMemo ? finalEstMemo + "\n" : "") + `${estStamp} ${newEstMemo}`;
+          }
+        } else {
+          finalEstMemo = gVal("esMemo");
+        }
         const ed = {
           row: ctx.ed.row || "",
           originalSiteName: ctx.ed.siteName || siteName,
@@ -26344,7 +26417,7 @@ end $$;`;
           nextAction: gVal("esNext", ctx.ed.nextAction || ""),
           failReason: gVal("esFailReason", ctx.ed.failReason || ""),
           estimateFile: gVal("esFile", ctx.ed.estimateFile || ""),
-          memo: gVal("esMemo")
+          memo: finalEstMemo
         };
         if (qt === "as" && ed.asCostPayer === "고객 부담") {
           ed.asBillingType = "paid";

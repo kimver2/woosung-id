@@ -4918,8 +4918,8 @@ function ensureSiteInfoSheetHeaders(sheet) {
   if (!sheet) return;
   try {
     var maxCols = sheet.getMaxColumns();
-    if (maxCols < 9) {
-      sheet.insertColumnsAfter(maxCols, 9 - maxCols);
+    if (maxCols < 10) {
+      sheet.insertColumnsAfter(maxCols, 10 - maxCols);
     }
     var hVal = String(sheet.getRange(1, 9).getValue() || "").trim();
     if (hVal !== "드라이브 링크") {
@@ -4935,6 +4935,25 @@ function ensureSiteInfoSheetHeaders(sheet) {
       var lastR = sheet.getLastRow();
       if (lastR >= 2) {
         sheet.getRange(2, 9, lastR - 1, 1)
+          .setHorizontalAlignment("left")
+          .setVerticalAlignment("middle")
+          .setBorder(true, true, true, true, true, true, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
+      }
+    }
+    var hVal10 = String(sheet.getRange(1, 10).getValue() || "").trim();
+    if (hVal10 !== "상담내역") {
+      sheet.getRange(1, 10).setValue("상담내역")
+        .setBackground("#1e3a8a")
+        .setFontColor("#ffffff")
+        .setFontWeight("bold")
+        .setHorizontalAlignment("center")
+        .setVerticalAlignment("middle");
+      try {
+        sheet.setColumnWidth(10, 320);
+      } catch (eW10) {}
+      var lastR10 = sheet.getLastRow();
+      if (lastR10 >= 2) {
+        sheet.getRange(2, 10, lastR10 - 1, 1)
           .setHorizontalAlignment("left")
           .setVerticalAlignment("middle")
           .setBorder(true, true, true, true, true, true, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
@@ -5084,8 +5103,8 @@ function getSiteInfoMap(ss, skipEnsure) {
     var lastRow = sheet.getLastRow();
     if (lastRow < 2) return map;
 
-    var maxC = sheet.getMaxColumns ? sheet.getMaxColumns() : 9;
-    var fetchCols = Math.max(1, Math.min(maxC, 9));
+    var maxC = sheet.getMaxColumns ? sheet.getMaxColumns() : 10;
+    var fetchCols = Math.max(1, Math.min(maxC, 10));
     var data = sheet.getRange(2, 1, lastRow - 1, fetchCols).getValues();
     for (var i = 0; i < data.length; i++) {
       var row = data[i];
@@ -5110,6 +5129,7 @@ function getSiteInfoMap(ss, skipEnsure) {
         officeNoticeDone: (row.length > 6 && (row[6] === true || String(row[6]).toUpperCase() === "TRUE")),
         memo: (row.length > 7 && row[7] !== undefined && row[7] !== null) ? String(row[7]).trim() : "",
         driveUrl: String(row[8] || "").trim(),
+        consultHistory: (row.length > 9 && row[9] !== undefined && row[9] !== null) ? String(row[9]).trim() : "",
         rowNum: i + 2
       };
 
@@ -5154,7 +5174,8 @@ function saveSiteInfoFieldFromWeb(siteName, fieldName, value) {
       "officeNoticeDone": 7,
       "memo": 8,
       "driveUrl": 9,
-      "driveLink": 9
+      "driveLink": 9,
+      "consultHistory": 10
     };
 
     var targetCol = colMap[fieldName];
@@ -5271,6 +5292,9 @@ function saveFullSiteInfoFromWeb(siteName, infoObj) {
       sheet.getRange(targetRow, 9).setValue(String(infoObj.driveUrl || "").trim());
     } else if (infoObj.driveLink !== undefined) {
       sheet.getRange(targetRow, 9).setValue(String(infoObj.driveLink || "").trim());
+    }
+    if (infoObj.consultHistory !== undefined) {
+      sheet.getRange(targetRow, 10).setValue(String(infoObj.consultHistory || "").trim());
     }
 
     SpreadsheetApp.flush();
@@ -10119,6 +10143,7 @@ function promoteEstimateToSite(data) {
       address: address,
       officePhone: clientPhone,
       memo: memoParts.join(" | "),
+      consultHistory: memo,
       driveUrl: estimateFile
     };
     try {
@@ -12415,6 +12440,7 @@ function doGet(e) {
     var sPhone = sInfoPayload.officePhone !== undefined ? sInfoPayload.officePhone : (sInfoPayload.mgmtPhone !== undefined ? sInfoPayload.mgmtPhone : (sInfoPayload.managerPhone !== undefined ? sInfoPayload.managerPhone : (p.officePhone || p.mgmtPhone || p.managerPhone || p.clientPhone)));
     var sDrive = sInfoPayload.driveUrl !== undefined ? sInfoPayload.driveUrl : (sInfoPayload.driveLink !== undefined ? sInfoPayload.driveLink : (p.driveUrl || p.driveLink));
     var sMemo = sInfoPayload.memo !== undefined ? sInfoPayload.memo : p.memo;
+    var sConsultHistory = sInfoPayload.consultHistory !== undefined ? sInfoPayload.consultHistory : p.consultHistory;
 
     var sConsent = sInfoPayload.consentDone !== undefined ? sInfoPayload.consentDone : (sInfoPayload.preChecklist ? sInfoPayload.preChecklist.consent : (p.consentDone !== undefined ? p.consentDone : undefined));
     var sElevator = sInfoPayload.elevatorCoverDone !== undefined ? sInfoPayload.elevatorCoverDone : (sInfoPayload.preChecklist ? sInfoPayload.preChecklist.protection : (p.elevatorCoverDone !== undefined ? p.elevatorCoverDone : undefined));
@@ -12426,6 +12452,7 @@ function doGet(e) {
     if (sPhone !== undefined) saveObj.officePhone = sPhone;
     if (sDrive !== undefined) saveObj.driveUrl = sDrive;
     if (sMemo !== undefined) saveObj.memo = sMemo;
+    if (sConsultHistory !== undefined) saveObj.consultHistory = sConsultHistory;
     if (sConsent !== undefined) saveObj.consentDone = (sConsent === true || String(sConsent).toUpperCase() === "TRUE");
     if (sElevator !== undefined) saveObj.elevatorCoverDone = (sElevator === true || String(sElevator).toUpperCase() === "TRUE");
     if (sNotice !== undefined) saveObj.officeNoticeDone = (sNotice === true || String(sNotice).toUpperCase() === "TRUE");
@@ -15341,11 +15368,11 @@ function backupSupabaseToSheetsDaily(silent) {
           infoRows.push([
             item.siteName, item.address || "", item.doorPassword || "", item.officePhone || "",
             Boolean(item.consentDone), Boolean(item.elevatorCoverDone), Boolean(item.officeNoticeDone),
-            item.memo || "", item.driveUrl || ""
+            item.memo || "", item.driveUrl || "", item.consultHistory || ""
           ]);
         });
         if (infoRows.length > 0) {
-          summary.backedUp.siteInfo = overwriteSheetDataRowsSafely_(infoSheet, infoRows, 9, [3]);
+          summary.backedUp.siteInfo = overwriteSheetDataRowsSafely_(infoSheet, infoRows, 10, [3]);
         }
       }
     }
