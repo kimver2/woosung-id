@@ -6243,7 +6243,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
 
     const initGanttOk = sb.state.calViewMode === 'gantt' && sb.state.mobileCalMode === 'gantt';
 
-    // 캘린더 진입 시 좌측 툴바에 .cal-view-switch 배치 + 📂 현장 칩 숨김 + 현장/단건/AS 통합(신규 제외) + 충돌 감지
+    // 캘린더 진입 시 좌측 툴바에 .cal-view-switch 배치 + 📂 현장 선택 버튼 노출 + 현장/단건/AS 통합(신규 제외) + 충돌 감지
     sb.selectCalDay('2026-11-19');
     sb.switchMainTab('calendar');
     const calHtmlGantt = elements.get('pcCalMain').innerHTML;
@@ -6251,7 +6251,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     const rightIdx = calHtmlGantt.indexOf('class="pc-cal-toolbar-right"');
     const switchIdx = calHtmlGantt.indexOf('class="cal-view-switch"');
     const switchInLeftOk = leftIdx !== -1 && rightIdx !== -1 && switchIdx > leftIdx && switchIdx < rightIdx;
-    const scopeChipHiddenInGanttOk = !calHtmlGantt.includes('📂 <b>현장</b>');
+    const ganttPickerBtnOk = calHtmlGantt.includes('toggleCalSitePickerPopover') && calHtmlGantt.includes('전체 (현장·단건·AS)');
     const integratedRowsOk = (
       calHtmlGantt.includes('강남 현장') &&
       calHtmlGantt.includes('판교 중문 단건') &&
@@ -6268,11 +6268,65 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     );
     const pcWeekMonStartOk = calHtmlGantt.includes('11.16 (월)') && calHtmlGantt.includes('(11.16 ~ 11.22)');
 
-    // 월간/주간 전환 시 모드 유지 및 📂 현장 칩 복원
+    // 월간/주간 전환 시 모드 유지 및 📂 현장 선택 버튼 복원 + 팝오버 현장/단건/AS 교차 선택 검증
     sb.setCalViewMode('month');
     const calHtmlMonth = elements.get('pcCalMain').innerHTML;
-    const monthChipShownOk = sb.state.calViewMode === 'month' && calHtmlMonth.includes('📂 <b>현장</b>');
+    const monthChipShownOk = sb.state.calViewMode === 'month' && calHtmlMonth.includes('📂 <b>현장</b>') && calHtmlMonth.includes('toggleCalSitePickerPopover');
+    sb.toggleCalSitePickerPopover();
+    const pickerOpenHtml = elements.get('pcCalMain').innerHTML;
+    const pickerPopoverGroupsOk = pickerOpenHtml.includes('pcCalSitePickerPopover') && pickerOpenHtml.includes('🏗️ 현장') && pickerOpenHtml.includes('⚡ 단건') && pickerOpenHtml.includes('🔧 AS');
+    sb.selectOnlyCalPickerScope('as');
+    sb.toggleCalPickerSite('SINGLE_B');
+    sb.closeCalSitePickerPopover();
+    const crossScopeMonthHtml = elements.get('pcCalMain').innerHTML;
+    const crossScopeMonthOk = crossScopeMonthHtml.includes('목공AS') && crossScopeMonthHtml.includes('중문') && !crossScopeMonthHtml.includes('>목공<');
+    sb.setCalViewMode('gantt');
+    const crossScopeGanttHtml = elements.get('pcCalMain').innerHTML;
+    const crossScopeGanttOk = crossScopeGanttHtml.includes('판교 중문 단건') && crossScopeGanttHtml.includes('서초 AS') && !crossScopeGanttHtml.includes('강남 현장');
+    sb.resetCalSitePickerDefault();
+    sb.setCalViewMode('month');
     sb.switchMainTab('sites');
+    const pcSitesHtml = elements.get('pcSiteMain').innerHTML;
+    const pcSitesSidebarHtml = elements.get('pcSiteSidebar').innerHTML;
+    const progressLabelOk = pcSitesHtml.includes('공정 진행 ') && !pcSitesHtml.includes('정상 진행');
+    // 착공일 기준 예정/진행중 배지 검증 (오늘: realTodayYmd)
+    const todayStr = sb.getTodayYmd();
+    const dNext = new Date(todayStr + 'T00:00:00');
+    dNext.setDate(dNext.getDate() + 3);
+    const futureStartYmd = dNext.getFullYear() + '-' + String(dNext.getMonth() + 1).padStart(2, '0') + '-' + String(dNext.getDate()).padStart(2, '0');
+    const dPrev = new Date(todayStr + 'T00:00:00');
+    dPrev.setDate(dPrev.getDate() - 2);
+    const pastStartYmd = dPrev.getFullYear() + '-' + String(dPrev.getMonth() + 1).padStart(2, '0') + '-' + String(dPrev.getDate()).padStart(2, '0');
+    sb.state.dashData.sites.push(
+      {
+        siteKey: 'FUTURE_START_SITE',
+        siteName: '착공예정 테스트현장',
+        scope: 'site',
+        colorHex: '#2563eb',
+        progressRate: 0,
+        tasks: [{ id: 't_fut_1', taskName: '착공', partner: '', manager: '조항만', startDateStr: futureStartYmd, endDateStr: futureStartYmd, status: '예정' }]
+      },
+      {
+        siteKey: 'STARTED_SITE',
+        siteName: '착공진행 테스트현장',
+        scope: 'site',
+        colorHex: '#10b981',
+        progressRate: 30,
+        tasks: [{ id: 't_past_1', taskName: '착공', partner: '', manager: '조항만', startDateStr: pastStartYmd, endDateStr: pastStartYmd, status: '진행' }]
+      }
+    );
+    sb.markAllDirty();
+    sb.renderActiveViews();
+    const pcSitesBadgeHtml = elements.get('pcSiteMain').innerHTML;
+    const pcSideBadgeHtml = elements.get('pcSiteSidebar').innerHTML;
+    const startBadgeOk = (
+      pcSitesBadgeHtml.includes('ws-site-start-badge scheduled') &&
+      pcSitesBadgeHtml.includes('ws-site-start-badge inProgress') &&
+      pcSitesBadgeHtml.includes('>예정<') &&
+      pcSitesBadgeHtml.includes('>진행중<') &&
+      pcSideBadgeHtml.includes('ws-site-start-badge scheduled') &&
+      pcSideBadgeHtml.includes('ws-site-start-badge inProgress')
+    );
     sb.switchMainTab('calendar');
     const modePersistedAcrossTabsOk = sb.state.calViewMode === 'month';
 
@@ -6367,9 +6421,9 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     const mobResetTodayOk = mPageCalNode.innerHTML.includes(`(${curWeekRange.monShort} ~ ${curWeekRange.sunShort})`) && mockGanttWrap.scrollLeft === expectedTodayScroll;
 
     assertTest(
-      '캘린더 기본 주간 타임라인(gantt)·좌측 뷰전환 툴바·현장/단건/AS 통합·막대 배지·모바일 월~일 동일 주간 및 오늘 열 자동 스크롤 런타임 검증',
-      initGanttOk && switchInLeftOk && scopeChipHiddenInGanttOk && integratedRowsOk && barScopeBadgesOk && pcWeekMonStartOk && monthChipShownOk && modePersistedAcrossTabsOk && selectCalDayOk && resetToGanttOk && mobileIntegratedOk && mobMonSunWeekOk && mobNextWeekOk && mobPrevWeekOk && mobResetTodayOk,
-      `init=${initGanttOk}, switchLeft=${switchInLeftOk}, hideScope=${scopeChipHiddenInGanttOk}, integrated=${integratedRowsOk}, barBadges=${barScopeBadgesOk}, pcMon=${pcWeekMonStartOk}, monthChip=${monthChipShownOk}, persist=${modePersistedAcrossTabsOk}, selDay=${selectCalDayOk}, reset=${resetToGanttOk}, mob=${mobileIntegratedOk}, mobMonSun=${mobMonSunWeekOk}, mobNext=${mobNextWeekOk}, mobPrev=${mobPrevWeekOk}, mobReset=${mobResetTodayOk}`
+      '캘린더 기본 주간 타임라인(gantt)·좌측 뷰전환 툴바·현장/단건/AS 선택 팝오버·공정진행/착공일 예정·진행중 배지·모바일 월~일 동일 주간 런타임 검증',
+      initGanttOk && switchInLeftOk && ganttPickerBtnOk && integratedRowsOk && barScopeBadgesOk && pcWeekMonStartOk && monthChipShownOk && pickerPopoverGroupsOk && crossScopeMonthOk && crossScopeGanttOk && progressLabelOk && startBadgeOk && modePersistedAcrossTabsOk && selectCalDayOk && resetToGanttOk && mobileIntegratedOk && mobMonSunWeekOk && mobNextWeekOk && mobPrevWeekOk && mobResetTodayOk,
+      `init=${initGanttOk}, switchLeft=${switchInLeftOk}, pickerBtn=${ganttPickerBtnOk}, integrated=${integratedRowsOk}, barBadges=${barScopeBadgesOk}, pcMon=${pcWeekMonStartOk}, monthChip=${monthChipShownOk}, pickerPop=${pickerPopoverGroupsOk}, crossMonth=${crossScopeMonthOk}, crossGantt=${crossScopeGanttOk}, progLabel=${progressLabelOk}, startBadge=${startBadgeOk}, persist=${modePersistedAcrossTabsOk}, selDay=${selectCalDayOk}, reset=${resetToGanttOk}, mob=${mobileIntegratedOk}, mobMonSun=${mobMonSunWeekOk}, mobNext=${mobNextWeekOk}, mobPrev=${mobPrevWeekOk}, mobReset=${mobResetTodayOk}`
     );
   })());
 

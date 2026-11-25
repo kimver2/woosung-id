@@ -1187,6 +1187,57 @@
     .pc-cal-chips-wrap .m-pill-chip .del-x:hover {
       color: #dc2626;
     }
+    .pc-cal-site-picker-wrap { position: relative; display: inline-flex; align-items: center; }
+    .cal-scope-picker-btn {
+      cursor: pointer; border: 1px solid #bfdbfe; background: #eff6ff; color: #1e40af;
+      font-family: inherit; transition: all 0.15s ease; user-select: none;
+    }
+    .cal-scope-picker-btn:hover, .cal-scope-picker-btn.open {
+      background: #dbeafe; border-color: #60a5fa; color: #1d4ed8;
+    }
+    .cal-scope-picker-btn.custom-active {
+      background: #ecfdf5; border-color: #6ee7b7; color: #047857;
+    }
+    .pc-cal-site-picker-popover {
+      position: absolute; top: calc(100% + 6px); left: 0; z-index: 1200;
+      width: 340px; max-width: 90vw; background: #ffffff; border: 1px solid #cbd5e1;
+      border-radius: 10px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+      padding: 10px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .pc-cal-picker-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 6px;
+      padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;
+    }
+    .pc-cal-picker-actions {
+      display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+    }
+    .pc-cal-picker-act-btn {
+      font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 5px;
+      border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; cursor: pointer;
+    }
+    .pc-cal-picker-act-btn:hover { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+    .pc-cal-picker-list {
+      max-height: 350px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px;
+    }
+    .pc-cal-picker-group {
+      border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff;
+    }
+    .pc-cal-picker-group-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 6px;
+      padding: 6px 8px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+      font-size: 11.5px; font-weight: 800; color: #0f172a;
+    }
+    .pc-cal-picker-only-btn {
+      font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+      border: 1px solid #cbd5e1; background: #ffffff; color: #475569; cursor: pointer; flex-shrink: 0;
+    }
+    .pc-cal-picker-only-btn:hover { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+    .pc-cal-picker-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 6px;
+      padding: 5px 8px; font-size: 12px; cursor: pointer; border-bottom: 1px dashed #f1f5f9;
+    }
+    .pc-cal-picker-row:last-child { border-bottom: none; }
+    .pc-cal-picker-row:hover { background: #f8fafc; }
     .cal-nav-segment {
       display: inline-flex; align-items: center; background: #f1f5f9; border: 1px solid #cbd5e1;
       border-radius: 8px; padding: 2px; height: 32px; box-sizing: border-box;
@@ -3662,6 +3713,8 @@ end $$;`;
         asWarrantySelectedPartner: "",
         asWarrantyPartnerFaultFilter: "all",
         checkedSiteKeys: null,
+        calSitePickerOpen: false,
+        calSitePickerCustom: false,
         selectedSiteKey: null,
         siteTaskStatusFilter: "all",
         siteTaskSearch: "",
@@ -4263,6 +4316,56 @@ end $$;`;
         if ((Number(site.progressRate) || 0) >= 100) return true;
         return false;
       }
+      function getSiteStartStatusBadgeInfo(site) {
+        if (!site || site.isArchived) return null;
+        const sc = site.scope || "site";
+        if (sc === "newSite") return null;
+        if (isSiteCompleted(site)) return null;
+
+        let startYmd = (typeof getSiteStartTaskYmd === "function") ? getSiteStartTaskYmd(site) : "";
+        if (!startYmd && Array.isArray(site.tasks)) {
+          const validDates = [];
+          for (let i = 0; i < site.tasks.length; i++) {
+            const t = site.tasks[i];
+            if (!t) continue;
+            const st = String(t.status || "").trim();
+            if (/취소|삭제|제외/.test(st)) continue;
+            const ymd = parseYmdFromTask(t);
+            if (ymd) validDates.push(ymd);
+          }
+          if (validDates.length) {
+            validDates.sort();
+            startYmd = validDates[0];
+          }
+        }
+        if (!startYmd && site.earliestDateYmd && /^\d{4}-\d{2}-\d{2}/.test(site.earliestDateYmd)) {
+          startYmd = site.earliestDateYmd.slice(0, 10);
+        }
+
+        const todayYmd = getTodayYmd();
+        if (startYmd && todayYmd && startYmd > todayYmd) {
+          return {
+            status: "scheduled",
+            label: "예정",
+            startYmd,
+            title: `착공 예정일: ${startYmd.replace(/-/g, ".")}`,
+            style: "background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;"
+          };
+        }
+        return {
+          status: "inProgress",
+          label: "진행중",
+          startYmd,
+          title: startYmd ? `착공일: ${startYmd.replace(/-/g, ".")}` : "진행중 현장",
+          style: "background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;"
+        };
+      }
+      function renderSiteStartStatusBadgeHtml(site, compact) {
+        const info = getSiteStartStatusBadgeInfo(site);
+        if (!info) return "";
+        const pad = compact ? "padding:1px 5px;font-size:10px;" : "padding:2px 7px;font-size:10.5px;";
+        return `<span class="ws-site-start-badge ${info.status}" title="${escHtml(info.title)}" style="${info.style}${pad}border-radius:4px;font-weight:700;white-space:nowrap;flex-shrink:0;line-height:1.2;display:inline-flex;align-items:center;">${escHtml(info.label)}</span>`;
+      }
       function isQuoteTabContext() {
         const dev = state.device || "pc";
         const curTab = (dev === "mobile") ? state.mobileTab : state.pcTab;
@@ -4594,6 +4697,151 @@ end $$;`;
         if (!skipDashMeta) recalcDashMeta();
       }
 
+      function getCalEligibleSites() {
+        const checked = state.checkedSiteKeys instanceof Set ? state.checkedSiteKeys : null;
+        return getAllSites()
+          .filter((s) => {
+            const sc = s.scope || "site";
+            if (sc !== "site" && sc !== "single" && sc !== "as") return false;
+            return !isSiteCompleted(s) || (checked && checked.has(s.siteKey));
+          })
+          .sort(compareActiveSites);
+      }
+      function getEffectiveCalSelectedSiteKeys(isGanttMode) {
+        ensureCheckedSitesInitialized();
+        const checked = state.checkedSiteKeys instanceof Set ? state.checkedSiteKeys : new Set();
+        if (state.calSitePickerCustom) {
+          return new Set(checked);
+        }
+        const eff = new Set();
+        const eligible = getCalEligibleSites();
+        eligible.forEach((s) => {
+          const sc = s.scope || "site";
+          if (sc === state.scope) {
+            if (checked.has(s.siteKey)) eff.add(s.siteKey);
+          } else if (isGanttMode && !isSiteCompleted(s)) {
+            eff.add(s.siteKey);
+          }
+        });
+        return eff;
+      }
+      function getCalSitePickerSummaryLabel(isGanttMode) {
+        const scopeNameMap = { site: "현장", single: "단건", as: "AS", newSite: "신규견적" };
+        if (!state.calSitePickerCustom) {
+          return isGanttMode ? "전체 (현장·단건·AS)" : (scopeNameMap[state.scope] || state.scope);
+        }
+        const activeAll = getAllSites().filter((s) => {
+          const sc = s.scope || "site";
+          return (sc === "site" || sc === "single" || sc === "as") && !isSiteCompleted(s);
+        });
+        const eff = getEffectiveCalSelectedSiteKeys(isGanttMode);
+        const selected = activeAll.filter((s) => eff.has(s.siteKey));
+        if (selected.length === 0) {
+          const anyCompleted = Array.from(eff);
+          if (anyCompleted.length === 1) {
+            const found = getAllSites().find((s) => s.siteKey === anyCompleted[0]);
+            if (found) return found.siteName;
+          }
+          return anyCompleted.length > 0 ? `선택 ${anyCompleted.length}개` : "선택 없음 (0)";
+        }
+        if (activeAll.length > 0 && selected.length === activeAll.length) {
+          return "전체 (현장·단건·AS)";
+        }
+        const byScope = { site: [], single: [], as: [] };
+        activeAll.forEach((s) => { byScope[s.scope || "site"].push(s); });
+        const selByScope = { site: [], single: [], as: [] };
+        selected.forEach((s) => { selByScope[s.scope || "site"].push(s); });
+        const activeScopes = ["site", "single", "as"].filter((sc) => selByScope[sc].length > 0);
+        if (activeScopes.length === 1) {
+          const sc = activeScopes[0];
+          if (byScope[sc].length > 0 && selByScope[sc].length === byScope[sc].length) {
+            return `${scopeNameMap[sc]} (${selByScope[sc].length})`;
+          }
+        }
+        if (selected.length === 1) {
+          const s0 = selected[0];
+          const sc0 = s0.scope || "site";
+          return sc0 === "site" ? s0.siteName : `[${scopeNameMap[sc0]}] ${s0.siteName}`;
+        }
+        const scopeTags = activeScopes.map((sc) => `${scopeNameMap[sc]} ${selByScope[sc].length}`);
+        return scopeTags.join(" · ");
+      }
+      function renderPcCalSitePickerHtml(isGanttMode) {
+        const label = getCalSitePickerSummaryLabel(isGanttMode);
+        let popoverHtml = "";
+        if (state.calSitePickerOpen) {
+          const eff = getEffectiveCalSelectedSiteKeys(isGanttMode);
+          const allActive = getAllSites()
+            .filter((s) => {
+              const sc = s.scope || "site";
+              return (sc === "site" || sc === "single" || sc === "as") && !isSiteCompleted(s);
+            })
+            .sort(compareActiveSites);
+          const groups = [
+            { scope: "site", icon: "🏗️", title: "현장" },
+            { scope: "single", icon: "⚡", title: "단건" },
+            { scope: "as", icon: "🔧", title: "AS" }
+          ];
+          const groupsHtml = groups.map((g) => {
+            const items = allActive.filter((s) => (s.scope || "site") === g.scope);
+            const checkedCnt = items.filter((s) => eff.has(s.siteKey)).length;
+            const allGroupChecked = items.length > 0 && checkedCnt === items.length;
+            const rowsHtml = items.length > 0
+              ? items.map((s) => {
+                  const isChk = eff.has(s.siteKey);
+                  const remCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t)).length;
+                  return `
+                    <div class="pc-cal-picker-row" onclick="toggleCalPickerSite('${escJs(s.siteKey)}', event)">
+                      <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
+                        <input type="checkbox" ${isChk ? "checked" : ""} onclick="event.stopPropagation(); toggleCalPickerSite('${escJs(s.siteKey)}', event)" style="width:14px;height:14px;accent-color:#1e40af;cursor:pointer;flex-shrink:0;">
+                        <span class="site-color-dot" style="background:${escHtml(s.colorHex || "#2563eb")};"></span>
+                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;color:#0f172a;" title="${escHtml(s.siteName)}">${escHtml(s.siteName)}</span>
+                        ${renderSiteStartStatusBadgeHtml(s, true)}
+                      </div>
+                      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                        <span style="font-size:10.5px;color:var(--text-muted);font-weight:600;">${remCnt}건</span>
+                        <button type="button" class="pc-cal-picker-only-btn" onclick="event.stopPropagation(); selectOnlyCalPickerSite('${escJs(s.siteKey)}')" title="이 현장만 보기">만</button>
+                      </div>
+                    </div>`;
+                }).join("")
+              : `<div style="padding:8px 10px;font-size:11px;color:var(--text-muted);">진행 중인 ${g.title}이 없습니다.</div>`;
+            return `
+              <div class="pc-cal-picker-group">
+                <div class="pc-cal-picker-group-head">
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="checkbox" ${allGroupChecked ? "checked" : ""} ${items.length === 0 ? "disabled" : ""} onchange="toggleCalPickerScopeGroup('${g.scope}', this.checked)" style="width:14px;height:14px;accent-color:#1e40af;cursor:pointer;">
+                    <span>${g.icon} ${g.title} (${checkedCnt}/${items.length})</span>
+                  </label>
+                  ${items.length > 0 ? `<button type="button" class="pc-cal-picker-only-btn" onclick="selectOnlyCalPickerScope('${g.scope}')">이 구분만</button>` : ""}
+                </div>
+                <div>${rowsHtml}</div>
+              </div>`;
+          }).join("");
+
+          const totalSelected = allActive.filter((s) => eff.has(s.siteKey)).length;
+          popoverHtml = `
+            <div id="pcCalSitePickerPopover" class="pc-cal-site-picker-popover" onclick="event.stopPropagation()">
+              <div class="pc-cal-picker-head">
+                <span style="font-size:12px;font-weight:800;color:#0f172a;">📅 캘린더 현장 선택 <span style="color:#2563eb;">(${totalSelected}/${allActive.length})</span></span>
+                <button type="button" onclick="closeCalSitePickerPopover()" style="border:none;background:transparent;color:#64748b;font-size:14px;font-weight:800;cursor:pointer;padding:0 4px;" title="닫기">✕</button>
+              </div>
+              <div class="pc-cal-picker-actions">
+                <button type="button" class="pc-cal-picker-act-btn" onclick="selectAllCalPickerSites(true)">전체 선택</button>
+                <button type="button" class="pc-cal-picker-act-btn" onclick="selectAllCalPickerSites(false)">전체 해제</button>
+                <button type="button" class="pc-cal-picker-act-btn" onclick="resetCalSitePickerDefault()">기본값 복원</button>
+              </div>
+              <div id="pcCalSitePickerList" class="pc-cal-picker-list">${groupsHtml}</div>
+            </div>`;
+        }
+        return `
+          <div class="pc-cal-site-picker-wrap">
+            <button type="button" class="m-pill-chip cal-scope-picker-btn ${state.calSitePickerOpen ? "open" : ""} ${state.calSitePickerCustom ? "custom-active" : ""}" onclick="toggleCalSitePickerPopover(event)" title="현장·단건·AS 현장을 선택하여 캘린더에 표시">
+              📂 <b>${escHtml(label)}</b> <span style="font-size:10px;opacity:0.75;margin-left:2px;">▾</span>
+            </button>
+            ${popoverHtml}
+          </div>`;
+      }
+
       // 다중 일자(연속 공정) 포함 필터링 — 현장서식.js renderCalendar 정책과 100% 일치
       function getFilteredCalendarTasks(opts) {
         opts = opts || {};
@@ -4604,21 +4852,28 @@ end $$;`;
         const hasMemberFilter = !!m;
         const hasKeywordFilter = !!q;
         const includeAllScopes = Boolean(opts.includeAllScopes);
+        const isCustomPicker = Boolean(state.calSitePickerCustom);
         const isGlobalSearch = hasKeywordFilter;
         const result = [];
 
-        const targetSites = (isGlobalSearch || includeAllScopes)
+        const targetSites = (isGlobalSearch || includeAllScopes || isCustomPicker)
           ? getAllSites().filter((s) => {
               const sc = s.scope || "site";
               if (sc === "newSite") return false;
-              if (includeAllScopes && sc !== "site" && sc !== "single" && sc !== "as") return false;
+              if ((includeAllScopes || isCustomPicker) && sc !== "site" && sc !== "single" && sc !== "as") return false;
               return !isSiteCompleted(s) || (checked && checked.has(s.siteKey));
             })
           : getAllSites().filter((s) => (s.scope || "site") !== "newSite" && s.scope === state.scope && (!isSiteCompleted(s) || (checked && checked.has(s.siteKey))));
 
         targetSites.forEach((site) => {
           const siteScope = site.scope || "site";
-          if (!isGlobalSearch && (!includeAllScopes || siteScope === state.scope) && checked && !checked.has(site.siteKey)) return;
+          if (!isGlobalSearch && checked) {
+            if (isCustomPicker) {
+              if (!checked.has(site.siteKey)) return;
+            } else if ((!includeAllScopes || siteScope === state.scope) && !checked.has(site.siteKey)) {
+              return;
+            }
+          }
           (site.tasks || []).forEach((task) => {
             if ((hasMemberFilter || hasKeywordFilter) && isTaskCompleted(task)) return;
             if (!taskMatchesMember(task, m)) return;
@@ -6126,6 +6381,8 @@ end $$;`;
         state.scope = "as";
         state.sitesSubView = "list";
         state.showArchivedSites = false;
+        state.calSitePickerCustom = false;
+        state.calSitePickerOpen = false;
         state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
         markAllDirty();
@@ -6225,6 +6482,7 @@ end $$;`;
               ${mode === "calendar" ? `<input type="checkbox" ${isChecked ? "checked" : ""} onclick="toggleSiteCheck('${escJs(site.siteKey)}', this.checked, event)">` : ""}
               <span class="site-color-dot" style="background:${escHtml(site.colorHex || "#2563eb")};"></span>
               <span class="site-lbl-name" title="${escHtml(site.siteName)}">${escHtml(site.siteName)}</span>
+              ${renderSiteStartStatusBadgeHtml(site, true)}
               <span class="site-lbl-count">${site.scope === "newSite" ? escHtml((site.estimateData && site.estimateData.status) || "신규") : `${cnt}건`}</span>
             </div>`;
         }).join("") || `<div style="font-size:11.5px;color:var(--text-muted);padding:8px 4px;">${mode === "quote" ? "등록된 미완료 건이 없습니다." : "진행 중인 현장이 없습니다."}</div>`;
@@ -6982,9 +7240,9 @@ end $$;`;
         const todayYmd = getTodayYmd();
         const holidays = (state.dashData && state.dashData.holidays) || {};
         const checkedCount = state.checkedSiteKeys ? state.checkedSiteKeys.size : activeSites.length;
-        const hasSubsetSites = state.checkedSiteKeys && checkedCount < activeSites.length;
+        const hasSubsetSites = !state.calSitePickerCustom && state.checkedSiteKeys && checkedCount < activeSites.length;
 
-        const chips = isGanttMode ? [] : [`<span class="m-pill-chip">📂 <b>${scopeNameMap[state.scope] || state.scope}</b></span>`];
+        const chips = [renderPcCalSitePickerHtml(isGanttMode)];
         if (hasSubsetSites) chips.push(`<span class="m-pill-chip">☑️ 선택 현장 <b>${checkedCount}/${activeSites.length}</b> <span class="del-x" onclick="checkAllSites(true)">✕</span></span>`);
         if (state.memberFilter) chips.push(`<span class="m-pill-chip">👤 <b>${escHtml(state.memberFilter)}</b> <span class="del-x" onclick="onMemberFilterChange('')">✕</span></span>`);
         if (state.searchQuery.trim()) chips.push(`<span class="m-pill-chip">🔍 <b>"${escHtml(state.searchQuery.trim())}"</b> <span class="del-x" onclick="clearGlobalSearch()">✕</span></span>`);
@@ -7125,6 +7383,8 @@ end $$;`;
         }
 
         const pcCalEl = document.getElementById("pcCalMain");
+        const existingPickerList = document.getElementById("pcCalSitePickerList");
+        const prevPickerScrollTop = existingPickerList ? existingPickerList.scrollTop : 0;
         const existingInput = document.getElementById("pcSearchInput");
         const isCalendarActive = state.pcTab === "calendar";
         const paperEl = pcCalEl ? pcCalEl.querySelector(".calendar-paper") : null;
@@ -7144,8 +7404,10 @@ end $$;`;
           if (chipsEl) {
             chipsEl.innerHTML = `
               ${chips.join("")}
-              ${(hasSubsetSites || state.memberFilter || state.searchQuery.trim()) ? `<button type="button" class="btn-tool-tag" onclick="resetAllFilters()" style="height:32px;padding:0 10px;border-radius:8px;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;background:#fff;border:1px solid #cbd5e1;cursor:pointer;">초기화</button>` : ""}
+              ${(hasSubsetSites || state.calSitePickerCustom || state.memberFilter || state.searchQuery.trim()) ? `<button type="button" class="btn-tool-tag" onclick="resetAllFilters()" style="height:32px;padding:0 10px;border-radius:8px;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;background:#fff;border:1px solid #cbd5e1;cursor:pointer;">초기화</button>` : ""}
             `;
+            const newPickerList = document.getElementById("pcCalSitePickerList");
+            if (newPickerList && prevPickerScrollTop > 0) newPickerList.scrollTop = prevPickerScrollTop;
           }
           if (existingInput.value !== state.searchQuery) {
             existingInput.value = state.searchQuery;
@@ -7164,7 +7426,7 @@ end $$;`;
           return;
         }
 
-        const hasChips = chips.length > 0 || hasSubsetSites || Boolean(state.memberFilter) || Boolean(state.searchQuery.trim());
+        const hasChips = chips.length > 0 || hasSubsetSites || Boolean(state.calSitePickerCustom) || Boolean(state.memberFilter) || Boolean(state.searchQuery.trim());
         pcCalEl.innerHTML = `
           <div class="pc-cal-toolbar">
             <div class="pc-cal-toolbar-left">
@@ -7177,7 +7439,7 @@ end $$;`;
               ${hasChips ? `
                 <div class="pc-cal-chips-wrap">
                   ${chips.join("")}
-                  ${(hasSubsetSites || state.memberFilter || state.searchQuery.trim()) ? `<button type="button" class="btn-tool-tag" onclick="resetAllFilters()" style="height:32px;padding:0 10px;border-radius:8px;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;background:#fff;border:1px solid #cbd5e1;cursor:pointer;">초기화</button>` : ""}
+                  ${(hasSubsetSites || state.calSitePickerCustom || state.memberFilter || state.searchQuery.trim()) ? `<button type="button" class="btn-tool-tag" onclick="resetAllFilters()" style="height:32px;padding:0 10px;border-radius:8px;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;background:#fff;border:1px solid #cbd5e1;cursor:pointer;">초기화</button>` : ""}
                 </div>
               ` : ""}
               <div class="pc-cal-divider"></div>
@@ -7211,6 +7473,8 @@ end $$;`;
             `}
           </div>
         `;
+        const fullPickerList = document.getElementById("pcCalSitePickerList");
+        if (fullPickerList && prevPickerScrollTop > 0) fullPickerList.scrollTop = prevPickerScrollTop;
         state._lastCalSlideDir = "";
         setupCalendarSwipe(pcCalEl);
         setTimeout(() => {
@@ -7388,7 +7652,10 @@ end $$;`;
             <div class="site-carousel-card ${selectedSite && s.siteKey === selectedSite.siteKey ? "active" : ""}" data-site-key="${escHtml(s.siteKey)}" onclick="selectSiteCard('${escJs(s.siteKey)}')">
               <div class="scc-top">
                 <span class="scc-title"><span style="color:${escHtml(s.colorHex || "#2563eb")};">●</span> ${escHtml(s.siteName)}</span>
-                <span class="scc-pct" style="color:${pctColor};">${pct}%</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">
+                  ${renderSiteStartStatusBadgeHtml(s, true)}
+                  <span class="scc-pct" style="color:${pctColor};">${pct}%</span>
+                </span>
               </div>
               <div class="scc-sub">
                 <div class="scc-sub-line1" title="${escHtml(mgrs)}">👤 ${escHtml(mgrs)}</div>
@@ -7446,7 +7713,8 @@ end $$;`;
                   <div class="dcp-title-wrap">
                     <span style="color:${escHtml(selectedSite.colorHex || "#10b981")};">●</span>
                     <span>${escHtml(selectedSite.siteName)}</span>
-                    ${delayCnt > 0 ? `<span class="dcp-delay-badge">공정지연 ${delayCnt}건 ⚠️</span>` : (isSiteCompleted(selectedSite) && isConsultationOnlySite(selectedSite) ? `<span class="dcp-ok-badge" style="background:#f1f5f9;color:#475569;border-color:#cbd5e1;">상담 완료 (미착공)</span>` : `<span class="dcp-ok-badge">정상 진행 (${selectedSite.progressRate || 0}%)</span>`)}
+                    ${renderSiteStartStatusBadgeHtml(selectedSite, false)}
+                    ${delayCnt > 0 ? `<span class="dcp-delay-badge">공정지연 ${delayCnt}건 ⚠️</span>` : (isSiteCompleted(selectedSite) && isConsultationOnlySite(selectedSite) ? `<span class="dcp-ok-badge" style="background:#f1f5f9;color:#475569;border-color:#cbd5e1;">상담 완료 (미착공)</span>` : `<span class="dcp-ok-badge">공정 진행 ${selectedSite.progressRate || 0}%</span>`)}
                     ${(isSiteCompleted(selectedSite) && selectedSite.scope !== "newSite" && selectedSite.scope !== "as") ? renderWarrantyBadgeHtml(computeSiteAsWarranty(selectedSite, state.asWarrantyDays || 365), false) : ""}
                   </div>
                   <div class="dcp-meta-text">담당자: <strong>${escHtml(mgrs)}</strong> &nbsp;•&nbsp; 공정 기간: <strong>${escHtml(periodStr)}</strong>${(isSiteCompleted(selectedSite) && selectedSite.scope !== "newSite" && selectedSite.scope !== "as") ? (() => { const dw = computeSiteAsWarranty(selectedSite, state.asWarrantyDays || 365); return dw.isConsultationOnly ? ` &nbsp;•&nbsp; A/S 보증: <strong style="color:#64748b;">해당 없음 (상담 단독 · 미착공)</strong>` : ` &nbsp;•&nbsp; A/S 보증만료: <strong>${escHtml(dw.expiryDisplay)}</strong>`; })() : ""}</div>
@@ -17112,13 +17380,19 @@ end $$;`;
         const holidays = (state.dashData && state.dashData.holidays) || {};
         const scopeNameMap = { site: "현장", single: "단건", as: "AS", newSite: "신규" };
 
-        const ongoingSites = getActiveScopeSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
+        const ongoingSites = state.calSitePickerCustom
+          ? getAllSites().filter((s) => ["site", "single", "as"].includes(s.scope || "site") && !isSiteCompleted(s))
+          : getActiveScopeSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
         ensureCheckedSitesInitialized();
         const checkedSitesSet = state.checkedSiteKeys || new Set();
         const selectedOngoingSites = ongoingSites.filter((s) => checkedSitesSet.has(s.siteKey));
-        const hasSubsetSites = selectedOngoingSites.length > 0 && selectedOngoingSites.length < ongoingSites.length;
-        let siteFilterButtonLabel = "🏗️ 전체 현장 ▾";
-        if (hasSubsetSites) {
+        const hasSubsetSites = state.calSitePickerCustom
+          ? selectedOngoingSites.length < ongoingSites.length
+          : (selectedOngoingSites.length > 0 && selectedOngoingSites.length < ongoingSites.length);
+        let siteFilterButtonLabel = state.calSitePickerCustom
+          ? `🏗️ ${getCalSitePickerSummaryLabel(isGanttMode)} ▾`
+          : "🏗️ 전체 현장 ▾";
+        if (!state.calSitePickerCustom && hasSubsetSites) {
           if (selectedOngoingSites.length === 1) {
             siteFilterButtonLabel = `🏗️ ${selectedOngoingSites[0].siteName} ▾`;
           } else {
@@ -17126,7 +17400,7 @@ end $$;`;
           }
         }
 
-        const filterChips = isGanttMode ? [] : [`<span class="m-pill-chip">📁 <b>${scopeNameMap[state.scope] || state.scope}</b></span>`];
+        const filterChips = isGanttMode ? [] : [`<button type="button" class="m-pill-chip" style="cursor:pointer;" onclick="openMobileSiteFilterModal()">📁 <b>${escHtml(getCalSitePickerSummaryLabel(false))}</b> ▾</button>`];
         if (state.memberFilter) filterChips.push(`<span class="m-pill-chip">👤 <b>${escHtml(state.memberFilter)}</b> <span class="del-x" onclick="onMMemberClick('')">✕</span></span>`);
         if (state.searchQuery.trim()) filterChips.push(`<span class="m-pill-chip">🔍 <b>"${escHtml(state.searchQuery.trim())}"</b> <span class="del-x" onclick="clearGlobalSearch()">✕</span></span>`);
 
@@ -17676,7 +17950,7 @@ end $$;`;
                       <span style="width:9px;height:9px;border-radius:50%;background:${escHtml(s.colorHex || "#0f766e")};flex-shrink:0;"></span>
                       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.siteName)}</span>
                     </span>
-                    <span style="font-size:11px;font-weight:800;color:${(s.progressRate || 0) >= 80 ? "#059669" : "#0f766e"};flex-shrink:0;display:inline-flex;align-items:center;gap:4px;">${(isExpanded && warrantyInfo) ? renderWarrantyBadgeHtml(warrantyInfo, true) : ""}${s.progressRate || 0}%</span>
+                    <span style="font-size:11px;font-weight:800;color:${(s.progressRate || 0) >= 80 ? "#059669" : "#0f766e"};flex-shrink:0;display:inline-flex;align-items:center;gap:4px;">${renderSiteStartStatusBadgeHtml(s, true)}${(isExpanded && warrantyInfo) ? renderWarrantyBadgeHtml(warrantyInfo, true) : ""}${s.progressRate || 0}%</span>
                   </div>
                   <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
                     담당: ${escHtml(mgrs)} · 남은 ${remainingCnt}건 (${s.completedTasksCount || 0}/${s.totalTasksCount || 0})
@@ -23353,53 +23627,85 @@ end $$;`;
         }, 2000);
       };
 
+      function getMobileSiteFilterPool() {
+        return getAllSites()
+          .filter((s) => {
+            const sc = s.scope || "site";
+            return (sc === "site" || sc === "single" || sc === "as") && !isSiteCompleted(s);
+          })
+          .sort(compareActiveSites);
+      }
+
       function renderMobileSiteFilterModal() {
-        const pool = getActiveScopeSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
+        const pool = getMobileSiteFilterPool();
         if (!state._tempCheckedSiteKeys) {
-          state._tempCheckedSiteKeys = new Set(state.checkedSiteKeys || pool.map((s) => s.siteKey));
+          const isGantt = state.mobileCalMode === "gantt";
+          state._tempCheckedSiteKeys = getEffectiveCalSelectedSiteKeys(isGantt);
         }
         const tempChecked = state._tempCheckedSiteKeys;
-        const allSelected = pool.length > 0 && tempChecked.size === pool.length;
+        const allSelected = pool.length > 0 && pool.every((s) => tempChecked.has(s.siteKey));
 
         const bodyEl = document.getElementById("mobileSiteFilterBody");
         const footEl = document.getElementById("mobileSiteFilterFooter");
         if (!bodyEl || !footEl) return;
 
-        const rowsHtml = pool.map((s) => {
-          const isChk = tempChecked.has(s.siteKey);
-          const monthTasks = (s.tasks || []).filter((t) => !isTaskCompleted(t));
-          return `
-            <div class="m-site-filter-row" onclick="toggleTempSiteFilterItem('${escJs(s.siteKey)}')" style="display:flex;align-items:center;justify-content:space-between;padding:10px 8px;border-bottom:1px solid #f1f5f9;cursor:pointer;">
-              <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
-                <input type="checkbox" ${isChk ? "checked" : ""} onclick="event.stopPropagation(); toggleTempSiteFilterItem('${escJs(s.siteKey)}')" style="width:17px;height:17px;accent-color:#2563eb;cursor:pointer;flex-shrink:0;">
-                <span style="color:${escHtml(s.colorHex || "#2563eb")};font-size:14px;line-height:1;flex-shrink:0;">●</span>
-                <span style="font-size:13px;font-weight:700;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.siteName)}</span>
+        const groups = [
+          { scope: "site", icon: "🏗️", title: "현장" },
+          { scope: "single", icon: "⚡", title: "단건" },
+          { scope: "as", icon: "🔧", title: "AS" }
+        ];
+        const rowsHtml = groups.map((g) => {
+          const items = pool.filter((s) => (s.scope || "site") === g.scope);
+          const groupCnt = items.filter((s) => tempChecked.has(s.siteKey)).length;
+          const allGrp = items.length > 0 && groupCnt === items.length;
+          const itemRows = items.map((s) => {
+            const isChk = tempChecked.has(s.siteKey);
+            const monthTasks = (s.tasks || []).filter((t) => !isTaskCompleted(t));
+            return `
+              <div class="m-site-filter-row" onclick="toggleTempSiteFilterItem('${escJs(s.siteKey)}')" style="display:flex;align-items:center;justify-content:space-between;padding:9px 8px;border-bottom:1px solid #f1f5f9;cursor:pointer;">
+                <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+                  <input type="checkbox" ${isChk ? "checked" : ""} onclick="event.stopPropagation(); toggleTempSiteFilterItem('${escJs(s.siteKey)}')" style="width:17px;height:17px;accent-color:#2563eb;cursor:pointer;flex-shrink:0;">
+                  <span style="color:${escHtml(s.colorHex || "#2563eb")};font-size:14px;line-height:1;flex-shrink:0;">●</span>
+                  <span style="font-size:13px;font-weight:700;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.siteName)}</span>
+                  ${renderSiteStartStatusBadgeHtml(s, true)}
+                </div>
+                <span style="font-size:11.5px;color:var(--text-sub);font-weight:600;flex-shrink:0;margin-left:8px;">공정 ${monthTasks.length}건</span>
               </div>
-              <span style="font-size:11.5px;color:var(--text-sub);font-weight:600;flex-shrink:0;margin-left:8px;">공정 ${monthTasks.length}건</span>
+            `;
+          }).join("") || `<div style="padding:8px 10px;font-size:12px;color:var(--text-muted);">진행 중인 ${g.title}이 없습니다.</div>`;
+          return `
+            <div style="margin-bottom:8px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:12px;font-weight:800;color:#0f172a;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                  <input type="checkbox" ${allGrp ? "checked" : ""} ${items.length === 0 ? "disabled" : ""} onchange="toggleTempSiteFilterScopeGroup('${g.scope}', this.checked)" style="width:16px;height:16px;accent-color:#2563eb;">
+                  <span>${g.icon} ${g.title} (${groupCnt}/${items.length})</span>
+                </label>
+                ${items.length > 0 ? `<button type="button" class="btn-tool-tag" style="font-size:10.5px;padding:2px 7px;" onclick="selectOnlyTempSiteFilterScope('${g.scope}')">이 구분만</button>` : ""}
+              </div>
+              <div>${itemRows}</div>
             </div>
           `;
-        }).join("") || `<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:13px;">진행 중인 현장이 없습니다.</div>`;
+        }).join("");
 
         bodyEl.innerHTML = `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px 10px 4px;border-bottom:1px solid #e2e8f0;margin-bottom:6px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px 10px 4px;border-bottom:1px solid #e2e8f0;margin-bottom:8px;">
             <button type="button" class="btn-tool-tag" onclick="toggleAllTempSiteFilter()" style="font-weight:700;">${allSelected ? "선택 전체 해제" : "전체 선택"}</button>
-            <span style="font-size:12px;color:var(--text-sub);font-weight:700;">진행 현장 ${pool.length}개소 중 <strong style="color:#2563eb;">${tempChecked.size}개</strong> 선택</span>
+            <span style="font-size:12px;color:var(--text-sub);font-weight:700;">전체 ${pool.length}개소 중 <strong style="color:#2563eb;">${tempChecked.size}개</strong> 선택</span>
           </div>
-          <div class="m-site-filter-list" style="max-height:50vh;overflow-y:auto;">
+          <div class="m-site-filter-list" style="max-height:52vh;overflow-y:auto;">
             ${rowsHtml}
           </div>
         `;
 
         footEl.innerHTML = `
-          <button type="button" class="btn-act-white" onclick="resetAndApplyAllSitesFilter()">전체 보기 (초기화)</button>
+          <button type="button" class="btn-act-white" onclick="resetAndApplyAllSitesFilter()">기본값 (초기화)</button>
           <button type="button" class="btn-act-blue" onclick="applyMobileSiteFilter()">적용 (${tempChecked.size}개소)</button>
         `;
       }
 
       window.openMobileSiteFilterModal = function () {
-        const pool = getActiveScopeSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
-        ensureCheckedSitesInitialized();
-        state._tempCheckedSiteKeys = new Set(state.checkedSiteKeys || pool.map((s) => s.siteKey));
+        const isGantt = state.mobileCalMode === "gantt";
+        state._tempCheckedSiteKeys = getEffectiveCalSelectedSiteKeys(isGantt);
         renderMobileSiteFilterModal();
         openModal("mobileSiteFilterModal");
       };
@@ -23414,8 +23720,24 @@ end $$;`;
         renderMobileSiteFilterModal();
       };
 
+      window.toggleTempSiteFilterScopeGroup = function (scope, checked) {
+        const pool = getMobileSiteFilterPool().filter((s) => (s.scope || "site") === scope);
+        if (!state._tempCheckedSiteKeys) state._tempCheckedSiteKeys = new Set();
+        pool.forEach((s) => {
+          if (checked) state._tempCheckedSiteKeys.add(s.siteKey);
+          else state._tempCheckedSiteKeys.delete(s.siteKey);
+        });
+        renderMobileSiteFilterModal();
+      };
+
+      window.selectOnlyTempSiteFilterScope = function (scope) {
+        const pool = getMobileSiteFilterPool().filter((s) => (s.scope || "site") === scope);
+        state._tempCheckedSiteKeys = new Set(pool.map((s) => s.siteKey));
+        renderMobileSiteFilterModal();
+      };
+
       window.toggleAllTempSiteFilter = function () {
-        const pool = getActiveScopeSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
+        const pool = getMobileSiteFilterPool();
         if (!state._tempCheckedSiteKeys) state._tempCheckedSiteKeys = new Set();
         if (state._tempCheckedSiteKeys.size === pool.length) {
           state._tempCheckedSiteKeys.clear();
@@ -23426,12 +23748,14 @@ end $$;`;
       };
 
       window.applyMobileSiteFilter = function () {
-        const pool = getActiveScopeSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
+        const pool = getMobileSiteFilterPool();
         if (!state._tempCheckedSiteKeys || state._tempCheckedSiteKeys.size === 0) {
           state.checkedSiteKeys = new Set(pool.map((s) => s.siteKey));
+          state.calSitePickerCustom = true;
           showToast("전체 현장으로 필터가 적용되었습니다.");
         } else {
           state.checkedSiteKeys = new Set(state._tempCheckedSiteKeys);
+          state.calSitePickerCustom = true;
           showToast(`현장 ${state.checkedSiteKeys.size}개소 필터 적용 완료`);
         }
         window.closeModal("mobileSiteFilterModal");
@@ -23441,10 +23765,11 @@ end $$;`;
 
       window.resetAndApplyAllSitesFilter = function () {
         const pool = getActiveScopeSites().filter((s) => (s.scope || "site") !== "newSite" && !isSiteCompleted(s));
+        state.calSitePickerCustom = false;
         state.checkedSiteKeys = new Set(pool.map((s) => s.siteKey));
         state._tempCheckedSiteKeys = new Set(state.checkedSiteKeys);
         window.closeModal("mobileSiteFilterModal");
-        showToast("전체 현장 보기로 초기화되었습니다.");
+        showToast("기본 현장 보기로 초기화되었습니다.");
         markAllDirty();
         renderActiveViews();
       };
@@ -33115,6 +33440,8 @@ end $$;`;
         }
         state.scope = scope;
         state.sitesSubView = "list";
+        state.calSitePickerCustom = false;
+        state.calSitePickerOpen = false;
         state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
         markAllDirty();
@@ -33139,6 +33466,8 @@ end $$;`;
         state.scope = scope;
         state.sitesSubView = "list";
         state.mobileHomeTasksExpanded = false;
+        state.calSitePickerCustom = false;
+        state.calSitePickerOpen = false;
         state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
         state.selectedSiteKey = getActiveScopeSites()[0] ? getActiveScopeSites()[0].siteKey : null;
         markAllDirty();
@@ -33202,6 +33531,8 @@ end $$;`;
       window.clearGlobalSearch = function () { window.onGlobalSearch(""); };
       window.resetAllFilters = function () {
         state.scope = "site"; state.memberFilter = ""; state.searchQuery = "";
+        state.calSitePickerCustom = false;
+        state.calSitePickerOpen = false;
         state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
         window.onGlobalSearch("");
       };
@@ -33306,8 +33637,93 @@ end $$;`;
       };
       window.checkAllSites = function (checked) {
         const active = getActiveScopeSites();
+        state.calSitePickerCustom = false;
         state.checkedSiteKeys = checked ? new Set(active.map((s) => s.siteKey)) : new Set();
         state.dirtyPcTabs.calendar = true; state.dirtyMobileTabs.calendar = true; renderActiveViews();
+      };
+      window.toggleCalSitePickerPopover = function (ev) {
+        if (ev) ev.stopPropagation();
+        state.calSitePickerOpen = !state.calSitePickerOpen;
+        state.dirtyPcTabs.calendar = true;
+        renderActiveViews();
+      };
+      window.closeCalSitePickerPopover = function () {
+        if (!state.calSitePickerOpen) return;
+        state.calSitePickerOpen = false;
+        state.dirtyPcTabs.calendar = true;
+        renderActiveViews();
+      };
+      window.toggleCalPickerSite = function (siteKey, ev) {
+        if (ev) ev.stopPropagation();
+        const isGantt = state.calViewMode === "gantt";
+        const eff = getEffectiveCalSelectedSiteKeys(isGantt);
+        if (eff.has(siteKey)) eff.delete(siteKey);
+        else eff.add(siteKey);
+        state.checkedSiteKeys = eff;
+        state.calSitePickerCustom = true;
+        state.dirtyPcTabs.calendar = true;
+        state.dirtyMobileTabs.calendar = true;
+        renderActiveViews();
+      };
+      window.toggleCalPickerScopeGroup = function (scope, checked) {
+        const isGantt = state.calViewMode === "gantt";
+        const eff = getEffectiveCalSelectedSiteKeys(isGantt);
+        getAllSites().forEach((s) => {
+          if ((s.scope || "site") === scope && !isSiteCompleted(s)) {
+            if (checked) eff.add(s.siteKey);
+            else eff.delete(s.siteKey);
+          }
+        });
+        state.checkedSiteKeys = eff;
+        state.calSitePickerCustom = true;
+        state.dirtyPcTabs.calendar = true;
+        state.dirtyMobileTabs.calendar = true;
+        renderActiveViews();
+      };
+      window.selectOnlyCalPickerScope = function (scope) {
+        const next = new Set();
+        getAllSites().forEach((s) => {
+          if ((s.scope || "site") === scope && !isSiteCompleted(s)) {
+            next.add(s.siteKey);
+          }
+        });
+        state.checkedSiteKeys = next;
+        state.calSitePickerCustom = true;
+        state.dirtyPcTabs.calendar = true;
+        state.dirtyMobileTabs.calendar = true;
+        renderActiveViews();
+      };
+      window.selectOnlyCalPickerSite = function (siteKey) {
+        state.checkedSiteKeys = new Set([siteKey]);
+        state.calSitePickerCustom = true;
+        state.calSitePickerOpen = false;
+        state.dirtyPcTabs.calendar = true;
+        state.dirtyMobileTabs.calendar = true;
+        renderActiveViews();
+      };
+      window.selectAllCalPickerSites = function (checked) {
+        const next = new Set();
+        if (checked) {
+          getAllSites().forEach((s) => {
+            const sc = s.scope || "site";
+            if ((sc === "site" || sc === "single" || sc === "as") && !isSiteCompleted(s)) {
+              next.add(s.siteKey);
+            }
+          });
+        }
+        state.checkedSiteKeys = next;
+        state.calSitePickerCustom = true;
+        state.dirtyPcTabs.calendar = true;
+        state.dirtyMobileTabs.calendar = true;
+        renderActiveViews();
+      };
+      window.resetCalSitePickerDefault = function () {
+        state.calSitePickerCustom = false;
+        state.calSitePickerOpen = false;
+        state.checkedSiteKeys = new Set(getActiveScopeSites().map((s) => s.siteKey));
+        state.dirtyPcTabs.calendar = true;
+        state.dirtyMobileTabs.calendar = true;
+        renderActiveViews();
       };
       window.onSidebarSiteClick = function (siteKey, ev) {
         if (ev && ev.target && ev.target.tagName === "INPUT") return;
@@ -33387,6 +33803,8 @@ end $$;`;
       window.focusSiteOnCalendar = function (siteKey, isMobile) {
         const site = getAllSites().find((s) => s.siteKey === siteKey);
         if (site && site.scope) state.scope = site.scope;
+        state.calSitePickerCustom = true;
+        state.calSitePickerOpen = false;
         state.checkedSiteKeys = new Set([siteKey]);
         if (site && Array.isArray(site.tasks) && site.tasks.length > 0) {
           let minDateStr = "";
@@ -34153,6 +34571,7 @@ end $$;`;
         state.mobileTab = "home";
         state.calViewMode = "gantt";
         state.mobileCalMode = "gantt";
+        state.calSitePickerOpen = false;
         const tabKeysToRemove = [
           "ws_active_tab", "ws_pc_tab", "ws_mobile_tab", "ws_tab",
           "activeTab", "pcTab", "mobileTab", "currentTab"
@@ -34455,6 +34874,10 @@ end $$;`;
         }
         if (!inTaskWrap && state.sheetCtx && state.sheetCtx.taskDropOpen && typeof window.closeSheetTaskDropdown === "function") {
           window.closeSheetTaskDropdown();
+        }
+        const inCalSitePicker = t && typeof t.closest === "function" ? t.closest(".pc-cal-site-picker-wrap") : null;
+        if (!inCalSitePicker && state.calSitePickerOpen && typeof window.closeCalSitePickerPopover === "function") {
+          window.closeCalSitePickerPopover();
         }
       });
 
