@@ -3703,10 +3703,10 @@ end $$;`;
         searchQuery: "",
         calYear: _initCalYear,
         calMonth: _initCalMonth,
-        calViewMode: "gantt",
+        calViewMode: "month",
         selectedDayStr: _initTodayYmd,
         userSelectedCalDay: false,
-        mobileCalMode: "gantt",
+        mobileCalMode: "month",
         ganttTradeFilter: "all",
         ganttPartnerFilter: "all",
         ganttOnlyConflict: false,
@@ -19145,8 +19145,8 @@ end $$;`;
           mobileTab: state.mobileTab || "home",
           scope: state.scope || "site",
           quoteCategory: state.quoteCategory || "site",
-          calViewMode: state.calViewMode || "gantt",
-          mobileCalMode: state.mobileCalMode || "gantt",
+          calViewMode: state.calViewMode || "month",
+          mobileCalMode: state.mobileCalMode || "month",
           sitesSubView: state.sitesSubView === "asWarranty" ? "asWarranty" : "list",
           showArchivedSites: Boolean(state.showArchivedSites),
           selectedSiteKey: state.selectedSiteKey || null,
@@ -19168,8 +19168,8 @@ end $$;`;
           snap.mobileTab || "home",
           snap.scope || "site",
           snap.quoteCategory || "site",
-          snap.calViewMode || "gantt",
-          snap.mobileCalMode || "gantt",
+          snap.calViewMode || "month",
+          snap.mobileCalMode || "month",
           snap.sitesSubView || "list",
           Boolean(snap.showArchivedSites),
           snap.selectedSiteKey || "",
@@ -19287,8 +19287,8 @@ end $$;`;
           state.mobileTab = snap.mobileTab || "home";
           state.scope = snap.scope || "site";
           state.quoteCategory = snap.quoteCategory || "site";
-          state.calViewMode = snap.calViewMode || "gantt";
-          state.mobileCalMode = snap.mobileCalMode || "gantt";
+          state.calViewMode = snap.calViewMode || "month";
+          state.mobileCalMode = snap.mobileCalMode || "month";
           state.sitesSubView = snap.sitesSubView === "asWarranty" ? "asWarranty" : "list";
           state.showArchivedSites = Boolean(snap.showArchivedSites);
           state.selectedSiteKey = snap.selectedSiteKey || null;
@@ -19330,8 +19330,8 @@ end $$;`;
 
           state.scope = snap.scope || "site";
           state.quoteCategory = snap.quoteCategory || "site";
-          state.calViewMode = snap.calViewMode || "gantt";
-          state.mobileCalMode = snap.mobileCalMode || "gantt";
+          state.calViewMode = snap.calViewMode || "month";
+          state.mobileCalMode = snap.mobileCalMode || "month";
           state.sitesSubView = snap.sitesSubView === "asWarranty" ? "asWarranty" : "list";
           state.showArchivedSites = Boolean(snap.showArchivedSites);
           state.selectedSiteKey = snap.selectedSiteKey || null;
@@ -34573,8 +34573,8 @@ end $$;`;
         opts = opts || {};
         state.pcTab = "home";
         state.mobileTab = "home";
-        state.calViewMode = "gantt";
-        state.mobileCalMode = "gantt";
+        state.calViewMode = "month";
+        state.mobileCalMode = "month";
         state.calSitePickerOpen = false;
         const tabKeysToRemove = [
           "ws_active_tab", "ws_pc_tab", "ws_mobile_tab", "ws_tab",

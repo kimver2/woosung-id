@@ -5604,7 +5604,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     subVm.sb.onCategoryClicked('single');
     subVm.sb.setSitesSubView('asWarranty');
     subVm.sb.switchMainTab('calendar');
-    subVm.sb.setCalViewMode('month');
+    subVm.sb.setCalViewMode('gantt');
     subVm.sb.switchMainTab('quote');
     subVm.sb.setQuoteStatusFilter('done');
     subVm.sb.selectQuoteSite('Q_3');
@@ -5613,9 +5613,9 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     subVm.history.back();
     const pcQFilterBackOk = subVm.sb.state.quoteStatusFilter === 'active';
     subVm.history.back();
-    const pcCalMonthBackOk = subVm.sb.state.pcTab === 'calendar' && subVm.sb.state.calViewMode === 'month';
+    const pcCalGanttBackOk = subVm.sb.state.pcTab === 'calendar' && subVm.sb.state.calViewMode === 'gantt';
     subVm.history.back();
-    const pcCalGanttBackOk = subVm.sb.state.calViewMode === 'gantt';
+    const pcCalMonthBackOk = subVm.sb.state.calViewMode === 'month';
     subVm.history.back();
     const pcAsBackOk = subVm.sb.state.pcTab === 'sites' && subVm.sb.state.sitesSubView === 'asWarranty';
     subVm.history.back();
@@ -5630,7 +5630,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     mobVm.sb.openSiteDetailMobile('SITE_2');
     mobVm.sb.setMobileSitesSubView('asWarranty');
     mobVm.sb.switchMobileTab('calendar');
-    mobVm.sb.setMobileCalMode('month');
+    mobVm.sb.setMobileCalMode('gantt');
     mobVm.sb.switchMobileTab('quote');
     mobVm.sb.setQuoteStatusFilter('done');
     mobVm.sb.toggleMobileQuoteCard('Q_2');
@@ -5652,9 +5652,9 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     mobVm.history.back(); // done (unselected)
     mobVm.history.back(); // active quote
     const qFilterBackOk = mobVm.sb.state.quoteStatusFilter === 'active';
-    mobVm.history.back(); // calendar/month
-    const mCalBackOk = mobVm.sb.state.mobileTab === 'calendar' && mobVm.sb.state.mobileCalMode === 'month';
     mobVm.history.back(); // calendar/gantt
+    const mCalBackOk = mobVm.sb.state.mobileTab === 'calendar' && mobVm.sb.state.mobileCalMode === 'gantt';
+    mobVm.history.back(); // calendar/month (default)
     mobVm.history.back(); // sites/asWarranty
     const mAsBackOk = mobVm.sb.state.mobileTab === 'sites' && mobVm.sb.state.sitesSubView === 'asWarranty';
 
@@ -6241,11 +6241,25 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     };
     sb.markAllDirty();
 
-    const initGanttOk = sb.state.calViewMode === 'gantt' && sb.state.mobileCalMode === 'gantt';
+    const initMonthOk = sb.state.calViewMode === 'month' && sb.state.mobileCalMode === 'month';
 
-    // 캘린더 진입 시 좌측 툴바에 .cal-view-switch 배치 + 📂 현장 선택 버튼 노출 + 현장/단건/AS 통합(신규 제외) + 충돌 감지
+    // 캘린더 진입 시 기본 월간 뷰 + 📂 현장 선택 버튼 노출 + 팝오버 현장/단건/AS 교차 선택 + 주간 타임라인 전환 검증
     sb.selectCalDay('2026-11-19');
     sb.switchMainTab('calendar');
+    const calHtmlMonth = elements.get('pcCalMain').innerHTML;
+    const monthChipShownOk = sb.state.calViewMode === 'month' && calHtmlMonth.includes('📂 <b>현장</b>') && calHtmlMonth.includes('toggleCalSitePickerPopover');
+    sb.toggleCalSitePickerPopover();
+    const pickerOpenHtml = elements.get('pcCalMain').innerHTML;
+    const pickerPopoverGroupsOk = pickerOpenHtml.includes('pcCalSitePickerPopover') && pickerOpenHtml.includes('🏗️ 현장') && pickerOpenHtml.includes('⚡ 단건') && pickerOpenHtml.includes('🔧 AS');
+    sb.selectOnlyCalPickerScope('as');
+    sb.toggleCalPickerSite('SINGLE_B');
+    sb.closeCalSitePickerPopover();
+    const crossScopeMonthHtml = elements.get('pcCalMain').innerHTML;
+    const crossScopeMonthOk = crossScopeMonthHtml.includes('목공AS') && crossScopeMonthHtml.includes('중문') && !crossScopeMonthHtml.includes('>목공<');
+    sb.setCalViewMode('gantt');
+    const crossScopeGanttHtml = elements.get('pcCalMain').innerHTML;
+    const crossScopeGanttOk = crossScopeGanttHtml.includes('판교 중문 단건') && crossScopeGanttHtml.includes('서초 AS') && !crossScopeGanttHtml.includes('강남 현장');
+    sb.resetCalSitePickerDefault();
     const calHtmlGantt = elements.get('pcCalMain').innerHTML;
     const leftIdx = calHtmlGantt.indexOf('class="pc-cal-toolbar-left"');
     const rightIdx = calHtmlGantt.indexOf('class="pc-cal-toolbar-right"');
@@ -6268,22 +6282,6 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     );
     const pcWeekMonStartOk = calHtmlGantt.includes('11.16 (월)') && calHtmlGantt.includes('(11.16 ~ 11.22)');
 
-    // 월간/주간 전환 시 모드 유지 및 📂 현장 선택 버튼 복원 + 팝오버 현장/단건/AS 교차 선택 검증
-    sb.setCalViewMode('month');
-    const calHtmlMonth = elements.get('pcCalMain').innerHTML;
-    const monthChipShownOk = sb.state.calViewMode === 'month' && calHtmlMonth.includes('📂 <b>현장</b>') && calHtmlMonth.includes('toggleCalSitePickerPopover');
-    sb.toggleCalSitePickerPopover();
-    const pickerOpenHtml = elements.get('pcCalMain').innerHTML;
-    const pickerPopoverGroupsOk = pickerOpenHtml.includes('pcCalSitePickerPopover') && pickerOpenHtml.includes('🏗️ 현장') && pickerOpenHtml.includes('⚡ 단건') && pickerOpenHtml.includes('🔧 AS');
-    sb.selectOnlyCalPickerScope('as');
-    sb.toggleCalPickerSite('SINGLE_B');
-    sb.closeCalSitePickerPopover();
-    const crossScopeMonthHtml = elements.get('pcCalMain').innerHTML;
-    const crossScopeMonthOk = crossScopeMonthHtml.includes('목공AS') && crossScopeMonthHtml.includes('중문') && !crossScopeMonthHtml.includes('>목공<');
-    sb.setCalViewMode('gantt');
-    const crossScopeGanttHtml = elements.get('pcCalMain').innerHTML;
-    const crossScopeGanttOk = crossScopeGanttHtml.includes('판교 중문 단건') && crossScopeGanttHtml.includes('서초 AS') && !crossScopeGanttHtml.includes('강남 현장');
-    sb.resetCalSitePickerDefault();
     sb.setCalViewMode('month');
     sb.switchMainTab('sites');
     const pcSitesHtml = elements.get('pcSiteMain').innerHTML;
@@ -6338,7 +6336,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     sb.setCalViewMode('week');
     sb.setMobileCalMode('week');
     sb.resetAllTabsToHome();
-    const resetToGanttOk = sb.state.calViewMode === 'gantt' && sb.state.mobileCalMode === 'gantt' && sb.state.pcTab === 'home';
+    const resetToMonthOk = sb.state.calViewMode === 'month' && sb.state.mobileCalMode === 'month' && sb.state.pcTab === 'home';
 
     // 모바일 주간 타임라인도 PC와 동일한 월~일 7일 + 현장/단건+AS 통합 + 바 배지 + 오늘 열 자동 스크롤 정렬 확인
     const mPageCalNode = elements.get('m-page-calendar');
@@ -6363,6 +6361,8 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     sb.switchDeviceMode('mobile');
     sb.selectCalDay('2026-11-19');
     sb.switchMobileTab('calendar');
+    const mobDefaultMonthOk = sb.state.mobileCalMode === 'month';
+    sb.setMobileCalMode('gantt');
     const mobCalHtml = mPageCalNode.innerHTML;
     const mobileIntegratedOk = (
       mobCalHtml.includes('강남 현장') &&
@@ -6421,9 +6421,9 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     const mobResetTodayOk = mPageCalNode.innerHTML.includes(`(${curWeekRange.monShort} ~ ${curWeekRange.sunShort})`) && mockGanttWrap.scrollLeft === expectedTodayScroll;
 
     assertTest(
-      '캘린더 기본 주간 타임라인(gantt)·좌측 뷰전환 툴바·현장/단건/AS 선택 팝오버·공정진행/착공일 예정·진행중 배지·모바일 월~일 동일 주간 런타임 검증',
-      initGanttOk && switchInLeftOk && ganttPickerBtnOk && integratedRowsOk && barScopeBadgesOk && pcWeekMonStartOk && monthChipShownOk && pickerPopoverGroupsOk && crossScopeMonthOk && crossScopeGanttOk && progressLabelOk && startBadgeOk && modePersistedAcrossTabsOk && selectCalDayOk && resetToGanttOk && mobileIntegratedOk && mobMonSunWeekOk && mobNextWeekOk && mobPrevWeekOk && mobResetTodayOk,
-      `init=${initGanttOk}, switchLeft=${switchInLeftOk}, pickerBtn=${ganttPickerBtnOk}, integrated=${integratedRowsOk}, barBadges=${barScopeBadgesOk}, pcMon=${pcWeekMonStartOk}, monthChip=${monthChipShownOk}, pickerPop=${pickerPopoverGroupsOk}, crossMonth=${crossScopeMonthOk}, crossGantt=${crossScopeGanttOk}, progLabel=${progressLabelOk}, startBadge=${startBadgeOk}, persist=${modePersistedAcrossTabsOk}, selDay=${selectCalDayOk}, reset=${resetToGanttOk}, mob=${mobileIntegratedOk}, mobMonSun=${mobMonSunWeekOk}, mobNext=${mobNextWeekOk}, mobPrev=${mobPrevWeekOk}, mobReset=${mobResetTodayOk}`
+      '캘린더 기본 월간(month)·좌측 뷰전환 툴바·현장/단건/AS 선택 팝오버·주간 타임라인(gantt)·공정진행/착공일 배지·모바일 월~일 주간 검증',
+      initMonthOk && switchInLeftOk && ganttPickerBtnOk && integratedRowsOk && barScopeBadgesOk && pcWeekMonStartOk && monthChipShownOk && pickerPopoverGroupsOk && crossScopeMonthOk && crossScopeGanttOk && progressLabelOk && startBadgeOk && modePersistedAcrossTabsOk && selectCalDayOk && resetToMonthOk && mobDefaultMonthOk && mobileIntegratedOk && mobMonSunWeekOk && mobNextWeekOk && mobPrevWeekOk && mobResetTodayOk,
+      `initMonth=${initMonthOk}, switchLeft=${switchInLeftOk}, pickerBtn=${ganttPickerBtnOk}, integrated=${integratedRowsOk}, barBadges=${barScopeBadgesOk}, pcMon=${pcWeekMonStartOk}, monthChip=${monthChipShownOk}, pickerPop=${pickerPopoverGroupsOk}, crossMonth=${crossScopeMonthOk}, crossGantt=${crossScopeGanttOk}, progLabel=${progressLabelOk}, startBadge=${startBadgeOk}, persist=${modePersistedAcrossTabsOk}, selDay=${selectCalDayOk}, reset=${resetToMonthOk}, mobDef=${mobDefaultMonthOk}, mob=${mobileIntegratedOk}, mobMonSun=${mobMonSunWeekOk}, mobNext=${mobNextWeekOk}, mobPrev=${mobPrevWeekOk}, mobReset=${mobResetTodayOk}`
     );
   })());
 
