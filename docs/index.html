@@ -7521,7 +7521,7 @@ end $$;`;
         }
 
         const hasChips = chips.length > 0 || hasSubsetSites || Boolean(state.calSitePickerCustom) || Boolean(state.memberFilter) || Boolean(state.searchQuery.trim());
-        pcCalEl.innerHTML = `
+        setInnerHtmlPreservingActiveInput(pcCalEl, `
           <div class="pc-cal-toolbar">
             <div class="pc-cal-toolbar-left">
               <span class="date-title-bold" id="pcMonthTitle" style="font-size:17.5px;font-weight:900;color:#0f172a;letter-spacing:-0.3px;white-space:nowrap;margin:0 2px 0 0;">${state.calYear}년 ${state.calMonth}월</span>
@@ -7566,7 +7566,7 @@ end $$;`;
               ${bodyHtml}
             `}
           </div>
-        `;
+        `);
         const fullPickerList = document.getElementById("pcCalSitePickerList");
         if (fullPickerList && prevPickerScrollTop > 0) fullPickerList.scrollTop = prevPickerScrollTop;
         state._lastCalSlideDir = "";
@@ -8024,7 +8024,7 @@ end $$;`;
         }
 
         const scopeProceedLbl = state.scope === "single" ? "⚡ 진행 단건" : state.scope === "as" ? "🔧 진행 A/S" : "🏗️ 진행 현장";
-        pcSiteEl.innerHTML = `
+        setInnerHtmlPreservingActiveInput(pcSiteEl, `
           <div class="site-carousel-controls" style="justify-content:space-between;gap:10px;flex-wrap:wrap;">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <div class="pc-est-status-tabs">
@@ -8070,7 +8070,7 @@ end $$;`;
               ${detailHtml}
             `}
           </div>
-        `;
+        `);
         if (!isAsWarrantyView) autoScrollCarouselToActive(trackId, ".site-carousel-card.active");
       }
 
@@ -8843,7 +8843,7 @@ end $$;`;
             </div>`;
         }
 
-        document.getElementById("pcQuoteMain").innerHTML = `
+        setInnerHtmlPreservingActiveInput("pcQuoteMain", `
           <div class="site-carousel-controls">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <div class="pc-est-status-tabs">
@@ -8869,7 +8869,7 @@ end $$;`;
               <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('pcQuoteCarouselTrack', 360)" title="다음 신규현장 보기">›</button>
             </div>` : ""}
           ${detailHtml}
-        `;
+        `);
         if (state.quoteTableSearch) window.onFilterQuoteTable(state.quoteTableSearch);
         autoScrollCarouselToActive("pcQuoteCarouselTrack", ".site-carousel-card.active");
       }
@@ -9817,18 +9817,108 @@ end $$;`;
         ensureFinanceDbDataLoaded(true);
       };
 
+      function setInnerHtmlPreservingActiveInput(containerOrId, newHtml) {
+        const container = typeof containerOrId === "string" ? document.getElementById(containerOrId) : containerOrId;
+        if (!container) return;
+        const activeEl = document.activeElement;
+        const canDomPatch = Boolean(
+          activeEl &&
+          activeEl.id &&
+          (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA") &&
+          typeof container.contains === "function" &&
+          container.contains(activeEl) &&
+          typeof document.createElement === "function"
+        );
+        if (!canDomPatch) {
+          container.innerHTML = newHtml;
+          return;
+        }
+        const tmp = document.createElement("div");
+        tmp.innerHTML = newHtml;
+        const sel = '[id="' + String(activeEl.id).replace(/"/g, '\\"') + '"]';
+        if (!tmp.querySelector || !tmp.querySelector(sel)) {
+          container.innerHTML = newHtml;
+          return;
+        }
+        function hasActiveInSubtree(node) {
+          if (!node) return false;
+          if (node === activeEl) return true;
+          return Boolean(node.nodeType === 1 && typeof node.contains === "function" && node.contains(activeEl));
+        }
+        function hasTargetIdInSubtree(node) {
+          if (!node || node.nodeType !== 1) return false;
+          if (node.id === activeEl.id) return true;
+          return Boolean(node.querySelector && node.querySelector(sel));
+        }
+        function syncNodeListSlice(parent, liveSlice, nextSlice, refBeforeNode) {
+          if (liveSlice.length === nextSlice.length) {
+            for (let i = 0; i < liveSlice.length; i++) {
+              const l = liveSlice[i];
+              const n = nextSlice[i];
+              if (l.nodeType === 1 && n.nodeType === 1) {
+                if (l.outerHTML !== n.outerHTML) parent.replaceChild(n.cloneNode(true), l);
+              } else if (l.nodeType !== n.nodeType || l.textContent !== n.textContent) {
+                parent.replaceChild(n.cloneNode(true), l);
+              }
+            }
+          } else {
+            liveSlice.forEach((l) => { if (l.parentNode === parent) parent.removeChild(l); });
+            nextSlice.forEach((n) => {
+              parent.insertBefore(n.cloneNode(true), refBeforeNode || null);
+            });
+          }
+        }
+        function syncTree(liveParent, nextParent) {
+          const liveChildren = Array.from(liveParent.childNodes || []);
+          const nextChildren = Array.from(nextParent.childNodes || []);
+          const liveIdx = liveChildren.findIndex(hasActiveInSubtree);
+          const nextIdx = nextChildren.findIndex(hasTargetIdInSubtree);
+          if (liveIdx === -1 || nextIdx === -1) {
+            liveParent.innerHTML = nextParent.innerHTML;
+            return;
+          }
+          const liveActiveBranch = liveChildren[liveIdx];
+          const nextActiveBranch = nextChildren[nextIdx];
+          syncNodeListSlice(liveParent, liveChildren.slice(0, liveIdx), nextChildren.slice(0, nextIdx), liveActiveBranch);
+          if (liveActiveBranch !== activeEl) {
+            if (liveActiveBranch.nodeType === 1 && nextActiveBranch.nodeType === 1) {
+              const nextStyle = nextActiveBranch.getAttribute("style");
+              if (nextStyle !== null && liveActiveBranch.getAttribute("style") !== nextStyle) {
+                liveActiveBranch.setAttribute("style", nextStyle);
+              }
+              const nextCls = nextActiveBranch.getAttribute("class");
+              if (nextCls !== null && liveActiveBranch.getAttribute("class") !== nextCls) {
+                liveActiveBranch.setAttribute("class", nextCls);
+              }
+            }
+            syncTree(liveActiveBranch, nextActiveBranch);
+          }
+          const updatedChildren = Array.from(liveParent.childNodes || []);
+          const curLiveIdx = updatedChildren.indexOf(liveActiveBranch);
+          syncNodeListSlice(liveParent, curLiveIdx >= 0 ? updatedChildren.slice(curLiveIdx + 1) : [], nextChildren.slice(nextIdx + 1), null);
+        }
+        syncTree(container, tmp);
+      }
+      window.setInnerHtmlPreservingActiveInput = setInnerHtmlPreservingActiveInput;
+
       function renderPreservingActiveInput(renderFn) {
         const ae = (typeof document !== "undefined") ? document.activeElement : null;
-        const activeId = (ae && ae.tagName === "INPUT" && ae.id) ? ae.id : "";
+        const activeId = (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA") && ae.id) ? ae.id : "";
+        let activeVal = "";
         let selStart = null, selEnd = null;
         if (activeId) {
-          try { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } catch (_) {}
+          try {
+            activeVal = ae.value;
+            selStart = ae.selectionStart;
+            selEnd = ae.selectionEnd;
+          } catch (_) {}
         }
         renderFn();
         if (activeId) {
           const nextEl = document.getElementById(activeId);
           if (nextEl && document.activeElement !== nextEl) {
             try {
+              if (nextEl.value !== activeVal) nextEl.value = activeVal;
               nextEl.focus();
               if (typeof selStart === "number" && typeof selEnd === "number") {
                 nextEl.setSelectionRange(selStart, selEnd);
@@ -9839,7 +9929,6 @@ end $$;`;
       }
 
       window.onFinanceSearchInput = function(val, ev) {
-        if (ev && ev.isComposing) return;
         state.financeSearchQuery = val;
         if (String(val || "").trim()) {
           state.financeYearFilter = "all";
@@ -11498,7 +11587,6 @@ end $$;`;
       };
 
       window.onExpenseSearchInput = function(val, ev) {
-        if (ev && ev.isComposing) return;
         state.expenseSearchQuery = val;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
@@ -14474,7 +14562,6 @@ end $$;`;
       };
 
       window.onFixedSearchInput = function(val, ev) {
-        if (ev && ev.isComposing) return;
         state.fixedSearchQuery = val;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
@@ -15525,7 +15612,6 @@ end $$;`;
       };
 
       window.onMonthlySiteSearch = function(query, ev) {
-        if (ev && ev.isComposing) return;
         state.monthlySiteSearch = query;
         state.monthlySitePage = 1;
         state.dirtyPcTabs.finance = true;
@@ -16770,7 +16856,7 @@ end $$;`;
 
         if (subTab === "dashboard") {
           const el = document.getElementById("pcFinanceMain");
-          if (el) el.innerHTML = `<div class="finance-view-wrap" style="padding:18px 24px 36px;max-width:1400px;margin:0 auto;">${subTabsHtml}${buildFinanceDashboardHtml(false)}</div>`;
+          if (el) setInnerHtmlPreservingActiveInput(el, `<div class="finance-view-wrap" style="padding:18px 24px 36px;max-width:1400px;margin:0 auto;">${subTabsHtml}${buildFinanceDashboardHtml(false)}</div>`);
           checkAndResetFinanceScroll();
           return;
         }
@@ -17020,21 +17106,21 @@ end $$;`;
             </div>
           `;
 
-          document.getElementById("pcFinanceMain").innerHTML = `
+          setInnerHtmlPreservingActiveInput("pcFinanceMain", `
             ${subTabsHtml}
             ${kpiHtml}
             ${actionFilterBarHtml}
             ${tableHtml}
-          `;
+          `);
           checkAndResetFinanceScroll();
           return;
         }
 
         if (subTab === "monthly") {
-          document.getElementById("pcFinanceMain").innerHTML = `
+          setInnerHtmlPreservingActiveInput("pcFinanceMain", `
             ${subTabsHtml}
             ${buildFinanceMonthlyDashboardHtml(false)}
-          `;
+          `);
           checkAndResetFinanceScroll();
           return;
         }
@@ -17170,12 +17256,12 @@ end $$;`;
             </div>
           `;
 
-          document.getElementById("pcFinanceMain").innerHTML = `
+          setInnerHtmlPreservingActiveInput("pcFinanceMain", `
             ${subTabsHtml}
             ${fixedKpiHtml}
             ${fixedActionBarHtml}
             ${fixedTableHtml}
-          `;
+          `);
           checkAndResetFinanceScroll();
           return;
         }
@@ -17380,13 +17466,13 @@ end $$;`;
           </div>
         `;
 
-        document.getElementById("pcFinanceMain").innerHTML = `
+        setInnerHtmlPreservingActiveInput("pcFinanceMain", `
           ${subTabsHtml}
           ${kpiHtml}
           ${monthStripHtml}
           ${filterBarHtml}
           ${tableHtml}
-        `;
+        `);
         checkAndResetFinanceScroll();
       }
 
@@ -17698,7 +17784,7 @@ end $$;`;
 
         const q = state.partnerTabSearchQuery || "";
 
-        document.getElementById("pcPartnersMain").innerHTML = `
+        setInnerHtmlPreservingActiveInput("pcPartnersMain", `
           <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
             <div>
               <div style="display:flex;align-items:center;gap:8px;">
@@ -17784,7 +17870,7 @@ end $$;`;
               </tbody>
             </table>
           </div>
-        `;
+        `);
       }
       window.renderPcPartnersTab = renderPcPartnersTab;
 
@@ -17797,7 +17883,7 @@ end $$;`;
 
         const q = state.partnerTabSearchQuery || "";
 
-        document.getElementById("m-page-partners").innerHTML = `
+        setInnerHtmlPreservingActiveInput("m-page-partners", `
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
             <div style="display:flex;align-items:center;gap:6px;">
               <span style="font-size:16px;font-weight:800;color:#0f172a;">🤝 거래처 연락망</span>
@@ -17837,7 +17923,7 @@ end $$;`;
           <div id="mPartnersListWrap">
             ${filtered.length ? filtered.map((p) => renderMobilePartnerCardHtml(p)).join("") : `<div style="text-align:center;padding:36px 16px;color:#94a3b8;font-size:13px;background:#ffffff;border-radius:10px;border:1px dashed #cbd5e1;">조건에 일치하는 거래처가 없습니다.</div>`}
           </div>
-        `;
+        `);
       }
       window.renderMobilePartnersTab = renderMobilePartnersTab;
 
@@ -19148,7 +19234,7 @@ end $$;`;
 
         if (subTab === "dashboard") {
           const el = document.getElementById("m-page-finance");
-          if (el) el.innerHTML = `<div style="padding:4px 0 24px;">${subTabsHtml}${buildFinanceDashboardHtml(true)}</div>`;
+          if (el) setInnerHtmlPreservingActiveInput(el, `<div style="padding:4px 0 24px;">${subTabsHtml}${buildFinanceDashboardHtml(true)}</div>`);
           checkAndResetMobileFinanceScroll();
           return;
         }
@@ -19367,13 +19453,13 @@ end $$;`;
             </div>
           `;
 
-          document.getElementById("m-page-finance").innerHTML = `
+          setInnerHtmlPreservingActiveInput("m-page-finance", `
             ${subTabsHtml}
             ${monthSelectorHtml}
             ${kpiHtml}
             ${actionFilterBarHtml}
             ${cardsHtml}
-          `;
+          `);
           checkAndResetMobileFinanceScroll();
           return;
         }
@@ -19381,10 +19467,10 @@ end $$;`;
         if (subTab === "monthly") {
           const mTarget = document.getElementById("m-page-finance");
           if (mTarget) {
-            mTarget.innerHTML = `
+            setInnerHtmlPreservingActiveInput(mTarget, `
               ${subTabsHtml}
               ${buildFinanceMonthlyDashboardHtml(true)}
-            `;
+            `);
             checkAndResetMobileFinanceScroll();
           }
           return;
@@ -19491,12 +19577,12 @@ end $$;`;
 
           const mTarget = document.getElementById("m-page-finance");
           if (mTarget) {
-            mTarget.innerHTML = `
+            setInnerHtmlPreservingActiveInput(mTarget, `
               ${subTabsHtml}
               ${mKpiHtml}
               ${mActionBarHtml}
               ${mCardsHtml}
-            `;
+            `);
             checkAndResetMobileFinanceScroll();
           }
           return;
@@ -19676,13 +19762,13 @@ end $$;`;
           </div>
         `;
 
-        document.getElementById("m-page-finance").innerHTML = `
+        setInnerHtmlPreservingActiveInput("m-page-finance", `
           ${subTabsHtml}
           ${kpiHtml}
           ${monthStripHtml}
           ${filterBarHtml}
           ${cardsHtml}
-        `;
+        `);
         checkAndResetMobileFinanceScroll();
       }
 
@@ -28041,7 +28127,7 @@ end $$;`;
         });
         const rows = Object.values(groups).sort((a, b) => b.count - a.count);
 
-        document.getElementById("monthlyReportBody").innerHTML = `
+        setInnerHtmlPreservingActiveInput("monthlyReportBody", `
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <div style="display:flex;align-items:center;gap:6px;">
               <button type="button" class="btn-tool-tag" onclick="moveReportMonth(-1)">◀</button>
@@ -28077,7 +28163,7 @@ end $$;`;
               </tbody>
             </table>
           </div>
-        `;
+        `);
         const summaryTxt = `[우성아이디 ${rc.year}년 ${rc.month}월 집계]\n` + rows.map((r) => `- ${r.key}: ${r.count}건 (완료 ${r.done}건)`).join("\n");
         document.getElementById("monthlyReportFooter").innerHTML = `
           <button type="button" class="btn-act-white" onclick="closeModal('monthlyReportModal')">닫기</button>
@@ -28086,7 +28172,6 @@ end $$;`;
       }
       window.renderMonthlyReportModal_safe = renderMonthlyReportModal;
       window.onMonthlyReportSearchInput = function (val, ev) {
-        if (ev && ev.isComposing) return;
         state.reportCtx.query = val;
         renderPreservingActiveInput(() => renderMonthlyReportModal());
       };
@@ -34744,7 +34829,6 @@ end $$;`;
       };
 
       window.onGlobalSearch = function (query, ev) {
-        if (ev && ev.isComposing) return;
         const activeId = document.activeElement ? document.activeElement.id : "";
         const keepPcFocus = (activeId === "pcSearchInput" || activeId === "pcQuoteScopedSearchInput");
         state._keepPcSearchFocus = keepPcFocus;
@@ -35137,7 +35221,6 @@ end $$;`;
       };
 
       window.setSiteTaskSearch = function (q, ev) {
-        if (ev && ev.isComposing) return;
         state.siteTaskSearch = q || "";
 
         const pcTbody = document.getElementById("pcSiteTaskTbody") || document.getElementById("pcQuoteSiteTaskTbody");

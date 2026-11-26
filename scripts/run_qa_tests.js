@@ -3556,6 +3556,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     const fnFmtExactKrw = idxRootHtml.match(/function formatExactKrw\([\s\S]*?\n      \}/);
     const fnParseExtra = idxRootHtml.match(/function parseExtraAmountFromNote\([\s\S]*?\n      \}/);
     const fnIsFixed = idxRootHtml.match(/function isFixedExpenseRow\([\s\S]*?\n      \}/);
+    const fnPreserveHtml = idxRootHtml.match(/function setInnerHtmlPreservingActiveInput\([\s\S]*?window\.setInnerHtmlPreservingActiveInput = setInnerHtmlPreservingActiveInput;/);
     const colHelperStart = idxRootHtml.indexOf('function isCollectionSiteCompleted(matchedSite, progress)');
     const colHelperEnd = idxRootHtml.indexOf('window.setFinanceSubTab = function(subTab)');
     const importStart = idxRootHtml.indexOf('window.openCollectionSiteImportModal = function');
@@ -3570,7 +3571,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     const mFinEnd = idxRootHtml.indexOf('function captureViewScrollPositions()');
 
     const extractedOk = Boolean(
-      fnEscHtml && fnEscJs && fnFmtShort && fnFmtKrw && fnFmtExactKrw && fnParseExtra && fnIsFixed &&
+      fnEscHtml && fnEscJs && fnFmtShort && fnFmtKrw && fnFmtExactKrw && fnParseExtra && fnIsFixed && fnPreserveHtml &&
       colHelperStart !== -1 && colHelperEnd > colHelperStart &&
       importStart !== -1 && importEnd > importStart &&
       detailStart !== -1 && detailEnd > detailStart &&
@@ -3675,7 +3676,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     };
 
     const finRuntimeCode = [
-      fnEscHtml[0], fnEscJs[0], fnFmtShort[0], fnFmtKrw[0], fnFmtExactKrw[0], fnParseExtra[0], fnIsFixed[0],
+      fnEscHtml[0], fnEscJs[0], fnFmtShort[0], fnFmtKrw[0], fnFmtExactKrw[0], fnParseExtra[0], fnIsFixed[0], fnPreserveHtml[0],
       idxRootHtml.slice(colHelperStart, colHelperEnd),
       idxRootHtml.slice(importStart, importEnd),
       idxRootHtml.slice(detailStart, detailEnd),
@@ -6997,6 +6998,132 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       mixedStats.progCnt === 2 && mixedStats.planCnt === 1 &&
       (mixedStats.doneCnt + mixedStats.activeCnt + mixedStats.delayCnt === mixedTasks.length),
       `allDone=${JSON.stringify(allDoneStats)}, mixed=${JSON.stringify(mixedStats)}`
+    );
+  })();
+
+  // ========================================================
+  // [한글 IME 조합 중 검색 필터링 및 포커스 input DOM 보존 런타임 QA]
+  // ========================================================
+  (() => {
+    const idxRootHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const noIsComposingGuard = !/if\s*\(\s*ev\s*&&\s*ev\.isComposing\s*\)\s*return\s*;/.test(idxRootHtml);
+    const fnPreserve = idxRootHtml.match(/function setInnerHtmlPreservingActiveInput[\s\S]*?window\.setInnerHtmlPreservingActiveInput = setInnerHtmlPreservingActiveInput;/);
+    const fnRenderPreserve = idxRootHtml.match(/function renderPreservingActiveInput\([\s\S]*?\n      \}/);
+    const fnMonthlySearch = idxRootHtml.match(/window\.onMonthlySiteSearch\s*=\s*function[\s\S]*?\n      \};/);
+
+    // Minimal DOM tree simulation to verify active <input> node identity is preserved when siblings update
+    class MockEl {
+      constructor(tag, id) {
+        this.nodeType = 1;
+        this.tagName = tag.toUpperCase();
+        this.id = id || '';
+        this.attrs = {};
+        if (this.id) this.attrs.id = this.id;
+        this.childNodes = [];
+        this.parentNode = null;
+        this.value = '';
+      }
+      setAttribute(k, v) { this.attrs[k] = String(v); if (k === 'id') this.id = String(v); }
+      getAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attrs, k) ? this.attrs[k] : null; }
+      contains(target) {
+        if (target === this) return true;
+        return this.childNodes.some((c) => c.nodeType === 1 && c.contains(target));
+      }
+      querySelector(sel) {
+        const m = sel.match(/^\[id="(.+)"\]$/);
+        if (!m) return null;
+        const targetId = m[1].replace(/\\"/g, '"');
+        if (this.id === targetId) return this;
+        for (const c of this.childNodes) {
+          if (c.nodeType === 1) {
+            const found = c.querySelector(sel);
+            if (found) return found;
+          }
+        }
+        return null;
+      }
+      appendChild(node) { node.parentNode = this; this.childNodes.push(node); return node; }
+      insertBefore(node, ref) {
+        node.parentNode = this;
+        if (!ref) { this.childNodes.push(node); return node; }
+        const idx = this.childNodes.indexOf(ref);
+        if (idx === -1) this.childNodes.push(node);
+        else this.childNodes.splice(idx, 0, node);
+        return node;
+      }
+      removeChild(node) {
+        const idx = this.childNodes.indexOf(node);
+        if (idx >= 0) { this.childNodes.splice(idx, 1); node.parentNode = null; }
+        return node;
+      }
+      replaceChild(newNode, oldNode) {
+        const idx = this.childNodes.indexOf(oldNode);
+        if (idx >= 0) { newNode.parentNode = this; oldNode.parentNode = null; this.childNodes[idx] = newNode; }
+        return oldNode;
+      }
+      cloneNode(deep) {
+        const c = new MockEl(this.tagName, this.id);
+        c.attrs = Object.assign({}, this.attrs);
+        c.value = this.value;
+        c._outer = this._outer;
+        if (deep) this.childNodes.forEach((ch) => c.appendChild(ch.cloneNode(true)));
+        return c;
+      }
+      get outerHTML() {
+        return this._outer || `<${this.tagName.toLowerCase()} id="${this.id}">${this.childNodes.map((c) => c.outerHTML).join('')}</${this.tagName.toLowerCase()}>`;
+      }
+      set innerHTML(html) {
+        this.childNodes = [];
+        if (html.includes('id="pcFinMonthlySiteSearchInput"')) {
+          const wrap = new MockEl('div', 'wrap');
+          const inp = new MockEl('input', 'pcFinMonthlySiteSearchInput');
+          const tbl = new MockEl('div', 'tbl');
+          tbl._outer = html.includes('우성') ? '<div id="tbl">우성1건</div>' : '<div id="tbl">전체34건</div>';
+          wrap.appendChild(inp);
+          this.appendChild(wrap);
+          this.appendChild(tbl);
+        }
+      }
+    }
+
+    const container = new MockEl('div', 'pcFinanceMain');
+    container.innerHTML = 'id="pcFinMonthlySiteSearchInput"';
+    const liveInput = container.querySelector('[id="pcFinMonthlySiteSearchInput"]');
+    liveInput.value = '우성';
+    let focusCalled = false;
+    liveInput.focus = () => { focusCalled = true; };
+
+    const imeVm = vm.createContext({
+      window: {},
+      state: { monthlySiteSearch: '', monthlySitePage: 1, dirtyPcTabs: {}, dirtyMobileTabs: {} },
+      renderPreservingActiveInput: (fn) => fn(),
+      renderActiveViews: () => {},
+      document: {
+        activeElement: liveInput,
+        getElementById: (id) => (id === 'pcFinanceMain' ? container : (id === 'pcFinMonthlySiteSearchInput' ? liveInput : null)),
+        createElement: (tag) => new MockEl(tag, '')
+      }
+    });
+    imeVm.window = imeVm;
+    if (fnPreserve && fnRenderPreserve && fnMonthlySearch) {
+      vm.runInContext([fnPreserve[0], fnRenderPreserve[0], fnMonthlySearch[0]].join('\n'), imeVm);
+      imeVm.onMonthlySiteSearch('우성', { isComposing: true });
+      imeVm.setInnerHtmlPreservingActiveInput('pcFinanceMain', '<div><input id="pcFinMonthlySiteSearchInput"></div><div id="tbl">우성1건</div>');
+    }
+    const afterInput = container.querySelector('[id="pcFinMonthlySiteSearchInput"]');
+    const afterTbl = container.querySelector('[id="tbl"]');
+
+    assertTest(
+      '한글 IME 조합 중(isComposing=true) 검색 차단 가드 제거 및 포커스 <input> DOM 노드 보존 검증',
+      Boolean(
+        noIsComposingGuard &&
+        fnPreserve && fnRenderPreserve && fnMonthlySearch &&
+        imeVm.state.monthlySiteSearch === '우성' &&
+        afterInput === liveInput &&
+        afterInput.value === '우성' &&
+        focusCalled === false &&
+        afterTbl && afterTbl.outerHTML.includes('우성1건')
+      )
     );
   })();
 
