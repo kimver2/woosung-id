@@ -1,5 +1,5 @@
 /* Service Worker for 우성아이디 통합 현장 대시보드 (PWA) */
-const CACHE_NAME = 'ws-dashboard-pwa-v12';
+const CACHE_NAME = 'ws-dashboard-pwa-v13';
 
 const PRECACHE_URLS = [
   './',

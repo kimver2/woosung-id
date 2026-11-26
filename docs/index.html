@@ -3161,7 +3161,7 @@
         <div class="m-search-wrap" id="mSearchWrap">
           <div class="m-search-box" id="mSearchBox">
             <span style="font-size:12px;color:#64748b;">🔍</span>
-            <input type="text" id="mSearchInput" placeholder="현장명, 공종, 담당자 실시간 검색 (Alt + S)" oninput="onGlobalSearch(this.value)">
+            <input type="text" id="mSearchInput" placeholder="현장명, 공종, 담당자 실시간 검색 (Alt + S)" oninput="onGlobalSearch(this.value, event)" oncompositionend="onGlobalSearch(this.value)">
             <button type="button" id="mSearchClear" class="m-search-clear" onclick="clearGlobalSearch()">✕</button>
           </div>
         </div>
@@ -7546,7 +7546,7 @@ end $$;`;
             <div class="pc-cal-toolbar-right">
               <div class="pc-page-search-wrap">
                 <span class="pc-page-search-icon">🔍</span>
-                <input type="text" id="pcSearchInput" class="pc-page-search-input" placeholder="현장, 공종, 담당자 검색 (Alt+S)" value="${escHtml(state.searchQuery)}" oninput="onGlobalSearch(this.value)">
+                <input type="text" id="pcSearchInput" class="pc-page-search-input" placeholder="현장, 공종, 담당자 검색 (Alt+S)" value="${escHtml(state.searchQuery)}" oninput="onGlobalSearch(this.value, event)" oncompositionend="onGlobalSearch(this.value)">
                 ${state.searchQuery ? `<span class="pc-page-search-clear" onclick="clearGlobalSearch()" title="검색 초기화">✕</span>` : `<span class="search-shortcut-badge" style="position:absolute;right:6px;font-size:10px;padding:2px 4px;border-radius:4px;background:#f1f5f9;color:#64748b;pointer-events:none;">Alt+S</span>`}
               </div>
               <span class="cal-count-capsule">
@@ -7936,7 +7936,7 @@ end $$;`;
               <div class="site-task-filter-row" style="justify-content:flex-end;">
                 <div class="site-task-search-wrap" style="width:280px;box-sizing:border-box;">
                   <span class="search-icon">🔍</span>
-                  <input type="text" id="${pfx}TaskSearchInput" class="ws-input" value="${escHtml(state.siteTaskSearch)}" placeholder="공종 / 업체 / 메모 검색" oninput="setSiteTaskSearch(this.value)" onkeydown="if(event.key==='Escape')clearSiteTaskSearch()" style="height:30px;font-size:12px;">
+                  <input type="text" id="${pfx}TaskSearchInput" class="ws-input" value="${escHtml(state.siteTaskSearch)}" placeholder="공종 / 업체 / 메모 검색" oninput="setSiteTaskSearch(this.value, event)" oncompositionend="setSiteTaskSearch(this.value)" onkeydown="if(event.key==='Escape')clearSiteTaskSearch()" style="height:30px;font-size:12px;">
                   <button type="button" id="${pfx}TaskSearchClear" class="search-clear search-clear-btn" onclick="clearSiteTaskSearch()" style="display:${state.siteTaskSearch ? "flex" : "none"};" title="검색어 지우기">✕</button>
                 </div>
               </div>
@@ -8050,7 +8050,7 @@ end $$;`;
             <div style="flex:1;display:flex;justify-content:center;min-width:240px;padding:0 12px;">
               <div class="pc-page-search-wrap" style="width:100%;max-width:520px;">
                 <span class="pc-page-search-icon">🔍</span>
-                <input type="text" id="${isQ ? "pcQuoteScopedSearchInput" : "pcSearchInput"}" class="pc-page-search-input" style="width:100%;height:33px;font-size:12.5px;" placeholder="현장, 공종, 담당자 검색 (Alt+S)" value="${escHtml(state.searchQuery)}" oninput="onGlobalSearch(this.value)">
+                <input type="text" id="${isQ ? "pcQuoteScopedSearchInput" : "pcSearchInput"}" class="pc-page-search-input" style="width:100%;height:33px;font-size:12.5px;" placeholder="현장, 공종, 담당자 검색 (Alt+S)" value="${escHtml(state.searchQuery)}" oninput="onGlobalSearch(this.value, event)" oncompositionend="onGlobalSearch(this.value)">
                 ${state.searchQuery ? `<span class="pc-page-search-clear" onclick="clearGlobalSearch()" title="검색 초기화">✕</span>` : `<span class="search-shortcut-badge" style="position:absolute;right:6px;font-size:10px;padding:2px 4px;border-radius:4px;background:#f1f5f9;color:#64748b;pointer-events:none;">Alt+S</span>`}
               </div>
             </div>
@@ -15524,21 +15524,24 @@ end $$;`;
         renderActiveViews();
       };
 
-      window.onMonthlySiteSearch = function(query) {
-        const activeId = document.activeElement ? document.activeElement.id : "";
+      window.onMonthlySiteSearch = function(query, ev) {
+        if (ev && ev.isComposing) return;
         state.monthlySiteSearch = query;
         state.monthlySitePage = 1;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
+        renderPreservingActiveInput(() => renderActiveViews());
+      };
+
+      window.clearMonthlySiteSearch = function() {
+        state.monthlySiteSearch = "";
+        state.monthlySitePage = 1;
+        state.dirtyPcTabs.finance = true;
+        state.dirtyMobileTabs.finance = true;
         renderActiveViews();
-        if (activeId === "monthlySiteSearchInput") {
-          const el = document.getElementById("monthlySiteSearchInput");
-          if (el) {
-            el.focus();
-            const len = el.value.length;
-            try { el.setSelectionRange(len, len); } catch (_) {}
-          }
-        }
+        const elId = state.device === "mobile" ? "mFinMonthlySiteSearchInput" : "pcFinMonthlySiteSearchInput";
+        const el = document.getElementById(elId);
+        if (el) { el.value = ""; el.focus(); }
       };
 
       window.setMonthlySitePage = function(page) {
@@ -16022,7 +16025,10 @@ end $$;`;
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <input type="text" id="monthlySiteSearchInput" placeholder="🔍 현장명 검색..." value="${escHtml(state.monthlySiteSearch || "")}" oninput="window.onMonthlySiteSearch(this.value)" class="sheet-filter-select" style="min-width:${isMobile ? "140px" : "180px"};height:34px;padding:0 12px;font-size:12.5px;border-radius:8px;">
+                <div style="position:relative;display:inline-flex;align-items:center;">
+                  <input type="text" id="${isMobile ? "mFinMonthlySiteSearchInput" : "pcFinMonthlySiteSearchInput"}" placeholder="🔍 현장명 검색..." value="${escHtml(state.monthlySiteSearch || "")}" oninput="window.onMonthlySiteSearch(this.value, event)" oncompositionend="window.onMonthlySiteSearch(this.value)" class="sheet-filter-select" style="min-width:${isMobile ? "140px" : "180px"};height:34px;padding:0 26px 0 12px;font-size:12.5px;border-radius:8px;">
+                  ${state.monthlySiteSearch ? `<button type="button" onclick="window.clearMonthlySiteSearch()" title="검색 초기화" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:bold;line-height:1;">✕</button>` : ""}
+                </div>
                 <select class="sheet-filter-select" style="height:34px;padding:0 10px;font-size:12.5px;border-radius:8px;" onchange="window.setMonthlySiteSort(this.value)">
                   <option value="marginDesc" ${sortKey === "marginDesc" ? "selected" : ""}>마진율 높은순</option>
                   <option value="marginAsc" ${sortKey === "marginAsc" ? "selected" : ""}>마진율 낮은순</option>
@@ -18679,7 +18685,7 @@ end $$;`;
                   <div style="display:flex;flex-direction:column;gap:6px;">
                     <div class="site-task-search-wrap" style="width:100%;margin:0;">
                       <span class="search-icon">🔍</span>
-                      <input type="text" class="ws-input m-site-task-search-input" id="mSiteTaskSearch_${escJs(s.siteKey)}" style="font-size:11.5px;height:28px;" placeholder="공종 / 업체 / 메모 검색" value="${escHtml(curSearch)}" oninput="setSiteTaskSearch(this.value)" onkeydown="if(event.key==='Escape')clearSiteTaskSearch()">
+                      <input type="text" class="ws-input m-site-task-search-input" id="mSiteTaskSearch_${escJs(s.siteKey)}" style="font-size:11.5px;height:28px;" placeholder="공종 / 업체 / 메모 검색" value="${escHtml(curSearch)}" oninput="setSiteTaskSearch(this.value, event)" oncompositionend="setSiteTaskSearch(this.value)" onkeydown="if(event.key==='Escape')clearSiteTaskSearch()">
                       <button type="button" class="search-clear search-clear-btn" id="mSiteTaskClear_${escJs(s.siteKey)}" onclick="clearSiteTaskSearch()" style="display:${curSearch ? "flex" : "none"};" title="검색어 지우기">✕</button>
                     </div>
                   </div>
@@ -28054,7 +28060,7 @@ end $$;`;
               <button type="button" class="seg-btn ${rc.tab === "member" ? "active" : ""}" onclick="setReportField('tab','member')">👤 담당자별</button>
               <button type="button" class="seg-btn ${rc.tab === "site" ? "active" : ""}" onclick="setReportField('tab','site')">🏢 현장별</button>
             </div>
-            <input class="ws-input" style="max-width:220px;" value="${escHtml(rc.query)}" placeholder="검색..." oninput="state.reportCtx.query=this.value; renderMonthlyReportModal_safe()">
+            <input type="text" id="monthlyReportSearchInput" class="ws-input" style="max-width:220px;" value="${escHtml(rc.query)}" placeholder="검색..." oninput="window.onMonthlyReportSearchInput(this.value, event)" oncompositionend="window.onMonthlyReportSearchInput(this.value)">
           </div>
           <div class="table-container" style="max-height:360px;overflow-y:auto;">
             <table class="clean-table">
@@ -28079,6 +28085,11 @@ end $$;`;
         `;
       }
       window.renderMonthlyReportModal_safe = renderMonthlyReportModal;
+      window.onMonthlyReportSearchInput = function (val, ev) {
+        if (ev && ev.isComposing) return;
+        state.reportCtx.query = val;
+        renderPreservingActiveInput(() => renderMonthlyReportModal());
+      };
       window.moveReportMonth = function (d) {
         state.reportCtx.month += d;
         if (state.reportCtx.month < 1) { state.reportCtx.month = 12; state.reportCtx.year--; }
@@ -34732,7 +34743,8 @@ end $$;`;
         renderActiveViews();
       };
 
-      window.onGlobalSearch = function (query) {
+      window.onGlobalSearch = function (query, ev) {
+        if (ev && ev.isComposing) return;
         const activeId = document.activeElement ? document.activeElement.id : "";
         const keepPcFocus = (activeId === "pcSearchInput" || activeId === "pcQuoteScopedSearchInput");
         state._keepPcSearchFocus = keepPcFocus;
@@ -34745,16 +34757,8 @@ end $$;`;
         if (mIn && mIn.value !== state.searchQuery) mIn.value = state.searchQuery;
         if (mBox) mBox.classList.toggle("has-query", !!state.searchQuery.trim());
         markAllDirty();
-        renderActiveViews();
+        renderPreservingActiveInput(() => renderActiveViews());
         state._keepPcSearchFocus = false;
-        if (keepPcFocus) {
-          const targetEl = document.getElementById(activeId);
-          if (targetEl && document.activeElement !== targetEl) {
-            targetEl.focus();
-            const len = targetEl.value.length;
-            try { targetEl.setSelectionRange(len, len); } catch (_) {}
-          }
-        }
       };
       window.clearGlobalSearch = function () { window.onGlobalSearch(""); };
       window.resetAllFilters = function () {
@@ -35132,7 +35136,8 @@ end $$;`;
         }
       };
 
-      window.setSiteTaskSearch = function (q) {
+      window.setSiteTaskSearch = function (q, ev) {
+        if (ev && ev.isComposing) return;
         state.siteTaskSearch = q || "";
 
         const pcTbody = document.getElementById("pcSiteTaskTbody") || document.getElementById("pcQuoteSiteTaskTbody");
@@ -35174,12 +35179,12 @@ end $$;`;
         if (!pcUpdated && (state.pcTab === "sites" || state.pcTab === "quote")) {
           state.dirtyPcTabs.sites = true;
           state.dirtyPcTabs.quote = true;
-          renderActiveViews();
+          renderPreservingActiveInput(() => renderActiveViews());
         }
         if (!mUpdated && (state.mobileTab === "sites" || state.mobileTab === "quote") && mExpandedCards.length === 0) {
           state.dirtyMobileTabs.sites = true;
           state.dirtyMobileTabs.quote = true;
-          renderActiveViews();
+          renderPreservingActiveInput(() => renderActiveViews());
         }
       };
 
