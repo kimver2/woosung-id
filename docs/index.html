@@ -2892,12 +2892,30 @@
     }
     .ws-as-mobile-item:hover { background: #f1f5f9; }
     .ws-as-mobile-item.is-selected { border-color: #2563eb; background: #eff6ff; }
+    .ws-as-mobile-partner-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .ws-as-mobile-partner-group.is-selected .ws-as-mobile-item.is-selected {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      border-bottom-color: #bfdbfe;
+    }
     .ws-as-partner-detail-box {
       margin-top: 12px;
       padding: 12px 14px;
       border: 1.5px solid #bfdbfe;
       border-radius: 10px;
       background: #f8fafc;
+    }
+    .ws-as-partner-detail-box.is-inline {
+      margin-top: 0;
+      border-top: 0;
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+      border-color: #2563eb;
+      background: #ffffff;
     }
     .ws-as-filter-pill {
       display: inline-flex;
@@ -6050,6 +6068,35 @@ end $$;`;
           ? model.allPartnerAnalysisRows.find((p) => p.partnerKey === selectedPartnerKey) || null
           : null;
         const activePartnerFaultFilter = state.asWarrantyPartnerFaultFilter || "all";
+        let partnerDetailRenderedInline = false;
+
+        const buildPartnerDetailHtml = (isInline) => {
+          if (!selectedPartner) return "";
+          const filteredPartnerRecords = activePartnerFaultFilter === "all"
+            ? selectedPartner.records
+            : selectedPartner.records.filter((r) => (r.faultInfo && r.faultInfo.label ? r.faultInfo.label : "미지정") === activePartnerFaultFilter);
+          return `
+            <div id="${domPrefix}WsAsPartnerDetailBox" class="ws-as-partner-detail-box${isInline ? " is-inline" : ""}">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+                <div>
+                  <strong style="font-size:13px;color:#1e3a8a;">
+                    🔍 [${escHtml(selectedPartner.partnerName)}] A/S 상세 내역 (${filteredPartnerRecords.length}건)
+                  </strong>
+                  <div style="font-size:11px;color:#64748b;margin-top:2px;font-weight:600;">
+                    전체 ${selectedPartner.count}건 (진행 중 ${selectedPartner.pendingCount} · 완료 ${selectedPartner.completedCount}) · 항목 클릭 시 상세/귀책 수정 모달 열기
+                  </div>
+                </div>
+                <button type="button" class="btn-tool-tag" onclick="selectAsWarrantyPartner('')">✕ 선택 해제</button>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;">
+                <button type="button" class="ws-as-filter-pill ${activePartnerFaultFilter === "all" ? "active" : ""}" onclick="setAsWarrantyPartnerFaultFilter('all')">전체 (${selectedPartner.count})</button>
+                ${selectedPartner.faultSummaryList.map((f) =>
+                  `<button type="button" class="ws-as-filter-pill ${activePartnerFaultFilter === f.label ? "active" : ""}" onclick="setAsWarrantyPartnerFaultFilter('${escJs(f.label)}')">${escHtml(f.label)} (${f.count})</button>`
+                ).join("")}
+              </div>
+              ${renderAsTaskRecordsListHtml(filteredPartnerRecords, isMobile, "선택한 귀책사유에 해당하는 A/S 내역이 없습니다.")}
+            </div>`;
+        };
 
         const faultOverviewHtml = model.faultSummaryStats.length
           ? `<div class="ws-as-chip-wrap" style="margin-top:6px;">
@@ -6075,22 +6122,26 @@ end $$;`;
           ? (isMobile
               ? `<div class="ws-as-mobile-list">
                   ${model.partnerAnalysisRows.map((p) => {
-                    const isSel = selectedPartner && selectedPartner.partnerKey === p.partnerKey;
+                    const isSel = Boolean(selectedPartner && selectedPartner.partnerKey === p.partnerKey);
+                    if (isSel) partnerDetailRenderedInline = true;
                     return `
-                      <div class="ws-as-mobile-item ${isSel ? "is-selected" : ""}" onclick="selectAsWarrantyPartner('${escJs(p.partnerKey)}')" title="클릭하여 해당 업체 A/S 내역 확인">
-                        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-                          <strong style="font-size:13px;color:${p.isUnassigned ? "#b45309" : "#0f172a"};">
-                            ${p.isUnassigned ? "⚠️ " : "🏢 "}${escHtml(p.partnerName)}
-                          </strong>
-                          <span class="ws-as-chip compact ${p.pendingCount > 0 ? "warn" : "ok"}">총 ${p.count}건 (진행 ${p.pendingCount} / 완료 ${p.completedCount})</span>
+                      <div class="ws-as-mobile-partner-group ${isSel ? "is-selected" : ""}">
+                        <div class="ws-as-mobile-item ${isSel ? "is-selected" : ""}" onclick="selectAsWarrantyPartner('${escJs(p.partnerKey)}')" title="클릭하여 해당 업체 A/S 내역 확인">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                            <strong style="font-size:13px;color:${p.isUnassigned ? "#b45309" : "#0f172a"};">
+                              ${p.isUnassigned ? "⚠️ " : "🏢 "}${escHtml(p.partnerName)}
+                            </strong>
+                            <span class="ws-as-chip compact ${p.pendingCount > 0 ? "warn" : "ok"}">총 ${p.count}건 (진행 ${p.pendingCount} / 완료 ${p.completedCount})</span>
+                          </div>
+                          <div style="font-size:11px;color:#475569;font-weight:700;">
+                            주요 공종: ${renderPartnerTrades(p)}
+                          </div>
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+                            ${renderPartnerFaultBadges(p)}
+                            <span style="font-size:11px;font-weight:800;color:#2563eb;margin-left:auto;">${isSel ? "선택됨 ▴" : "내역 보기 ▾"}</span>
+                          </div>
                         </div>
-                        <div style="font-size:11px;color:#475569;font-weight:700;">
-                          주요 공종: ${renderPartnerTrades(p)}
-                        </div>
-                        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
-                          ${renderPartnerFaultBadges(p)}
-                          <span style="font-size:11px;font-weight:800;color:#2563eb;margin-left:auto;">${isSel ? "선택됨 ▴" : "내역 보기 ▾"}</span>
-                        </div>
+                        ${isSel ? buildPartnerDetailHtml(true) : ""}
                       </div>`;
                   }).join("")}
                 </div>`
@@ -6132,33 +6183,7 @@ end $$;`;
                 </div>`)
           : `<div style="font-size:12px;color:#64748b;padding:20px 0;text-align:center;font-weight:700;">집계된 협력업체별 A/S 이력이 없습니다.</div>`;
 
-        let partnerDetailHtml = "";
-        if (selectedPartner) {
-          const filteredPartnerRecords = activePartnerFaultFilter === "all"
-            ? selectedPartner.records
-            : selectedPartner.records.filter((r) => (r.faultInfo && r.faultInfo.label ? r.faultInfo.label : "미지정") === activePartnerFaultFilter);
-          partnerDetailHtml = `
-            <div id="${domPrefix}WsAsPartnerDetailBox" class="ws-as-partner-detail-box">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
-                <div>
-                  <strong style="font-size:13px;color:#1e3a8a;">
-                    🔍 [${escHtml(selectedPartner.partnerName)}] A/S 상세 내역 (${filteredPartnerRecords.length}건)
-                  </strong>
-                  <div style="font-size:11px;color:#64748b;margin-top:2px;font-weight:600;">
-                    전체 ${selectedPartner.count}건 (진행 중 ${selectedPartner.pendingCount} · 완료 ${selectedPartner.completedCount}) · 항목 클릭 시 상세/귀책 수정 모달 열기
-                  </div>
-                </div>
-                <button type="button" class="btn-tool-tag" onclick="selectAsWarrantyPartner('')">✕ 선택 해제</button>
-              </div>
-              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;">
-                <button type="button" class="ws-as-filter-pill ${activePartnerFaultFilter === "all" ? "active" : ""}" onclick="setAsWarrantyPartnerFaultFilter('all')">전체 (${selectedPartner.count})</button>
-                ${selectedPartner.faultSummaryList.map((f) =>
-                  `<button type="button" class="ws-as-filter-pill ${activePartnerFaultFilter === f.label ? "active" : ""}" onclick="setAsWarrantyPartnerFaultFilter('${escJs(f.label)}')">${escHtml(f.label)} (${f.count})</button>`
-                ).join("")}
-              </div>
-              ${renderAsTaskRecordsListHtml(filteredPartnerRecords, isMobile, "선택한 귀책사유에 해당하는 A/S 내역이 없습니다.")}
-            </div>`;
-        }
+        const partnerDetailHtml = (!isMobile || !partnerDetailRenderedInline) ? buildPartnerDetailHtml(false) : "";
 
         return `
           <div class="ws-as-panel">

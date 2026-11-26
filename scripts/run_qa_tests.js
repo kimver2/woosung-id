@@ -4108,6 +4108,13 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     const cubeStat = modelBefore.partnerStats.find((p) => p.partnerName === '큐브타일');
     asVm.selectAsWarrantyPartner('정경식 반장 (개인)', true);
     const partnerSelHtml = asVm.renderAsWarrantyDashboardHtml(false);
+    const mobPartnerSelHtml = asVm.renderAsWarrantyDashboardHtml(true);
+    const mobPartnerDetailMatches = (mobPartnerSelHtml.match(/id="mWsAsPartnerDetailBox"/g) || []).length;
+    const mobJungCardIdx = mobPartnerSelHtml.indexOf("selectAsWarrantyPartner('정경식 반장 (개인)')");
+    const mobDetailIdx = mobPartnerSelHtml.indexOf('id="mWsAsPartnerDetailBox"');
+    const mobCubeCardIdx = mobPartnerSelHtml.indexOf("selectAsWarrantyPartner('큐브타일')");
+    const mobInlineDetailOrderOk = mobPartnerDetailMatches === 1 &&
+      mobJungCardIdx !== -1 && mobDetailIdx > mobJungCardIdx && mobCubeCardIdx > mobDetailIdx;
     const partnerSelDetailSub = partnerSelHtml.slice(partnerSelHtml.indexOf('id="pcWsAsPartnerDetailBox"'));
     asVm.setAsWarrantyPartnerFaultFilter('자재 하자');
     const partnerFaultFilteredHtml = asVm.renderAsWarrantyDashboardHtml(false);
@@ -4150,6 +4157,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       jungStat.faultBuckets['자재 하자'] && jungStat.faultBuckets['자재 하자'].count === 1 &&
       cubeStat.count === 2 && cubeStat.faultBuckets['협력업체 시공불량'] && cubeStat.faultBuckets['고객 과실·변심'] &&
       partnerSelHtml.includes('id="pcWsAsPartnerDetailBox"') &&
+      mobInlineDetailOrderOk &&
       partnerSelDetailSub.includes("openTaskEditModal('as_qa_1')") &&
       partnerSelDetailSub.includes("openTaskEditModal('as_qa_2')") &&
       !partnerFaultFilteredSub.includes("openTaskEditModal('as_qa_1')") &&
