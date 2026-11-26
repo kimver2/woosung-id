@@ -9630,11 +9630,101 @@ end $$;`;
       }
       window.isExpense33Withholding = isExpense33Withholding;
 
-      function calcExpenseFinancials(claimAmount, paidAmount, rowOrNote, explicitProof) {
+      function normalizeExpenseDetailItems(rawItems) {
+        if (!Array.isArray(rawItems)) return [];
+        return rawItems.map((it) => {
+          if (!it || typeof it !== "object") return null;
+          const type = (it.type === "material" || it.type === "etc") ? it.type : "labor";
+          const name = String(it.name || "").trim();
+          const unitPrice = Number(String(it.unitPrice !== undefined ? it.unitPrice : (it.amount || 0)).replace(/,/g, "").trim()) || 0;
+          const rawQty = it.qty !== undefined && it.qty !== "" && it.qty !== null ? Number(it.qty) : 1;
+          const qty = (!isNaN(rawQty) && rawQty >= 0) ? rawQty : 1;
+          const unit = String(it.unit || (type === "labor" ? "일" : "식")).trim() || (type === "labor" ? "일" : "식");
+          const amount = Math.round(unitPrice * qty);
+          return { type, name, unitPrice, qty, unit, amount };
+        }).filter((it) => it && (it.name || it.unitPrice > 0 || it.amount > 0));
+      }
+      window.normalizeExpenseDetailItems = normalizeExpenseDetailItems;
+
+      function summarizeExpenseDetailItems(rawItems) {
+        const list = Array.isArray(rawItems) ? rawItems : [];
+        let laborSum = 0;
+        let materialSum = 0;
+        let etcSum = 0;
+        let validCount = 0;
+        const parts = [];
+        list.forEach((it) => {
+          if (!it || typeof it !== "object") return;
+          const type = (it.type === "material" || it.type === "etc") ? it.type : "labor";
+          const up = Number(String(it.unitPrice !== undefined ? it.unitPrice : 0).replace(/,/g, "").trim()) || 0;
+          const q = (it.qty !== undefined && it.qty !== "" && it.qty !== null && !isNaN(Number(it.qty))) ? Number(it.qty) : 1;
+          const amt = (it.amount !== undefined && !isNaN(Number(it.amount)) && up === 0)
+            ? Math.round(Number(it.amount))
+            : Math.round(up * q);
+          if (amt > 0 || String(it.name || "").trim()) validCount++;
+          if (type === "labor") laborSum += amt;
+          else if (type === "material") materialSum += amt;
+          else etcSum += amt;
+          if (amt > 0 || String(it.name || "").trim()) {
+            const typeLbl = type === "labor" ? "인건비" : (type === "material" ? "자재비" : "기타");
+            const unitLbl = it.unit || (type === "labor" ? "일" : "식");
+            const nameLbl = String(it.name || "").trim() || typeLbl;
+            parts.push(q !== 1 || type === "labor"
+              ? `${nameLbl} ${up.toLocaleString("ko-KR")}×${q}${unitLbl}(${amt.toLocaleString("ko-KR")})`
+              : `${nameLbl} ${amt.toLocaleString("ko-KR")}`);
+          }
+        });
+        const totalSum = laborSum + materialSum + etcSum;
+        return {
+          laborSum,
+          materialSum,
+          etcSum,
+          totalSum,
+          validCount,
+          summaryText: parts.join(" + ")
+        };
+      }
+      window.summarizeExpenseDetailItems = summarizeExpenseDetailItems;
+
+      function renderExpenseDetailSummaryBadgesHtml(rowOrItems, opts) {
+        const o = opts || {};
+        const items = Array.isArray(rowOrItems)
+          ? rowOrItems
+          : (rowOrItems && Array.isArray(rowOrItems.detailItems) ? rowOrItems.detailItems : []);
+        if (!items || items.length === 0) return "";
+        const sum = summarizeExpenseDetailItems(items);
+        if (sum.totalSum <= 0) return "";
+        const fz = o.compact ? "10px" : "10.5px";
+        const chips = [];
+        if (sum.laborSum > 0) {
+          chips.push(`<span style="display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:4px;font-size:${fz};font-weight:700;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;white-space:nowrap;">👷 인건비 ${formatKrw(sum.laborSum)}</span>`);
+        }
+        if (sum.materialSum > 0) {
+          chips.push(`<span style="display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:4px;font-size:${fz};font-weight:700;background:#fffbeb;color:#b45309;border:1px solid #fde68a;white-space:nowrap;">📦 자재 ${formatKrw(sum.materialSum)}</span>`);
+        }
+        if (sum.etcSum > 0) {
+          chips.push(`<span style="display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:4px;font-size:${fz};font-weight:700;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;white-space:nowrap;">➕ 기타 ${formatKrw(sum.etcSum)}</span>`);
+        }
+        if (chips.length === 0) return "";
+        return `<div style="display:flex;flex-wrap:wrap;gap:3px;justify-content:${o.align || "flex-end"};margin-top:2px;" title="${escHtml(sum.summaryText)}">${chips.join("")}</div>`;
+      }
+      window.renderExpenseDetailSummaryBadgesHtml = renderExpenseDetailSummaryBadgesHtml;
+
+      function calcExpenseFinancials(claimAmount, paidAmount, rowOrNote, explicitProof, detailItemsOpt) {
         const claim = Number(claimAmount) || 0;
         const paid = Number(paidAmount) || 0;
         const is33 = isExpense33Withholding(rowOrNote, explicitProof);
-        const tax33 = is33 ? Math.round(claim * 0.033) : 0;
+        const detailItems = Array.isArray(detailItemsOpt)
+          ? detailItemsOpt
+          : (rowOrNote && typeof rowOrNote === "object" && Array.isArray(rowOrNote.detailItems) ? rowOrNote.detailItems : null);
+        let taxBase = claim;
+        if (is33 && Array.isArray(detailItems) && detailItems.length > 0 && typeof summarizeExpenseDetailItems === "function") {
+          const sum = summarizeExpenseDetailItems(detailItems);
+          if (sum.laborSum > 0 && sum.totalSum > 0) {
+            taxBase = sum.laborSum;
+          }
+        }
+        const tax33 = is33 ? Math.round(taxBase * 0.033) : 0;
         const payableAmount = claim - tax33;
         const rawBalance = payableAmount - paid;
         const balance = Math.max(rawBalance, 0);
@@ -9642,6 +9732,7 @@ end $$;`;
           claim: claim,
           paid: paid,
           is33: is33,
+          taxBase: taxBase,
           tax33: tax33,
           payableAmount: payableAmount,
           rawBalance: rawBalance,
@@ -11560,10 +11651,27 @@ end $$;`;
           paidAmount: prefill.paidAmount || 0,
           balance: initPrefillFin.balance,
           payDate: prefill.payDate || "",
-          note: prefill.note || ""
+          note: prefill.note || "",
+          detailItems: Array.isArray(prefill.detailItems) ? prefill.detailItems : []
         };
         rData.category2 = String(rData.category2 || rData.accountNumber || rData.accountNo || "").trim();
         window._expModalLastItem = String(rData.item || "외주").trim();
+        window._expModalDetailItems = Array.isArray(rData.detailItems)
+          ? JSON.parse(JSON.stringify(rData.detailItems)).map((it) => {
+              const type = (it && (it.type === "material" || it.type === "etc")) ? it.type : "labor";
+              const unitPrice = Number(it && it.unitPrice !== undefined ? it.unitPrice : (it && it.amount) || 0) || 0;
+              const qty = (it && it.qty !== undefined && it.qty !== "" && !isNaN(Number(it.qty))) ? Number(it.qty) : 1;
+              const unit = String((it && it.unit) || (type === "labor" ? "일" : "식")).trim() || (type === "labor" ? "일" : "식");
+              return {
+                type,
+                name: String((it && it.name) || ""),
+                unitPrice,
+                qty,
+                unit,
+                amount: Math.round(unitPrice * qty)
+              };
+            })
+          : [];
 
         const siteOptions = Array.from(new Set([
           "공통",
@@ -11709,20 +11817,37 @@ end $$;`;
             <input type="hidden" id="expCategory2" value="${escHtml(initFormattedBank || rData.category2)}" />
           </div>
 
+          <!-- 세부 산출내역 (인건비 × 일수 / 자재비 리스트) -->
+          <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;padding:12px 14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <div style="font-size:13px;font-weight:800;color:#1e293b;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span>🧮 세부 산출내역 (인건비 · 자재비)</span>
+                <span style="font-size:11px;font-weight:600;color:#64748b;background:#e2e8f0;padding:2px 8px;border-radius:999px;white-space:nowrap;">청구금액 자동합산 · 선택사항</span>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button type="button" onclick="window.addExpenseDetailItem('labor')" style="padding:5px 10px;font-size:11.5px;font-weight:700;border-radius:6px;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;cursor:pointer;white-space:nowrap;">+ 👷 인건비 추가</button>
+                <button type="button" onclick="window.addExpenseDetailItem('material')" style="padding:5px 10px;font-size:11.5px;font-weight:700;border-radius:6px;border:1px solid #fcd34d;background:#fffbeb;color:#b45309;cursor:pointer;white-space:nowrap;">+ 📦 자재비 추가</button>
+                <button type="button" onclick="window.addExpenseDetailItem('etc')" style="padding:5px 10px;font-size:11.5px;font-weight:700;border-radius:6px;border:1px solid #cbd5e1;background:#ffffff;color:#475569;cursor:pointer;white-space:nowrap;">+ 기타</button>
+              </div>
+            </div>
+            <div id="expDetailItemsContainer"></div>
+            <div id="expDetailSummaryBar"></div>
+          </div>
+
           <!-- 금액 및 잔금 영역 -->
-          <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">
+          <div style="background:rgba(59,130,246,0.05);padding:12px;border-radius:8px;border:1px solid #dbeafe;">
             <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
               <div>
-                <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">청구금액 (원) <span style="color:#ef4444;">*</span></label>
+                <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#2563eb;">청구금액 (원) <span style="color:#ef4444;">*</span></label>
                 <input type="text" inputmode="numeric" id="expClaimAmount" value="${(Number(rData.claimAmount) || 0).toLocaleString('ko-KR')}" placeholder="0"
                   oninput="window.onExpenseAmountInput(this)"
-                  style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:14px;font-weight:700;text-align:right;" />
+                  style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #93c5fd;background:#ffffff;font-size:14px;font-weight:800;text-align:right;" />
               </div>
               <div>
                 <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#15803d;">지급금액 (원)</label>
                 <input type="text" inputmode="numeric" id="expPaidAmount" value="${(Number(rData.paidAmount) || 0).toLocaleString('ko-KR')}" placeholder="0"
                   oninput="window.onExpenseAmountInput(this)"
-                  style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:14px;font-weight:700;color:#15803d;text-align:right;" />
+                  style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;background:#ffffff;font-size:14px;font-weight:800;color:#15803d;text-align:right;" />
               </div>
               <div>
                 <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#dc2626;">남은 잔금 (외상)</label>
@@ -11742,7 +11867,7 @@ end $$;`;
                 style="width:100%;height:36px;padding:0 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;" />
             </div>
             <div>
-              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">증빙 구분 <button type="button" onclick="window.applyExpense33Withholding()" style="margin-left:6px;padding:1px 6px;font-size:10.5px;font-weight:800;border-radius:4px;border:1px solid #fcd34d;background:#fef3c7;color:#b45309;cursor:pointer;" title="청구금액에서 3.3% 원천징수 공제 후 실지급액 자동 계산">⚡ 3.3% 공제</button></label>
+              <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px;color:#334155;">증빙 구분 <button type="button" id="btnExp33Withholding" onclick="window.applyExpense33Withholding()" style="margin-left:6px;padding:1px 6px;font-size:10.5px;font-weight:800;border-radius:4px;border:1px solid #fcd34d;background:#fef3c7;color:#b45309;cursor:pointer;" title="청구금액(또는 인건비 소계)에서 3.3% 원천징수 공제 후 실지급액 자동 계산">⚡ 3.3% 공제</button></label>
               <select id="expTaxProof" onchange="window.calcExpenseModalBalance()" style="width:100%;height:36px;padding:0 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:13px;background:#ffffff;">
                 <option value="" ${!initProof ? "selected" : ""}>미선택</option>
                 <option value="세금계산서" ${initProof === "세금계산서" ? "selected" : ""}>🧾 세금계산서</option>
@@ -11779,9 +11904,203 @@ end $$;`;
         }
 
         if (typeof enhanceWsSelects === "function") enhanceWsSelects();
+        renderExpenseDetailItemsTable();
         calcExpenseModalBalance();
         if (rData.vendor) onExpenseVendorChange(rData.vendor, false);
         openModal("expenseModal");
+      };
+
+      window.renderExpenseDetailItemsTable = function() {
+        const container = document.getElementById("expDetailItemsContainer");
+        const summaryBar = document.getElementById("expDetailSummaryBar");
+        if (!container) return;
+        const items = Array.isArray(window._expModalDetailItems) ? window._expModalDetailItems : [];
+        if (items.length === 0) {
+          container.innerHTML = `
+            <div style="font-size:11.5px;color:#64748b;background:#ffffff;border:1px dashed #cbd5e1;border-radius:7px;padding:9px 11px;line-height:1.45;">
+              💡 한 공정에 <b>인건비(일당 × 일수)</b>와 <b>자재비</b>가 함께 있을 때 우측 상단 <b>[+ 인건비 추가]</b> / <b>[+ 자재비 추가]</b>를 눌러 리스트로 입력하면 아래 청구금액이 자동 계산됩니다. (자재비가 없거나 단건이면 아래 청구금액에 바로 입력하세요)
+            </div>
+          `;
+          if (summaryBar) summaryBar.innerHTML = "";
+          const btn33 = document.getElementById("btnExp33Withholding");
+          if (btn33) btn33.textContent = "⚡ 3.3% 공제";
+          return;
+        }
+
+        const rowsHtml = items.map((it, idx) => {
+          const type = (it.type === "material" || it.type === "etc") ? it.type : "labor";
+          const pillStyle = type === "labor"
+            ? "background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;"
+            : (type === "material"
+              ? "background:#fef3c7;color:#92400e;border:1px solid #fde68a;"
+              : "background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;");
+          const unitLbl = it.unit || (type === "labor" ? "일" : "식");
+          const upVal = Number(it.unitPrice) || 0;
+          const qVal = (it.qty !== undefined && it.qty !== "" && !isNaN(Number(it.qty))) ? Number(it.qty) : 1;
+          const subAmt = Math.round(upVal * qVal);
+          it.amount = subAmt;
+          const ph = type === "labor"
+            ? "예: 기공 / 조공 / 팀명"
+            : (type === "material" ? "예: 타일 자재 / 부자재" : "예: 폐기물 / 양중 / 경비");
+          return `
+            <div style="display:grid;grid-template-columns:82px 1.35fr 112px 76px 114px 28px;gap:6px;align-items:center;padding:6px 2px;border-bottom:1px dashed #e2e8f0;">
+              <select onchange="window.onExpenseDetailTypeChange(${idx}, this.value)"
+                style="width:100%;height:32px;padding:0 4px;border-radius:6px;font-size:11.5px;font-weight:800;cursor:pointer;${pillStyle}">
+                <option value="labor" ${type === "labor" ? "selected" : ""}>👷 인건비</option>
+                <option value="material" ${type === "material" ? "selected" : ""}>📦 자재비</option>
+                <option value="etc" ${type === "etc" ? "selected" : ""}>➕ 기타</option>
+              </select>
+              <input type="text" value="${escHtml(it.name || "")}" placeholder="${ph}"
+                oninput="window.onExpenseDetailNameInput(${idx}, this.value)"
+                style="width:100%;height:32px;padding:0 8px;border:1px solid #cbd5e1;border-radius:6px;background:#ffffff;font-size:12.5px;color:#0f172a;" />
+              <input type="text" inputmode="numeric" id="expDetailUp_${idx}" value="${upVal ? upVal.toLocaleString('ko-KR') : ''}" placeholder="0"
+                oninput="window.onExpenseDetailUnitPriceInput(${idx}, this)"
+                style="width:100%;height:32px;padding:0 8px;border:1px solid #cbd5e1;border-radius:6px;background:#ffffff;font-size:12.5px;font-weight:700;text-align:right;color:#0f172a;" />
+              <div style="display:flex;align-items:center;height:32px;background:#ffffff;border:1px solid #cbd5e1;border-radius:6px;padding:0 5px;">
+                <span style="font-size:11px;color:#64748b;font-weight:700;">×</span>
+                <input type="number" step="0.5" min="0" id="expDetailQty_${idx}" value="${qVal}"
+                  oninput="window.onExpenseDetailQtyInput(${idx}, this.value)"
+                  style="width:100%;border:none;outline:none;padding:0 2px;text-align:right;font-size:12.5px;font-weight:700;color:#0f172a;background:transparent;" />
+                <span id="expDetailUnit_${idx}" style="font-size:11px;color:#64748b;font-weight:700;margin-left:1px;">${escHtml(unitLbl)}</span>
+              </div>
+              <div id="expDetailSub_${idx}" style="text-align:right;font-size:12.5px;font-weight:800;color:#0f172a;background:#f1f5f9;padding:6px 8px;border-radius:6px;border:1px solid #e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                ${subAmt.toLocaleString("ko-KR")}원
+              </div>
+              <button type="button" onclick="window.removeExpenseDetailItem(${idx})" title="이 항목 삭제"
+                style="width:26px;height:26px;border-radius:6px;border:1px solid #fecaca;background:#fef2f2;color:#ef4444;font-weight:800;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;">✕</button>
+            </div>
+          `;
+        }).join("");
+
+        container.innerHTML = `
+          <div style="overflow-x:auto;">
+            <div style="min-width:520px;">
+              <div style="display:grid;grid-template-columns:82px 1.35fr 112px 76px 114px 28px;gap:6px;font-size:11px;font-weight:700;color:#64748b;padding:0 2px 5px 2px;border-bottom:1px solid #e2e8f0;">
+                <div>구분</div>
+                <div>내역 / 품목명</div>
+                <div style="text-align:right;">단가 (일당/원)</div>
+                <div style="text-align:right;">일수/수량</div>
+                <div style="text-align:right;">소계 (자동)</div>
+                <div></div>
+              </div>
+              ${rowsHtml}
+            </div>
+          </div>
+        `;
+        window.updateExpenseDetailSummaryBar(false);
+      };
+
+      window.updateExpenseDetailSummaryBar = function(syncClaimInput) {
+        const items = Array.isArray(window._expModalDetailItems) ? window._expModalDetailItems : [];
+        const summaryBar = document.getElementById("expDetailSummaryBar");
+        const sum = summarizeExpenseDetailItems(items);
+        if (summaryBar) {
+          if (items.length === 0) {
+            summaryBar.innerHTML = "";
+          } else {
+            const chips = [];
+            chips.push(`<span style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:3px 8px;border-radius:6px;font-weight:700;white-space:nowrap;">👷 인건비: ${sum.laborSum.toLocaleString("ko-KR")}원</span>`);
+            chips.push(`<span style="color:#94a3b8;font-weight:700;">+</span>`);
+            chips.push(`<span style="background:#fffbeb;color:#b45309;border:1px solid #fde68a;padding:3px 8px;border-radius:6px;font-weight:700;white-space:nowrap;">📦 자재비: ${sum.materialSum.toLocaleString("ko-KR")}원</span>`);
+            if (sum.etcSum > 0) {
+              chips.push(`<span style="color:#94a3b8;font-weight:700;">+</span>`);
+              chips.push(`<span style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;padding:3px 8px;border-radius:6px;font-weight:700;white-space:nowrap;">➕ 기타: ${sum.etcSum.toLocaleString("ko-KR")}원</span>`);
+            }
+            summaryBar.innerHTML = `
+              <div style="margin-top:9px;padding-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px;">
+                <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">${chips.join("")}</div>
+                <div style="font-size:12.5px;font-weight:800;color:#0f172a;white-space:nowrap;">
+                  산출 합계: <b style="color:#2563eb;font-size:13.5px;">${sum.totalSum.toLocaleString("ko-KR")}원</b>
+                  <span style="font-size:11px;color:#10b981;font-weight:700;margin-left:3px;">(자동반영 ✔)</span>
+                </div>
+              </div>
+            `;
+          }
+        }
+        const btn33 = document.getElementById("btnExp33Withholding");
+        if (btn33) {
+          btn33.textContent = (items.length > 0 && sum.laborSum > 0 && (sum.materialSum > 0 || sum.etcSum > 0))
+            ? "⚡ 3.3% 공제 (인건비 기준)"
+            : "⚡ 3.3% 공제";
+        }
+        if (syncClaimInput && items.length > 0) {
+          const claimEl = document.getElementById("expClaimAmount");
+          if (claimEl) {
+            claimEl.value = sum.totalSum.toLocaleString("ko-KR");
+          }
+          calcExpenseModalBalance();
+        }
+      };
+
+      window.addExpenseDetailItem = function(type) {
+        if (!Array.isArray(window._expModalDetailItems)) window._expModalDetailItems = [];
+        const normType = (type === "material" || type === "etc") ? type : "labor";
+        const catVal = (document.getElementById("expCategory")?.value || "").trim();
+        const defaultName = normType === "labor"
+          ? (catVal ? `${catVal} 인건비` : "")
+          : (normType === "material" ? (catVal ? `${catVal} 자재비` : "") : "");
+        window._expModalDetailItems.push({
+          type: normType,
+          name: defaultName,
+          unitPrice: 0,
+          qty: 1,
+          unit: normType === "labor" ? "일" : "식",
+          amount: 0
+        });
+        renderExpenseDetailItemsTable();
+        const newIdx = window._expModalDetailItems.length - 1;
+        const upInput = document.getElementById("expDetailUp_" + newIdx);
+        if (upInput && typeof upInput.focus === "function") upInput.focus();
+      };
+
+      window.removeExpenseDetailItem = function(idx) {
+        if (!Array.isArray(window._expModalDetailItems)) return;
+        window._expModalDetailItems.splice(idx, 1);
+        renderExpenseDetailItemsTable();
+        if (window._expModalDetailItems.length > 0) {
+          window.updateExpenseDetailSummaryBar(true);
+        } else {
+          calcExpenseModalBalance();
+        }
+      };
+
+      window.onExpenseDetailTypeChange = function(idx, newType) {
+        if (!Array.isArray(window._expModalDetailItems) || !window._expModalDetailItems[idx]) return;
+        const it = window._expModalDetailItems[idx];
+        const normType = (newType === "material" || newType === "etc") ? newType : "labor";
+        it.type = normType;
+        it.unit = normType === "labor" ? "일" : "식";
+        renderExpenseDetailItemsTable();
+        window.updateExpenseDetailSummaryBar(true);
+      };
+
+      window.onExpenseDetailNameInput = function(idx, val) {
+        if (!Array.isArray(window._expModalDetailItems) || !window._expModalDetailItems[idx]) return;
+        window._expModalDetailItems[idx].name = String(val || "");
+      };
+
+      window.onExpenseDetailUnitPriceInput = function(idx, inputEl) {
+        if (!Array.isArray(window._expModalDetailItems) || !window._expModalDetailItems[idx]) return;
+        formatNumberInputWithCommas(inputEl);
+        const it = window._expModalDetailItems[idx];
+        const up = Number(String(inputEl.value || "").replace(/,/g, "").trim()) || 0;
+        const q = (it.qty !== undefined && it.qty !== "" && !isNaN(Number(it.qty))) ? Number(it.qty) : 1;
+        it.unitPrice = up;
+        it.amount = Math.round(up * q);
+        const subEl = document.getElementById("expDetailSub_" + idx);
+        if (subEl) subEl.textContent = it.amount.toLocaleString("ko-KR") + "원";
+        window.updateExpenseDetailSummaryBar(true);
+      };
+
+      window.onExpenseDetailQtyInput = function(idx, rawVal) {
+        if (!Array.isArray(window._expModalDetailItems) || !window._expModalDetailItems[idx]) return;
+        const it = window._expModalDetailItems[idx];
+        const q = (rawVal !== "" && rawVal !== null && !isNaN(Number(rawVal)) && Number(rawVal) >= 0) ? Number(rawVal) : 0;
+        it.qty = q;
+        it.amount = Math.round((Number(it.unitPrice) || 0) * q);
+        const subEl = document.getElementById("expDetailSub_" + idx);
+        if (subEl) subEl.textContent = it.amount.toLocaleString("ko-KR") + "원";
+        window.updateExpenseDetailSummaryBar(true);
       };
 
       window.closeExpenseModal = function() {
@@ -11797,7 +12116,7 @@ end $$;`;
         const claim = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const paid = Number(String(document.getElementById("expPaidAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const proof = document.getElementById("expTaxProof")?.value || "";
-        const fin = calcExpenseFinancials(claim, paid, null, proof);
+        const fin = calcExpenseFinancials(claim, paid, null, proof, window._expModalDetailItems);
         const bal = fin.rawBalance;
         const balEl = document.getElementById("expBalanceDisplay");
         if (balEl) {
@@ -11812,7 +12131,7 @@ end $$;`;
       window.setExpenseFullPaid = function() {
         const claim = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         const proof = document.getElementById("expTaxProof")?.value || "";
-        const target = calcExpenseFinancials(claim, 0, null, proof).payableAmount;
+        const target = calcExpenseFinancials(claim, 0, null, proof, window._expModalDetailItems).payableAmount;
         const paidEl = document.getElementById("expPaidAmount");
         if (paidEl) paidEl.value = target > 0 ? target.toLocaleString("ko-KR") : "0";
         const dateEl = document.getElementById("expPayDate");
@@ -11824,7 +12143,7 @@ end $$;`;
       window.applyExpense33Withholding = function() {
         const claim = Number(String(document.getElementById("expClaimAmount")?.value || "").replace(/,/g, "").trim()) || 0;
         if (claim <= 0) return showToast("ℹ️ 청구금액을 먼저 입력해 주세요.");
-        const fin = calcExpenseFinancials(claim, 0, null, "3.3%원천징수");
+        const fin = calcExpenseFinancials(claim, 0, null, "3.3%원천징수", window._expModalDetailItems);
         const tax33 = fin.tax33;
         const netPay = fin.payableAmount;
         const paidEl = document.getElementById("expPaidAmount");
@@ -11836,7 +12155,10 @@ end $$;`;
         }
         const noteEl = document.getElementById("expNote");
         if (noteEl && !String(noteEl.value || "").includes("3.3%")) {
-          noteEl.value = (noteEl.value ? noteEl.value + " / " : "") + `3.3% 공제 ${tax33.toLocaleString("ko-KR")}원 (실지급 ${netPay.toLocaleString("ko-KR")}원)`;
+          const basisPrefix = (fin.taxBase && fin.taxBase < claim)
+            ? `인건비 ${fin.taxBase.toLocaleString("ko-KR")}원 기준 `
+            : "";
+          noteEl.value = (noteEl.value ? noteEl.value + " / " : "") + `${basisPrefix}3.3% 공제 ${tax33.toLocaleString("ko-KR")}원 (실지급 ${netPay.toLocaleString("ko-KR")}원)`;
         }
         const dateEl = document.getElementById("expPayDate");
         if (dateEl && !dateEl.value) dateEl.value = getTodayYmd();
@@ -12008,7 +12330,10 @@ end $$;`;
         const expTaxProof = (document.getElementById("expTaxProof")?.value || "").trim();
         let rawNote = (document.getElementById("expNote")?.value || "").trim();
         const note = (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) ? buildExpenseNoteWithTaxProof(rawNote, expTaxProof) : rawNote;
-        const balance = calcExpenseFinancials(claimAmount, paidAmount, rawNote, expTaxProof).balance;
+        const cleanDetailItems = typeof normalizeExpenseDetailItems === "function"
+          ? normalizeExpenseDetailItems(window._expModalDetailItems)
+          : (Array.isArray(window._expModalDetailItems) ? window._expModalDetailItems : []);
+        const balance = calcExpenseFinancials(claimAmount, paidAmount, rawNote, expTaxProof, cleanDetailItems).balance;
 
         if (!settleMonth) {
           alert("정산월(YYYY-MM)을 입력해 주세요.");
@@ -12049,7 +12374,8 @@ end $$;`;
           paidAmount: paidAmount,
           balance: balance,
           payDate: payDate,
-          note: note
+          note: note,
+          detailItems: cleanDetailItems
         };
 
         const ds = window.WSDataService;
@@ -12729,6 +13055,34 @@ end $$;`;
         const fin = calcExpenseFinancials(claim, paid, e);
         const bal = getExpenseRowBalance(e);
         const balText = (fin.is33 && bal === 0) ? "0원 (3.3% 공제)" : `${bal.toLocaleString("ko-KR")}원`;
+        const detailItems = normalizeExpenseDetailItems(e.detailItems);
+        const detailSum = summarizeExpenseDetailItems(detailItems);
+        const detailSectionHtml = detailItems.length > 0 ? `
+            <div style="margin-bottom:14px;">
+              <div style="font-size:12px;font-weight:800;color:#1e293b;margin-bottom:6px;">🧮 세부 산출내역 (인건비: ${detailSum.laborSum.toLocaleString("ko-KR")}원 / 자재비: ${detailSum.materialSum.toLocaleString("ko-KR")}원${detailSum.etcSum > 0 ? ` / 기타: ${detailSum.etcSum.toLocaleString("ko-KR")}원` : ""})</div>
+              <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+                <tr style="background:#f8fafc;">
+                  <th style="border:1px solid #cbd5e1;padding:5px 7px;width:70px;">구분</th>
+                  <th style="border:1px solid #cbd5e1;padding:5px 7px;text-align:left;">내역 / 품목명</th>
+                  <th style="border:1px solid #cbd5e1;padding:5px 7px;text-align:right;width:105px;">단가</th>
+                  <th style="border:1px solid #cbd5e1;padding:5px 7px;text-align:center;width:75px;">일수/수량</th>
+                  <th style="border:1px solid #cbd5e1;padding:5px 7px;text-align:right;width:110px;">소계</th>
+                </tr>
+                ${detailItems.map((it) => {
+                  const tLbl = it.type === "labor" ? "👷 인건비" : (it.type === "material" ? "📦 자재비" : "➕ 기타");
+                  return `
+                    <tr>
+                      <td style="border:1px solid #cbd5e1;padding:5px 7px;text-align:center;font-weight:700;">${tLbl}</td>
+                      <td style="border:1px solid #cbd5e1;padding:5px 7px;">${escHtml(it.name || "-")}</td>
+                      <td style="border:1px solid #cbd5e1;padding:5px 7px;text-align:right;">${(Number(it.unitPrice) || 0).toLocaleString("ko-KR")}원</td>
+                      <td style="border:1px solid #cbd5e1;padding:5px 7px;text-align:center;">${it.qty}${escHtml(it.unit || "")}</td>
+                      <td style="border:1px solid #cbd5e1;padding:5px 7px;text-align:right;font-weight:800;">${(Number(it.amount) || 0).toLocaleString("ko-KR")}원</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </table>
+            </div>
+        ` : "";
         const certHtml = `
           <div style="border:1.5px solid #334155;border-radius:8px;padding:22px;background:#fff;text-align:left;font-size:12.5px;">
             <div style="text-align:center;font-size:21px;font-weight:900;letter-spacing:5px;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:16px;">대 금 지 급 확 인 서</div>
@@ -12737,6 +13091,7 @@ end $$;`;
               <tr><td style="border:1px solid #cbd5e1;padding:7px;background:#f8fafc;font-weight:700;">수취인(업체)</td><td style="border:1px solid #cbd5e1;padding:7px;font-weight:800;">${escHtml(e.vendor || "-")}</td><td style="border:1px solid #cbd5e1;padding:7px;background:#f8fafc;font-weight:700;">입금계좌</td><td style="border:1px solid #cbd5e1;padding:7px;">${escHtml(e.accountNumber || e.category2 || "-")}</td></tr>
               <tr><td style="border:1px solid #cbd5e1;padding:7px;background:#f8fafc;font-weight:700;">현장 / 공종</td><td colspan="3" style="border:1px solid #cbd5e1;padding:7px;">${escHtml(e.siteName || "공통")} · ${escHtml(e.category || e.item || "-")} (정산월: ${escHtml(e.settleMonth || "-")})</td></tr>
             </table>
+            ${detailSectionHtml}
             <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
               <tr style="background:#f8fafc;"><th style="border:1px solid #cbd5e1;padding:7px;">청구금액</th><th style="border:1px solid #cbd5e1;padding:7px;">실지급금액</th><th style="border:1px solid #cbd5e1;padding:7px;">잔금</th><th style="border:1px solid #cbd5e1;padding:7px;">지급일</th></tr>
               <tr style="text-align:center;font-weight:800;">
@@ -14667,6 +15022,11 @@ end $$;`;
                       ? `window.openExpenseModal('${escJs(primaryExp.id)}', { linkedIds: (window._siteDetailTaskLinkedIds && window._siteDetailTaskLinkedIds[${tIdx}]) || [], siteName: '${escJs(siteName)}', category: '${escJs(t.taskName)}', vendor: '${escJs(t.partner || "")}', settleMonth: '${escJs(taskMonth)}' })`
                       : `window.openExpenseModal(null, { siteName: '${escJs(siteName)}', category: '${escJs(t.taskName)}', vendor: '${escJs(t.partner || "")}', settleMonth: '${escJs(taskMonth)}' })`;
 
+                    const taskDetailItems = [];
+                    matchedExps.forEach(me => {
+                      if (me && Array.isArray(me.detailItems)) taskDetailItems.push(...me.detailItems);
+                    });
+
                     return `
                       <tr>
                         <td><strong>${escHtml(t.taskName)}</strong></td>
@@ -14676,7 +15036,10 @@ end $$;`;
                           ${matchedExps.length > 0 ? `<span style="font-size:10.5px;color:#2563eb;display:block;">(${matchedExps.length}건 연결)</span>` : ""}
                         </td>
                         <td style="text-align:center;">${stBadge}</td>
-                        <td style="text-align:right;font-weight:700;white-space:nowrap;">${taskClaim > 0 ? formatExactKrw(taskClaim) : "-"}</td>
+                        <td style="text-align:right;font-weight:700;white-space:nowrap;">
+                          ${taskClaim > 0 ? formatExactKrw(taskClaim) : "-"}
+                          ${renderExpenseDetailSummaryBadgesHtml(taskDetailItems, { compact: true })}
+                        </td>
                         <td style="text-align:right;font-weight:700;color:#15803d;white-space:nowrap;">${taskPaid > 0 ? formatExactKrw(taskPaid) : "-"}</td>
                         <td style="text-align:right;font-weight:800;color:${taskBal > 0 ? "#dc2626" : "#15803d"};white-space:nowrap;">${taskBal > 0 ? formatExactKrw(taskBal) : (taskClaim > 0 ? "완납" : "-")}</td>
                         <td style="text-align:center;">
@@ -14740,7 +15103,10 @@ end $$;`;
                         <td><span style="padding:1px 5px;border-radius:3px;font-size:10.5px;background:#f1f5f9;color:#334155;font-weight:700;">${escHtml(e.item)}</span></td>
                         <td>${escHtml(e.category)}</td>
                         <td><strong>${escHtml(e.vendor)}</strong></td>
-                        <td style="text-align:right;font-weight:700;white-space:nowrap;">${formatExactKrw(claim)}</td>
+                        <td style="text-align:right;font-weight:700;white-space:nowrap;">
+                          ${formatExactKrw(claim)}
+                          ${renderExpenseDetailSummaryBadgesHtml(e, { compact: true })}
+                        </td>
                         <td style="text-align:right;font-weight:700;color:#15803d;white-space:nowrap;">${formatExactKrw(paid)}</td>
                         <td style="text-align:right;font-weight:800;color:${bal > 0 ? "#dc2626" : "#15803d"};white-space:nowrap;">
                           ${bal > 0 ? formatExactKrw(bal) : "완납"}
@@ -16200,7 +16566,10 @@ end $$;`;
                     </span>
                   ` : `<span style="color:#64748b;font-weight:600;">공통</span>`}
                 </td>
-                <td style="text-align:right;font-weight:800;color:#1e293b;white-space:nowrap;">${formatExactKrw(claim)}</td>
+                <td style="text-align:right;font-weight:800;color:#1e293b;white-space:nowrap;">
+                  ${formatExactKrw(claim)}
+                  ${renderExpenseDetailSummaryBadgesHtml(e, { compact: true })}
+                </td>
                 <td style="text-align:right;font-weight:700;color:#15803d;white-space:nowrap;">${formatExactKrw(paid)}</td>
                 <td style="text-align:right;white-space:nowrap;">
                   ${bal > 0 ? `
@@ -18546,6 +18915,7 @@ end $$;`;
                   <div>
                     <div style="font-size:10px;color:var(--text-muted);">청구금액</div>
                     <div style="font-size:11.5px;font-weight:800;color:#1e293b;margin-top:2px;white-space:nowrap;">${formatExactKrw(claim)}</div>
+                    ${renderExpenseDetailSummaryBadgesHtml(e, { compact: true, align: "center" })}
                   </div>
                   <div>
                     <div style="font-size:10px;color:var(--text-muted);">지급완료</div>

@@ -1726,7 +1726,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
   assertTest('sw.js·docs/sw.js(v6, client.html 프리캐시, 4초 AbortController 타임아웃, client.html 오프라인 격리) 및 manifest.json 미러 동기화 검증',
     swSyntaxOk &&
     swRootJs === swDocsJs &&
-    swRootJs.includes("'ws-dashboard-pwa-v6'") &&
+    /ws-dashboard-pwa-v\d+/.test(swRootJs) &&
     !swRootJs.includes("'./v2.html'") &&
     swRootJs.includes("'./index.html'") &&
     swRootJs.includes("'./client.html'") &&

@@ -15470,11 +15470,27 @@ function backupSupabaseToSheetsDaily(silent) {
           var expSheet = fss.getSheetByName("비용마감");
           if (expSheet) {
             var expRows = fin.expense.map(function (e) {
+              var noteStr = String(e.note || "").trim();
+              if (Array.isArray(e.detailItems) && e.detailItems.length > 0 && noteStr.indexOf("[산출내역:") === -1) {
+                var dParts = [];
+                e.detailItems.forEach(function (it) {
+                  if (!it) return;
+                  var tLbl = it.type === "material" ? "자재" : (it.type === "etc" ? "기타" : "인건비");
+                  var nm = String(it.name || "").trim() || tLbl;
+                  var up = Number(it.unitPrice) || 0;
+                  var q = (it.qty !== undefined && it.qty !== "") ? Number(it.qty) : 1;
+                  var amt = Number(it.amount) || Math.round(up * q);
+                  if (amt > 0) dParts.push(nm + " " + (q !== 1 || it.type === "labor" ? (up.toLocaleString() + "×" + q + (it.unit || "일")) : amt.toLocaleString()));
+                });
+                if (dParts.length > 0) {
+                  noteStr = (noteStr ? noteStr + " " : "") + "[산출내역: " + dParts.join(" + ") + "]";
+                }
+              }
               return [
                 e.id || "", e.settleMonth || "", e.item || "", e.category || "", e.vendor || "",
                 e.accountNumber || e.category2 || "", e.siteName || "",
                 Number(e.claimAmount) || 0, Number(e.paidAmount) || 0, Number(e.balance) || 0,
-                e.payDate || "", e.note || ""
+                e.payDate || "", noteStr
               ];
             });
             summary.backedUp.expense = overwriteSheetDataRowsSafely_(expSheet, expRows, 12);
