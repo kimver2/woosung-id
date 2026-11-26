@@ -23784,8 +23784,18 @@ end $$;`;
       window.openSiteInfoModal = function (siteName) {
         const info = getSiteInfo(siteName) || {};
         state._siteInfoName = siteName;
+        const promotedOrigin = (state.dashData && Array.isArray(state.dashData.sites))
+          ? state.dashData.sites.find((s) => s && s.scope === "newSite" && normalizeSiteNameForMatch(s.siteName) === normalizeSiteNameForMatch(siteName))
+          : null;
         document.getElementById("siteInfoModalTitle").textContent = `✏️ [${siteName}] 현장 정보 수정`;
         document.getElementById("siteInfoModalBody").innerHTML = `
+          <div class="fg">
+            <label style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;">
+              <span>🏷️ 현장명 <span style="color:#ef4444;">*</span></span>
+              <span style="font-size:11px;color:#2563eb;font-weight:700;">변경 시 ${promotedOrigin ? "신규현장(원본)·" : ""}일정·재무(수금·비용)·To-Do 전체 자동 연동</span>
+            </label>
+            <input class="ws-input" id="siSiteName" value="${escHtml(siteName || "")}" placeholder="현장명을 입력하세요" style="font-weight:800;color:#0f172a;border-color:#93c5fd;background:#f8fafc;">
+          </div>
           <div class="fg"><label>📍 현장 주소</label><input class="ws-input" id="siAddr" value="${escHtml(info.address || "")}" placeholder="예: 동작구 여의대방로22 신대방 우성아파트 5동 601호"></div>
           <div class="form-grid-2">
             <div class="fg"><label>🔑 도어락 / 공동현관 비번</label><input class="ws-input" id="siPw" value="${escHtml(info.doorPassword || "")}" placeholder="예: 공동 *#1818* / 세대 1234*"></div>
@@ -23810,12 +23820,279 @@ end $$;`;
         openModal("siteInfoModal");
       };
 
+      function buildRenamedSiteStringPreservingPrefix(rawName, newBaseName) {
+        const raw = String(rawName || "").trim();
+        const m = raw.match(/^(\[(?:단건|AS|as|신규|현장)\]|\((?:단건|AS|as|신규|현장)\))\s*/i);
+        if (m && !/^(\[(?:단건|AS|as|신규|현장)\]|\((?:단건|AS|as|신규|현장)\))\s*/i.test(newBaseName)) {
+          return `${m[1]} ${newBaseName}`;
+        }
+        return newBaseName;
+      }
+
+      function computeUpdatedSiteKeyForRename(siteObj, oldSiteKey, oldSiteName, newSiteName) {
+        const sc = String((siteObj && siteObj.scope) || "site");
+        const oldKey = String(oldSiteKey || "").trim();
+        if (sc === "newSite" || oldKey.startsWith("NEWSITE::")) return `NEWSITE::${newSiteName}`;
+        if (oldKey.startsWith("SINGLE::")) return `SINGLE::${newSiteName}`;
+        if (oldKey.startsWith("AS::")) return `AS::${newSiteName}`;
+        if (oldKey.startsWith("ARCHIVED::")) {
+          const rest = oldKey.slice("ARCHIVED::".length);
+          if (rest.startsWith("SINGLE::")) return `ARCHIVED::SINGLE::${newSiteName}`;
+          if (rest.startsWith("AS::")) return `ARCHIVED::AS::${newSiteName}`;
+          return `ARCHIVED::${newSiteName}`;
+        }
+        if (oldKey === oldSiteName) return newSiteName;
+        return oldKey.replace(oldSiteName, newSiteName) || newSiteName;
+      }
+
+      window.cascadeRenameSiteEverywhere = function (oldSiteName, newSiteName) {
+        const oldClean = String(oldSiteName || "").trim();
+        const newClean = String(newSiteName || "").trim();
+        if (!oldClean || !newClean || oldClean === newClean) {
+          return { renamed: false, oldSiteName: oldClean, newSiteName: newClean };
+        }
+        const oldNorm = normalizeSiteNameForMatch(oldClean);
+        const newBaseClean = stripSiteKeyAndTagPrefix(newClean) || newClean;
+        const nowMs = Date.now();
+        const nowIso = new Date(nowMs).toISOString();
+        const renamedScopes = [];
+        const oldSiteNamesRemoved = new Set([oldClean, stripSiteKeyAndTagPrefix(oldClean)].filter(Boolean));
+        const newSiteNamesSynced = new Set([newClean, newBaseClean].filter(Boolean));
+
+        // 1. state.dashData.sites (진행/완료 현장, 단건, AS 및 승격 원본 신규현장 전체 연동)
+        if (state.dashData && Array.isArray(state.dashData.sites)) {
+          state.dashData.sites.forEach((s) => {
+            if (!s) return;
+            const sRawName = String(s.siteName || "").trim();
+            const sNorm = normalizeSiteNameForMatch(sRawName);
+            const edNorm = (s.estimateData && s.estimateData.siteName) ? normalizeSiteNameForMatch(s.estimateData.siteName) : "";
+            if (sRawName !== oldClean && sNorm !== oldNorm && edNorm !== oldNorm) return;
+
+            const prevSiteName = sRawName;
+            const prevSiteKey = String(s.siteKey || sRawName).trim();
+            const sc = String(s.scope || "site");
+            renamedScopes.push(sc);
+            oldSiteNamesRemoved.add(prevSiteName);
+
+            const targetSiteName = (sc === "newSite")
+              ? newBaseClean
+              : (prevSiteName === oldClean ? newClean : buildRenamedSiteStringPreservingPrefix(prevSiteName, newBaseClean));
+            const targetSiteKey = computeUpdatedSiteKeyForRename(s, prevSiteKey, prevSiteName, targetSiteName);
+            newSiteNamesSynced.add(targetSiteName);
+
+            if (typeof recordDeletedSiteGuard === "function") {
+              recordDeletedSiteGuard({ siteName: prevSiteName, siteKey: prevSiteKey, scope: sc }, { skipRemoteSync: true });
+            }
+            if (typeof clearDeletedSiteGuardByName === "function") {
+              clearDeletedSiteGuardByName(targetSiteName, sc, { skipRemoteSync: true });
+            }
+
+            s.siteName = targetSiteName;
+            s.siteKey = targetSiteKey;
+            s.createdAtMs = Math.max(Number(s.createdAtMs) || 0, nowMs);
+            s.updatedAtMs = nowMs;
+
+            if (s.estimateData && typeof s.estimateData === "object") {
+              s.estimateData.siteName = targetSiteName;
+              s.estimateData.updatedAtMs = nowMs;
+            }
+            if (Array.isArray(s.tasks)) {
+              s.tasks.forEach((t) => {
+                if (!t) return;
+                if (t.siteName) t.siteName = targetSiteName;
+                if (t.site) t.site = targetSiteName;
+                if (t.siteKey) t.siteKey = targetSiteKey;
+                t.updatedAtMs = nowMs;
+              });
+            }
+
+            // UI 선택/확장 상태 키 동기화
+            if (state.selectedSiteKey === prevSiteKey) state.selectedSiteKey = targetSiteKey;
+            if (state.selectedQuoteKey === prevSiteKey) state.selectedQuoteKey = targetSiteKey;
+            if (state.checkedSiteKeys instanceof Set && state.checkedSiteKeys.has(prevSiteKey)) {
+              state.checkedSiteKeys.delete(prevSiteKey);
+              state.checkedSiteKeys.add(targetSiteKey);
+            }
+            if (state._tempCheckedSiteKeys instanceof Set && state._tempCheckedSiteKeys.has(prevSiteKey)) {
+              state._tempCheckedSiteKeys.delete(prevSiteKey);
+              state._tempCheckedSiteKeys.add(targetSiteKey);
+            }
+            if (state.mobileExpandedSiteKeys instanceof Set && state.mobileExpandedSiteKeys.has(prevSiteKey)) {
+              state.mobileExpandedSiteKeys.delete(prevSiteKey);
+              state.mobileExpandedSiteKeys.add(targetSiteKey);
+            }
+            if (state.mobileExpandedQuoteKeys instanceof Set && state.mobileExpandedQuoteKeys.has(prevSiteKey)) {
+              state.mobileExpandedQuoteKeys.delete(prevSiteKey);
+              state.mobileExpandedQuoteKeys.add(targetSiteKey);
+            }
+
+            if (window.WSSupabaseV3 && typeof window.WSSupabaseV3.markLocalDashMutation === "function") {
+              window.WSSupabaseV3.markLocalDashMutation({
+                siteKey: targetSiteKey,
+                siteName: targetSiteName,
+                scope: sc,
+                isSiteMeta: true,
+                isEstimate: sc === "newSite",
+                isInfo: true
+              });
+            }
+          });
+        }
+
+        if (window.currentDetailSiteName && (window.currentDetailSiteName === oldClean || normalizeSiteNameForMatch(window.currentDetailSiteName) === oldNorm)) {
+          window.currentDetailSiteName = newClean;
+        }
+        if (state._uploadSiteName && (state._uploadSiteName === oldClean || normalizeSiteNameForMatch(state._uploadSiteName) === oldNorm)) {
+          state._uploadSiteName = newClean;
+        }
+        if (state.sheetCtx && (state.sheetCtx.siteName === oldClean || normalizeSiteNameForMatch(state.sheetCtx.siteName) === oldNorm)) {
+          state.sheetCtx.siteName = newClean;
+        }
+
+        // 2. state.dashData.siteInfoMap 및 siteInfos 키 이동
+        [state.dashData && state.dashData.siteInfoMap, state.dashData && state.dashData.siteInfos].forEach((infoMap) => {
+          if (!infoMap || typeof infoMap !== "object") return;
+          let existingEntry = infoMap[oldClean];
+          Object.keys(infoMap).forEach((k) => {
+            if (k === oldClean || normalizeSiteNameForMatch(k) === oldNorm) {
+              if (!existingEntry && infoMap[k]) existingEntry = infoMap[k];
+              if (k !== newClean) delete infoMap[k];
+            }
+          });
+          if (existingEntry && typeof existingEntry === "object") {
+            infoMap[newClean] = Object.assign({}, existingEntry, {
+              siteName: newClean,
+              updatedAtMs: nowMs
+            });
+          }
+        });
+
+        // 3. To-Do 목록(state.todoData.list) 현장명 일괄 갱신
+        let todoUpdatedCount = 0;
+        if (state.todoData && Array.isArray(state.todoData.list)) {
+          state.todoData.list.forEach((td) => {
+            if (!td || !td.siteName) return;
+            const tdRaw = String(td.siteName).trim();
+            if (tdRaw === oldClean || normalizeSiteNameForMatch(tdRaw) === oldNorm) {
+              td.siteName = (tdRaw === oldClean) ? newClean : buildRenamedSiteStringPreservingPrefix(tdRaw, newBaseClean);
+              td.updatedAt = nowIso;
+              td.updatedAtMs = nowMs;
+              todoUpdatedCount++;
+            }
+          });
+        }
+
+        // 4. 재무 DB (state.financeDbData: 수금현황 collection & 비용마감 expense) 현장명 일괄 갱신
+        let colUpdatedCount = 0;
+        let expUpdatedCount = 0;
+        if (state.financeDbData) {
+          if (Array.isArray(state.financeDbData.collection)) {
+            state.financeDbData.collection.forEach((c) => {
+              if (!c || !c.siteName) return;
+              const cRaw = String(c.siteName).trim();
+              if (cRaw === oldClean || normalizeSiteNameForMatch(cRaw) === oldNorm) {
+                c.siteName = (cRaw === oldClean) ? newClean : buildRenamedSiteStringPreservingPrefix(cRaw, newBaseClean);
+                c.updatedAt = nowIso;
+                c.updatedAtMs = nowMs;
+                colUpdatedCount++;
+              }
+            });
+          }
+          if (Array.isArray(state.financeDbData.expense)) {
+            state.financeDbData.expense.forEach((e) => {
+              if (!e || !e.siteName || e.siteName === "공통") return;
+              const eRaw = String(e.siteName).trim();
+              if (eRaw === oldClean || normalizeSiteNameForMatch(eRaw) === oldNorm) {
+                e.siteName = (eRaw === oldClean) ? newClean : buildRenamedSiteStringPreservingPrefix(eRaw, newBaseClean);
+                e.updatedAt = nowIso;
+                e.updatedAtMs = nowMs;
+                expUpdatedCount++;
+              }
+            });
+          }
+        }
+
+        // 5. 견적서 PDF 품목 localStorage 키 이관
+        try {
+          const oldPdfKey = `ws_estimate_pdf_items_${oldClean}`;
+          const newPdfKey = `ws_estimate_pdf_items_${newClean}`;
+          const savedPdf = localStorage.getItem(oldPdfKey);
+          if (savedPdf !== null) {
+            localStorage.setItem(newPdfKey, savedPdf);
+            localStorage.removeItem(oldPdfKey);
+          }
+          const oldBasePdfKey = `ws_estimate_pdf_items_${stripSiteKeyAndTagPrefix(oldClean)}`;
+          const newBasePdfKey = `ws_estimate_pdf_items_${newBaseClean}`;
+          if (oldBasePdfKey !== oldPdfKey) {
+            const savedBasePdf = localStorage.getItem(oldBasePdfKey);
+            if (savedBasePdf !== null) {
+              localStorage.setItem(newBasePdfKey, savedBasePdf);
+              localStorage.removeItem(oldBasePdfKey);
+            }
+          }
+        } catch (_) {}
+
+        if (state.dashData && typeof recalcDashMeta === "function") {
+          recalcDashMeta(state.dashData);
+        }
+
+        return {
+          renamed: true,
+          oldSiteName: oldClean,
+          newSiteName: newClean,
+          renamedScopes,
+          oldSiteNamesRemoved: Array.from(oldSiteNamesRemoved),
+          newSiteNamesSynced: Array.from(newSiteNamesSynced),
+          todoUpdatedCount,
+          colUpdatedCount,
+          expUpdatedCount
+        };
+      };
+
       window.saveSiteInfoModal = function () {
-        const siteName = state._siteInfoName;
-        if (!siteName) return;
+        const oldSiteName = String(state._siteInfoName || "").trim();
+        if (!oldSiteName) return;
+        const nameInputEl = document.getElementById("siSiteName");
+        const newSiteName = nameInputEl ? String(nameInputEl.value || "").trim() : oldSiteName;
+        if (!newSiteName) {
+          showToast("⚠️ 현장명을 입력해 주세요.");
+          if (nameInputEl) nameInputEl.focus();
+          return;
+        }
+
+        const isRenamed = newSiteName !== oldSiteName;
+        if (isRenamed && state.dashData && Array.isArray(state.dashData.sites)) {
+          const oldNorm = normalizeSiteNameForMatch(oldSiteName);
+          const newNorm = normalizeSiteNameForMatch(newSiteName);
+          if (oldNorm !== newNorm) {
+            const conflictSite = state.dashData.sites.find((s) => {
+              if (!s) return false;
+              const sNorm = normalizeSiteNameForMatch(s.siteName);
+              if (sNorm === oldNorm) return false;
+              return sNorm === newNorm && (s.scope || "site") !== "newSite";
+            });
+            if (conflictSite) {
+              showToast(`⚠️ 이미 동일한 이름의 현장이 존재합니다: ${conflictSite.siteName}`);
+              if (nameInputEl) nameInputEl.focus();
+              return;
+            }
+          }
+        }
+
         if (!state.dashData.siteInfoMap) state.dashData.siteInfoMap = {};
-        const prev = JSON.parse(JSON.stringify(state.dashData.siteInfoMap[siteName] || {}));
+        const prev = JSON.parse(JSON.stringify(state.dashData.siteInfoMap[oldSiteName] || getSiteInfo(oldSiteName) || {}));
+        prev.siteName = oldSiteName;
+
+        let renameSummary = null;
+        if (isRenamed) {
+          renameSummary = window.cascadeRenameSiteEverywhere(oldSiteName, newSiteName);
+          state._siteInfoName = newSiteName;
+        }
+
+        const targetSiteName = newSiteName;
+        const nowMs = Date.now();
         const updated = Object.assign({}, prev, {
+          siteName: targetSiteName,
           address: document.getElementById("siAddr").value.trim(),
           doorPassword: document.getElementById("siPw").value.trim(),
           officePhone: document.getElementById("siOffice").value.trim(),
@@ -23825,19 +24102,48 @@ end $$;`;
           consentDone: document.getElementById("siC1").checked,
           elevatorCoverDone: document.getElementById("siC2").checked,
           officeNoticeDone: document.getElementById("siC3").checked,
-          updatedAtMs: Date.now()
+          updatedAtMs: nowMs
         });
-        state.dashData.siteInfoMap[siteName] = updated;
+        state.dashData.siteInfoMap[targetSiteName] = updated;
+        if (state.dashData.siteInfos && typeof state.dashData.siteInfos === "object") {
+          state.dashData.siteInfos[targetSiteName] = updated;
+        }
+
         if (window.WSDataService) {
           window.WSDataService.saveSiteInfo(
-            Object.assign({ site: siteName }, updated, { _auditBefore: prev, _auditAfter: updated }),
+            Object.assign(
+              {
+                site: targetSiteName,
+                siteName: targetSiteName,
+                oldSite: isRenamed ? oldSiteName : "",
+                oldSiteName: isRenamed ? oldSiteName : "",
+                _renameSummary: renameSummary
+              },
+              updated,
+              { _auditBefore: prev, _auditAfter: updated }
+            ),
             state.dashData
           );
         }
+
+        if (isRenamed) {
+          if (typeof window.syncActiveClientShareForSite === "function") {
+            window.syncActiveClientShareForSite(targetSiteName);
+          }
+          if (typeof window.syncActivePartnerShareForSite === "function") {
+            window.syncActivePartnerShareForSite(targetSiteName);
+          }
+        }
+
         window.closeModal("siteInfoModal");
         markAllDirty();
         renderActiveViews();
-        showToast("✅ 현장 정보가 저장되었습니다.");
+        if (isRenamed) {
+          const hasPromotedNewSite = renameSummary && Array.isArray(renameSummary.renamedScopes) && renameSummary.renamedScopes.includes("newSite");
+          showToast(`✅ 현장명이 [${oldSiteName}] ➔ [${targetSiteName}](으)로 변경되었으며, ${hasPromotedNewSite ? "신규현장·" : ""}일정·재무·To-Do에 일괄 반영되었습니다.`);
+        } else {
+          showToast("✅ 현장 정보가 저장되었습니다.");
+        }
       };
 
       // ================= 모달 4: 현장 파일 업로드 모달 =================
@@ -27676,11 +27982,13 @@ end $$;`;
           { key: "detail", label: "메모", emptyLabel: "(없음)", maxLen: 80 }
         ],
         siteInfo: [
+          { key: "siteName", label: "현장명", emptyLabel: "(없음)" },
           { key: "address", label: "현장주소", emptyLabel: "(없음)" },
           { key: "doorPassword", label: "도어락 비번", emptyLabel: "(없음)" },
           { key: "officePhone", label: "관리사무소", emptyLabel: "(없음)" },
           { key: "driveUrl", label: "드라이브URL", emptyLabel: "(없음)", maxLen: 60 },
           { key: "memo", label: "특이사항", emptyLabel: "(없음)", maxLen: 80 },
+          { key: "consultHistory", label: "상담내역", emptyLabel: "(없음)", maxLen: 80 },
           { key: "consentDone", label: "입주민 동의서", type: "boolean", trueLabel: "완료", falseLabel: "미완료" },
           { key: "elevatorCoverDone", label: "승강기 보양", type: "boolean", trueLabel: "완료", falseLabel: "미완료" },
           { key: "officeNoticeDone", label: "관리실 신고", type: "boolean", trueLabel: "완료", falseLabel: "미완료" }
@@ -32193,23 +32501,135 @@ end $$;`;
           };
 
           ds.saveSiteInfo = function (payload, dashData) {
-            const { clean, meta } = extractAuditMeta(payload);
+            const { clean: rawClean, meta } = extractAuditMeta(payload);
+            const clean = Object.assign({}, rawClean || {});
+            const renameSummary = clean._renameSummary || null;
+            delete clean._renameSummary;
+            const oldSiteName = String(clean.oldSiteName || clean.oldSite || "").trim();
+            const newSiteName = String(clean.site || clean.siteName || "").trim();
+            const isRenamed = Boolean(oldSiteName && newSiteName && oldSiteName !== newSiteName);
+
             if (typeof window.recordAuditLog === "function" && clean && (!meta || !meta.skip)) {
-              const siteLabel = clean.site || clean.siteName || "";
+              const siteLabel = isRenamed ? `${oldSiteName} ➔ ${newSiteName}` : (newSiteName || "");
+              const actionLabel = isRenamed ? "현장명·정보 수정" : "정보 수정";
               const diffInput = (meta && meta.before && typeof window.computeAuditDiff === "function" && window.AUDIT_FIELD_SPECS)
-                ? window.computeAuditDiff(meta.before, meta.after || clean, window.AUDIT_FIELD_SPECS.siteInfo, "현장 정보 저장")
-                : "현장 정보 저장";
-              window.recordAuditLog("현장", "정보 수정", siteLabel, diffInput);
+                ? window.computeAuditDiff(meta.before, meta.after || clean, window.AUDIT_FIELD_SPECS.siteInfo, isRenamed ? `현장명 변경: ${oldSiteName} → ${newSiteName}` : "현장 정보 저장")
+                : (isRenamed ? `현장명 변경: ${oldSiteName} → ${newSiteName}` : "현장 정보 저장");
+              window.recordAuditLog("현장", actionLabel, siteLabel, diffInput);
             }
             if (!isSupabaseActive()) return orig.saveSiteInfo.call(ds, clean, dashData);
             const d = dashData || state.dashData;
             if (d) ds.saveDashboardCache(d);
-            markLocalDashMutation({ siteName: clean && (clean.site || clean.siteName), isInfo: true });
+            if (isRenamed && state.todoData && typeof ds.saveTodoCache === "function") {
+              ds.saveTodoCache(state.todoData);
+            }
+            if (isRenamed && state.financeDbData && typeof ds.saveFinanceCache === "function") {
+              ds.saveFinanceCache(state.financeDbData);
+            }
+            markLocalDashMutation({ siteName: newSiteName, isInfo: true });
+            if (isRenamed) {
+              markLocalDashMutation({ siteName: oldSiteName, isInfo: true });
+            }
             bgDualWrite("saveSiteInfo", () => orig.saveSiteInfo.call(ds, clean, dashData));
             return enqueueKeyWrite("dashboard_main", async () => {
+              if (isRenamed && typeof syncTombstonesToSupabase === "function") {
+                await syncTombstonesToSupabase();
+              }
               await persistDomainSnapshotImpl("dashboard_main", d);
-              if (clean && (clean.site || clean.siteName)) {
-                await syncNormalizedForSite(clean.site || clean.siteName, d);
+              if (isRenamed) {
+                const oldNames = (renameSummary && Array.isArray(renameSummary.oldSiteNamesRemoved) && renameSummary.oldSiteNamesRemoved.length)
+                  ? renameSummary.oldSiteNamesRemoved
+                  : [oldSiteName];
+                for (const oNm of oldNames) {
+                  if (oNm && oNm !== newSiteName) {
+                    await removeNormalizedSite(oNm, d);
+                  }
+                }
+                const newNames = (renameSummary && Array.isArray(renameSummary.newSiteNamesSynced) && renameSummary.newSiteNamesSynced.length)
+                  ? renameSummary.newSiteNamesSynced
+                  : [newSiteName];
+                for (const nNm of newNames) {
+                  if (nNm) {
+                    await syncNormalizedForSite(nNm, d);
+                  }
+                }
+                // To-Do 스냅샷(todo_main) 동기화
+                if (state.todoData && Array.isArray(state.todoData.list)) {
+                  await enqueueKeyWrite("todo_main", async () => {
+                    await persistDomainSnapshot("todo_main", state.todoData);
+                  });
+                }
+                // 재무 스냅샷(finance_db) 및 ws_finance_store 동기화 (메모리 미로드 상태여도 원격에서 가져와 일괄 개명)
+                await enqueueKeyWrite("finance_db", async () => {
+                  const fb = await ensureFinanceInMemory();
+                  const oldNorm = typeof normalizeSiteNameForMatch === "function"
+                    ? normalizeSiteNameForMatch(oldSiteName)
+                    : oldSiteName.replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase();
+                  const newBase = typeof stripSiteKeyAndTagPrefix === "function"
+                    ? (stripSiteKeyAndTagPrefix(newSiteName) || newSiteName)
+                    : newSiteName.replace(/^\[(단건|AS)\]\s*/i, "").trim();
+                  const nowIso = new Date().toISOString();
+                  const nowMs = Date.now();
+                  const changedFinanceRows = [];
+
+                  (fb.collection || []).forEach((c) => {
+                    if (!c || !c.siteName) return;
+                    const cRaw = String(c.siteName).trim();
+                    const cNorm = typeof normalizeSiteNameForMatch === "function"
+                      ? normalizeSiteNameForMatch(cRaw)
+                      : cRaw.replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase();
+                    if (cRaw === oldSiteName || cNorm === oldNorm || cRaw === newSiteName) {
+                      const nextName = (cRaw === oldSiteName || cRaw === newSiteName)
+                        ? newSiteName
+                        : buildRenamedSiteStringPreservingPrefix(cRaw, newBase);
+                      c.siteName = nextName;
+                      c.updatedAt = nowIso;
+                      c.updatedAtMs = nowMs;
+                      if (c.id) {
+                        changedFinanceRows.push({
+                          record_key: "collection::" + c.id,
+                          category: "collection",
+                          payload: c,
+                          updated_at: nowIso
+                        });
+                      }
+                    }
+                  });
+
+                  (fb.expense || []).forEach((e) => {
+                    if (!e || !e.siteName || e.siteName === "공통") return;
+                    const eRaw = String(e.siteName).trim();
+                    const eNorm = typeof normalizeSiteNameForMatch === "function"
+                      ? normalizeSiteNameForMatch(eRaw)
+                      : eRaw.replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase();
+                    if (eRaw === oldSiteName || eNorm === oldNorm || eRaw === newSiteName) {
+                      const nextName = (eRaw === oldSiteName || eRaw === newSiteName)
+                        ? newSiteName
+                        : buildRenamedSiteStringPreservingPrefix(eRaw, newBase);
+                      e.siteName = nextName;
+                      e.updatedAt = nowIso;
+                      e.updatedAtMs = nowMs;
+                      if (e.id) {
+                        changedFinanceRows.push({
+                          record_key: "expense::" + e.id,
+                          category: "expense",
+                          payload: e,
+                          updated_at: nowIso
+                        });
+                      }
+                    }
+                  });
+
+                  if (changedFinanceRows.length > 0) {
+                    const nextFb = Object.assign({}, fb, { updatedAt: nowIso });
+                    state.financeDbData = nextFb;
+                    if (typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(nextFb);
+                    await persistDomainSnapshot("finance_db", nextFb);
+                    await upsertRows("ws_finance_store", changedFinanceRows, "record_key");
+                  }
+                });
+              } else if (newSiteName) {
+                await syncNormalizedForSite(newSiteName, d);
               }
               return { ok: true, success: true, source: "supabase" };
             });

@@ -5230,6 +5230,87 @@ function saveSiteInfoFieldFromWeb(siteName, fieldName, value) {
 }
 
 /**
+ * 현장명 변경 시 구글 스프레드시트 전체(현장정보, 현장데이터, 단건, AS, 완료현장, 신규견적, To-Do, 수금현황, 비용마감) 일괄 변경 헬퍼
+ */
+function renameSiteAcrossAllSheetsFromWeb(ss, oldSiteName, newSiteName) {
+  var oldClean = String(oldSiteName || "").trim();
+  var newClean = String(newSiteName || "").trim();
+  if (!oldClean || !newClean || oldClean === newClean) {
+    return { renamed: false, updatedRows: 0 };
+  }
+  if (!ss) ss = getAppSpreadsheet();
+  var stripTag = function (v) {
+    return String(v || "").replace(/^(\[(?:단건|AS|as|신규|현장)\]|\((?:단건|AS|as|신규|현장)\))\s*/i, "").replace(/\s+/g, " ").trim();
+  };
+  var normMatch = function (v) {
+    return stripTag(v).replace(/\s+/g, "").toLowerCase();
+  };
+  var applyRenamedWithPrefix = function (rawVal) {
+    var raw = String(rawVal || "").trim();
+    if (raw === oldClean) return newClean;
+    var m = raw.match(/^(\[(?:단건|AS|as|신규|현장)\]|\((?:단건|AS|as|신규|현장)\))\s*/i);
+    var newBase = stripTag(newClean) || newClean;
+    if (m && !/^(\[(?:단건|AS|as|신규|현장)\]|\((?:단건|AS|as|신규|현장)\))\s*/i.test(newBase)) {
+      return m[1] + " " + newBase;
+    }
+    return newBase;
+  };
+
+  var oldNorm = normMatch(oldClean);
+  var newBaseClean = stripTag(newClean) || newClean;
+  var totalUpdated = 0;
+
+  var renameColumnInSheet = function (sh, colIdx1Based, useBaseOnly) {
+    if (!sh || typeof sh.getLastRow !== "function") return 0;
+    var lastR = sh.getLastRow();
+    if (lastR < 2) return 0;
+    var range = sh.getRange(2, colIdx1Based, lastR - 1, 1);
+    var vals = range.getValues();
+    var changed = false;
+    var cnt = 0;
+    for (var i = 0; i < vals.length; i++) {
+      var cur = String(vals[i][0] || "").trim();
+      if (!cur) continue;
+      if (cur === oldClean || normMatch(cur) === oldNorm) {
+        var nextVal = useBaseOnly ? newBaseClean : applyRenamedWithPrefix(cur);
+        if (vals[i][0] !== nextVal) {
+          vals[i][0] = nextVal;
+          changed = true;
+          cnt++;
+        }
+      }
+    }
+    if (changed) {
+      range.setValues(vals);
+      totalUpdated += cnt;
+    }
+    return cnt;
+  };
+
+  if (ss) {
+    try { renameColumnInSheet(findSiteInfoSheet(ss, false), 1, false); } catch (e1) {}
+    try { renameColumnInSheet(findSiteScheduleSheet(ss), 1, false); } catch (e2) {}
+    try { renameColumnInSheet(findSingleTaskSheet(ss, false), 1, false); } catch (e3) {}
+    try { renameColumnInSheet(findAsSheet(ss, false), 1, false); } catch (e4) {}
+    try { renameColumnInSheet(findCompletedSitesSheet(ss, false), 1, false); } catch (e5) {}
+    try { renameColumnInSheet(findEstimateSheet(ss, false), 1, true); } catch (e6) {}
+    try { renameColumnInSheet(findOrCreateTodoSheet(ss), 8, false); } catch (e7) {}
+  }
+
+  try {
+    if (typeof FINANCE_DB_SPREADSHEET_ID !== "undefined" && FINANCE_DB_SPREADSHEET_ID) {
+      var fss = SpreadsheetApp.openById(FINANCE_DB_SPREADSHEET_ID);
+      if (fss) {
+        try { renameColumnInSheet(fss.getSheetByName("수금현황"), 2, false); } catch (e8) {}
+        try { renameColumnInSheet(fss.getSheetByName("비용마감"), 7, false); } catch (e9) {}
+      }
+    }
+  } catch (eFin) {}
+
+  return { renamed: true, updatedRows: totalUpdated };
+}
+
+/**
  * 대시보드 모달에서 현장 전체 정보(주소, 비번, 연락처, 메모, 드라이브 링크 등) 일괄 저장
  */
 function saveFullSiteInfoFromWeb(siteName, infoObj) {
@@ -5240,6 +5321,14 @@ function saveFullSiteInfoFromWeb(siteName, infoObj) {
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) ss = getAppSpreadsheet();
+    var oldSite = String(infoObj.oldSiteName || infoObj.oldSite || "").trim();
+    if (oldSite && oldSite !== cleanSite) {
+      try {
+        renameSiteAcrossAllSheetsFromWeb(ss, oldSite, cleanSite);
+      } catch (eRen) {
+        Logger.log("renameSiteAcrossAllSheetsFromWeb error: " + eRen.toString());
+      }
+    }
     var sheet = findSiteInfoSheet(ss, true);
     if (!sheet) return { success: false, error: "현장정보 시트를 찾을 수 없습니다." };
 
@@ -12445,8 +12534,10 @@ function doGet(e) {
     var sConsent = sInfoPayload.consentDone !== undefined ? sInfoPayload.consentDone : (sInfoPayload.preChecklist ? sInfoPayload.preChecklist.consent : (p.consentDone !== undefined ? p.consentDone : undefined));
     var sElevator = sInfoPayload.elevatorCoverDone !== undefined ? sInfoPayload.elevatorCoverDone : (sInfoPayload.preChecklist ? sInfoPayload.preChecklist.protection : (p.elevatorCoverDone !== undefined ? p.elevatorCoverDone : undefined));
     var sNotice = sInfoPayload.officeNoticeDone !== undefined ? sInfoPayload.officeNoticeDone : (sInfoPayload.preChecklist ? sInfoPayload.preChecklist.report : (p.officeNoticeDone !== undefined ? p.officeNoticeDone : undefined));
+    var sOldSite = sInfoPayload.oldSiteName || sInfoPayload.oldSite || p.oldSiteName || p.oldSite || "";
 
     var saveObj = {};
+    if (sOldSite) saveObj.oldSiteName = sOldSite;
     if (sAddr !== undefined) saveObj.address = sAddr;
     if (sPwd !== undefined) saveObj.doorPassword = sPwd;
     if (sPhone !== undefined) saveObj.officePhone = sPhone;
