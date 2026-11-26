@@ -6294,7 +6294,7 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     sb.switchMainTab('sites');
     const pcSitesHtml = elements.get('pcSiteMain').innerHTML;
     const pcSitesSidebarHtml = elements.get('pcSiteSidebar').innerHTML;
-    const progressLabelOk = pcSitesHtml.includes('공정 진행 ') && !pcSitesHtml.includes('정상 진행');
+    const delayedLabelOk = pcSitesHtml.includes('공정지연 1건') && !pcSitesHtml.includes('정상 진행');
     // 착공일 기준 예정/진행중 배지 검증 (오늘: realTodayYmd)
     const todayStr = sb.getTodayYmd();
     const dNext = new Date(todayStr + 'T00:00:00');
@@ -6333,6 +6333,11 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
       pcSideBadgeHtml.includes('ws-site-start-badge scheduled') &&
       pcSideBadgeHtml.includes('ws-site-start-badge inProgress')
     );
+    sb.state.selectedSiteKey = 'FUTURE_START_SITE';
+    sb.markAllDirty();
+    sb.renderActiveViews();
+    const pcFutureSitesHtml = elements.get('pcSiteMain').innerHTML;
+    const progressLabelOk = delayedLabelOk && pcFutureSitesHtml.includes('공정 진행 ') && !pcFutureSitesHtml.includes('정상 진행');
     sb.switchMainTab('calendar');
     const modePersistedAcrossTabsOk = sb.state.calViewMode === 'month';
 

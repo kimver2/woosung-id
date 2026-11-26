@@ -4455,10 +4455,11 @@ end $$;`;
 
       function isTaskDelayed(t, today) {
         if (!t || isTaskCompleted(t)) return false;
-        if (t.isDelayed) return true;
-        const ymd = parseYmdFromTask(t);
         if (!today) today = getTodayYmd();
-        return Boolean(ymd && ymd < today);
+        const startYmd = parseYmdFromTask(t);
+        const endYmd = startYmd ? (parseEndYmdFromTask(t, startYmd) || startYmd) : "";
+        if (endYmd) return endYmd < today;
+        return Boolean(t.isDelayed);
       }
 
       function getNextUpcomingTask(site) {
@@ -4616,6 +4617,14 @@ end $$;`;
         const dash = targetDash || state.dashData;
         if (!dash) return;
         const todayY = getTodayYmd();
+        const checkDelayed = (t, refToday) => {
+          if (typeof isTaskDelayed === "function") return isTaskDelayed(t, refToday);
+          if (!t || isTaskCompleted(t)) return false;
+          const sy = parseYmdFromTask(t);
+          const ey = sy ? (parseEndYmdFromTask(t, sy) || sy) : "";
+          if (ey) return ey < refToday;
+          return Boolean(t.isDelayed);
+        };
         let tCnt = 0, dCnt = 0;
         let totalSites = 0, activeSites = 0, totalTasks = 0;
         const scCounts = { site: 0, single: 0, as: 0, newSite: 0, siteDone: 0, singleDone: 0, asDone: 0, newSiteDone: 0 };
@@ -4638,8 +4647,9 @@ end $$;`;
           tasksArr.forEach((t) => {
             if (!isTaskCompleted(t)) {
               const y = parseYmdFromTask(t);
-              if (y === todayY || t.isToday) tCnt++;
-              if (t.isDelayed || (y && y < todayY)) dCnt++;
+              const eY = y ? (parseEndYmdFromTask(t, y) || y) : "";
+              if ((y && y <= todayY && eY >= todayY) || t.isToday) tCnt++;
+              if (checkDelayed(t, todayY)) dCnt++;
             }
           });
         });
@@ -4666,17 +4676,21 @@ end $$;`;
           });
         }
         const todayYmd = getTodayYmd();
+        const checkDelayed = (t, refToday) => {
+          if (typeof isTaskDelayed === "function") return isTaskDelayed(t, refToday);
+          if (!t || isTaskCompleted(t)) return false;
+          const sy = parseYmdFromTask(t);
+          const ey = sy ? (parseEndYmdFromTask(t, sy) || sy) : "";
+          if (ey) return ey < refToday;
+          return Boolean(t.isDelayed);
+        };
         const done = tasks.filter((t) => isTaskCompleted(t)).length;
         const validTasks = tasks.filter((t) => {
           const st = String(t.status || "").replace(/\s+/g, "");
           return st.indexOf("취소") === -1 && st.indexOf("제외") === -1;
         });
         const doneValid = validTasks.filter((t) => isTaskCompleted(t)).length;
-        const delayed = tasks.filter((t) => {
-          if (isTaskCompleted(t)) return false;
-          const ymd = parseYmdFromTask(t);
-          return Boolean(t.isDelayed || (ymd && ymd < todayYmd));
-        }).length;
+        const delayed = tasks.filter((t) => checkDelayed(t, todayYmd)).length;
         site.totalTasksCount = tasks.length;
         site.validTasksCount = validTasks.length;
         site.completedTasksCount = done;
@@ -4927,6 +4941,53 @@ end $$;`;
           }
         });
         return map;
+      }
+
+      function countCalendarVisibleEvents(events, mode, year, month, selectedDayStr) {
+        const list = Array.isArray(events) ? events : [];
+        if (mode === "gantt") {
+          if (typeof computeWeeklyGanttModel === "function") {
+            const gModel = computeWeeklyGanttModel(list, { anchorYmd: selectedDayStr || getTodayYmd() });
+            const hasSub = (state.ganttTradeFilter && state.ganttTradeFilter !== "all")
+              || (state.ganttPartnerFilter && state.ganttPartnerFilter !== "all")
+              || Boolean(state.ganttOnlyConflict);
+            if (!hasSub) return gModel.totalWeekEvents;
+            const seenTaskIds = new Set();
+            gModel.siteRows.forEach((row) => {
+              Object.values(row.cellsByDay || {}).forEach((bars) => {
+                bars.forEach((b) => seenTaskIds.add(b.tid || (row.site.siteKey + "::" + (b.task && b.task.taskName))));
+              });
+            });
+            return seenTaskIds.size;
+          }
+          const wInfo = getGanttWeekInfo(selectedDayStr || getTodayYmd());
+          return list.filter((it) => {
+            if (!it || !it.startYmd) return false;
+            const endYmd = it.endYmd && it.endYmd >= it.startYmd ? it.endYmd : it.startYmd;
+            return it.startYmd <= wInfo.weekEndYmd && endYmd >= wInfo.weekStartYmd;
+          }).length;
+        }
+        if (mode === "week") {
+          const anchor = new Date((selectedDayStr || getTodayYmd()) + "T00:00:00");
+          const startD = new Date(anchor);
+          startD.setDate(anchor.getDate() - anchor.getDay());
+          const weekStartYmd = startD.getFullYear() + "-" + String(startD.getMonth() + 1).padStart(2, "0") + "-" + String(startD.getDate()).padStart(2, "0");
+          const weekEndYmd = addDaysYmd(weekStartYmd, 6);
+          return list.filter((it) => {
+            if (!it || !it.startYmd) return false;
+            const endYmd = it.endYmd && it.endYmd >= it.startYmd ? it.endYmd : it.startYmd;
+            return it.startYmd <= weekEndYmd && endYmd >= weekStartYmd;
+          }).length;
+        }
+        const ym = year + "-" + String(month).padStart(2, "0");
+        const monthStart = ym + "-01";
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const monthEnd = ym + "-" + String(daysInMonth).padStart(2, "0");
+        return list.filter((it) => {
+          if (!it || !it.startYmd) return false;
+          const endYmd = it.endYmd && it.endYmd >= it.startYmd ? it.endYmd : it.startYmd;
+          return it.startYmd <= monthEnd && endYmd >= monthStart;
+        }).length;
       }
 
       // ================= 주간 멀티현장 타임라인(간트) & A/S 보증·하자 통계 공통 엔진 =================
@@ -5723,7 +5784,7 @@ end $$;`;
           return String(a.site.siteName || "").localeCompare(String(b.site.siteName || ""), "ko");
         };
         const activeAsRecords = allAsRecords
-          .filter((r) => (r.isFromAsSheet || r.task.status === "AS") && !r.isCompleted)
+          .filter((r) => !r.isCompleted)
           .slice()
           .sort(sortAsRecords);
 
@@ -5991,8 +6052,8 @@ end $$;`;
       }
 
       /** 준공 현장 A/S 보증기간 & 하자 통계 대시보드 HTML을 생성합니다(PC·모바일 공용). */
-      function renderAsWarrantyDashboardHtml(isMobile) {
-        const model = buildAsWarrantyAndStatsModel();
+      function renderAsWarrantyDashboardHtml(isMobile, precomputedModel) {
+        const model = precomputedModel || buildAsWarrantyAndStatsModel();
         const validPct = model.totalDoneCount ? Math.round((model.validCount / model.totalDoneCount) * 100) : 0;
         const topTrade = model.topDefectTrade;
         const rowClickFn = isMobile ? "openSiteDetailMobile" : "openSiteDetail";
@@ -6482,8 +6543,9 @@ end $$;`;
           (s.tasks || []).forEach((t) => {
             if (isTaskCompleted(t)) return;
             const y = parseYmdFromTask(t);
-            if (y === todayYmd || t.isToday) kpiToday++;
-            if (t.isDelayed || (y && y < todayYmd)) kpiDelayed++;
+            const eY = y ? (parseEndYmdFromTask(t, y) || y) : "";
+            if ((y && y <= todayYmd && eY >= todayYmd) || t.isToday) kpiToday++;
+            if (isTaskDelayed(t, todayYmd)) kpiDelayed++;
           });
         });
 
@@ -6622,10 +6684,7 @@ end $$;`;
         for (const s of allSites) {
           if (s.scope === "newSite" || isSiteCompleted(s)) continue;
           const hasUserDelayed = (s.tasks || []).some((t) => {
-            if (isTaskCompleted(t)) return false;
-            const ymd = parseYmdFromTask(t);
-            const isDel = Boolean(t.isDelayed || (ymd && ymd < todayYmd));
-            if (!isDel) return false;
+            if (!isTaskDelayed(t, todayYmd)) return false;
             if (user && t.manager && !t.manager.includes(user)) return false;
             return true;
           });
@@ -6637,9 +6696,9 @@ end $$;`;
 
         // 2순위: 사용자 지연 현장이 특정되지 않은 경우, 전체 진행 현장 중 지연 공정이 있는 현장 (site 우선)
         if (!targetSite) {
-          targetSite = allSites.find((s) => s.scope === "site" && !isSiteCompleted(s) && (s.tasks || []).some((t) => !isTaskCompleted(t) && (t.isDelayed || (parseYmdFromTask(t) && parseYmdFromTask(t) < todayYmd))));
+          targetSite = allSites.find((s) => s.scope === "site" && !isSiteCompleted(s) && (s.tasks || []).some((t) => isTaskDelayed(t, todayYmd)));
           if (!targetSite) {
-            targetSite = allSites.find((s) => s.scope !== "newSite" && !isSiteCompleted(s) && (s.tasks || []).some((t) => !isTaskCompleted(t) && (t.isDelayed || (parseYmdFromTask(t) && parseYmdFromTask(t) < todayYmd))));
+            targetSite = allSites.find((s) => s.scope !== "newSite" && !isSiteCompleted(s) && (s.tasks || []).some((t) => isTaskDelayed(t, todayYmd)));
           }
         }
 
@@ -6948,8 +7007,8 @@ end $$;`;
           .slice()
           .sort((a, b) => {
             if (a.task.isToday !== b.task.isToday) return a.task.isToday ? -1 : 1;
-            const aDel = Boolean(a.task.isDelayed || (a.ymd && a.ymd < todayYmd));
-            const bDel = Boolean(b.task.isDelayed || (b.ymd && b.ymd < todayYmd));
+            const aDel = isTaskDelayed(a.task, todayYmd);
+            const bDel = isTaskDelayed(b.task, todayYmd);
             if (aDel !== bDel) return aDel ? -1 : 1;
             return String(a.ymd || "9999-99-99").localeCompare(String(b.ymd || "9999-99-99"));
           });
@@ -6967,7 +7026,9 @@ end $$;`;
         const allTodos = (state.todoData && state.todoData.list) || [];
         const myTodos = allTodos.filter((t) => isUserAssignedTodo(t, user));
         const myPendingTodos = myTodos.filter((t) => t.status !== "완료");
-        const myPayable = (state.financeData && state.financeData.summary && state.financeData.summary.totalPayable) || 0;
+        const myPayable = (state.financeDbData && Array.isArray(state.financeDbData.expense) && (state.financeLoaded || state.financeDbData.expense.length > 0))
+          ? state.financeDbData.expense.reduce((acc, e) => acc + getExpenseRowBalance(e), 0)
+          : ((state.financeData && state.financeData.summary && state.financeData.summary.totalPayable) || 0);
 
         // 1) 최상단 To-Do 2열 카드 그리드 (완료된 To-Do 제외)
         const todoItemsHtml = myPendingTodos.slice(0, 8).map((t) => {
@@ -7038,7 +7099,7 @@ end $$;`;
           const barCol = pct >= 80 ? "#10b981" : pct >= 40 ? "#2563eb" : "#f59e0b";
           const mgrText = getUniqueSiteManagers(s.tasks).slice(0, 2).join(", ") || "미지정";
           const remainingCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t)).length;
-          const delayCnt = (s.tasks || []).filter((t) => !isTaskCompleted(t) && (t.isDelayed || (parseYmdFromTask(t) && parseYmdFromTask(t) < todayYmd))).length;
+          const delayCnt = (s.tasks || []).filter((t) => isTaskDelayed(t, todayYmd)).length;
           const effScope = s.scope || (/^\[단건\]/i.test(s.siteName) ? "single" : /^\[AS\]/i.test(s.siteName) ? "as" : "site");
           const cleanSiteName = String(s.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "");
           return `
@@ -7281,6 +7342,7 @@ end $$;`;
 
         const eventsByDay = expandEventsByDay(events);
         const year = state.calYear, month = state.calMonth;
+        const visibleCalCount = countCalendarVisibleEvents(events, state.calViewMode, year, month, state.selectedDayStr);
         const slideCls = state._lastCalSlideDir === "next" ? "cal-slide-next" : state._lastCalSlideDir === "prev" ? "cal-slide-prev" : "";
         let bodyHtml = "";
 
@@ -7298,8 +7360,8 @@ end $$;`;
             const dayEvents = eventsByDay[ymd] || [];
             const w = state.weatherData && state.weatherData[ymd];
             const pills = dayEvents.map(({ site, task }) => {
-              const isDone = task.status === "완료";
-              const isDel = task.isDelayed && !isDone;
+              const isDone = isTaskCompleted(task);
+              const isDel = !isDone && isTaskDelayed(task, todayYmd);
               const bgCol = isDel ? "#dc2626" : (site.colorHex || "#2563eb");
               const lightCls = !isDel && isLightHexColor(bgCol) ? "light-bg" : "";
               const timeStr = extractTaskTimeStr(task);
@@ -7369,8 +7431,8 @@ end $$;`;
             const holName = holidays[ymd];
 
             const pillsHtml = dayEvents.map(({ site, task }) => {
-              const isDone = task.status === "완료";
-              const isDel = task.isDelayed && !isDone;
+              const isDone = isTaskCompleted(task);
+              const isDel = !isDone && isTaskDelayed(task, todayYmd);
               const bgCol = isDel ? "#dc2626" : (site.colorHex || "#2563eb");
               const lightCls = !isDel && isLightHexColor(bgCol) ? "light-bg" : "";
               const sIcon = getTaskStatusIcon(task);
@@ -7431,7 +7493,7 @@ end $$;`;
             ${bodyHtml}
           `;
           const countEl = pcCalEl.querySelector(".cal-count-capsule");
-          if (countEl) countEl.innerHTML = `총 <strong>${events.length}건</strong> <span class="dot">·</span> 다중일자 포함`;
+          if (countEl) countEl.innerHTML = `총 <strong>${visibleCalCount}건</strong> <span class="dot">·</span> 다중일자 포함`;
           const chipsEl = pcCalEl.querySelector(".pc-cal-chips-wrap");
           if (chipsEl) {
             chipsEl.innerHTML = `
@@ -7488,7 +7550,7 @@ end $$;`;
                 ${state.searchQuery ? `<span class="pc-page-search-clear" onclick="clearGlobalSearch()" title="검색 초기화">✕</span>` : `<span class="search-shortcut-badge" style="position:absolute;right:6px;font-size:10px;padding:2px 4px;border-radius:4px;background:#f1f5f9;color:#64748b;pointer-events:none;">Alt+S</span>`}
               </div>
               <span class="cal-count-capsule">
-                총 <strong>${events.length}건</strong> <span class="dot">·</span> 다중일자 포함
+                총 <strong>${visibleCalCount}건</strong> <span class="dot">·</span> 다중일자 포함
               </span>
               <button type="button" class="btn-tool-tag btn-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐">📸 캡쳐</button>
             </div>
@@ -7527,12 +7589,13 @@ end $$;`;
         return filteredRows.map((t) => {
           const tid = t.id || t.taskId;
           const isRowChecked = state.checkedTableTaskIds.has(tid);
-          const isDone = t.status === "완료";
-          const isDelay = t.isDelayed && !isDone;
+          const isDone = isTaskCompleted(t);
+          const isDelay = !isDone && isTaskDelayed(t);
           const hasPartner = Boolean(t.partner && String(t.partner).trim() && !["미등록", "업체 미등록", "-"].includes(String(t.partner).trim()));
           const phone = hasPartner ? lookupPartnerPhone(t.partner) : "";
           const badgeStyle = isDone ? "background:#dcfce7;color:#15803d;" : isDelay ? "background:#fee2e2;color:#dc2626;" : "background:#dbeafe;color:#1e40af;";
-          const badgeLabel = isDone ? "✓ 완료" : isDelay ? "⚠️ 지연" : escHtml(t.status || "예정");
+          const stStr = String(t.status || "").trim();
+          const badgeLabel = isDone ? (stStr && stStr !== "완료" ? escHtml(stStr) : "✓ 완료") : isDelay ? "⚠️ 지연" : escHtml(stStr || "예정");
           const mgrParts = String(t.manager || "").split(",").map((m) => m.trim()).filter(Boolean);
           const mgrCellHtml = mgrParts.length > 1
             ? mgrParts.map((m) => `<div style="white-space:nowrap;line-height:1.45;">👤 ${escHtml(m)}</div>`).join("")
@@ -7565,11 +7628,24 @@ end $$;`;
       /** 현장 공정 목록의 요약 건수(전체/완료/진행/예정/지연)를 필터 기준과 일치하도록 계산합니다. */
       function computeSiteTaskSummaryStats(tasks) {
         const list = Array.isArray(tasks) ? tasks : [];
+        const checkDone = (t) => {
+          if (typeof isTaskCompleted === "function") return isTaskCompleted(t);
+          if (!t) return true;
+          const st = String(t.status || "").replace(/\s+/g, "");
+          if (st && (st === "예정" || st === "진행" || st === "진행중" || st === "AS")) return false;
+          if (st.indexOf("완료") !== -1 || st.indexOf("취소") !== -1 || st.indexOf("제외") !== -1) return true;
+          return t.isArchived === true || t.isCompleted === true;
+        };
+        const checkDelay = (t) => {
+          if (checkDone(t)) return false;
+          if (typeof isTaskDelayed === "function") return isTaskDelayed(t);
+          return Boolean(t && t.isDelayed);
+        };
         const total = list.length || 1;
-        const doneCnt = list.filter((t) => t && t.status === "완료").length;
-        const delayCnt = list.filter((t) => t && t.status !== "완료" && t.isDelayed).length;
+        const doneCnt = list.filter((t) => t && checkDone(t)).length;
+        const delayCnt = list.filter((t) => t && checkDelay(t)).length;
         // 완료 또는 지연 공정이 오늘 날짜(isToday)와 겹쳐도 예정·진행 건수에 중복 집계되지 않도록 제외합니다.
-        const progCnt = list.filter((t) => t && t.status !== "완료" && !t.isDelayed && (t.status === "진행중" || t.status === "진행 중" || t.isToday)).length;
+        const progCnt = list.filter((t) => t && !checkDone(t) && !checkDelay(t) && (t.status === "진행중" || t.status === "진행 중" || t.isToday)).length;
         const planCnt = Math.max(0, list.length - doneCnt - progCnt - delayCnt);
         const activeCnt = planCnt + progCnt;
         const pctDone = list.length ? Math.round((doneCnt / list.length) * 1000) / 10 : 0;
@@ -7581,11 +7657,26 @@ end $$;`;
         const list = Array.isArray(tasks) ? tasks : [];
         const curFilter = statusFilter || "all";
         const curSearch = String(searchQuery || "").trim();
+        const checkDone = (t) => {
+          if (typeof isTaskCompleted === "function") return isTaskCompleted(t);
+          if (!t) return true;
+          const st = String(t.status || "").replace(/\s+/g, "");
+          if (st && (st === "예정" || st === "진행" || st === "진행중" || st === "AS")) return false;
+          if (st.indexOf("완료") !== -1 || st.indexOf("취소") !== -1 || st.indexOf("제외") !== -1) return true;
+          return t.isArchived === true || t.isCompleted === true;
+        };
+        const checkDelay = (t) => {
+          if (checkDone(t)) return false;
+          if (typeof isTaskDelayed === "function") return isTaskDelayed(t);
+          return Boolean(t && t.isDelayed);
+        };
         return list.filter((t) => {
           if (!t) return false;
-          if (curFilter === "done" && t.status !== "완료") return false;
-          if (curFilter === "delay" && !(t.isDelayed && t.status !== "완료")) return false;
-          if (curFilter === "active" && (t.status === "완료" || (t.isDelayed && t.status !== "완료"))) return false;
+          const isDone = checkDone(t);
+          const isDel = checkDelay(t);
+          if (curFilter === "done" && !isDone) return false;
+          if (curFilter === "delay" && !isDel) return false;
+          if (curFilter === "active" && (isDone || isDel)) return false;
           if (curSearch && !matchesQuery([t.taskName, t.partner, t.manager, t.memo].join(" "), curSearch)) return false;
           return true;
         });
@@ -7681,7 +7772,11 @@ end $$;`;
         const activeCountAll = sitesPool.filter((s) => !isSiteCompleted(s)).length;
         const doneCountAll = sitesPool.filter((s) => isSiteCompleted(s)).length;
         const isAsWarrantyView = !isQ && state.sitesSubView === "asWarranty";
-        const asPendingCount = !isQ ? collectAllAsTaskRecords().filter((r) => (r.isFromAsSheet || r.task.status === "AS") && !r.isCompleted).length : 0;
+        const asWarrantyModel = isAsWarrantyView ? buildAsWarrantyAndStatsModel() : null;
+        const asPendingCount = !isQ
+          ? (asWarrantyModel ? asWarrantyModel.activeAsCount : collectAllAsTaskRecords().filter((r) => !r.isCompleted).length)
+          : 0;
+        const asWarrantyDoneCount = asWarrantyModel ? asWarrantyModel.totalDoneCount : doneCountAll;
 
         const carouselHtml = isAsWarrantyView ? "" : visibleSites.map((s) => {
           const uniqueMgrs = getUniqueSiteManagers(s.tasks);
@@ -7885,7 +7980,7 @@ end $$;`;
         const isSitesActive = isQ ? (state.pcTab === "quote") : (state.pcTab === "sites");
         const bodyAreaEl = pcSiteEl ? document.getElementById(pfx + "BodyArea") : null;
         if (pcSiteEl && existingInput && bodyAreaEl && isSitesActive && pcSiteEl.contains(existingInput) && (document.activeElement === existingInput || state._keepPcSearchFocus)) {
-          bodyAreaEl.innerHTML = isAsWarrantyView ? renderAsWarrantyDashboardHtml(false) : `
+          bodyAreaEl.innerHTML = isAsWarrantyView ? renderAsWarrantyDashboardHtml(false, asWarrantyModel) : `
             ${visibleSites.length ? `
               <div class="carousel-wrap-box">
                 <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('${trackId}', -360)" title="이전 현장 보기">‹</button>
@@ -7895,7 +7990,7 @@ end $$;`;
             ${detailHtml}
           `;
           const countSpan = document.getElementById(pfx + "VisibleCount");
-          if (countSpan) countSpan.textContent = isAsWarrantyView ? `완료 ${doneCountAll}개` : `표시 ${visibleSites.length}개`;
+          if (countSpan) countSpan.textContent = isAsWarrantyView ? `완료 ${asWarrantyDoneCount}개` : `표시 ${visibleSites.length}개`;
           if (existingInput.value !== state.searchQuery) {
             existingInput.value = state.searchQuery;
           }
@@ -7937,7 +8032,7 @@ end $$;`;
                 <button type="button" class="pc-c-status-tab done-tab ${!isAsWarrantyView && state.showArchivedSites ? "active" : ""}" onclick="setSitesSubView('list', true)">✅ 완료·보관 포함 <span class="pc-badge-count-done">${doneCountAll}</span></button>
                 ${!isQ ? `<button type="button" class="pc-c-status-tab as-tab ${isAsWarrantyView ? "active" : ""}" onclick="setSitesSubView('asWarranty')">🛠️ A/S 보증·하자 통계 <span class="pc-badge-count-as">${asPendingCount}</span></button>` : ""}
               </div>
-              <span id="${pfx}VisibleCount" style="font-size:12px;font-weight:700;color:var(--text-muted);">${isAsWarrantyView ? `완료 ${doneCountAll}개` : `표시 ${visibleSites.length}개`}</span>
+              <span id="${pfx}VisibleCount" style="font-size:12px;font-weight:700;color:var(--text-muted);">${isAsWarrantyView ? `완료 ${asWarrantyDoneCount}개` : `표시 ${visibleSites.length}개`}</span>
               ${isAsWarrantyView ? "" : `
                 <span style="width:1px;height:18px;background:#cbd5e1;display:inline-block;"></span>
                 <div style="display:flex;gap:5px;align-items:center;">
@@ -7965,7 +8060,7 @@ end $$;`;
             </div>
           </div>
           <div id="${pfx}BodyArea">
-            ${isAsWarrantyView ? renderAsWarrantyDashboardHtml(false) : `
+            ${isAsWarrantyView ? renderAsWarrantyDashboardHtml(false, asWarrantyModel) : `
               ${visibleSites.length ? `
                 <div class="carousel-wrap-box">
                   <button type="button" class="carousel-arrow-btn" onclick="scrollCarouselTrack('${trackId}', -360)" title="이전 현장 보기">‹</button>
@@ -8133,6 +8228,12 @@ end $$;`;
         return { list: visible, allList: kept, hiddenDoneCount };
       }
 
+      function isTodoManagerUnassigned(mgr) {
+        const m = String(mgr || "").trim();
+        return !m || m === "미지정" || m === "담당 미지정" || m === "담당자 미지정";
+      }
+      window.isTodoManagerUnassigned = isTodoManagerUnassigned;
+
       function renderPcTodoTab() {
         const retention = getActiveTodosWithRetention();
         const list = retention.list;
@@ -8145,9 +8246,9 @@ end $$;`;
         const filteredList = list.filter((t) => {
           if (activeMemberFilter !== "all") {
             if (activeMemberFilter === "unassigned") {
-              if (t.manager) return false;
+              if (!isTodoManagerUnassigned(t.manager)) return false;
             } else {
-              if (!t.manager || !t.manager.includes(activeMemberFilter)) return false;
+              if (!t.manager || isTodoManagerUnassigned(t.manager) || !t.manager.includes(activeMemberFilter)) return false;
             }
           }
           if (q && !matchesQuery([t.title, t.siteName, t.manager, t.detail, t.tag].join(" "), q)) return false;
@@ -8174,12 +8275,12 @@ end $$;`;
             <span>전체 (${list.length})</span>
           </button>
           ${displayMembers.map((m) => {
-            const mCnt = list.filter((t) => t.manager && t.manager.includes(m)).length;
+            const mCnt = list.filter((t) => !isTodoManagerUnassigned(t.manager) && t.manager.includes(m)).length;
             return `<button type="button" class="tm-chip ${activeMemberFilter === m ? "active" : ""}" onclick="filterTodoMember('${escJs(m)}')"><span class="tm-avatar">${escHtml(m.slice(0, 1))}</span><span>${escHtml(m)} (${mCnt})</span></button>`;
           }).join("")}
           <button type="button" class="tm-chip ${activeMemberFilter === "unassigned" ? "active" : ""}" onclick="filterTodoMember('unassigned')">
             <span class="tm-avatar tm-avatar-unassigned">미</span>
-            <span>미지정 (${list.filter((t) => !t.manager || t.manager === "미지정" || t.manager === "담당 미지정").length})</span>
+            <span>미지정 (${list.filter((t) => isTodoManagerUnassigned(t.manager)).length})</span>
           </button>
         `;
 
@@ -8254,7 +8355,7 @@ end $$;`;
         } else if (groupBy === "manager") {
           const mgrKeys = [...displayMembers, "unassigned"];
           groupedHtml = mgrKeys.map((mKey) => {
-            const items = pendingList.filter((t) => mKey === "unassigned" ? !t.manager : t.manager && t.manager.includes(mKey));
+            const items = pendingList.filter((t) => mKey === "unassigned" ? isTodoManagerUnassigned(t.manager) : (!isTodoManagerUnassigned(t.manager) && t.manager.includes(mKey)));
             if (!items.length) return "";
             const labelName = mKey === "unassigned" ? "담당 미지정" : mKey;
             const impCount = items.filter((t) => t.isImportant || t.status === "중요").length;
@@ -8422,9 +8523,10 @@ end $$;`;
         const m = state.memberFilter;
         const targetCat = quoteCat || state.quoteCategory || "site";
         const allNewSites = getAllSites().filter((s) => s.scope === "newSite" && getQuoteTypeOfSite(s) === targetCat);
+        const isDoneQuoteFn = (s) => Boolean(s && (s.isArchived || s.isAllCompleted || (s.estimateData && s.estimateData.status === "계약 완료")));
         const failedQuotes = allNewSites.filter((s) => isQuoteFailedOrHold(s));
-        const doneQuotes = allNewSites.filter((s) => !isQuoteFailedOrHold(s) && (s.isArchived || s.isAllCompleted));
-        const activeQuotes = allNewSites.filter((s) => !isQuoteFailedOrHold(s) && !s.isArchived && !s.isAllCompleted);
+        const doneQuotes = allNewSites.filter((s) => !isQuoteFailedOrHold(s) && isDoneQuoteFn(s));
+        const activeQuotes = allNewSites.filter((s) => !isQuoteFailedOrHold(s) && !isDoneQuoteFn(s));
         const pool = statusMode === "done" ? doneQuotes : (statusMode === "failed" ? failedQuotes : activeQuotes);
 
         const filtered = pool.filter((s) => {
@@ -8810,6 +8912,8 @@ end $$;`;
               state.financeDbData = { collection: [], expense: [], fixedMaster: [], updatedAt: "" };
             }
           }
+          state.dirtyPcTabs.home = true;
+          state.dirtyMobileTabs.home = true;
           state.dirtyPcTabs.finance = true;
           state.dirtyMobileTabs.finance = true;
           renderActiveViews();
@@ -8821,6 +8925,8 @@ end $$;`;
           if (!state.financeDbData) {
             state.financeDbData = { collection: [], expense: [], fixedMaster: [], updatedAt: "" };
           }
+          state.dirtyPcTabs.home = true;
+          state.dirtyMobileTabs.home = true;
           state.dirtyPcTabs.finance = true;
           state.dirtyMobileTabs.finance = true;
           renderActiveViews();
@@ -9590,7 +9696,10 @@ end $$;`;
         `;
       }
 
-      function getFilteredCollectionList() {
+      function getFilteredCollectionList(opts) {
+        opts = opts || {};
+        const ignoreStatus = Boolean(opts.ignoreStatusFilter);
+        const ignoreDate = Boolean(opts.ignoreDateFilter);
         const list = (state.financeDbData && Array.isArray(state.financeDbData.collection)) ? state.financeDbData.collection : [];
         const q = String(state.financeSearchQuery || "").trim().toLowerCase();
         const stFilter = state.financeStatusFilter || "all";
@@ -9610,16 +9719,18 @@ end $$;`;
           const uncollected = fin.uncollected;
           const effStatus = getCollectionEffectiveStatus(r, fin);
 
-          if (stFilter === "uncollected") {
-            if (uncollected <= 0) return false;
-          } else if (stFilter === "doneUncollected") {
-            if (uncollected <= 0) return false;
-            const isDone = isCollectionSiteCompleted(matchedSite, progress);
-            if (!isDone) return false;
-          } else if (stFilter === "closing") {
-            if (effStatus !== "마감중") return false;
-          } else if (stFilter === "completed") {
-            if (effStatus !== "완료") return false;
+          if (!ignoreStatus) {
+            if (stFilter === "uncollected") {
+              if (uncollected <= 0) return false;
+            } else if (stFilter === "doneUncollected") {
+              if (uncollected <= 0) return false;
+              const isDone = isCollectionSiteCompleted(matchedSite, progress);
+              if (!isDone) return false;
+            } else if (stFilter === "closing") {
+              if (effStatus !== "마감중") return false;
+            } else if (stFilter === "completed") {
+              if (effStatus !== "완료") return false;
+            }
           }
 
           if (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) {
@@ -9635,16 +9746,18 @@ end $$;`;
           }
 
           const pInfo = getCollectionAttributionMonth(r, matchedSite);
-          if (yearFilter !== "all") {
-            if (yearFilter === "undetermined") {
-              if (pInfo.year) return false;
-            } else {
-              if (pInfo.year !== String(yearFilter)) return false;
+          if (!ignoreDate) {
+            if (yearFilter !== "all") {
+              if (yearFilter === "undetermined") {
+                if (pInfo.year) return false;
+              } else {
+                if (pInfo.year !== String(yearFilter)) return false;
+              }
             }
-          }
 
-          if (monthFilter > 0) {
-            if (pInfo.month !== monthFilter) return false;
+            if (monthFilter > 0) {
+              if (pInfo.month !== monthFilter) return false;
+            }
           }
 
           if (q) {
@@ -10107,6 +10220,7 @@ end $$;`;
 
       window.setFinanceYearFilter = function(year) {
         state.financeYearFilter = year;
+        state.financeMonthFilter = 0;
         state.dirtyPcTabs.finance = true;
         state.dirtyMobileTabs.finance = true;
         renderActiveViews();
@@ -11282,7 +11396,9 @@ end $$;`;
         return opts;
       }
 
-      function getFilteredExpenseList() {
+      function getFilteredExpenseList(opts) {
+        opts = opts || {};
+        const ignoreStatus = Boolean(opts.ignoreStatusFilter);
         const allExpenses = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
         const selMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
         const allMonths = !!state.expenseAllMonths;
@@ -11309,9 +11425,11 @@ end $$;`;
           }
 
           // 3. 상태 필터
-          const bal = getExpenseRowBalance(e);
-          if (stFilter === "unpaid" && bal <= 0) return false;
-          if (stFilter === "paid" && bal > 0) return false;
+          if (!ignoreStatus) {
+            const bal = getExpenseRowBalance(e);
+            if (stFilter === "unpaid" && bal <= 0) return false;
+            if (stFilter === "paid" && bal > 0) return false;
+          }
 
           // 3.5 증빙 필터
           if (window.FINANCE_EXT_FLAGS && window.FINANCE_EXT_FLAGS.taxProofBadge) {
@@ -12616,6 +12734,8 @@ end $$;`;
           console.error("saveExpenseRow error:", err);
           state.financeDbData.expense = prevExpense;
           if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+          state.dirtyPcTabs.home = true;
+          state.dirtyMobileTabs.home = true;
           state.dirtyPcTabs.finance = true;
           state.dirtyMobileTabs.finance = true;
           renderActiveViews();
@@ -12682,6 +12802,8 @@ end $$;`;
           console.error("deleteExpenseRow error:", err);
           state.financeDbData.expense = prevExpense;
           if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+          state.dirtyPcTabs.home = true;
+          state.dirtyMobileTabs.home = true;
           state.dirtyPcTabs.finance = true;
           state.dirtyMobileTabs.finance = true;
           renderActiveViews();
@@ -14276,9 +14398,12 @@ end $$;`;
         });
       };
 
-      window.onLoadFixedExpenses = function() {
+      window.onLoadFixedExpenses = function(useCurrentMonth) {
         if (window._isLoadingFixedExpenses) return;
-        const targetMonth = state.expenseSelectedMonth || getTodayYmd().slice(0, 7);
+        const forceCur = Boolean(useCurrentMonth || state.financeSubTab === "fixed");
+        const targetMonth = forceCur
+          ? getTodayYmd().slice(0, 7)
+          : (state.expenseSelectedMonth || getTodayYmd().slice(0, 7));
         if (!confirm(`[${targetMonth}]월의 고정비 마스터 항목을 불러오시겠습니까?\n(이미 등록된 항목은 중복 생성되지 않습니다)`)) {
           return;
         }
@@ -14609,6 +14734,8 @@ end $$;`;
           console.error("saveFixedMaster error:", err);
           state.financeDbData.fixedMaster = prevFixedMaster;
           if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+          state.dirtyPcTabs.home = true;
+          state.dirtyMobileTabs.home = true;
           state.dirtyPcTabs.finance = true;
           state.dirtyMobileTabs.finance = true;
           renderActiveViews();
@@ -14675,6 +14802,8 @@ end $$;`;
           console.error("deleteFixedMaster error:", err);
           state.financeDbData.fixedMaster = prevFixedMaster;
           if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+          state.dirtyPcTabs.home = true;
+          state.dirtyMobileTabs.home = true;
           state.dirtyPcTabs.finance = true;
           state.dirtyMobileTabs.finance = true;
           renderActiveViews();
@@ -14733,6 +14862,8 @@ end $$;`;
         }).catch(err => {
           item.active = prevActive;
           if (ds && typeof ds.saveFinanceCache === "function") ds.saveFinanceCache(state.financeDbData);
+          state.dirtyPcTabs.home = true;
+          state.dirtyMobileTabs.home = true;
           state.dirtyPcTabs.finance = true;
           state.dirtyMobileTabs.finance = true;
           renderActiveViews();
@@ -14999,6 +15130,8 @@ end $$;`;
           const ven = String(e.vendor || "").trim();
           const catMatch = Boolean(tName && cat && (cat === tName || tName.includes(cat) || cat.includes(tName)));
           const venMatch = Boolean(tPartner && ven && (ven.includes(tPartner) || tPartner.includes(ven)));
+          const hasBothCats = Boolean(tName && cat);
+          if (hasBothCats) return catMatch;
           return catMatch || venMatch;
         });
       }
@@ -15044,14 +15177,33 @@ end $$;`;
         window.currentDetailSiteName = siteName;
         window.currentDetailColId = colId;
 
+        const normSiteKeyFn = (val) => (typeof normalizeFinanceSiteMatchKey === "function"
+          ? normalizeFinanceSiteMatchKey(val)
+          : String(val || "").replace(/^(?:\[(?:단건|AS|단품)\]|\((?:단건|AS|단품)\))\s*/gi, "").replace(/\s+/g, "").toLowerCase());
+        const trimmedSiteName = String(siteName || "").trim();
+        const targetNormKey = normSiteKeyFn(trimmedSiteName);
+
         const collection = (state.financeDbData && Array.isArray(state.financeDbData.collection)) ? state.financeDbData.collection : [];
-        const colRow = collection.find(c => (colId && c.id === colId) || c.siteName === siteName) || {};
+        const colRow = collection.find(c => c && ((colId && c.id === colId) || String(c.siteName || "").trim() === trimmedSiteName))
+          || collection.find(c => c && targetNormKey && normSiteKeyFn(c.siteName) === targetNormKey)
+          || {};
 
         const allSites = getAllSites();
-        const site = allSites.find(s => s.siteName === siteName);
+        const site = allSites.find(s => s && String(s.siteName || "").trim() === trimmedSiteName && s.scope !== "newSite")
+          || allSites.find(s => s && String(s.siteName || "").trim() === trimmedSiteName)
+          || allSites.find(s => s && targetNormKey && normSiteKeyFn(s.siteName) === targetNormKey && s.scope !== "newSite")
+          || allSites.find(s => s && targetNormKey && normSiteKeyFn(s.siteName) === targetNormKey)
+          || null;
 
         const expList = (state.financeDbData && Array.isArray(state.financeDbData.expense)) ? state.financeDbData.expense : [];
-        const siteExpenses = expList.filter(e => e && String(e.siteName || "").trim() === String(siteName || "").trim());
+        const siteExpenses = expList.filter(e => {
+          if (!e) return false;
+          const eSite = String(e.siteName || "").trim();
+          if (!eSite) return false;
+          if (eSite === trimmedSiteName) return true;
+          if (eSite === "공통" || trimmedSiteName === "공통") return false;
+          return Boolean(targetNormKey && normSiteKeyFn(eSite) === targetNormKey);
+        });
 
         const titleEl = document.getElementById("siteFinanceDetailModalTitle");
         if (titleEl) {
@@ -15121,9 +15273,53 @@ end $$;`;
           </div>
         `;
 
-        // 2. 세부 공정별 지급 내역
+        // 2. 세부 공정별 지급 내역 (한 지출 행이 여러 공정에 중복 배정되지 않도록 우선순위 기반 1:1 매칭)
         const tasks = site ? (site.tasks || []) : [];
         window._siteDetailTaskLinkedIds = {};
+        const matchedExpensesByTaskIdx = tasks.map(() => []);
+        if (tasks.length > 0 && siteExpenses.length > 0) {
+          const scoreTaskExpenseMatch = (t, e) => {
+            if (!t || !e) return 0;
+            const tId = String(t.id || t.taskId || "").trim();
+            if (tId && e.asTaskId && String(e.asTaskId).trim() === tId) return 1000;
+            const tName = String(t.taskName || "").trim();
+            const cat = String(e.category || "").trim();
+            const tPartnerRaw = String(t.partner || "").trim();
+            const tPartner = (tPartnerRaw && tPartnerRaw !== "-" && tPartnerRaw !== "미등록") ? tPartnerRaw : "";
+            const ven = String(e.vendor || "").trim();
+            const catExact = Boolean(tName && cat && cat === tName);
+            const catMatch = Boolean(tName && cat && (cat === tName || tName.includes(cat) || cat.includes(tName)));
+            const venExact = Boolean(tPartner && ven && ven === tPartner);
+            const venMatch = Boolean(tPartner && ven && (ven.includes(tPartner) || tPartner.includes(ven)));
+            const hasBothCats = Boolean(tName && cat);
+            if (hasBothCats && !catMatch) return 0;
+            if (!catMatch && !venMatch) return 0;
+            let score = 0;
+            if (catMatch && venMatch) score += 300;
+            else if (catMatch) score += 200;
+            else if (venMatch) score += 100;
+            if (catExact) score += 30;
+            if (venExact) score += 20;
+            const tMonth = (typeof parseYmdFromTask === "function" ? parseYmdFromTask(t) : "").slice(0, 7);
+            const eMonth = typeof normalizeMonthStr === "function" ? normalizeMonthStr(e.settleMonth) : String(e.settleMonth || "").slice(0, 7);
+            if (tMonth && eMonth && tMonth === eMonth) score += 5;
+            return score;
+          };
+          siteExpenses.forEach((e) => {
+            let bestIdx = -1;
+            let bestScore = 0;
+            for (let ti = 0; ti < tasks.length; ti++) {
+              const sc = scoreTaskExpenseMatch(tasks[ti], e);
+              if (sc > bestScore) {
+                bestScore = sc;
+                bestIdx = ti;
+              }
+            }
+            if (bestIdx >= 0) {
+              matchedExpensesByTaskIdx[bestIdx].push(e);
+            }
+          });
+        }
         const tasksSectionHtml = `
           <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -15149,7 +15345,7 @@ end $$;`;
                 </thead>
                 <tbody>
                   ${tasks.map((t, tIdx) => {
-                    const matchedExps = getMatchedExpensesForTask(siteExpenses, t);
+                    const matchedExps = matchedExpensesByTaskIdx[tIdx] || [];
 
                     const taskClaim = matchedExps.reduce((acc, e) => acc + (Number(e.claimAmount) || 0), 0);
                     const taskPaid = matchedExps.reduce((acc, e) => acc + (Number(e.paidAmount) || 0), 0);
@@ -15500,29 +15696,45 @@ end $$;`;
           }
         });
 
+        const normSiteMatchFn = (val) => (typeof normalizeFinanceSiteMatchKey === "function"
+          ? normalizeFinanceSiteMatchKey(val)
+          : String(val || "").replace(/^(?:\[(?:단건|AS|단품)\]|\((?:단건|AS|단품)\))\s*/gi, "").replace(/\s+/g, "").toLowerCase());
+        const findSiteMapKeyByNorm = (name) => {
+          const nk = normSiteMatchFn(name);
+          if (!nk) return "";
+          for (const k of siteMap.keys()) {
+            if (normSiteMatchFn(k) === nk) return k;
+          }
+          return "";
+        };
+
         filteredExp.forEach(e => {
           let sName = String(e.siteName || "").trim();
           if (!sName || sName === "공통") return;
-          if (!siteMap.has(sName) && siteMap.has("[AS] " + sName)) {
-            sName = "[AS] " + sName;
-          }
           if (!siteMap.has(sName)) {
-            const matchedCol = allCollection.find(c => c.siteName === sName) || allCollection.find(c => c.siteName === "[AS] " + sName);
-            if (matchedCol && matchedCol.siteName && siteMap.has(matchedCol.siteName)) {
-              sName = matchedCol.siteName;
+            const existingMapKey = findSiteMapKeyByNorm(sName);
+            if (existingMapKey) {
+              sName = existingMapKey;
             } else {
-              const matchedFin = matchedCol ? getCollectionRowFinancials(matchedCol) : { total: 0, collected: 0, uncollected: 0 };
-              if (matchedCol && matchedCol.siteName) sName = matchedCol.siteName;
-              siteMap.set(sName, {
-                siteName: sName,
-                colRow: matchedCol || null,
-                contractAmount: matchedFin.total,
-                collected: matchedFin.collected,
-                uncollected: matchedFin.uncollected,
-                expenseClaim: 0,
-                expensePaid: 0,
-                expenseBalance: 0
-              });
+              const eNorm = normSiteMatchFn(sName);
+              const matchedCol = allCollection.find(c => c && String(c.siteName || "").trim() === sName)
+                || allCollection.find(c => c && eNorm && normSiteMatchFn(c.siteName) === eNorm);
+              if (matchedCol && matchedCol.siteName && siteMap.has(matchedCol.siteName)) {
+                sName = matchedCol.siteName;
+              } else {
+                const matchedFin = matchedCol ? getCollectionRowFinancials(matchedCol) : { total: 0, collected: 0, uncollected: 0 };
+                if (matchedCol && matchedCol.siteName) sName = matchedCol.siteName;
+                siteMap.set(sName, {
+                  siteName: sName,
+                  colRow: matchedCol || null,
+                  contractAmount: matchedFin.total,
+                  collected: matchedFin.collected,
+                  uncollected: matchedFin.uncollected,
+                  expenseClaim: 0,
+                  expensePaid: 0,
+                  expenseBalance: 0
+                });
+              }
             }
           }
           const sObj = siteMap.get(sName);
@@ -15981,7 +16193,9 @@ end $$;`;
         unpaidAlerts.sort((a, b) => b.bal - a.bal);
 
         // 2. 현장별 마진율 & 올해 평균 마진
-        const normSiteKey = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
+        const normSiteKey = (s) => (typeof normalizeFinanceSiteMatchKey === "function"
+          ? normalizeFinanceSiteMatchKey(s)
+          : String(s || "").replace(/^(?:\[(?:단건|AS|단품)\]|\((?:단건|AS|단품)\))\s*/gi, "").replace(/\s+/g, "").toLowerCase());
         const expBySite = {};
         allExp.forEach((e) => {
           if (!e || !e.siteName || e.siteName === "공통") return;
@@ -16154,9 +16368,17 @@ end $$;`;
           return (b.fin.collected || b.fin.total) - (a.fin.collected || a.fin.total);
         });
 
-        // 3. 향후 예상 유입 자금 (총 미수금 + 신규견적 계약완료 금액)
+        // 3. 향후 예상 유입 자금 (총 미수금 + 미승격·미등록 신규견적 계약완료 금액)
+        const colSiteNormSet = new Set(allCol.map((c) => (c && c.siteName ? normSiteKey(c.siteName) : "")).filter(Boolean));
         const quoteContractedAmt = getAllSites()
-          .filter((s) => s.scope === "newSite" && s.estimateData && s.estimateData.status === "계약 완료")
+          .filter((s) => {
+            if (!s || s.scope !== "newSite" || !s.estimateData || s.estimateData.status !== "계약 완료") return false;
+            const qt = s.estimateData.quoteType;
+            if (typeof isEstimatePromotedToSite === "function" && isEstimatePromotedToSite(s.siteName, qt)) return false;
+            const nk = normSiteKey(s.siteName);
+            if (nk && colSiteNormSet.has(nk)) return false;
+            return true;
+          })
           .reduce((acc, s) => acc + (Number(s.estimateData.contractAmount) || Number(s.estimateData.expectedAmount) || 0), 0);
         const expectedInflow = totalUncollected + quoteContractedAmt;
 
@@ -16217,12 +16439,12 @@ end $$;`;
               <div style="font-size:${isMobile ? "13.5px" : "18.5px"};font-weight:900;color:${curMonthNet >= 0 ? "#059669" : "#dc2626"};margin-top:4px;white-space:nowrap;">${(curMonthNet >= 0 ? "+" : "") + formatExactKrw(curMonthNet)}</div>
               <div style="font-size:${isMobile ? "10px" : "11px"};color:#64748b;margin-top:4px;">수금 <span style="white-space:nowrap;">${formatExactKrw(curMonthCol)}</span> · 지출 <span style="white-space:nowrap;">${formatExactKrw(curMonthExp)}</span></div>
             </div>
-            <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #ef4444;background:#fff;cursor:pointer;" onclick="window.setFinanceSubTab('collection'); window.setFinanceStatusFilter('uncollected');">
+            <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #ef4444;background:#fff;cursor:pointer;" onclick="state.financeManagerFilter='all'; state.financeTaxFilter='all'; state.financeSearchQuery=''; window.setFinanceSubTab('collection'); window.setFinanceStatusFilter('uncollected');">
               <div style="font-size:${isMobile ? "11px" : "11.5px"};color:#64748b;font-weight:700;display:flex;justify-content:space-between;"><span>🚨 총 미수금 (받을 돈)</span><span style="color:#2563eb;font-size:10.5px;">바로가기 ➔</span></div>
               <div style="font-size:${isMobile ? "13.5px" : "18.5px"};font-weight:900;color:#dc2626;margin-top:4px;white-space:nowrap;">${formatExactKrw(totalUncollected)}</div>
               <div style="font-size:11px;color:#b91c1c;font-weight:700;margin-top:4px;">공사완료 미수 ${doneUncollectedCnt}건</div>
             </div>
-            <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #f59e0b;background:#fff;cursor:pointer;" onclick="window.setFinanceSubTab('expense'); window.setExpenseStatusFilter('unpaid');">
+            <div class="standard-card" style="margin-bottom:0;padding:${isMobile ? "10px 12px" : "14px 16px"};border-left:4px solid #f59e0b;background:#fff;cursor:pointer;" onclick="state.expenseSelectedMonth='${escJs(curYm)}'; state.expenseAllMonths=false; state.expenseItemFilter='all'; state.expenseTaxFilter='all'; state.expenseSearchQuery=''; window.setFinanceSubTab('expense'); window.setExpenseStatusFilter('unpaid');">
               <div style="font-size:${isMobile ? "11px" : "11.5px"};color:#64748b;font-weight:700;display:flex;justify-content:space-between;"><span>🧾 ${curMonthNum}월 미지급금 (줄 돈)</span><span style="color:#2563eb;font-size:10.5px;">바로가기 ➔</span></div>
               <div style="font-size:${isMobile ? "13.5px" : "18.5px"};font-weight:900;color:#d97706;margin-top:4px;white-space:nowrap;">${formatExactKrw(curMonthUnpaid)}</div>
               <div style="font-size:11px;color:#92400e;font-weight:700;margin-top:4px;">미지급 정산 ${curMonthUnpaidCnt}건 대기</div>
@@ -16285,7 +16507,7 @@ end $$;`;
             <div class="standard-card" style="margin-bottom:0;padding:16px;background:#fff;">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                 <h3 style="margin:0;font-size:14px;font-weight:800;color:#991b1b;">🔔 수금 독려 필요 현장 (TOP 5)</h3>
-                <button type="button" class="btn-tool-tag" onclick="window.setFinanceSubTab('collection'); window.setFinanceStatusFilter('uncollected');">전체보기</button>
+                <button type="button" class="btn-tool-tag" onclick="state.financeManagerFilter='all'; state.financeTaxFilter='all'; state.financeSearchQuery=''; window.setFinanceSubTab('collection'); window.setFinanceStatusFilter('uncollected');">전체보기</button>
               </div>
               <div style="display:flex;flex-direction:column;gap:7px;">
                 ${uncollectedAlerts.slice(0, 5).map(({ row, fin, isDone }) => `
@@ -16303,7 +16525,7 @@ end $$;`;
             <div class="standard-card" style="margin-bottom:0;padding:16px;background:#fff;">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                 <h3 style="margin:0;font-size:14px;font-weight:800;color:#92400e;">💸 ${curMonthNum}월 미지급 정산 대기 (TOP 5)</h3>
-                <button type="button" class="btn-tool-tag" onclick="window.setFinanceSubTab('expense'); window.setExpenseStatusFilter('unpaid');">전체보기</button>
+                <button type="button" class="btn-tool-tag" onclick="state.expenseSelectedMonth='${escJs(curYm)}'; state.expenseAllMonths=false; state.expenseItemFilter='all'; state.expenseTaxFilter='all'; state.expenseSearchQuery=''; window.setFinanceSubTab('expense'); window.setExpenseStatusFilter('unpaid');">전체보기</button>
               </div>
               <div style="display:flex;flex-direction:column;gap:7px;">
                 ${unpaidAlerts.slice(0, 5).map(({ row, bal }) => `
@@ -16442,7 +16664,7 @@ end $$;`;
             <div class="standard-card" style="margin-bottom:0;padding:16px;background:#fff;">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                 <h3 style="margin:0;font-size:13.5px;font-weight:800;color:#0f766e;">🧾 계산서·영수증 미발행 점검 <span style="font-size:11px;background:#ccfbf1;color:#0f766e;padding:1px 6px;border-radius:999px;margin-left:3px;">${taxCheckAlerts.length}건</span></h3>
-                <button type="button" class="btn-tool-tag" onclick="window.setFinanceSubTab('collection'); window.setFinanceTaxFilter('미발행');">미발행 전체 ➔</button>
+                <button type="button" class="btn-tool-tag" onclick="state.financeStatusFilter='all'; state.financeManagerFilter='all'; state.financeSearchQuery=''; window.setFinanceSubTab('collection'); window.setFinanceTaxFilter('미발행');">미발행 전체 ➔</button>
               </div>
               <div style="display:flex;flex-direction:column;gap:7px;">
                 ${taxCheckAlerts.slice(0, 5).map(({ row, fin, isDone, hasCollected }) => `
@@ -16512,7 +16734,8 @@ end $$;`;
         const stFilter = state.financeStatusFilter || "all";
         const mgrFilter = state.financeManagerFilter || "all";
 
-        const doneUncollectedCount = allCollection.filter(r => {
+        const colStatusBaseList = getFilteredCollectionList({ ignoreStatusFilter: true, ignoreDateFilter: true });
+        const doneUncollectedCount = colStatusBaseList.filter(r => {
           const mSite = findMatchedSiteInfo(r.siteName);
           const prog = (mSite && mSite.progressRate !== undefined && mSite.progressRate !== null)
             ? mSite.progressRate
@@ -16555,7 +16778,18 @@ end $$;`;
           const totalClaim = filtered.reduce((acc, r) => acc + (Number(r.claimAmount) || 0), 0);
           const totalPaid = filtered.reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0);
           const totalBal = filtered.reduce((acc, r) => acc + getExpenseRowBalance(r), 0);
+          const totalTax33 = typeof calcExpenseFinancials === "function"
+            ? filtered.reduce((acc, r) => acc + calcExpenseFinancials(r.claimAmount, r.paidAmount, r).tax33, 0)
+            : 0;
+          const totalPayable = typeof calcExpenseFinancials === "function"
+            ? filtered.reduce((acc, r) => acc + calcExpenseFinancials(r.claimAmount, r.paidAmount, r).payableAmount, 0)
+            : totalClaim;
+          const payRate = totalPayable > 0
+            ? Math.min(100, Math.round((totalPaid / totalPayable) * 100))
+            : (totalClaim > 0 ? 100 : 0);
           const unpaidCount = filtered.filter(r => getExpenseRowBalance(r) > 0).length;
+          const expBaseList = getFilteredExpenseList({ ignoreStatusFilter: true });
+          const tabUnpaidCount = expBaseList.filter(r => getExpenseRowBalance(r) > 0).length;
 
           const itemFilter = state.expenseItemFilter || "all";
           const stFilter = state.expenseStatusFilter || "all";
@@ -16587,7 +16821,8 @@ end $$;`;
               <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #10b981;">
                 <div style="font-size:12px;color:var(--text-muted);font-weight:600;">지급 완료금액</div>
                 <div style="font-size:18.5px;font-weight:800;color:#10b981;margin-top:4px;white-space:nowrap;">${formatExactKrw(totalPaid)}</div>
-                <div style="font-size:11.5px;color:#16a34a;margin-top:4px;font-weight:700;">지급 완료율 ${totalClaim > 0 ? Math.round((totalPaid / totalClaim) * 100) : 0}%</div>
+                <div style="font-size:11.5px;color:#16a34a;margin-top:4px;font-weight:700;">지급 완료율 ${payRate}%</div>
+                ${totalTax33 > 0 ? `<div style="font-size:10.5px;color:#b45309;margin-top:2px;font-weight:700;">3.3% 원천세 공제 ${formatExactKrw(totalTax33)} 포함</div>` : ""}
               </div>
               <div class="standard-card" style="margin-bottom:0;padding:14px 16px;border-left:4px solid #dc2626;background:${stFilter === "unpaid" ? "#fee2e2" : "#fff5f5"};${FINANCE_EXT_FLAGS.kpiClickFilter ? "cursor:pointer;transition:all 0.15s ease;" : ""}${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "unpaid" ? "outline:2px solid #dc2626;box-shadow:0 0 0 3px rgba(220,38,38,0.25);" : ""}" onclick="${FINANCE_EXT_FLAGS.kpiClickFilter ? "window.toggleExpenseUnpaidFilter()" : ""}" title="${FINANCE_EXT_FLAGS.kpiClickFilter ? "클릭 시 미지급 항목 즉시 필터링/해제" : ""}">
                 <div style="font-size:12px;color:#991b1b;font-weight:700;display:flex;align-items:center;justify-content:space-between;">
@@ -16624,7 +16859,7 @@ end $$;`;
                 </div>
                 <div style="display:flex;gap:4px;background:#f1f5f9;padding:3px;border-radius:6px;">
                   <button type="button" class="btn-sub-chip ${stFilter === "all" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;" onclick="window.setExpenseStatusFilter('all')">전체 상태</button>
-                  <button type="button" class="btn-sub-chip ${stFilter === "unpaid" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;${stFilter === "unpaid" ? "background:#fee2e2;color:#dc2626;border-color:#fca5a5;" : ""}" onclick="window.setExpenseStatusFilter('unpaid')">미지급만 (${allExp.filter(e => getExpenseRowBalance(e) > 0).length})</button>
+                  <button type="button" class="btn-sub-chip ${stFilter === "unpaid" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;${stFilter === "unpaid" ? "background:#fee2e2;color:#dc2626;border-color:#fca5a5;" : ""}" onclick="window.setExpenseStatusFilter('unpaid')">미지급만 (${tabUnpaidCount})</button>
                   <button type="button" class="btn-sub-chip ${stFilter === "paid" ? "active" : ""}" style="height:28px;padding:0 8px;font-size:11.5px;" onclick="window.setExpenseStatusFilter('paid')">지급완료</button>
                 </div>
                 ${FINANCE_EXT_FLAGS.taxProofBadge ? `
@@ -16852,7 +17087,7 @@ end $$;`;
                 </div>
               </div>
               <div style="display:flex;gap:8px;align-items:center;">
-                <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.onLoadFixedExpenses()">
+                <button type="button" class="btn-tool-tag" style="height:34px;padding:0 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#ffffff;border:1px solid #cbd5e1;" onclick="window.onLoadFixedExpenses(true)">
                   📌 이번 달 고정비 불러오기
                 </button>
                 <button type="button" class="btn-primary" style="height:34px;padding:0 14px;font-size:12.5px;font-weight:800;display:inline-flex;align-items:center;gap:4px;" onclick="window.openFixedMasterModal(null)">
@@ -16985,11 +17220,11 @@ end $$;`;
               </div>
 
               <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                <button type="button" class="btn-sub-chip ${stFilter === "all" ? "active" : ""}" onclick="window.setFinanceStatusFilter('all')">전체 (${allCollection.length})</button>
-                <button type="button" class="btn-sub-chip ${stFilter === "uncollected" ? "active" : ""}" onclick="window.setFinanceStatusFilter('uncollected')">미수 있음 (${allCollection.filter(r => getCollectionRowFinancials(r).uncollected > 0).length})</button>
+                <button type="button" class="btn-sub-chip ${stFilter === "all" ? "active" : ""}" onclick="window.setFinanceStatusFilter('all')">전체 (${colStatusBaseList.length})</button>
+                <button type="button" class="btn-sub-chip ${stFilter === "uncollected" ? "active" : ""}" onclick="window.setFinanceStatusFilter('uncollected')">미수 있음 (${colStatusBaseList.filter(r => getCollectionRowFinancials(r).uncollected > 0).length})</button>
                 <button type="button" class="btn-sub-chip ${stFilter === "doneUncollected" ? "active" : ""}" style="${stFilter === "doneUncollected" ? "background:#fee2e2;color:#dc2626;border-color:#f87171;" : "color:#b91c1c;"}" onclick="window.setFinanceStatusFilter('doneUncollected')">공사완료 미수 ⚠️ (${doneUncollectedCount})</button>
-                <button type="button" class="btn-sub-chip ${stFilter === "closing" ? "active" : ""}" onclick="window.setFinanceStatusFilter('closing')">마감중 (${allCollection.filter(r => getCollectionEffectiveStatus(r) === "마감중").length})</button>
-                <button type="button" class="btn-sub-chip ${stFilter === "completed" ? "active" : ""}" onclick="window.setFinanceStatusFilter('completed')">완료 (${allCollection.filter(r => getCollectionEffectiveStatus(r) === "완료").length})</button>
+                <button type="button" class="btn-sub-chip ${stFilter === "closing" ? "active" : ""}" onclick="window.setFinanceStatusFilter('closing')">마감중 (${colStatusBaseList.filter(r => getCollectionEffectiveStatus(r) === "마감중").length})</button>
+                <button type="button" class="btn-sub-chip ${stFilter === "completed" ? "active" : ""}" onclick="window.setFinanceStatusFilter('completed')">완료 (${colStatusBaseList.filter(r => getCollectionEffectiveStatus(r) === "완료").length})</button>
               </div>
 
               <select onchange="window.setFinanceManagerFilter(this.value)" style="height:34px;padding:0 10px;border-radius:6px;border:1px solid var(--border-dark);font-size:12.5px;font-weight:600;">
@@ -17224,15 +17459,15 @@ end $$;`;
             if (pB !== state.partnerTabBizFilter) return false;
           }
           if (state.partnerTabCatFilter) {
-            const pC = String(p.category || "시공").trim();
+            const pC = String(p.category || "").trim() || "시공";
             if (pC !== state.partnerTabCatFilter) return false;
           }
           if (state.partnerTabPrioFilter) {
-            const pPr = String(p.priority || "일반").trim();
+            const pPr = String(p.priority || "").trim() || "일반";
             if (pPr !== state.partnerTabPrioFilter) return false;
           }
           if (state.partnerTabStatusFilter) {
-            const pSt = String(p.status || "운영 중").trim();
+            const pSt = String(p.status || "").trim() || "운영 중";
             if (pSt !== state.partnerTabStatusFilter) return false;
           }
           return true;
@@ -17426,15 +17661,34 @@ end $$;`;
       }
       window.updatePartnerTabResultsPartial = updatePartnerTabResultsPartial;
 
+      function buildPartnerTabFilterOptions(rawList) {
+        const list = Array.isArray(rawList) ? rawList : [];
+        const mergeOpts = (baseOpts, getter) => {
+          const seen = new Set(baseOpts);
+          const extras = [];
+          list.forEach((p) => {
+            if (!p) return;
+            const val = getter(p);
+            if (val && !seen.has(val)) {
+              seen.add(val);
+              extras.push(val);
+            }
+          });
+          return [...baseOpts, ...extras.sort((a, b) => a.localeCompare(b, "ko"))];
+        };
+        const uniqueBiz = Array.from(new Set(list.map((p) => String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim()).filter(Boolean))).sort();
+        const uniqueCat = mergeOpts(["시공", "자재", "가구", "설비", "철거", "단품", "AS", "기타"], (p) => String(p.category || "").trim() || "시공");
+        const uniquePrio = mergeOpts(["1팀", "2팀", "3팀", "일반"], (p) => String(p.priority || "").trim() || "일반");
+        const uniqueStatus = mergeOpts(["운영 중", "확인 필요", "신규 발굴", "보류"], (p) => String(p.status || "").trim() || "운영 중");
+        return { uniqueBiz, uniqueCat, uniquePrio, uniqueStatus };
+      }
+
       // ================= [PC 탭 6: 협력업체 및 거래처 (일반 직원 전용 6번째 탭)] =================
       function renderPcPartnersTab() {
         const rawList = getPartnersListForTab();
         const filtered = getFilteredPartnersForTab();
 
-        const uniqueBiz = Array.from(new Set(rawList.map((p) => String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim()).filter(Boolean))).sort();
-        const uniqueCat = ["시공", "자재", "가구", "AS", "기타"];
-        const uniquePrio = ["1팀", "2팀", "3팀", "일반"];
-        const uniqueStatus = ["운영 중", "확인 필요", "보류"];
+        const { uniqueBiz, uniqueCat, uniquePrio, uniqueStatus } = buildPartnerTabFilterOptions(rawList);
 
         const q = state.partnerTabSearchQuery || "";
 
@@ -17533,10 +17787,7 @@ end $$;`;
         const rawList = getPartnersListForTab();
         const filtered = getFilteredPartnersForTab();
 
-        const uniqueBiz = Array.from(new Set(rawList.map((p) => String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim()).filter(Boolean))).sort();
-        const uniqueCat = ["시공", "자재", "가구", "AS", "기타"];
-        const uniquePrio = ["1팀", "2팀", "3팀", "일반"];
-        const uniqueStatus = ["운영 중", "확인 필요", "보류"];
+        const { uniqueBiz, uniqueCat, uniquePrio, uniqueStatus } = buildPartnerTabFilterOptions(rawList);
 
         const q = state.partnerTabSearchQuery || "";
 
@@ -17641,8 +17892,8 @@ end $$;`;
         const homeEligibleTasks = tasks.filter((x) => Boolean(getHomeTaskCategory(x.task, x.ymd, todayYmd)));
         homeEligibleTasks.sort((a, b) => {
           if (a.task.isToday !== b.task.isToday) return a.task.isToday ? -1 : 1;
-          const aDel = Boolean(a.task.isDelayed || (a.ymd && a.ymd < todayYmd));
-          const bDel = Boolean(b.task.isDelayed || (b.ymd && b.ymd < todayYmd));
+          const aDel = isTaskDelayed(a.task, todayYmd);
+          const bDel = isTaskDelayed(b.task, todayYmd);
           if (aDel !== bDel) return aDel ? -1 : 1;
           return String(a.ymd || "9999-99-99").localeCompare(String(b.ymd || "9999-99-99"));
         });
@@ -17909,17 +18160,19 @@ end $$;`;
           ? selectedOngoingSites.length < ongoingSites.length
           : (selectedOngoingSites.length > 0 && selectedOngoingSites.length < ongoingSites.length);
         let siteFilterButtonLabel = state.calSitePickerCustom
-          ? `🏗️ ${getCalSitePickerSummaryLabel(isGanttMode)} ▾`
-          : "🏗️ 전체 현장 ▾";
+          ? `📂 ${getCalSitePickerSummaryLabel(isGanttMode)} ▾`
+          : (isGanttMode
+              ? "📂 전체 (현장·단건·AS) ▾"
+              : `📂 ${(scopeNameMap[state.scope] || "현장")} 전체 ▾`);
         if (!state.calSitePickerCustom && hasSubsetSites) {
           if (selectedOngoingSites.length === 1) {
-            siteFilterButtonLabel = `🏗️ ${selectedOngoingSites[0].siteName} ▾`;
+            siteFilterButtonLabel = `📂 ${selectedOngoingSites[0].siteName} ▾`;
           } else {
-            siteFilterButtonLabel = `🏗️ ${selectedOngoingSites[0].siteName} 외 ${selectedOngoingSites.length - 1}건 ▾`;
+            siteFilterButtonLabel = `📂 ${selectedOngoingSites[0].siteName} 외 ${selectedOngoingSites.length - 1}건 ▾`;
           }
         }
 
-        const filterChips = isGanttMode ? [] : [`<button type="button" class="m-pill-chip" style="cursor:pointer;" onclick="openMobileSiteFilterModal()">📁 <b>${escHtml(getCalSitePickerSummaryLabel(false))}</b> ▾</button>`];
+        const filterChips = [];
         if (state.memberFilter) filterChips.push(`<span class="m-pill-chip">👤 <b>${escHtml(state.memberFilter)}</b> <span class="del-x" onclick="onMMemberClick('')">✕</span></span>`);
         if (state.searchQuery.trim()) filterChips.push(`<span class="m-pill-chip">🔍 <b>"${escHtml(state.searchQuery.trim())}"</b> <span class="del-x" onclick="clearGlobalSearch()">✕</span></span>`);
 
@@ -17930,6 +18183,7 @@ end $$;`;
         }
 
         const year = state.calYear, month = state.calMonth;
+        const visibleCalCount = countCalendarVisibleEvents(events, state.mobileCalMode, year, month, state.selectedDayStr);
         const slideCls = state._lastCalSlideDir === "next" ? "cal-slide-next" : state._lastCalSlideDir === "prev" ? "cal-slide-prev" : "";
         let calContentHtml = "";
 
@@ -17950,7 +18204,7 @@ end $$;`;
             const w = state.weatherData && state.weatherData[ymd];
             const pills = dayEvents.map(({ site, task }) => {
               const isDone = isTaskCompleted(task);
-              const isDel = !isDone && (task.isDelayed || ymd < todayYmd);
+              const isDel = !isDone && isTaskDelayed(task, todayYmd);
               const bgCol = isDel ? "#dc2626" : (site.colorHex || "#2563eb");
               const lightCls = !isDel && isLightHexColor(bgCol) ? "light-bg" : "";
               const sIcon = getTaskStatusIcon(task);
@@ -18012,7 +18266,7 @@ end $$;`;
 
             const pillsHtml = dayEvents.map(({ site, task }) => {
               const isDone = isTaskCompleted(task);
-              const isDel = !isDone && (task.isDelayed || ymd < todayYmd);
+              const isDel = !isDone && isTaskDelayed(task, todayYmd);
               const bgCol = isDel ? "#dc2626" : (site.colorHex || "#2563eb");
               const lightCls = !isDel && isLightHexColor(bgCol) ? "light-bg" : "";
               const sIcon = getTaskStatusIcon(task);
@@ -18049,7 +18303,7 @@ end $$;`;
         const selCardsHtml = selEvents.map(({ site, task }) => {
           const info = getSiteInfo(site.siteName);
           const phone = lookupPartnerPhone(task.partner);
-          const isDel = !isTaskCompleted(task) && (task.isDelayed || state.selectedDayStr < todayYmd);
+          const isDel = !isTaskCompleted(task) && isTaskDelayed(task, todayYmd);
           const tid = task.id || task.taskId;
           const timeFull = extractTaskFullTimeStr(task);
           return `
@@ -18095,18 +18349,18 @@ end $$;`;
                 </div>
               </div>
 
-              <!-- 2단: 좌측 [현장] 스코프 칩 + [전체 현장 ▾] 드롭다운 / 우측 요약 뱃지(169건) + 📸 캡쳐 -->
+              <!-- 2단: 좌측 단일 현장 선택 버튼 + 필터 칩 / 우측 요약 뱃지 + 📸 캡쳐 -->
               <div class="m-cal-row-secondary">
                 <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;">
-                  ${filterChips.join("")}
                   <button type="button" id="btnMobileSiteFilter" class="m-site-filter-btn ${hasSubsetSites ? 'active' : ''}" onclick="openMobileSiteFilterModal()" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;">
                     ${siteFilterButtonLabel}
                   </button>
                   ${hasSubsetSites ? `<button type="button" class="m-site-filter-clear-btn" onclick="resetAndApplyAllSitesFilter()" title="전체 현장 보기로 초기화">✕</button>` : ""}
+                  ${filterChips.join("")}
                 </div>
                 <div class="m-cal-row-secondary-right">
                   <span class="m-cal-count-badge">
-                    ${events.length}건
+                    ${visibleCalCount}건
                   </span>
                   <button type="button" class="btn-m-cal-capture" onclick="captureCurrentScreen()" title="캘린더 화면 캡쳐">📸 캡쳐</button>
                 </div>
@@ -18166,7 +18420,7 @@ end $$;`;
         return filteredTasks.map((t) => {
           const tid = t.id || t.taskId;
           const isDone = isTaskCompleted(t);
-          const isDel = !isDone && t.isDelayed;
+          const isDel = !isDone && isTaskDelayed(t);
           const pPhone = lookupPartnerPhone(t.partner);
           const checked = state.checkedMobileTaskIds.has(tid);
           const ymd = parseYmdFromTask(t);
@@ -18270,7 +18524,10 @@ end $$;`;
         });
 
         const isAsWarrantyView = !topExtraHtml && state.sitesSubView === "asWarranty";
-        const asPendingCount = !topExtraHtml ? collectAllAsTaskRecords().filter((r) => (r.isFromAsSheet || r.task.status === "AS") && !r.isCompleted).length : 0;
+        const asWarrantyModel = isAsWarrantyView ? buildAsWarrantyAndStatsModel() : null;
+        const asPendingCount = !topExtraHtml
+          ? (asWarrantyModel ? asWarrantyModel.activeAsCount : collectAllAsTaskRecords().filter((r) => !r.isCompleted).length)
+          : 0;
 
         const toggleBarHtml = (topExtraHtml || "") + `
           <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
@@ -18291,7 +18548,7 @@ end $$;`;
           </div>`}`;
 
         if (isAsWarrantyView) {
-          document.getElementById(targetContainerId || "m-page-sites").innerHTML = toggleBarHtml + renderAsWarrantyDashboardHtml(true);
+          document.getElementById(targetContainerId || "m-page-sites").innerHTML = toggleBarHtml + renderAsWarrantyDashboardHtml(true, asWarrantyModel);
           return;
         }
 
@@ -18480,9 +18737,9 @@ end $$;`;
 
         const filteredList = list.filter((t) => {
           if (activeMemberFilter === "unassigned") {
-            if (t.manager && t.manager !== "미지정" && t.manager !== "담당 미지정") return false;
+            if (!isTodoManagerUnassigned(t.manager)) return false;
           } else if (activeMemberFilter !== "all") {
-            if (!t.manager || !t.manager.includes(activeMemberFilter)) return false;
+            if (!t.manager || isTodoManagerUnassigned(t.manager) || !t.manager.includes(activeMemberFilter)) return false;
           }
           if (q && !matchesQuery([t.title, t.siteName, t.manager, t.detail].join(" "), q)) return false;
           return true;
@@ -18503,12 +18760,12 @@ end $$;`;
               <span>전체 (${list.length})</span>
             </button>
             ${displayMembers.map((m) => {
-              const mCnt = list.filter((t) => t.manager && t.manager.includes(m)).length;
+              const mCnt = list.filter((t) => !isTodoManagerUnassigned(t.manager) && t.manager.includes(m)).length;
               return `<button type="button" class="tm-chip ${activeMemberFilter === m ? "active" : ""}" onclick="filterTodoMember('${escJs(m)}')"><span class="tm-avatar">${escHtml(m.slice(0, 1))}</span><span>${escHtml(m)} (${mCnt})</span></button>`;
             }).join("")}
             <button type="button" class="tm-chip ${activeMemberFilter === "unassigned" ? "active" : ""}" onclick="filterTodoMember('unassigned')">
               <span class="tm-avatar tm-avatar-unassigned">미</span>
-              <span>미지정 (${list.filter((t) => !t.manager || t.manager === "미지정" || t.manager === "담당 미지정").length})</span>
+              <span>미지정 (${list.filter((t) => isTodoManagerUnassigned(t.manager)).length})</span>
             </button>
           </div>
         `;
@@ -18585,7 +18842,7 @@ end $$;`;
           const members = getMembersList();
           const mgrKeys = [...Array.from(new Set(members)), "unassigned"];
           groupedHtml = mgrKeys.map((mKey) => {
-            const items = pendingList.filter((t) => mKey === "unassigned" ? !t.manager : t.manager && t.manager.includes(mKey));
+            const items = pendingList.filter((t) => mKey === "unassigned" ? isTodoManagerUnassigned(t.manager) : (!isTodoManagerUnassigned(t.manager) && t.manager.includes(mKey)));
             if (!items.length) return "";
             const labelName = mKey === "unassigned" ? "담당 미지정" : mKey;
             return `
@@ -18856,7 +19113,8 @@ end $$;`;
         const collectionRate = totalContract > 0 ? Math.round((totalCollected / totalContract) * 100) : 0;
         const stFilter = state.financeStatusFilter || "all";
 
-        const doneUncollectedCount = allCollection.filter(r => {
+        const colStatusBaseList = getFilteredCollectionList({ ignoreStatusFilter: true, ignoreDateFilter: true });
+        const doneUncollectedCount = colStatusBaseList.filter(r => {
           const mSite = findMatchedSiteInfo(r.siteName);
           const prog = (mSite && mSite.progressRate !== undefined && mSite.progressRate !== null)
             ? mSite.progressRate
@@ -18898,7 +19156,18 @@ end $$;`;
           const totalClaim = filtered.reduce((acc, r) => acc + (Number(r.claimAmount) || 0), 0);
           const totalPaid = filtered.reduce((acc, r) => acc + (Number(r.paidAmount) || 0), 0);
           const totalBal = filtered.reduce((acc, r) => acc + getExpenseRowBalance(r), 0);
+          const totalTax33 = typeof calcExpenseFinancials === "function"
+            ? filtered.reduce((acc, r) => acc + calcExpenseFinancials(r.claimAmount, r.paidAmount, r).tax33, 0)
+            : 0;
+          const totalPayable = typeof calcExpenseFinancials === "function"
+            ? filtered.reduce((acc, r) => acc + calcExpenseFinancials(r.claimAmount, r.paidAmount, r).payableAmount, 0)
+            : totalClaim;
+          const payRate = totalPayable > 0
+            ? Math.min(100, Math.round((totalPaid / totalPayable) * 100))
+            : (totalClaim > 0 ? 100 : 0);
           const unpaidCount = filtered.filter(r => getExpenseRowBalance(r) > 0).length;
+          const expBaseList = getFilteredExpenseList({ ignoreStatusFilter: true });
+          const tabUnpaidCount = expBaseList.filter(r => getExpenseRowBalance(r) > 0).length;
 
           const itemFilter = state.expenseItemFilter || "all";
           const stFilter = state.expenseStatusFilter || "all";
@@ -18926,7 +19195,8 @@ end $$;`;
               <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #10b981;">
                 <div style="font-size:10.5px;color:var(--text-muted);font-weight:600;">지급 완료금액</div>
                 <div style="font-size:13.5px;font-weight:800;color:#10b981;margin-top:2px;white-space:nowrap;">${formatExactKrw(totalPaid)}</div>
-                <div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700;">지급 완료</div>
+                <div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700;">지급 완료율 ${payRate}%</div>
+                ${totalTax33 > 0 ? `<div style="font-size:9.5px;color:#b45309;margin-top:2px;font-weight:700;">3.3% 원천세 공제 ${formatExactKrw(totalTax33)} 포함</div>` : ""}
               </div>
               <div class="m-card-box" style="padding:10px 12px;border-left:3px solid #dc2626;background:${stFilter === "unpaid" ? "#fee2e2" : "#fff8f8"};${FINANCE_EXT_FLAGS.kpiClickFilter ? "cursor:pointer;" : ""}${FINANCE_EXT_FLAGS.kpiClickFilter && stFilter === "unpaid" ? "outline:2px solid #dc2626;" : ""}" onclick="${FINANCE_EXT_FLAGS.kpiClickFilter ? "window.toggleExpenseUnpaidFilter()" : ""}">
                 <div style="font-size:10.5px;color:#991b1b;font-weight:700;display:flex;align-items:center;justify-content:space-between;">
@@ -18980,7 +19250,7 @@ end $$;`;
               ${getExpenseItemFilterOptions().map(([k, label]) => `
                 <button type="button" class="btn-sub-chip ${itemFilter === k ? "active" : ""}" style="padding:3px 7px;font-size:11px;white-space:nowrap;" onclick="window.setExpenseItemFilter('${escJs(k)}')">${escHtml(label === "전체 항목" ? "전체" : label)}</button>
               `).join("")}
-              <button type="button" class="btn-sub-chip ${stFilter === "unpaid" ? "active" : ""}" style="padding:3px 7px;font-size:11px;${stFilter === "unpaid" ? "background:#fee2e2;color:#dc2626;border-color:#fca5a5;" : ""}" onclick="window.setExpenseStatusFilter('${stFilter === "unpaid" ? "all" : "unpaid"}')">미지급만</button>
+              <button type="button" class="btn-sub-chip ${stFilter === "unpaid" ? "active" : ""}" style="padding:3px 7px;font-size:11px;${stFilter === "unpaid" ? "background:#fee2e2;color:#dc2626;border-color:#fca5a5;" : ""}" onclick="window.setExpenseStatusFilter('${stFilter === "unpaid" ? "all" : "unpaid"}')">미지급만 (${tabUnpaidCount})</button>
               ${FINANCE_EXT_FLAGS.taxProofBadge ? `
                 <select onchange="window.setExpenseTaxFilter(this.value)" style="height:26px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;font-weight:700;">
                   <option value="all" ${state.expenseTaxFilter === "all" ? "selected" : ""}>증빙전체</option>
@@ -19158,7 +19428,7 @@ end $$;`;
                   + 고정비 추가
                 </button>
               </div>
-              <button type="button" class="btn-sub-xs" style="padding:6px 10px;font-size:11.5px;width:100%;background:#ffffff;border:1px solid #cbd5e1;font-weight:700;" onclick="window.onLoadFixedExpenses()">
+              <button type="button" class="btn-sub-xs" style="padding:6px 10px;font-size:11.5px;width:100%;background:#ffffff;border:1px solid #cbd5e1;font-weight:700;" onclick="window.onLoadFixedExpenses(true)">
                 📌 이번 달 고정비 불러오기
               </button>
             </div>
@@ -19280,11 +19550,11 @@ end $$;`;
             </button>
           </div>
           <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;">
-            <button type="button" class="btn-sub-chip ${stFilter === "all" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('all')">전체 (${allCollection.length})</button>
-            <button type="button" class="btn-sub-chip ${stFilter === "uncollected" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('uncollected')">미수 (${allCollection.filter(r => getCollectionRowFinancials(r).uncollected > 0).length})</button>
+            <button type="button" class="btn-sub-chip ${stFilter === "all" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('all')">전체 (${colStatusBaseList.length})</button>
+            <button type="button" class="btn-sub-chip ${stFilter === "uncollected" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('uncollected')">미수 (${colStatusBaseList.filter(r => getCollectionRowFinancials(r).uncollected > 0).length})</button>
             <button type="button" class="btn-sub-chip ${stFilter === "doneUncollected" ? "active" : ""}" style="padding:4px 8px;font-size:11px;${stFilter === "doneUncollected" ? "background:#fee2e2;color:#dc2626;border-color:#f87171;" : "color:#b91c1c;"}" onclick="window.setFinanceStatusFilter('doneUncollected')">공사완료 미수 ⚠️ (${doneUncollectedCount})</button>
-            <button type="button" class="btn-sub-chip ${stFilter === "closing" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('closing')">마감중 (${allCollection.filter(r => getCollectionEffectiveStatus(r) === "마감중").length})</button>
-            <button type="button" class="btn-sub-chip ${stFilter === "completed" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('completed')">완료 (${allCollection.filter(r => getCollectionEffectiveStatus(r) === "완료").length})</button>
+            <button type="button" class="btn-sub-chip ${stFilter === "closing" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('closing')">마감중 (${colStatusBaseList.filter(r => getCollectionEffectiveStatus(r) === "마감중").length})</button>
+            <button type="button" class="btn-sub-chip ${stFilter === "completed" ? "active" : ""}" style="padding:4px 8px;font-size:11px;" onclick="window.setFinanceStatusFilter('completed')">완료 (${colStatusBaseList.filter(r => getCollectionEffectiveStatus(r) === "완료").length})</button>
             ${FINANCE_EXT_FLAGS.taxProofBadge ? `
               <select onchange="window.setFinanceTaxFilter(this.value)" style="height:26px;padding:0 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;font-weight:700;">
                 <option value="all" ${state.financeTaxFilter === "all" ? "selected" : ""}>증빙전체</option>
@@ -22074,7 +22344,7 @@ end $$;`;
 
       function normalizeFinanceSiteMatchKey(siteName) {
         return String(siteName || "")
-          .replace(/^\[(단건|AS)\]\s*/i, "")
+          .replace(/^(?:\[(?:단건|AS|단품)\]|\((?:단건|AS|단품)\))\s*/gi, "")
           .replace(/\s+/g, "")
           .toLowerCase();
       }
@@ -22405,6 +22675,8 @@ end $$;`;
           } else if (!state.financeDbData) {
             state.financeDbData = { collection: [], expense: [], fixedMaster: [], updatedAt: "" };
           }
+          state.dirtyPcTabs.home = true;
+          state.dirtyMobileTabs.home = true;
           state.dirtyPcTabs.finance = true;
           state.dirtyMobileTabs.finance = true;
           return onSettled(state.financeDbData);
@@ -22701,7 +22973,7 @@ end $$;`;
             vendor: partner || (isSiteScope ? "현장 외주/자재" : "단건 외주/자재"),
             category2: "",
             accountNumber: "",
-            siteName: `[AS] ${baseName}`,
+            siteName: baseName,
             claimAmount: costAmt,
             paidAmount: 0,
             balance: costAmt,
@@ -27000,13 +27272,29 @@ end $$;`;
         const canOptimisticCommit = Boolean(state.financeLoaded || !(window.WSSupabaseV3 && window.WSSupabaseV3.isSupabaseActive()));
 
         if (existingCol) {
-          const updatedCol = Object.assign({}, existingCol, {
+          const nextContractAmt = amt > 0 ? amt : (Number(existingCol.contractAmount) || 0);
+          const mergedCol = Object.assign({}, existingCol, {
             siteName: baseName,
             clientName: clientCombined || existingCol.clientName || "",
             manager: extractFirstManager(ed.manager, user),
             category: ed.scope || existingCol.category || "전체공사",
-            contractAmount: amt > 0 ? amt : (Number(existingCol.contractAmount) || 0),
+            contractAmount: nextContractAmt,
             period: (ed.promotePeriod || !existingCol.period) ? periodStr : existingCol.period
+          });
+          if (amt > 0) {
+            mergedCol.totalAmount = nextContractAmt + (Number(mergedCol.changeAmount) || 0);
+          }
+          const fin = typeof getCollectionRowFinancials === "function"
+            ? getCollectionRowFinancials(mergedCol)
+            : {
+                total: Number(mergedCol.totalAmount) || (nextContractAmt + (Number(mergedCol.changeAmount) || 0)),
+                collected: Number(mergedCol.collectedAmount) || 0,
+                uncollected: (Number(mergedCol.totalAmount) || (nextContractAmt + (Number(mergedCol.changeAmount) || 0))) - (Number(mergedCol.collectedAmount) || 0)
+              };
+          const updatedCol = Object.assign({}, mergedCol, {
+            totalAmount: fin.total,
+            collectedAmount: fin.collected,
+            uncollectedAmount: fin.uncollected
           });
           if (canOptimisticCommit && typeof commitOptimisticFinanceRow === "function") {
             commitOptimisticFinanceRow("collection", updatedCol, true, "saveCollectionRow", "COL-");
@@ -27600,11 +27888,12 @@ end $$;`;
           const recEstTs = (typeof clearDeletedSiteGuardByName === "function" ? clearDeletedSiteGuardByName(siteName, "newSite") : 0) || 0;
           const nowMs = Math.max(Date.now(), recEstTs);
           const newKey = "NEWSITE::" + siteName;
+          const isNewDoneOrFailed = ed.status === "계약 완료" || ed.status === "수주 실패" || ed.status === "실패";
           state.dashData.sites.unshift({
             siteKey: newKey, siteName, colorCode: "1", colorHex: "#0284c7",
             createdAtMs: nowMs,
             tasks: [{ id: "est_" + nowMs, taskName: ed.status, dateDisplay: ed.inquiryDate, startDateStr: ed.inquiryDate, endDateStr: ed.inquiryDate, manager: ed.manager, status: ed.status, scope: "newSite", createdAtMs: nowMs }],
-            scope: "newSite", isArchived: false, isAllCompleted: false, estimateData: ed, totalTasksCount: 1, completedTasksCount: 0, delayedTasksCount: 0, progressRate: 0
+            scope: "newSite", isArchived: isNewDoneOrFailed, isAllCompleted: isNewDoneOrFailed, estimateData: ed, totalTasksCount: 1, completedTasksCount: isNewDoneOrFailed ? 1 : 0, delayedTasksCount: 0, progressRate: isNewDoneOrFailed ? 100 : 0
           });
           state.selectedQuoteKey = newKey;
         }
@@ -27719,6 +28008,7 @@ end $$;`;
         const matched = [];
         getAllSites().forEach((s) => {
           const sScope = s.scope || "site";
+          if (sScope === "newSite") return;
           (s.tasks || []).forEach((t) => {
             const sy = parseYmdFromTask(t);
             if (!sy) return;
@@ -29055,11 +29345,11 @@ end $$;`;
             if (pB !== state.partnerBizFilter) return false;
           }
           if (state.partnerCatFilter) {
-            const pC = String(p.category || "시공").trim();
+            const pC = String(p.category || "").trim() || "시공";
             if (pC !== state.partnerCatFilter) return false;
           }
           if (state.partnerPrioFilter) {
-            const pPr = String(p.priority || "미지정").trim();
+            const pPr = String(p.priority || "").trim() || "일반";
             if (pPr !== state.partnerPrioFilter) return false;
           }
           if (state.partnerStatusFilter) {
@@ -29165,9 +29455,9 @@ end $$;`;
           rawList.forEach((p) => {
             const b = String(p.biz || (p.fullName && p.fullName.includes("_") ? p.fullName.split("_")[0] : "") || "미지정").trim();
             bizCounts[b] = (bizCounts[b] || 0) + 1;
-            const c = String(p.category || (p.category === "" ? "미지정" : "시공")).trim();
+            const c = String(p.category || "").trim() || "시공";
             catCounts[c] = (catCounts[c] || 0) + 1;
-            const pr = String(p.priority || "미지정").trim();
+            const pr = String(p.priority || "").trim() || "일반";
             prioCounts[pr] = (prioCounts[pr] || 0) + 1;
             const st = String(p.status || "운영 중").trim();
             statCounts[st] = (statCounts[st] || 0) + 1;
@@ -34913,7 +35203,7 @@ end $$;`;
           }
         }
       };
-      window.filterTodoMember = function (mem) { state.todoMemberFilter = mem; state.dirtyPcTabs.todo = true; renderActiveViews(); };
+      window.filterTodoMember = function (mem) { state.todoMemberFilter = mem; state.dirtyPcTabs.todo = true; state.dirtyMobileTabs.todo = true; renderActiveViews(); };
       function preserveHomeScrollAndRender(fn) {
         const selectors = [".home-workspace", ".m-app-body", "#page-home", "#m-page-home"];
         const savedBySelector = selectors.map((sel) => {
