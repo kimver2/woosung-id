@@ -4698,6 +4698,9 @@ end $$;`;
         if (dm.earliest && !site.earliestDateDisplay) {
           site.earliestDateDisplay = dm.earliest;
         }
+        if (typeof syncCollectionPeriodFromSite === "function") {
+          syncCollectionPeriodFromSite(site);
+        }
         if (!skipDashMeta) recalcDashMeta();
       }
 
@@ -8924,8 +8927,99 @@ end $$;`;
         return `${y}-${mo}-${d}`;
       }
 
+      function getSiteLiveSchedulePeriodInfo(site) {
+        if (!site || site.scope === "newSite" || site.scope === "as") return null;
+        let startYmd = "";
+        let endYmd = "";
+        if (Array.isArray(site.tasks) && site.tasks.length > 0) {
+          const ymds = [];
+          site.tasks.forEach((t) => {
+            if (!t) return;
+            const st = String(t.status || "").trim();
+            if (/취소|삭제|제외/.test(st)) return;
+            const s = (typeof parseYmdFromTask === "function" ? parseYmdFromTask(t) : "")
+              || normalizeDateYmd(t.startDateStr || t.startDate || t.dateDisplay || t.date || "");
+            if (s) ymds.push(s);
+            const e = (typeof parseEndYmdFromTask === "function" ? parseEndYmdFromTask(t, s) : "")
+              || normalizeDateYmd(t.endDateStr || t.endDate || "");
+            if (e && e !== s) ymds.push(e);
+          });
+          if (ymds.length > 0) {
+            ymds.sort();
+            startYmd = ymds[0];
+            endYmd = ymds[ymds.length - 1];
+          }
+        }
+        if (!startYmd && typeof getSiteDateMetrics === "function") {
+          const dm = getSiteDateMetrics(site);
+          if (dm && dm.earliest) {
+            startYmd = dm.earliest;
+            endYmd = dm.latest || dm.earliest;
+          }
+        }
+        if (!startYmd && site.earliestDateDisplay) {
+          startYmd = normalizeDateYmd(site.earliestDateDisplay);
+          endYmd = site.latestDateDisplay ? normalizeDateYmd(site.latestDateDisplay) : startYmd;
+        }
+        if (!startYmd) return null;
+        if (!endYmd || endYmd < startYmd) endYmd = startYmd;
+        const sFmt = startYmd.replace(/-/g, ".");
+        const eFmt = endYmd.replace(/-/g, ".");
+        return {
+          periodDisplay: sFmt === eFmt ? sFmt : `${sFmt} ~ ${eFmt}`,
+          startYmd,
+          endYmd,
+          year: startYmd.slice(0, 4),
+          month: parseInt(startYmd.slice(5, 7), 10) || 0
+        };
+      }
+
+      function syncCollectionPeriodFromSite(site) {
+        if (!site || site.scope === "newSite" || site.scope === "as") return false;
+        if (!state.financeDbData || !Array.isArray(state.financeDbData.collection)) return false;
+        const liveInfo = getSiteLiveSchedulePeriodInfo(site);
+        if (!liveInfo || !liveInfo.periodDisplay) return false;
+        const targetKey = typeof normalizeFinanceSiteMatchKey === "function"
+          ? normalizeFinanceSiteMatchKey(site.siteName)
+          : String(site.siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase();
+        if (!targetKey) return false;
+        let updated = false;
+        state.financeDbData.collection.forEach((col) => {
+          if (!col) return;
+          const colSiteName = String(col.siteName || "").trim();
+          const colCat = String(col.category || "").trim();
+          if (/^\[(AS|as)\]|\((AS|as)\)/i.test(colSiteName) || colCat.toUpperCase() === "AS") return;
+          const colKey = typeof normalizeFinanceSiteMatchKey === "function"
+            ? normalizeFinanceSiteMatchKey(colSiteName)
+            : colSiteName.replace(/^\[(단건|AS)\]\s*/i, "").replace(/\s+/g, "").toLowerCase();
+          if (colKey === targetKey && col.period !== liveInfo.periodDisplay) {
+            col.period = liveInfo.periodDisplay;
+            updated = true;
+          }
+        });
+        if (updated) {
+          if (state.dirtyPcTabs) state.dirtyPcTabs.finance = true;
+          if (state.dirtyMobileTabs) state.dirtyMobileTabs.finance = true;
+          if (window.WSDataService && typeof window.WSDataService.saveFinanceCache === "function") {
+            window.WSDataService.saveFinanceCache(state.financeDbData);
+          }
+        }
+        return updated;
+      }
+
       function getCollectionPeriodInfo(row, matchedSite) {
         const site = matchedSite || (row ? findMatchedSiteInfo(row.siteName) : null);
+        const rowSiteName = String((row && row.siteName) || "").trim();
+        const rowCategory = String((row && row.category) || "").trim();
+        const isExplicitAsRow = /^\[(AS|as)\]|\((AS|as)\)/i.test(rowSiteName) || rowCategory.toUpperCase() === "AS";
+
+        if (!isExplicitAsRow && site && site.scope !== "newSite" && site.scope !== "as") {
+          const liveInfo = getSiteLiveSchedulePeriodInfo(site);
+          if (liveInfo && liveInfo.periodDisplay) {
+            return liveInfo;
+          }
+        }
+
         let periodDisplay = String(row && row.period ? row.period : "").trim();
         let startYmd = "";
         let endYmd = "";
@@ -9299,8 +9393,20 @@ end $$;`;
         }
 
         // 2순위(폴백): 수금현황 공사기간(period) 첫 날짜 기준
-        const fbYear = String(fallbackInfo.year || "").trim();
-        const fbMonth = Number(fallbackInfo.month) || 0;
+        let fbYear = "";
+        let fbMonth = 0;
+        const rawRowPeriod = String(row.period || "").trim();
+        if (rawRowPeriod) {
+          const rawYmd = _normAttrYmdSafe(rawRowPeriod);
+          if (rawYmd && /^\d{4}-\d{2}-\d{2}$/.test(rawYmd)) {
+            fbYear = rawYmd.slice(0, 4);
+            fbMonth = parseInt(rawYmd.slice(5, 7), 10) || 0;
+          }
+        }
+        if (!fbYear || !fbMonth) {
+          fbYear = String(fallbackInfo.year || "").trim();
+          fbMonth = Number(fallbackInfo.month) || 0;
+        }
         if (/^\d{4}$/.test(fbYear) && fbMonth >= 1 && fbMonth <= 12) {
           const mm = String(fbMonth).padStart(2, "0");
           return {
@@ -10448,14 +10554,17 @@ end $$;`;
           const periodInput = document.getElementById("colPeriod");
           const sInput = document.getElementById("colStartDate");
           const eInput = document.getElementById("colEndDate");
+          const liveInfo = (typeof getSiteLiveSchedulePeriodInfo === "function") ? getSiteLiveSchedulePeriodInfo(matched) : null;
           const dm = (typeof getSiteDateMetrics === "function") ? getSiteDateMetrics(matched) : null;
           const startTaskYmd = (typeof getSiteStartTaskYmd === "function") ? getSiteStartTaskYmd(matched) : "";
-          const sYmd = startTaskYmd || (dm && dm.earliest ? dm.earliest : "");
+          const sYmd = (liveInfo && liveInfo.startYmd) || (dm && dm.earliest ? dm.earliest : "") || startTaskYmd;
           if (sYmd) {
-            const eYmd = (dm && dm.latest && dm.latest >= sYmd) ? dm.latest : sYmd;
-            if (sInput && (!sInput.value || !periodInput.value)) sInput.value = sYmd;
-            if (eInput && (!eInput.value || !periodInput.value)) eInput.value = eYmd;
-            if (periodInput && !periodInput.value) {
+            const eYmd = (liveInfo && liveInfo.endYmd && liveInfo.endYmd >= sYmd)
+              ? liveInfo.endYmd
+              : ((dm && dm.latest && dm.latest >= sYmd) ? dm.latest : sYmd);
+            if (sInput) sInput.value = sYmd;
+            if (eInput) eInput.value = eYmd;
+            if (periodInput) {
               const sFmt = sYmd.replace(/-/g, ".");
               const eFmt = eYmd.replace(/-/g, ".");
               periodInput.value = (sFmt === eFmt ? sFmt : `${sFmt} ~ ${eFmt}`);
@@ -10530,7 +10639,7 @@ end $$;`;
         const pInfo = getCollectionPeriodInfo(rData, matchedSite);
         const initStartDate = pInfo.startYmd || "";
         const initEndDate = pInfo.endYmd || "";
-        const initPeriod = rData.period || pInfo.periodDisplay || "";
+        const initPeriod = pInfo.periodDisplay || rData.period || "";
 
         const bodyEl = document.getElementById("collectionModalBody");
         if (!bodyEl) return;
@@ -13894,7 +14003,7 @@ end $$;`;
           });
           ymds.sort();
           const startTaskYmd = getSiteStartTaskYmd(s);
-          const startDot = startTaskYmd ? startTaskYmd.replace(/-/g, ".") : (ymds[0] || "");
+          const startDot = ymds[0] || (startTaskYmd ? startTaskYmd.replace(/-/g, ".") : "");
           const endDot = ymds.length ? (ymds[ymds.length - 1] >= startDot ? ymds[ymds.length - 1] : startDot) : startDot;
           const period = startDot ? (startDot === endDot ? startDot : `${startDot} ~ ${endDot}`) : "";
           const mgr = getUniqueSiteManagers(s.tasks).slice(0, 1)[0] || "";
@@ -22499,8 +22608,20 @@ end $$;`;
         const user = state.authUser || state.currentUser || state.user || "조항만";
         const baseName = String(siteName || "").replace(/^\[(단건|AS)\]\s*/i, "").trim();
         const normKey = normalizeFinanceSiteMatchKey(baseName);
-        const sFmt = (startYmd || getTodayYmd()).replace(/-/g, ".");
-        const eFmt = (endYmd || startYmd || getTodayYmd()).replace(/-/g, ".");
+        const matchedForPeriod = typeof findMatchedSiteInfo === "function" ? findMatchedSiteInfo(baseName) : null;
+        const livePeriodInfo = (matchedForPeriod && typeof getSiteLiveSchedulePeriodInfo === "function")
+          ? getSiteLiveSchedulePeriodInfo(matchedForPeriod)
+          : null;
+        const rawStartYmd = normalizeDateYmd(startYmd) || getTodayYmd();
+        const rawEndYmd = normalizeDateYmd(endYmd) || rawStartYmd;
+        const mergedStartYmd = (livePeriodInfo && livePeriodInfo.startYmd && livePeriodInfo.startYmd < rawStartYmd)
+          ? livePeriodInfo.startYmd
+          : rawStartYmd;
+        const mergedEndYmd = (livePeriodInfo && livePeriodInfo.endYmd && livePeriodInfo.endYmd > rawEndYmd)
+          ? livePeriodInfo.endYmd
+          : rawEndYmd;
+        const sFmt = mergedStartYmd.replace(/-/g, ".");
+        const eFmt = mergedEndYmd.replace(/-/g, ".");
         const periodStr = sFmt === eFmt ? sFmt : `${sFmt} ~ ${eFmt}`;
         const taskId = String(opts.taskId || "").trim();
 
@@ -26584,10 +26705,13 @@ end $$;`;
         const startTaskObj = computedTasks.find((t) => String(t && t.taskName || "").trim() === "착공" && !/취소|삭제|제외/.test(String(t && t.status || "")));
         const startTaskDateYmd = normalizeDateYmd((startTaskObj && (startTaskObj.startDateStr || startTaskObj.date)) || "") || resolvedStartDate;
         const computedYmds = computedTasks
-          .map((t) => normalizeDateYmd((t && (t.startDateStr || t.date)) || ""))
+          .flatMap((t) => [
+            normalizeDateYmd((t && (t.startDateStr || t.date)) || ""),
+            normalizeDateYmd((t && (t.endDateStr || t.endDate)) || "")
+          ])
           .filter(Boolean)
           .sort();
-        const firstColYmd = startTaskObj ? startTaskDateYmd : (computedYmds[0] || startTaskDateYmd);
+        const firstColYmd = computedYmds[0] || startTaskDateYmd;
         const lastColYmd = computedYmds.length && computedYmds[computedYmds.length - 1] >= firstColYmd
           ? computedYmds[computedYmds.length - 1]
           : firstColYmd;
@@ -26744,7 +26868,7 @@ end $$;`;
               costAmount: Number(ed.costAmount) || 0
             });
           } else if (qt === "single") {
-            syncSingleTaskToFinance(siteName, (computedTasks[0] && computedTasks[0].taskName) || ed.taskName || "단건시공", startDate, startDate, ed.partner || "", manager, {
+            syncSingleTaskToFinance(siteName, (computedTasks[0] && computedTasks[0].taskName) || ed.taskName || "단건시공", firstColYmd || startDate, lastColYmd || firstColYmd || startDate, ed.partner || "", manager, {
               clientName: [ed.clientName, ed.clientPhone].filter(Boolean).join(" / "),
               chargeAmount: Number(ed.contractAmount) || Number(ed.expectedAmount) || 0,
               costAmount: Number(ed.costAmount) || 0

@@ -10396,7 +10396,7 @@ function promoteEstimateToSite(data) {
               }
               if (startTaskNormDate || validDates.length > 0) {
                 validDates.sort();
-                var minD = startTaskNormDate || validDates[0];
+                var minD = validDates.length > 0 ? validDates[0] : startTaskNormDate;
                 var maxD = validDates.length ? (validDates[validDates.length - 1] >= minD ? validDates[validDates.length - 1] : minD) : minD;
                 periodStr = (minD === maxD) ? minD : (minD + " ~ " + maxD);
               }
