@@ -7562,6 +7562,35 @@ end $$;`;
         }).join("");
       }
 
+      /** 현장 공정 목록의 요약 건수(전체/완료/진행/예정/지연)를 필터 기준과 일치하도록 계산합니다. */
+      function computeSiteTaskSummaryStats(tasks) {
+        const list = Array.isArray(tasks) ? tasks : [];
+        const total = list.length || 1;
+        const doneCnt = list.filter((t) => t && t.status === "완료").length;
+        const delayCnt = list.filter((t) => t && t.status !== "완료" && t.isDelayed).length;
+        // 완료 또는 지연 공정이 오늘 날짜(isToday)와 겹쳐도 예정·진행 건수에 중복 집계되지 않도록 제외합니다.
+        const progCnt = list.filter((t) => t && t.status !== "완료" && !t.isDelayed && (t.status === "진행중" || t.status === "진행 중" || t.isToday)).length;
+        const planCnt = Math.max(0, list.length - doneCnt - progCnt - delayCnt);
+        const activeCnt = planCnt + progCnt;
+        const pctDone = list.length ? Math.round((doneCnt / list.length) * 1000) / 10 : 0;
+        return { total, count: list.length, doneCnt, progCnt, delayCnt, planCnt, activeCnt, pctDone };
+      }
+
+      /** 현장 공정 목록을 상태 필터(all/done/active/delay) 및 검색어로 필터링합니다. */
+      function filterSiteTasksByStatusAndSearch(tasks, statusFilter, searchQuery) {
+        const list = Array.isArray(tasks) ? tasks : [];
+        const curFilter = statusFilter || "all";
+        const curSearch = String(searchQuery || "").trim();
+        return list.filter((t) => {
+          if (!t) return false;
+          if (curFilter === "done" && t.status !== "완료") return false;
+          if (curFilter === "delay" && !(t.isDelayed && t.status !== "완료")) return false;
+          if (curFilter === "active" && (t.status === "완료" || (t.isDelayed && t.status !== "완료"))) return false;
+          if (curSearch && !matchesQuery([t.taskName, t.partner, t.manager, t.memo].join(" "), curSearch)) return false;
+          return true;
+        });
+      }
+
       function updatePcSiteTasksPartial() {
         const sitesPool = getScopeSites(true);
         const selectedSite = sitesPool.find((s) => s.siteKey === state.selectedSiteKey) || sitesPool[0];
@@ -7571,13 +7600,7 @@ end $$;`;
         const curFilter = state.siteTaskStatusFilter || "all";
         const curSearch = (state.siteTaskSearch || "").trim();
 
-        const filteredRows = tasks.filter((t) => {
-          if (curFilter === "done" && t.status !== "완료") return false;
-          if (curFilter === "delay" && !(t.isDelayed && t.status !== "완료")) return false;
-          if (curFilter === "active" && (t.status === "완료" || (t.isDelayed && t.status !== "완료"))) return false;
-          if (curSearch && !matchesQuery([t.taskName, t.partner, t.manager, t.memo].join(" "), curSearch)) return false;
-          return true;
-        });
+        const filteredRows = filterSiteTasksByStatusAndSearch(tasks, curFilter, curSearch);
 
         const allChecked = filteredRows.length > 0 && filteredRows.every((t) => state.checkedTableTaskIds.has(t.id || t.taskId));
         const checkedCount = filteredRows.filter((t) => state.checkedTableTaskIds.has(t.id || t.taskId)).length;
@@ -7717,20 +7740,9 @@ end $$;`;
             : (selectedSite.earliestDateDisplay ? selectedSite.earliestDateDisplay.replace(/-/g, ".") : "-");
           const info = getSiteInfo(selectedSite.siteName) || {};
 
-          const total = tasks.length || 1;
-          const doneCnt = tasks.filter((t) => t.status === "완료").length;
-          const progCnt = tasks.filter((t) => t.status === "진행중" || t.status === "진행 중" || t.isToday).length;
-          const delayCnt = tasks.filter((t) => t.isDelayed && t.status !== "완료").length;
-          const planCnt = Math.max(0, tasks.length - doneCnt - progCnt - delayCnt);
-          const pctDone = tasks.length ? Math.round((doneCnt / tasks.length) * 1000) / 10 : 0;
+          const { total, doneCnt, progCnt, delayCnt, planCnt, pctDone } = computeSiteTaskSummaryStats(tasks);
 
-          const filteredRows = tasks.filter((t) => {
-            if (state.siteTaskStatusFilter === "done" && t.status !== "완료") return false;
-            if (state.siteTaskStatusFilter === "delay" && !(t.isDelayed && t.status !== "완료")) return false;
-            if (state.siteTaskStatusFilter === "active" && (t.status === "완료" || (t.isDelayed && t.status !== "완료"))) return false;
-            if (state.siteTaskSearch.trim() && !matchesQuery([t.taskName, t.partner, t.manager, t.memo].join(" "), state.siteTaskSearch.trim())) return false;
-            return true;
-          });
+          const filteredRows = filterSiteTasksByStatusAndSearch(tasks, state.siteTaskStatusFilter, state.siteTaskSearch);
 
           const allChecked = filteredRows.length > 0 && filteredRows.every((t) => state.checkedTableTaskIds.has(t.id || t.taskId));
           const checkedCount = filteredRows.filter((t) => state.checkedTableTaskIds.has(t.id || t.taskId)).length;
@@ -18184,13 +18196,7 @@ end $$;`;
         const curFilter = state.siteTaskStatusFilter || "all";
         const curSearch = (state.siteTaskSearch || "").trim();
 
-        const filteredTasks = tasks.filter((t) => {
-          if (curFilter === "done" && t.status !== "완료") return false;
-          if (curFilter === "delay" && !(t.isDelayed && t.status !== "완료")) return false;
-          if (curFilter === "active" && (t.status === "완료" || (t.isDelayed && t.status !== "완료"))) return false;
-          if (curSearch && !matchesQuery([t.taskName, t.partner, t.manager, t.memo].join(" "), curSearch)) return false;
-          return true;
-        });
+        const filteredTasks = filterSiteTasksByStatusAndSearch(tasks, curFilter, curSearch);
 
         const allChecked = filteredTasks.length > 0 && filteredTasks.every((t) => state.checkedMobileTaskIds.has(t.id || t.taskId));
 
@@ -18326,23 +18332,12 @@ end $$;`;
 
           let bodyHtml = "";
           if (isExpanded) {
-            const total = tasks.length || 1;
-            const doneCnt = tasks.filter((t) => t.status === "완료").length;
-            const progCnt = tasks.filter((t) => t.status === "진행중" || t.status === "진행 중" || t.isToday).length;
-            const delayCnt = tasks.filter((t) => t.isDelayed && t.status !== "완료").length;
-            const planCnt = Math.max(0, tasks.length - doneCnt - progCnt - delayCnt);
-            const pctDone = tasks.length ? Math.round((doneCnt / tasks.length) * 1000) / 10 : 0;
+            const { total, doneCnt, progCnt, delayCnt, planCnt, pctDone } = computeSiteTaskSummaryStats(tasks);
 
             const curFilter = state.siteTaskStatusFilter || "all";
             const curSearch = (state.siteTaskSearch || "").trim();
 
-            const filteredTasks = tasks.filter((t) => {
-              if (curFilter === "done" && t.status !== "완료") return false;
-              if (curFilter === "delay" && !(t.isDelayed && t.status !== "완료")) return false;
-              if (curFilter === "active" && (t.status === "완료" || (t.isDelayed && t.status !== "완료"))) return false;
-              if (curSearch && !matchesQuery([t.taskName, t.partner, t.manager, t.memo].join(" "), curSearch)) return false;
-              return true;
-            });
+            const filteredTasks = filterSiteTasksByStatusAndSearch(tasks, curFilter, curSearch);
 
             const allChecked = filteredTasks.length > 0 && filteredTasks.every((t) => state.checkedMobileTaskIds.has(t.id || t.taskId));
 
@@ -34521,13 +34516,7 @@ end $$;`;
             if (site) {
               const curFilter = state.siteTaskStatusFilter || "all";
               const curSearch = (state.siteTaskSearch || "").trim();
-              const filtered = (site.tasks || []).filter((t) => {
-                if (curFilter === "done" && t.status !== "완료") return false;
-                if (curFilter === "delay" && !(t.isDelayed && t.status !== "완료")) return false;
-                if (curFilter === "active" && (t.status === "완료" || (t.isDelayed && t.status !== "완료"))) return false;
-                if (curSearch && !matchesQuery([t.taskName, t.partner, t.manager, t.memo].join(" "), curSearch)) return false;
-                return true;
-              });
+              const filtered = filterSiteTasksByStatusAndSearch(site.tasks, curFilter, curSearch);
               const allChecked = filtered.length > 0 && filtered.every((t) => state.checkedMobileTaskIds.has(t.id || t.taskId));
               const checkEl = document.getElementById(`mSiteBundleCheck_${siteKey}`);
               if (checkEl) checkEl.checked = allChecked;

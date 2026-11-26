@@ -6940,6 +6940,61 @@ console.log('\n🔍 [핵심: PC/모바일 대시보드 및 GitHub Pages <script>
     );
   })());
 
+  // ========================================================
+  // [현장 상세 4단 요약 타일 vs 테이블 필터 건수 100% 일치 검증]
+  // ========================================================
+  (() => {
+    const idxHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const s = idxHtml.indexOf('function computeSiteTaskSummaryStats(tasks)');
+    const e = idxHtml.indexOf('function updatePcSiteTasksPartial()', s > -1 ? s : 0);
+    if (s === -1 || e <= s) throw new Error('Missing computeSiteTaskSummaryStats block');
+    const statsVm = vm.createContext({
+      Math, Array, String, Boolean,
+      matchesQuery: (hay, q) => String(hay || '').toLowerCase().includes(String(q || '').toLowerCase())
+    });
+    vm.runInContext(idxHtml.slice(s, e), statsVm);
+
+    // Case A: 49건 모두 완료이고 그중 1건이 isToday === true인 경우 -> 예정·진행 0건이어야 함
+    const allDoneTasks = Array.from({ length: 49 }, (_, i) => ({
+      id: `t_${i}`,
+      taskName: `공종${i}`,
+      status: '완료',
+      isToday: i === 0,
+      isDelayed: i === 1
+    }));
+    const allDoneStats = statsVm.computeSiteTaskSummaryStats(allDoneTasks);
+    const allDoneActiveFiltered = statsVm.filterSiteTasksByStatusAndSearch(allDoneTasks, 'active', '');
+
+    // Case B: 완료(isToday포함) + 지연(isToday포함) + 진행중 + 오늘예정 + 일반예정 혼합
+    const mixedTasks = [
+      { id: 'm1', taskName: '철거', status: '완료', isToday: true, isDelayed: true },
+      { id: 'm2', taskName: '설비', status: '예정', isToday: true, isDelayed: true },
+      { id: 'm3', taskName: '목공', status: '진행중', isToday: false, isDelayed: false },
+      { id: 'm4', taskName: '전기', status: '예정', isToday: true, isDelayed: false },
+      { id: 'm5', taskName: '도배', status: '예정', isToday: false, isDelayed: false }
+    ];
+    const mixedStats = statsVm.computeSiteTaskSummaryStats(mixedTasks);
+    const mixedDoneFiltered = statsVm.filterSiteTasksByStatusAndSearch(mixedTasks, 'done', '');
+    const mixedActiveFiltered = statsVm.filterSiteTasksByStatusAndSearch(mixedTasks, 'active', '');
+    const mixedDelayFiltered = statsVm.filterSiteTasksByStatusAndSearch(mixedTasks, 'delay', '');
+
+    assertTest(
+      '현장 상세 4단 요약 타일(완료/예정·진행/지연) 건수 및 isToday 중복 집계 방지·필터 100% 일치 검증',
+      allDoneStats.doneCnt === 49 &&
+      allDoneStats.progCnt === 0 &&
+      allDoneStats.planCnt === 0 &&
+      allDoneStats.activeCnt === 0 &&
+      allDoneStats.delayCnt === 0 &&
+      allDoneActiveFiltered.length === 0 &&
+      mixedStats.doneCnt === mixedDoneFiltered.length && mixedStats.doneCnt === 1 &&
+      mixedStats.delayCnt === mixedDelayFiltered.length && mixedStats.delayCnt === 1 &&
+      mixedStats.activeCnt === mixedActiveFiltered.length && mixedStats.activeCnt === 3 &&
+      mixedStats.progCnt === 2 && mixedStats.planCnt === 1 &&
+      (mixedStats.doneCnt + mixedStats.activeCnt + mixedStats.delayCnt === mixedTasks.length),
+      `allDone=${JSON.stringify(allDoneStats)}, mixed=${JSON.stringify(mixedStats)}`
+    );
+  })();
+
 Promise.all(pendingAsyncTests).then(() => {
 if (isVerbose) {
   rawConsoleLog('\n========================================================');
